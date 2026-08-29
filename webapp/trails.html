@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wordicon — Trails</title>
+<meta name="theme-color" content="#11161d">
+<style>
+  :root {
+    --bg: #11161d; --panel: #181f29; --panel-2: #1f2833; --border: #2a3441;
+    --text: #e7ecf3; --muted: #8b98a9; --accent: #78aaff;
+    --good: #6fcf97; --bad: #e08a8a;
+    --warp: #b98bf0; --word: #3987e5; --lang: #199e70; --story: #d95926; --source: #d766a6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%; }
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 5;
+    background: rgba(17,22,29,0.96); backdrop-filter: blur(6px); }
+  header h1 { font-size: 16px; margin: 0; font-weight: 700; }
+  header a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; font-size: 13px; }
+  main { max-width: 760px; margin: 0 auto; padding: 14px 16px 80px; }
+  .sub { color: var(--muted); font-size: 12.5px; }
+  input[type=search] { width: 100%; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+    font-size: 15px; font-family: inherit; margin-bottom: 14px; }
+
+  .trail { background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 12px 14px; margin-bottom: 12px; }
+  .trail-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+    margin-bottom: 8px; }
+  .trail-root { font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+  .trail-meta { color: var(--muted); font-size: 12px; }
+
+  /* Every row is a flex line with a fixed indent. No positioning, no
+     transforms, no canvas — the page scrolls and that is the whole
+     navigation model. */
+  .row { display: flex; align-items: baseline; gap: 8px; padding: 4px 0;
+    line-height: 1.45; }
+  .rail { flex: 0 0 auto; color: var(--border); font-size: 13px; white-space: pre;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .name { font-size: 14.5px; font-weight: 600; }
+  /* Links: the ruled palette (measured >=8.4:1 on these surfaces), and
+     underlined — a door should look like a door, which was this page's
+     whole complaint. Kind colors below still own their hues. */
+  a { color: #8cc8ff; text-decoration: underline; text-underline-offset: 2px; }
+  a:visited { color: #d9b3ff; }
+  a:hover, a:focus-visible { color: #ffe08a; }
+  a:focus-visible { outline: 2px solid #ffe08a; outline-offset: 2px; border-radius: 3px; }
+  .name.word { color: var(--text); }
+  .name.external { color: var(--story); font-weight: 500; }
+  .name.translation { color: var(--lang); font-weight: 500; }
+  .name.source { color: var(--source); font-weight: 500; }
+  .name.component { color: var(--muted); font-weight: 500; }
+  .via { color: var(--muted); font-size: 12px; }
+  .from { color: var(--muted); font-size: 12px; opacity: 0.8; }
+  .also { color: var(--muted); font-size: 11.5px; font-style: italic; }
+  /* doors look like doors: underlined always, not only on hover */
+  a.name { text-decoration: underline; text-underline-offset: 2px; }
+  .pill { font-size: 10.5px; padding: 1px 7px; border-radius: 20px; }
+  .pill.accepted { background: rgba(111,207,151,0.18); color: var(--good); }
+  .pill.rejected { background: rgba(224,138,138,0.18); color: var(--bad); }
+  .pill.revised  { background: rgba(120,170,255,0.18); color: var(--accent); }
+  /* A foreign term the reviewer called strained, and a candidate its own
+     source denied, were printing in the same voice as a word you accepted.
+     The verdicts were on the nodes the whole time; the display dropped them. */
+  .pill.holds       { background: rgba(111,207,151,0.13); color: var(--good); }
+  .pill.strained    { background: rgba(217,164,65,0.18);  color: #d9a441; }
+  .pill.contradicted{ background: rgba(224,138,138,0.22); color: var(--bad); font-weight: 600; }
+  .pill.suspect     { background: rgba(224,138,138,0.18); color: var(--bad); }
+  .pill.reject      { background: rgba(224,138,138,0.14); color: var(--bad); }
+  .title-from { color: var(--muted); font-size: 11px; font-style: italic; }
+
+  /* A warp is not an arrow and must not look like one. Arrows are solid
+     rails in the border colour; a warp is a dotted pipe in its own colour,
+     indented under the row it left from but never given a depth of its
+     own — because it is not a child of anything. */
+  .warp { display: flex; align-items: baseline; gap: 8px; padding: 3px 0 3px 2px;
+    line-height: 1.45; }
+  .warp .rail { color: var(--warp); }
+  .warp-body { border-left: 2px dotted var(--warp); padding-left: 9px; }
+  .warp-to { color: var(--warp); font-weight: 600; font-size: 13.5px;
+    text-decoration: underline; text-underline-offset: 2px; }
+  .warp-meta { color: var(--muted); font-size: 11.5px; }
+  .warp-note { color: var(--text); font-size: 12.5px; font-style: italic;
+    opacity: 0.9; margin-top: 2px; }
+  .warp-note b { font-style: normal; color: var(--muted); font-weight: 600;
+    font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .warp-in { width: 100%; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px;
+    font-size: 13px; font-family: inherit; margin-top: 5px; }
+  .warp-save { background: none; border: 1px solid var(--border); color: var(--accent);
+    border-radius: 7px; font-size: 11.5px; padding: 3px 9px; cursor: pointer;
+    font-family: inherit; margin-top: 4px; }
+  #warp-toggle { background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 7px; font-size: 11.5px; padding: 3px 9px; cursor: pointer;
+    font-family: inherit; }
+  #warp-toggle.on { color: var(--warp); border-color: var(--warp); }
+  .more { background: none; border: none; color: var(--accent); font-size: 12.5px;
+    cursor: pointer; padding: 5px 0 0; font-family: inherit; }
+  .loose-row { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+  .loose-row:last-child { border-bottom: none; }
+  .loose-row a { color: var(--text); text-decoration: underline; text-underline-offset: 2px; font-weight: 600; }
+  .empty { color: var(--muted); padding: 20px 0; text-align: center; font-size: 14px; }
+  .note { color: var(--muted); font-size: 12px; line-height: 1.55; }
+  .spinner { display: inline-block; width: 12px; height: 12px; margin-right: 8px;
+    border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Trails</h1>
+  <a href="/">← back to Wordicon</a>
+  <span class="sub" id="counts" style="margin-left:auto"></span>
+  <button id="warp-toggle" onclick="toggleWarps()"></button>
+  <a href="/map/world" title="the spatial map, where the Wayfinder lives">the spatial map →</a>
+</header>
+
+<main>
+  <input type="search" id="q" placeholder="find a word…" oninput="render()">
+  <div id="stage"><p class="sub"><span class="spinner"></span>reading your trails…</p></div>
+</main>
+
+<script>
+let DATA = null, expanded = {}, showLoose = false;
+// Off is a real option, not a nicety: if warps turn out to be a log of
+// accidental clicks, the page has to be able to stop showing them without
+// anyone editing a file or deleting the record of what actually happened.
+let showWarps = true;
+try { showWarps = localStorage.getItem('wordicon.warps') !== 'off'; } catch (e) {}
+function toggleWarps() {
+  showWarps = !showWarps;
+  try { localStorage.setItem('wordicon.warps', showWarps ? 'on' : 'off'); } catch (e) {}
+  render();
+}
+const HEAD = 6;          // rows shown before a trail folds
+const LOOSE_HEAD = 12;
+
+// Forward and backward readings of every relation. A trail walked up an
+// edge instead of down it has to say so, or it reverses the history: the
+// Deadial trail read "Deadial renamed to Same-Result Ritual" until this
+// existed, which is exactly backwards.
+const FWD = {
+  renamed_as: 'renamed to', compressed_as: 'compressed into', reworked_into: 'reworked into',
+  parallels: 'runs parallel to', translated_as: 'in other languages',
+  english_fossil: 'fossil inside English', continued_from: 'carried on from',
+  decomposed_into: 'taken apart into', forged_as: 'forged as',
+};
+const BACK = {
+  renamed_as: 'renamed from', compressed_as: 'compressed from', reworked_into: 'reworked from',
+  parallels: 'runs parallel to', translated_as: 'translation of',
+  english_fossil: 'fossil found in', continued_from: 'led on to',
+  decomposed_into: 'a part of', forged_as: 'forged from',
+};
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// "Kompromat (Russian)" -> name + a quieter source. External labels carry
+// their whole provenance and would otherwise be a wall of parentheses.
+function split(label) {
+  const m = String(label || '').match(/^(.*?)\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)\s*$/);
+  return m ? {name: m[1], from: m[2]} : {name: label || '', from: ''};
+}
+
+async function load() {
+  try {
+    const r = await fetch('/api/trails');
+    const text = await r.text();
+    try { DATA = JSON.parse(text); }
+    catch (e) {
+      document.getElementById('stage').innerHTML =
+        `<p class="empty">The server answered but not with trails (HTTP ${r.status}). Check the server log.</p>`;
+      return;
+    }
+  } catch (e) {
+    document.getElementById('stage').innerHTML =
+      `<p class="empty">Couldn't reach the server at all — it may not be running.</p>`;
+    return;
+  }
+  const c = DATA.counts || {};
+  document.getElementById('counts').textContent =
+    // was "words connected", which counted passages, components, foreign
+    // terms and external parallels as though they were all your words
+    `${c.trails} trails · ${c.in_trails} items · ${c.own_words} of them your words · ${c.relations} links` +
+    (c.warps ? ` · ${c.warps} warp${c.warps === 1 ? '' : 's'}` : '');
+  render();
+}
+
+function rowHtml(n) {
+  const {name, from} = split(n.label);
+  const via = n.via ? (n.via_back ? BACK : FWD)[n.via] || n.via : '';
+  const rail = n.depth === 0 ? '' : '   '.repeat(n.depth - 1) + '└─ ';
+  const inner = `<span class="name ${esc(n.kind)}">${esc(name)}</span>`;
+  return `<div class="row">
+    <span class="rail">${rail}</span>
+    <span>
+      ${n.trace_id ? `<a class="name ${esc(n.kind)}" href="${doorHref(n, name)}">${esc(name)}</a>` : inner}
+      ${from ? `<span class="from">${esc(from)}</span>` : ''}
+      ${via ? `<span class="via">— ${esc(via)}</span>` : ''}
+      ${n.judgment ? `<span class="pill ${esc(n.judgment)}">you: ${esc(n.judgment)}</span>` : ''}
+      ${verdictPill(n.verdict)}
+      
+      ${(n.also || []).length ? `<div class="also">also ${esc(n.also[0])}${n.also.length > 1 ? ` and ${n.also.length - 1} more` : ''}</div>` : ''}
+    </span>
+  </div>`;
+}
+
+// A warp says one thing and stops: at a time, from a run that had been on
+// screen for a measured number of seconds, the owner opened something else.
+// There is deliberately no verb here that connects the two ideas — no "led
+// to", no "grew from", no "because". The tool watched a click; it did not
+// watch a thought. If the two are connected, the owner has to say so, and
+// what they say is printed under their own name.
+function warpHtml(w, depth, fromLabel) {
+  const rail = '   '.repeat(Math.max(0, depth)) + '  ⇢ ';
+  const shelf = (w.shelf || '').replace('library-', '').replace('-', ' ') || 'the shelf';
+  const when = (w.created_at || '').slice(0, 10);
+  const bits = [];
+  if (w.times > 1) bits.push(`you have made this same jump ${w.times} times`);
+  if (w.pull > 1) bits.push(`${w.pull} different runs have jumped here`);
+  bits.push(`${Math.round(w.dwell_s)}s on the previous run`);
+  bits.push(`from ${shelf}`);
+  if (when) bits.push(when);
+  return `<div class="warp">
+    <span class="rail">${rail}</span>
+    <span class="warp-body">
+      <span class="warp-meta">${fromLabel ? esc(fromLabel) + ' was open — you jumped to'
+                                          : 'while this was open, you jumped to'}</span>
+      ${w.to_trace ? `<a class="warp-to" href="/?trace=${encodeURIComponent(w.to_trace)}">${esc(w.to_label || w.to_trace)}</a>`
+                   : `<span class="warp-to">${esc(w.to_label || '(a run)')}</span>`}
+      ${w.same_trail ? `<span class="warp-meta">— back into this same trail</span>` : ''}
+      <div class="warp-meta">${esc(bits.join(' · '))}</div>
+      ${w.note
+        ? `<div class="warp-note"><b>your reading</b> — ${esc(w.note)}</div>`
+        : `<div id="wn-${esc(w.warp_id)}">
+             <input class="warp-in" placeholder="why did you jump? (optional — saved as yours, not the tool's)"
+                    onkeydown="if(event.key==='Enter')saveNote('${esc(w.warp_id)}')">
+             <button class="warp-save" onclick="saveNote('${esc(w.warp_id)}')">save as my reading</button>
+           </div>`}
+    </span>
+  </div>`;
+}
+
+async function saveNote(id) {
+  const box = document.getElementById('wn-' + id);
+  if (!box) return;
+  const text = (box.querySelector('input').value || '').trim();
+  if (!text) { box.querySelector('.warp-save').textContent = 'nothing typed'; return; }
+  try {
+    const r = await fetch('/api/warp/note', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({warp_id: id, note: text}),
+    });
+    if (!r.ok) throw new Error();
+    box.outerHTML = `<div class="warp-note"><b>your reading</b> — ${esc(text)}</div>`;
+  } catch (e) { box.querySelector('.warp-save').textContent = 'could not save'; }
+}
+
+// The review's own word for this node, printed in its own voice. Never
+// merged with your judgment: "you: accepted" is your ruling, "contradicted"
+// is what a check said, and the two are not the same kind of thing.
+const VERDICT_WORDS = {
+  holds: 'holds', strained: 'strained', contradicted: 'its source denied this',
+  suspect: 'suspect', reject: 'critic objected',
+};
+function verdictPill(v) {
+  const w = VERDICT_WORDS[v];
+  return w ? `<span class="pill ${esc(v)}">${esc(w)}</span>` : '';
+}
+
+function trailHtml(t) {
+  const open = expanded[t.id];
+  // The root is the heading; repeating it as the first row said the same
+  // word twice before anything had been said once.
+  const root = t.nodes[0] || {};
+  const rest = t.nodes.slice(1);
+  const nodes = open ? rest : rest.slice(0, HEAD);
+  const hidden = rest.length - nodes.length;
+  return `<div class="trail">
+    <div class="trail-head">
+      ${root.trace_id ? `<a class="trail-root" style="color:var(--text)" href="/?trace=${encodeURIComponent(root.trace_id)}">${esc(split(t.title || t.root).name)}</a>`
+        : `<span class="trail-root">${esc(split(t.title || t.root).name)}</span>`}
+      ${t.title_from === 'source' ? `<span class="title-from">named for the passage it came from</span>`
+        : t.title_from === 'accepted' ? `<span class="title-from">named for the word you accepted</span>`
+        : `<span class="title-from">no accepted word here yet — named for where the thread starts</span>`}
+      ${root.judgment ? `<span class="pill ${esc(root.judgment)}">you: ${esc(root.judgment)}</span>` : ''}
+      <span class="trail-meta">${t.size} items · ${t.accepted} accepted${
+        t.revised ? ` · ${t.revised} revised` : ''} · ${esc((t.last_at || '').slice(0, 10))}${
+        showWarps && (t.nodes || []).some(n => (n.warps || []).length) ? ' · has warp pipes' : ''}</span>
+    </div>
+    ${showWarps ? (root.warps || []).map(w => warpHtml(w, 0)).join('') : ''}
+    ${nodes.map(n => rowHtml(n) + (showWarps ? (n.warps || []).map(w => warpHtml(w, n.depth)).join('') : '')).join('')}
+    ${showWarps ? rest.slice(nodes.length).flatMap(n => (n.warps || []).map(w => warpHtml(w, 0, n.label))).join('') : ''}
+    ${hidden > 0 ? `<button class="more" onclick="expanded['${t.id}']=1;render()">show ${hidden} more</button>`
+      : (open && rest.length > HEAD ? `<button class="more" onclick="delete expanded['${t.id}'];render()">show fewer</button>` : '')}
+  </div>`;
+}
+
+// Every door is TYPED and carries a stable id: a blue word opens the
+// concept on the shelf, a source or parallel opens its recorded account
+// (and from there its Work Room, if one is declared), everything else
+// reopens the run that made it. The originating trace rides along as the
+// declared fallback, so a missing shelf entry degrades to the run WITH a
+// visible note — never to a silent empty page.
+function doorHref(n, name) {
+  const trace = 'trace=' + encodeURIComponent(n.trace_id);
+  if (n.kind === 'word' || n.kind === 'concept') {
+    // the stable id is the node KEY's name part (the shelf's own key),
+    // never the displayed label
+    const id = (n.key || '').startsWith('word:') ? n.key.slice(5) : name;
+    return '/?dest=' + encodeURIComponent('concept:' + id) + '&' + trace;
+  }
+  if (n.kind === 'external')
+    // parallels are the Sources page's material; src: components are a
+    // run's own innards and their door is their run, below
+    return '/?dest=' + encodeURIComponent('source:' + name) + '&' + trace;
+  return '/?' + trace;
+}
+// Back returns you to the Trails you left: scroll, expanded trails, and
+// the loose-runs toggle survive the round trip through any door.
+function saveTrailsView() {
+  try {
+    sessionStorage.setItem('wordicon_trails_view', JSON.stringify({
+      y: window.scrollY, expanded, showLoose,
+      q: (document.getElementById('q') || {}).value || '' }));
+  } catch (e) {}
+}
+window.addEventListener('pagehide', saveTrailsView);
+function restoreTrailsView() {
+  try {
+    const v = JSON.parse(sessionStorage.getItem('wordicon_trails_view'));
+    if (!v) return;
+    expanded = v.expanded || {};
+    showLoose = !!v.showLoose;
+    const q = document.getElementById('q');
+    if (q && v.q) q.value = v.q;
+    render();
+    window.scrollTo(0, v.y || 0);
+  } catch (e) {}
+}
+
+function render() {
+  if (!DATA) return;
+  const q = (document.getElementById('q').value || '').trim().toLowerCase();
+  const hit = t => !q || t.nodes.some(n => (n.label || '').toLowerCase().includes(q));
+  const trails = (DATA.trails || []).filter(hit);
+  const loose = (DATA.loose || []).filter(r => !q ||
+    (r.labels || []).some(l => (l || '').toLowerCase().includes(q)) ||
+    (r.input_text || '').toLowerCase().includes(q));
+
+  const tw = document.getElementById('warp-toggle');
+  const nw = (DATA.counts || {}).warps || 0;
+  tw.textContent = showWarps ? `warps on${nw ? ' · ' + nw : ''}` : 'warps off';
+  tw.className = showWarps && nw ? 'on' : '';
+  const unplaced = (showWarps ? (DATA.unplaced_warps || []) : []).filter(w => !q ||
+    (w.to_label || '').toLowerCase().includes(q) || (w.from_label || '').toLowerCase().includes(q) ||
+    (w.note || '').toLowerCase().includes(q));
+  const shownLoose = showLoose ? loose : loose.slice(0, LOOSE_HEAD);
+  document.getElementById('stage').innerHTML =
+    (trails.length ? trails.map(trailHtml).join('')
+      : `<p class="empty">No trail has a word matching that.</p>`) +
+    (loose.length ? `<div class="trail">
+      <div class="trail-head"><span class="trail-root" style="font-size:15px">On their own</span>
+        <span class="trail-meta">${loose.length} runs that never linked to anything else</span></div>
+      ${shownLoose.map(r => `<div class="loose-row">
+        <a href="/?trace=${encodeURIComponent(r.trace_id)}">${(r.labels || []).map(esc).join(' · ') || '(untitled)'}</a>
+        <div class="sub">${esc(r.mode)} · ${esc((r.created_at || '').slice(0, 10))}${r.input_text ? ' · “' + esc(r.input_text.slice(0, 60)) + '”' : ''}</div>
+      </div>`).join('')}
+      ${loose.length > shownLoose.length ? `<button class="more" onclick="showLoose=true;render()">show ${loose.length - shownLoose.length} more</button>`
+        : (showLoose && loose.length > LOOSE_HEAD ? `<button class="more" onclick="showLoose=false;render()">show fewer</button>` : '')}
+    </div>` : '') +
+    ((DATA.contaminated_runs || []).length ? `<div class="trail" style="border-color:var(--bad)">
+      <div class="trail-head"><span class="trail-root" style="font-size:15px;color:var(--bad)">Runs built on a contaminated source</span>
+        <span class="trail-meta">${DATA.contaminated_runs.length} run(s)</span></div>
+      <p class="note" style="margin-top:0">These ran before the source boundary was fixed. Their input
+      included Wordicon's own instructions, so their line numbers are shifted and some of their concepts
+      may have been extracted from text you never wrote. Nothing has been deleted — a bad run is still a
+      record — but they should not be read as findings about your source.</p>
+      ${DATA.contaminated_runs.slice(0, 10).map(r => `<div class="loose-row">
+        <a href="/?trace=${encodeURIComponent(r.trace_id)}">${esc(r.mode || 'run')} · ${esc((r.created_at||'').slice(0,10))}</a>
+        <div class="sub">found in its source: ${(r.found||[]).map(esc).join(' · ')}</div></div>`).join('')}
+    </div>` : '') +
+    (unplaced.length ? `<div class="trail">
+      <div class="trail-head"><span class="trail-root" style="font-size:15px">Warp pipes</span>
+        <span class="trail-meta">${unplaced.length} jump${unplaced.length === 1 ? '' : 's'} made from runs that never joined a trail</span></div>
+      ${unplaced.map(w => `<div class="row"><span class="rail"></span><span>
+          <span class="name word">${esc(w.from_label || 'an earlier run')}</span>
+          <span class="via">— was open</span></span></div>` + warpHtml(w, 0)).join('')}
+    </div>` : '') +
+    `<p class="note">A trail is a group of things your runs actually linked — a rename, a
+     compression, a parallel, a translation. Nothing here is inferred from similarity.
+     Runs that only ever produced words and never connected them sit under “On their own”;
+     that is not a fault, it is most of the work. The old spatial map is still there if you
+     want to see everything at once.</p>
+     <p class="note"><strong style="color:var(--warp)">Warp pipes</strong> are the one thing on this page that
+     records something <em>you</em> did rather than something a run did: while one thing was open, you reached
+     back and opened another. A dotted pipe is not an arrow, and the difference is the point — an arrow means
+     one run produced another, and a warp means only that one was on screen when you opened the next.
+     Wordicon cannot see a reason and will never write one; the reading under a pipe is there because you typed
+     it. Jumps are recorded only after ${DATA.warp_min_dwell_s || 20} seconds on a run, so clicking down the
+     archive is not logged as a leap of thought. That threshold is a guess, not a measurement.</p>`;
+}
+
+load().then(restoreTrailsView);
+</script>
+</body>
+</html>

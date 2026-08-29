@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/claim.schema.json",
+  "title": "Claim",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "object_type", "text", "claim_type", "supporting_fragments", "confidence"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^claim_[a-z0-9_]+$" },
+    "object_type": { "const": "claim" },
+    "text": { "type": "string", "minLength": 1 },
+    "claim_type": { "type": "string", "enum": ["historical", "etymological", "scientific", "cultural", "biographical"] },
+    "supporting_fragments": { "type": "array", "items": { "type": "string", "pattern": "^frag_[a-z0-9_]+$" }, "minItems": 1 },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1, "description": "Computed by Q(c) per blueprint §13, not hand-assigned." },
+    "confidence_components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fragment_id", "authority_weight", "relevance", "entailment_strength"],
+        "properties": {
+          "fragment_id": { "type": "string" },
+          "authority_weight": { "type": "number", "minimum": 0, "maximum": 1 },
+          "relevance": { "type": "number", "minimum": 0, "maximum": 1 },
+          "entailment_strength": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "material_disagreement": { "type": "string", "description": "Set when sources conflict; must not be silently resolved." }
+  }
+}

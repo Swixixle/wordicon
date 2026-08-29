@@ -1,0 +1,7 @@
+[
+  { "id": "UC-001", "object_type": "concept", "name": "Ulcerian Defiance", "definition": "Resistance enacted from within a containing system that cannot be exited without cost.", "status": "canonical", "supporting_claims": [], "governing_constraints": [], "related_mechanisms": ["graft_rejection"], "version": 1 },
+  { "id": "ELM-004", "object_type": "concept", "name": "The Exile at the Gate", "definition": "Departure that remains complicated by a prohibited or unresolved belonging left behind.", "status": "canonical", "supporting_claims": [], "governing_constraints": [], "related_mechanisms": ["institution_denies_passage"], "version": 1 },
+  { "id": "WC-012", "object_type": "concept", "name": "Custodial Tenderness", "definition": "Care administered by a system whose primary function is control, not welfare.", "status": "canonical", "supporting_claims": [], "governing_constraints": [], "related_mechanisms": ["protection_becomes_captivity"], "version": 1 },
+  { "id": "WC-013", "object_type": "concept", "name": "The Refusenik Posture", "definition": "The stance of one who exits a containing system without pretending the exit resolves it.", "status": "canonical", "supporting_claims": [], "governing_constraints": ["dc_000091"], "related_mechanisms": [], "version": 1 },
+  { "id": "WC-014", "object_type": "concept", "name": "Ledger Guilt", "definition": "Guilt structured as an unclosable account rather than a resolvable debt.", "status": "canonical", "supporting_claims": [], "governing_constraints": ["dc_000091"], "related_mechanisms": [], "version": 1 }
+]

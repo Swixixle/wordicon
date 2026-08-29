@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/personality-kernel.schema.json",
+  "title": "PersonalityKernel",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "object_type", "kernel_version", "status", "principles", "member_constraints"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^kernel_v[0-9]+$" },
+    "object_type": { "const": "personality_kernel" },
+    "kernel_version": { "type": "integer", "minimum": 1 },
+    "status": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/review_status" },
+    "principles": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "style": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "favor": { "type": "array", "items": { "type": "string" } },
+        "reject": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "required_checks": { "type": "array", "items": { "type": "string" } },
+    "member_constraints": { "type": "array", "items": { "type": "string", "pattern": "^dc_[a-z0-9_]+$" } },
+    "immutable": { "const": true, "description": "Kernel versions are never edited in place; a change creates a new version (blueprint §6.3)." },
+    "supersedes": { "type": ["string", "null"] },
+    "superseded_by": { "type": ["string", "null"] }
+  }
+}

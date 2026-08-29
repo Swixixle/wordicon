@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/source.schema.json",
+  "title": "Source",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "object_type", "title", "created_at", "provenance", "epistemic_class", "sensitivity", "permissions_profile", "permissions", "version"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^src_[a-z0-9_]+$" },
+    "object_type": { "const": "source" },
+    "title": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origin", "author"],
+      "properties": {
+        "origin": { "type": "string", "enum": ["personal_ai_conversation", "personal_writing", "licensed_reference", "public_domain_reference", "owned_media", "manual_entry"] },
+        "author": { "type": "string" },
+        "external_participants": { "type": "array", "items": { "type": "string" } },
+        "original_file_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    },
+    "epistemic_class": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/epistemic_class" },
+    "sensitivity": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/sensitivity" },
+    "permissions_profile": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/permissions_profile" },
+    "permissions": { "$ref": "https://wordicon.local/schemas/permission-policy.schema.json" },
+    "permission_overrides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["flag", "prior_value", "new_value", "reason", "curator", "timestamp"],
+        "properties": {
+          "flag": { "type": "string" },
+          "prior_value": {},
+          "new_value": {},
+          "reason": { "type": "string", "minLength": 1 },
+          "curator": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "rights_record": { "type": "string", "enum": ["public_domain", "openly_licensed", "licensed_commercial_reference", "personally_owned_limited_use", "quotation_only", "metadata_only", "prohibited"] },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "review_status": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/review_status" },
+    "revoked": { "type": "boolean", "default": false },
+    "version": { "type": "integer", "minimum": 1 }
+  }
+}

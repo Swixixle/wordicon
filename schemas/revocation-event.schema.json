@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/revocation-event.schema.json",
+  "title": "RevocationEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "object_type", "revoked_object_id", "revoked_at", "revoked_by", "reason", "dependents_invalidated", "dependents_degraded", "dependents_queued_for_review"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^rev_[a-z0-9_]+$" },
+    "object_type": { "const": "revocation_event" },
+    "revoked_object_id": { "type": "string" },
+    "revoked_at": { "type": "string", "format": "date-time" },
+    "revoked_by": { "type": "string" },
+    "reason": { "type": "string" },
+    "dependents_invalidated": { "type": "array", "items": { "type": "string" } },
+    "dependents_degraded": { "type": "array", "items": { "type": "string" } },
+    "dependents_queued_for_review": { "type": "array", "items": { "type": "string" } },
+    "chamber_summaries_queued_for_regeneration": { "type": "array", "items": { "type": "string" } },
+    "receipts_annotated": { "type": "array", "items": { "type": "string" } }
+  }
+}

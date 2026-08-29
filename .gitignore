@@ -1,0 +1,20 @@
+# Never tracked — the owner's private material and machine-local state.
+# The corpus is the point of the tool and is not source code.
+.env
+local_state/
+_to_delete/
+
+# Generated reports that may quote private corpus content (add back
+# deliberately if ever wanted in history)
+codeview_reports/
+
+# Rebuildable environments, caches, indexes
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# Archives and folder-copy era artifacts
+*.tgz
+*.zip

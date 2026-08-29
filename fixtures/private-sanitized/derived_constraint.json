@@ -1,0 +1,20 @@
+{
+  "id": "dc_000091",
+  "object_type": "derived_constraint",
+  "text": "Do not romanticize survivor guilt.",
+  "derived_from": [
+    { "object_id": "src_personal_sanitized_001", "relationship": "derived_from", "materiality": "essential" }
+  ],
+  "derivation_method": "curator_authored",
+  "review_status": "approved",
+  "sensitivity": "derived_only",
+  "permissions_profile": "derived_only",
+  "valid_from": "2026-08-18T00:00:00Z",
+  "valid_until": null,
+  "supersedes": null,
+  "superseded_by": null,
+  "kernel_membership": ["kernel_v1"],
+  "chamber_summary_membership": [],
+  "reused_in_operations": [],
+  "version": 1
+}

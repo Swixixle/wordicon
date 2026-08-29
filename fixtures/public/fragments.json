@@ -1,0 +1,86 @@
+[
+  {
+    "id": "frag_pub_quarantine_01",
+    "source_id": "src_pub_quarantine",
+    "claim_text": "\"Quarantine\" derives from the Venetian dialect \"quaranta giorni\" (forty days), the isolation period imposed on ships arriving from plague-affected ports during the 14th-century Black Death.",
+    "supports_bone": true
+  },
+  {
+    "id": "frag_pub_exile_01",
+    "source_id": "src_pub_exile",
+    "claim_text": "Exile (Latin \"exilium\") was formalized in Roman law as a punishment that removed a person from their community while leaving their legal existence intact elsewhere, distinct from execution or slavery.",
+    "supports_bone": true
+  },
+  {
+    "id": "frag_pub_parole_01",
+    "source_id": "src_pub_parole",
+    "claim_text": "\"Parole\" entered English from French \"parole\" (word, speech); a prisoner released \"on parole\" was released on their word or promise, not on unconditional release.",
+    "supports_bone": true
+  },
+  {
+    "id": "frag_pub_scapegoat_01",
+    "source_id": "src_pub_scapegoat",
+    "claim_text": "\"Scapegoat\" originates in William Tyndale's 1530 English translation of Leviticus 16, rendering a Hebrew ritual term as \"(e)scape goat\" — a goat symbolically burdened with a community's sins and released into the wilderness.",
+    "supports_bone": true
+  },
+  {
+    "id": "frag_pub_liminal_01",
+    "source_id": "src_pub_liminal",
+    "claim_text": "\"Liminal\" (Latin \"limen\", threshold) was popularized in anthropology by Victor Turner's extension of Arnold van Gennep's work on rites of passage, describing the ambiguous middle stage of a transition ritual.",
+    "supports_bone": true
+  },
+  {
+    "id": "frag_pub_pedagogue_01",
+    "source_id": "src_pub_pedagogue",
+    "claim_text": "\"Pedagogue\" derives from Greek \"paidagogos\" (child + leader); the role originally named not a teacher but the slave assigned to escort a boy to school and supervise his conduct along the way.",
+    "supports_bone": true
+  },
+  {
+    "id": "frag_pub_mortgage_01",
+    "source_id": "src_pub_mortgage",
+    "claim_text": "\"Mortgage\" entered English from Old French \"mort gage,\" literally \"dead pledge\": the pledge dies either when the debt is fully repaid or when the debtor defaults and forfeits the property.",
+    "supports_bone": true
+  },
+  {
+    "id": "frag_pub_sabotage_01",
+    "source_id": "src_pub_sabotage",
+    "claim_text": "\"Sabotage\" derives from French \"saboter\" (to bungle, to walk noisily, from \"sabot,\" a wooden shoe); the popular story that it originated from workers throwing shoes into machinery is a documented myth, not supported by the historical record — the original sense was deliberately poor workmanship, not destruction.",
+    "supports_bone": true
+  },
+  {
+    "id": "frag_pub_propaganda_01",
+    "source_id": "src_pub_propaganda",
+    "claim_text": "\"Propaganda\" entered English in reference to the \"Congregatio de Propaganda Fide\" (\"Congregation for Propagating the Faith\"), a committee of cardinals established by Pope Gregory XV in 1622 to oversee the Catholic Church's foreign missions.",
+    "supports_bone": true
+  },
+  {
+    "id": "frag_pub_orphan_01",
+    "source_id": "src_pub_orphan",
+    "claim_text": "\"Orphan\" derives from Greek \"orphanos\" (bereft, deprived), tracing to a Proto-Indo-European root meaning \"to change status or allegiance\" — the same root produced Old Church Slavonic and Germanic words for servitude and inheritance.",
+    "supports_bone": true
+  },
+  {
+    "id": "frag_pub_hybrid_01",
+    "source_id": "src_pub_hybrid",
+    "claim_text": "\"Hybrid\" derives from Latin \"hibrida,\" which named the offspring of a tame sow and a wild boar, before the word broadened around 1850 to mean the product of any two heterogeneous things.",
+    "supports_bone": true
+  },
+  {
+    "id": "frag_pub_nostalgia_01",
+    "source_id": "src_pub_nostalgia",
+    "claim_text": "\"Nostalgia\" was coined in 1688 by Swiss physician Johannes Hofer, combining Greek \"nostos\" (homecoming) and \"algos\" (pain), to name what he classified as a medical disease — severe homesickness — observed in Swiss populations living away from home.",
+    "supports_bone": true
+  },
+  {
+    "id": "frag_pub_taboo_01",
+    "source_id": "src_pub_taboo",
+    "claim_text": "\"Taboo\" entered English from Tongan \"tapu\" (sacred, forbidden) via Captain James Cook's 1777 account of his Pacific voyages; the English noun and verb forms were Cook's own innovations, not direct translations.",
+    "supports_bone": true
+  },
+  {
+    "id": "frag_pub_curfew_01",
+    "source_id": "src_pub_curfew",
+    "claim_text": "\"Curfew\" derives from Old French \"cuevrefeu,\" literally \"cover fire\": a bell rung at a fixed evening hour in medieval towns, signaling households to bank their hearth fires and prevent conflagration.",
+    "supports_bone": true
+  }
+]

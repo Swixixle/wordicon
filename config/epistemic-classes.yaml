@@ -1,0 +1,40 @@
+# Epistemic classes (blueprint v1.2 §4.3). What kind of authority an object has —
+# independent of its sensitivity/permission profile, which governs WHO can see it,
+# not what claims it can support.
+
+classes:
+  external_factual_authority:
+    meaning: May support Bone claims within scope.
+    may_support_bone: true
+
+  primary_historical_source:
+    meaning: Direct evidence requiring contextual interpretation.
+    may_support_bone: true
+    notes: Interpretation must be labeled Flesh, not folded into the Bone claim itself.
+
+  secondary_scholarship:
+    meaning: Interprets primary evidence.
+    may_support_bone: true
+    notes: Disagreement between secondary sources must be disclosed on the claim, not resolved silently.
+
+  personal_authority:
+    meaning: Authoritative about the owner's own concepts, preferences, and judgments — not about external fact.
+    may_support_bone: false
+    notes: Can support a Derived Constraint or a Flesh interpretation; cannot alone support an external factual Bone claim.
+
+  creative_source:
+    meaning: May inspire Flesh but not factual claims.
+    may_support_bone: false
+
+  speculative_framework:
+    meaning: May structure interpretation with explicit qualification.
+    may_support_bone: false
+
+  negative_example:
+    meaning: Teaches prohibited or failed behavior (anti-corpus).
+    may_support_bone: false
+
+  quarantined_research:
+    meaning: Not admitted to Bone until reviewed.
+    may_support_bone: false
+    notes: Default class for freshly ingested, unreviewed external material.

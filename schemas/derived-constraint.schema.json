@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/derived-constraint.schema.json",
+  "title": "DerivedConstraint",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "object_type", "text", "derived_from", "derivation_method", "review_status", "sensitivity", "permissions_profile", "valid_from", "version"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^dc_[a-z0-9_]+$" },
+    "object_type": { "const": "derived_constraint" },
+    "text": { "type": "string", "minLength": 1 },
+    "derived_from": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["object_id", "relationship", "materiality"],
+        "properties": {
+          "object_id": { "type": "string" },
+          "relationship": { "const": "derived_from" },
+          "materiality": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/materiality" }
+        }
+      }
+    },
+    "derivation_method": { "type": "string", "enum": ["curator_authored", "model_proposed", "kernel_v1_manual"] },
+    "review_status": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/review_status" },
+    "sensitivity": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/sensitivity" },
+    "permissions_profile": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/permissions_profile" },
+    "valid_from": { "type": "string", "format": "date-time" },
+    "valid_until": { "type": ["string", "null"], "format": "date-time" },
+    "supersedes": { "type": ["string", "null"] },
+    "superseded_by": { "type": ["string", "null"] },
+    "kernel_membership": { "type": "array", "items": { "type": "string" } },
+    "chamber_summary_membership": { "type": "array", "items": { "type": "string" } },
+    "reused_in_operations": { "type": "array", "items": { "type": "string" } },
+    "version": { "type": "integer", "minimum": 1 }
+  }
+}

@@ -1,0 +1,1377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wordicon — Map</title>
+<meta name="theme-color" content="#11161d">
+<style>
+  /* Links: the ruled palette (measured >=8.4:1 on these surfaces),
+     underlined; inline-styled links keep their chosen colors. */
+  a { color: #8cc8ff; text-decoration: underline; text-underline-offset: 2px; }
+  a:visited { color: #d9b3ff; }
+  a:hover, a:focus-visible { color: #ffe08a; }
+  a:focus-visible { outline: 2px solid #ffe08a; outline-offset: 2px; border-radius: 3px; }
+
+  /* Same tokens as the main app, so the map reads as one product. */
+  :root {
+    --bg: #11161d;
+    --panel: #181f29;
+    --panel-2: #1f2833;
+    --border: #2a3441;
+    --text: #e7ecf3;
+    --muted: #8b98a9;
+    --accent: #78aaff;
+    --good: #6fcf97;
+    --bad: #e08a8a;
+    /* Route palette — validated (dataviz six-checks) against #11161d,
+       all-pairs, dark mode. The magenta sits in the CVD warn band, which
+       is legal ONLY because color is never the only signal here: every
+       route also has its own dash pattern and node glyph. If you change
+       these, keep that rule. */
+    --route-word: #3987e5;     /* renamed_as / compressed_as / reworked_into */
+    --route-source: #d766a6;   /* decomposed_into / forged_as */
+    --route-sprout: #d95926;   /* parallels / continued_from */
+    --route-refract: #199e70;  /* translated_as / english_fossil */
+    --route-warp: #9085e9;     /* recurrence arcs (derived, dashed) */
+    --route-dispute: #e66767;  /* conflicting verdicts (status, broken dash) */
+    --route-journey: #4a5a70;  /* the spine + produced edges (structural) */
+    --route-declared: #d9a441; /* owner-declared roads (dotted — a ruling, not a run) */
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    overflow: hidden; }
+
+  header { position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 10px 16px; background: rgba(17,22,29,0.92); border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(6px); }
+  header h1 { font-size: 16px; margin: 0; font-weight: 700; }
+  header a { color: var(--accent); text-decoration: none; font-size: 13px; }
+  .toggles { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; }
+  .toggles label { display: flex; align-items: center; gap: 5px; cursor: pointer;
+    color: var(--muted); user-select: none; }
+  .toggles input { accent-color: var(--accent); }
+  .toggles .swatch { display: inline-block; width: 18px; height: 0; border-top: 3px solid; }
+  .zoom-btns { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .zoom-btns button { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 4px 11px; font-size: 15px; cursor: pointer; }
+
+  #viewport { position: absolute; inset: 0; top: 52px; cursor: grab; touch-action: none; overscroll-behavior: none; }
+  #viewport.dragging { cursor: grabbing; }
+  svg text { user-select: none; }
+
+  .runbox { fill: var(--panel); stroke: var(--border); }
+  .itembox { fill: var(--panel-2); stroke: var(--border); cursor: pointer; }
+  .itembox.accepted { stroke: var(--good); stroke-width: 1.6; }
+  .itembox.rejected, .ghost { opacity: 0.35; }
+  /* Contradiction is NOT the same as rejection and must not fade like one:
+     rejected is your judgment, contradicted is a factual error about the
+     quoted source. It stays at full opacity with a hard red edge so a
+     limb that denies its own anchor is visible from far out. */
+  .itembox.contradicted { stroke: var(--bad); stroke-width: 2.2; opacity: 1; }
+  .itembox:hover { stroke: var(--accent); }
+  .lbl { fill: var(--text); font-size: 12px; }
+  .sub { fill: var(--muted); font-size: 10px; }
+  .glyph { font-size: 12px; }
+  /* semantic zoom: labels go first, then boxes thin to glyph blocks */
+  .zoom-mid .lbl, .zoom-mid .sub { display: none; }
+  .zoom-far .lbl, .zoom-far .sub, .zoom-far .glyph { display: none; }
+  /* And routes thin out with them. Local lineage — which candidate came
+     from which component — is detail you read up close; drawn at world
+     scale across a full corpus it's a hairball that buries the only
+     things worth pulling back FOR, which are the long-range recurrence
+     arcs and disputes. Those stay at full strength. Faded rather than
+     hidden, so the density still reads as density. */
+  .zoom-mid .route-source, .zoom-mid .route-word,
+  .zoom-mid .route-refract, .zoom-mid .route-sprout { opacity: 0.3; }
+  .zoom-far .route-source, .zoom-far .route-word,
+  .zoom-far .route-refract, .zoom-far .route-sprout { opacity: 0.1; }
+
+  #detail { position: fixed; top: 52px; right: 0; bottom: 0; width: 340px; max-width: 90vw;
+    background: var(--panel); border-left: 1px solid var(--border); padding: 16px;
+    overflow-y: auto; z-index: 15; transform: translateX(100%); transition: transform 0.18s; }
+  #detail.open { transform: none; }
+  #detail h2 { font-size: 16px; margin: 0 0 4px; }
+  #detail .close { position: absolute; top: 10px; right: 14px; background: none; border: none;
+    color: var(--muted); font-size: 18px; cursor: pointer; }
+  #detail p { font-size: 13px; line-height: 1.45; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 20px; margin-right: 5px; }
+  .tag.accepted, .tag.holds, .tag.keep, .tag.confirmed { background: rgba(111,207,151,0.18); color: var(--good); }
+  .tag.rejected, .tag.suspect, .tag.reject { background: rgba(224,138,138,0.18); color: var(--bad); }
+  .tag.revised, .tag.strained, .tag.existing { background: rgba(120,170,255,0.18); color: var(--accent); }
+
+  #legend { position: fixed; left: 12px; bottom: 12px; z-index: 15; background: rgba(24,31,41,0.95);
+    border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; font-size: 12px;
+    max-width: 420px; }
+  #legend summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+  #legend .row { display: flex; align-items: center; gap: 8px; margin: 5px 0; color: var(--muted); }
+  #legend svg { flex: 0 0 34px; }
+  /* .row is a flex container, which shreds any row made of several text
+     runs into narrow columns — a prose row has to opt out of it. */
+  #legend .row.prose { display: block; line-height: 1.6; }
+  #legend .row.prose .tag { display: inline-block; vertical-align: baseline; margin: 0 2px; }
+  #legend .limits { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--muted); }
+  #legend .limits p { margin: 4px 0; }
+
+  #minimap { position: fixed; right: 12px; bottom: 12px; z-index: 15; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--panel); cursor: pointer; }
+  #empty { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 15px; text-align: center; padding: 40px; }
+
+  /* ---- Wayfinder ---- */
+  #wayfinder { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-size: 12.5px; color: var(--muted); }
+  #wayfinder input, #wayfinder select { background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 4px 9px; font-size: 12.5px; }
+  #wayfinder input { width: 150px; }
+  #wayfinder button { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 4px 11px; font-size: 12.5px; cursor: pointer; }
+  #wayfinder button.primary { border-color: var(--accent); color: var(--accent); }
+  /* When a route is plotted, everything irrelevant quiets down and the
+     chosen hospital-tape path brightens. Blanket-dim every top-level part
+     of the world, then re-light exactly what the route touches. */
+  svg.routing #world > * { opacity: 0.08; transition: opacity 0.25s; }
+  svg.routing #world > .on-route { opacity: 1; }
+  svg.routing #world > path.on-route { stroke-width: 3.4 !important; }
+  /* item boxes are nested inside their run's group: light the holder,
+     re-dim its other children, re-light the stop itself */
+  svg.routing #world > g.on-route-holder { opacity: 1; }
+  svg.routing g.on-route-holder > g { opacity: 0.12; }
+  svg.routing g.on-route-holder > rect.runbox, svg.routing g.on-route-holder > text { opacity: 0.12; }
+  svg.routing g.on-route-holder > g.on-route { opacity: 1; }
+  svg.routing g.on-route-holder.on-route > rect.runbox,
+  svg.routing g.on-route-holder.on-route > text { opacity: 1; }
+  svg.routing g.on-route rect { stroke: var(--accent); stroke-width: 2.2; }
+  path.inferred-road { stroke: var(--route-warp); stroke-width: 2.6; stroke-dasharray: 4 7;
+    fill: none; opacity: 1; }
+  #wf-out { position: fixed; left: 12px; right: 232px; bottom: 12px; z-index: 16;
+    background: rgba(24,31,41,0.97); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 16px; font-size: 13px; max-height: 42vh; overflow-y: auto; display: none; }
+  #wf-out.open { display: block; }
+  #wf-out h3 { margin: 0 0 6px; font-size: 13.5px; }
+  #wf-out .step { margin: 5px 0; line-height: 1.5; }
+  #wf-out .stop { color: var(--text); font-weight: 700; cursor: pointer; }
+  #wf-out .stop:hover { color: var(--accent); }
+  #wf-out .roadchip { font-size: 10.5px; padding: 1px 7px; border-radius: 20px; margin-left: 5px;
+    border: 1px solid var(--border); color: var(--muted); vertical-align: 1px; }
+  #wf-out .roadchip.recorded { color: var(--good); border-color: var(--good); }
+  #wf-out .roadchip.reconstructed { color: var(--accent); border-color: var(--accent); }
+  #wf-out .roadchip.declared { color: var(--route-declared); border-color: var(--route-declared); }
+  #wf-out .roadchip.inferred { color: var(--route-warp); border-color: var(--route-warp); }
+  #wf-out .basis { color: var(--muted); font-size: 12px; }
+  #wf-out .cand { border-top: 1px solid var(--border); padding: 7px 0; }
+  #wf-out .cand input { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 2px 7px; font-size: 12px; width: 200px; }
+  #wf-out button { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 7px; padding: 2px 9px; font-size: 11.5px; cursor: pointer; margin-left: 5px; }
+  #wf-out .close { float: right; background: none; border: none; color: var(--muted);
+    font-size: 16px; cursor: pointer; }
+  #wf-out .alt { display: flex; align-items: center; gap: 10px; padding: 6px 8px;
+    border: 1px solid var(--border); border-radius: 9px; margin: 5px 0; cursor: pointer; }
+  #wf-out .alt:hover, #wf-out .alt.chosen { border-color: var(--accent); }
+  #wf-out .alt .altname { font-weight: 700; min-width: 105px; }
+  #wf-out .alt .altsum { color: var(--muted); font-size: 12px; }
+
+  /* ---- Aerial: the whole corpus as a legible calendar. World-anchored
+     labels overlap into soup at true-fit scale, so the aerial is a
+     screen-space index instead — every day, every accepted word, one
+     glance, click to dive. */
+  #aerial-overlay { position: fixed; inset: 52px 0 0 0; z-index: 14; display: none;
+    background: rgba(17,22,29,0.94); overflow-y: auto; padding: 18px 22px 80px; }
+  #aerial-overlay.open { display: block; }
+  #aerial-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 10px; }
+  .air-cell { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 9px 11px; cursor: pointer; }
+  .air-cell:hover { border-color: var(--accent); }
+  .air-cell .d { font-weight: 700; font-size: 13px; }
+  .air-cell .n { color: var(--muted); font-size: 11px; margin: 1px 0 5px; }
+  .air-cell .w { font-size: 12px; color: var(--good); line-height: 1.5; }
+  .air-cell .w .none { color: var(--muted); }
+  #aerial-note { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Map</h1>
+  <a href="/">← back to Wordicon</a>
+  <div class="toggles" id="toggles"></div>
+  <div id="wayfinder">
+    <strong style="color:var(--text)">Wayfinder</strong>
+    <input id="wf-from" list="wf-places" placeholder="from…" autocomplete="off">
+    <span>→</span>
+    <input id="wf-to" list="wf-places" placeholder="to…" autocomplete="off">
+    <button class="primary" onclick="findRoutes()" title="Every honest route at once — Lineage, Direct, Well-trodden, History — like route alternatives on a road map. Resonance and Friction proposals stay behind their own buttons in the results.">Find routes</button>
+    <button onclick="clearRoute()">Clear</button>
+    <button onclick="openAerial()" title="the whole corpus as a legible calendar — click a day to dive">◫ Aerial</button>
+    <button onclick="showStats()" title="what you did with the map, counted raw">Σ Stats</button>
+    <datalist id="wf-places"></datalist>
+  </div>
+  <div class="zoom-btns">
+    <button onclick="zoomBy(1.25)">+</button>
+    <button onclick="zoomBy(0.8)">−</button>
+    <button onclick="fitAll()" title="fit everything (0)">⤢</button>
+    <button onclick="cam.x=20;cam.y=10;applyCamera()" title="jump to the beginning (Home)">⇤</button>
+    <button onclick="jumpToEnd();applyCamera()" title="jump to today (End)">⇥</button>
+    <span class="sub" style="color:var(--muted);font-size:11px;margin-left:4px">scroll or drag to move · ⌘/ctrl+scroll or pinch to zoom · arrows, Home/End</span>
+  </div>
+</header>
+
+<div id="viewport"><svg id="stage" width="100%" height="100%"><g id="world"></g></svg></div>
+<div id="empty">Nothing on the map yet — run something in Wordicon first.<br>
+  Every forge, sprout, refract, and revision lands here as it happens.</div>
+
+<div id="detail"><button class="close" onclick="closeDetail()">×</button><div id="detail-body"></div></div>
+<div id="wf-out"><button class="close" onclick="clearRoute()">×</button><div id="wf-out-body"></div></div>
+<div id="aerial-overlay">
+  <p id="aerial-note">The whole corpus, one glance — every day, its runs, and the words you accepted.
+  Click a day to dive to it on the map. <button onclick="closeAerial()" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:2px 10px;font-size:12px;cursor:pointer">close</button></p>
+  <div id="aerial-grid"></div>
+</div>
+
+<details id="legend">
+  <summary>Legend & what this map does NOT claim</summary>
+  <div id="legend-routes"></div>
+  <div class="row prose">◆ concept &nbsp; ● word-form &nbsp; ★ external work &nbsp; ⬠ translation &nbsp; ▣ source text &nbsp; ◇ component &nbsp; <span style="color:var(--bad)">⊘ contradicts its own anchor</span></div>
+  <div class="row prose"><strong>Two judgments per item, never one.</strong> <span class="tag rejected">Friction: reject</span> is the critic's advice and decides nothing. <span class="tag accepted">you: accepted</span> is your ruling and is the only thing that settles anything. An item can carry both — Friction arguing against a word you kept is a normal, recorded disagreement, not an error.</div>
+  <div class="row prose">solid = recorded lineage · dashed arc = same title recurring · thick solid arc = different titles, one shared concept (carried by Revise/Wordify) · broken + ⚠ = disputed verdicts · faint = rejected, kept as ghost · green ring = you accepted it</div>
+  <div class="row prose"><strong>Wayfinder roads identify themselves:</strong> <span class="tag accepted">recorded</span> written to the log as it happened · <span class="tag revised">reconstructed from snapshot</span> the event happened, the road was written down late · <span style="color:var(--route-declared)">declared</span> you ruled it exists · <span style="color:var(--route-warp)">inferred</span> a model proposed it just now — not part of the record, editable, and real only if you declare it. Lineage, Direct and History never infer; “No road exists” is a result, not an error.</div>
+  <div class="limits" id="legend-limits"></div>
+</details>
+
+<canvas id="minimap" width="280" height="92" title="drag to travel"></canvas>
+
+<script>
+// ---- route model ---------------------------------------------------------
+// One place maps every edge rel to a route; colors live in CSS custom
+// properties above (change them there — but keep the rule that every
+// route also differs by dash pattern, never by color alone).
+const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+const ROUTES = {
+  journey: { label: 'Journey (produced)', color: css('--route-journey'), dash: '', rels: ['produced'] },
+  word:    { label: 'Word lineage', color: css('--route-word'), dash: '', rels: ['renamed_as', 'compressed_as', 'reworked_into'] },
+  source:  { label: 'Source lineage', color: css('--route-source'), dash: '', rels: ['decomposed_into', 'forged_as'] },
+  sprout:  { label: 'Sprout parallels', color: css('--route-sprout'), dash: '', rels: ['parallels', 'continued_from'] },
+  refract: { label: 'Refractions', color: css('--route-refract'), dash: '', rels: ['translated_as', 'english_fossil'] },
+  warp:    { label: 'Recurrence (derived)', color: css('--route-warp'), dash: '8 5', rels: [] },
+  dispute: { label: 'Disputes', color: css('--route-dispute'), dash: '3 6', rels: [] },
+  declared: { label: 'Declared roads (yours)', color: css('--route-declared'), dash: '2 4', rels: ['declared_road'] },
+};
+// reworked_into = the meaning changed under the owner's critique — long
+// dashes distinguish it from a pure rename without needing a second hue.
+const REL_DASH = { reworked_into: '12 4' };
+const REL_ROUTE = {};
+for (const [name, r] of Object.entries(ROUTES)) r.rels.forEach(rel => REL_ROUTE[rel] = name);
+const GLYPH = { concept: '◆', word: '●', external: '★', translation: '⬠', source: '▣', component: '◇', run: '' };
+
+// Two judgments sat side by side reading "reject · accepted", and nothing
+// in that string said which was whose. Friction ADVISES; the owner DECIDES;
+// the whole design rests on that asymmetry, so the map has to show it. The
+// owner's half is always the one carrying "you:".
+function dispositionLabel(it) {
+  const bits = [];
+  if (it.verdict) bits.push('Friction: ' + it.verdict);
+  if (it.judgment) bits.push('you: ' + it.judgment);
+  return bits.join(' · ');
+}
+
+const COL_W = 250, COL_GAP = 70, SPINE_Y = 120, RUN_H = 46, ITEM_W = 210, ITEM_H = 40, ITEM_GAP = 10;
+
+let DATA = null, boxes = {}, runX = {}, runY = {}, days = [], worldW = 1000, worldH = 800;
+let cam = { x: 0, y: 0, k: 1 };
+// Defaults spread FIRST so a stored prefs blob from before a route existed
+// can never hide it: 'declared' was invisible for exactly that reason once.
+let visible = { journey: false, word: true, source: true, sprout: true, refract: true, warp: true, dispute: true, declared: true };
+try { const s = localStorage.getItem('overworld_routes'); if (s) visible = { ...visible, ...JSON.parse(s) }; } catch (e) {}
+
+function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ---- layout ---------------------------------------------------------------
+// The geography is STABLE by construction: x is chronological order, y is
+// list order within a run. Nothing ever rearranges when data is added to
+// the right — that stability is what lets you build spatial memory of
+// your own corpus, and it's why this is not a force-directed graph.
+function layout() {
+  boxes = {}; runX = {}; runY = {}; days = [];
+  // One column per DAY, not per run. Per-run columns made the world 415
+  // screen-widths across at 1500 runs — unnavigable by any amount of
+  // panning — and the axis was also lying: it spaced run 5 and run 6
+  // identically whether they happened seconds or a week apart. Days are
+  // both navigable and true. Within a day, runs stack downward in order.
+  const byDay = new Map();
+  DATA.runs.forEach(run => {
+    const day = (run.created_at || '').slice(0, 10) || 'undated';
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(run);
+  });
+  const dayKeys = [...byDay.keys()].sort();
+  // Folding across BOTH axes, because neither alone survives a real
+  // corpus: one column per run made the world 415 screens wide, and one
+  // column per day made it 380 screens tall. The content is a fixed
+  // area, so the only honest move is to fold it into a roughly square
+  // world — a day that outgrows a column continues in the next one,
+  // still labelled with its own date.
+  const runH = run => RUN_H + 8 + run.items.length * (ITEM_H + ITEM_GAP) + 18;
+  const totalH = DATA.runs.reduce((a, r) => a + runH(r), 0);
+  const colTarget = Math.max(900, Math.sqrt(Math.max(1, totalH) * (COL_W + COL_GAP)));
+
+  days = [];              // one entry per COLUMN: {day, x, first}
+  let col = 0, tallest = 0;
+  dayKeys.forEach(day => {
+    let y = SPINE_Y + RUN_H + 26;
+    days.push({ day, x: 40 + col * (COL_W + COL_GAP), first: true });
+    byDay.get(day).forEach(run => {
+      if (y - (SPINE_Y + RUN_H + 26) + runH(run) > colTarget && y > SPINE_Y + RUN_H + 40) {
+        tallest = Math.max(tallest, y);
+        col++; y = SPINE_Y + RUN_H + 26;
+        days.push({ day, x: 40 + col * (COL_W + COL_GAP), first: false });
+      }
+      const x = 40 + col * (COL_W + COL_GAP);
+      runX[run.trace_id] = x;
+      runY[run.trace_id] = y;
+      run._headY = y;
+      y += RUN_H + 8;
+      run.items.forEach(it => {
+        (boxes[it.key] = boxes[it.key] || []).push(
+          { run: run.trace_id, runIdx: col, item: it, x, y });
+        y += ITEM_H + ITEM_GAP;
+      });
+      if (!run.items.length) y += 6;
+      y += 18;
+    });
+    tallest = Math.max(tallest, y);
+    col++;
+  });
+  worldW = 80 + col * (COL_W + COL_GAP);
+  worldH = tallest + 60;
+}
+
+function findBox(key, preferTrace) {
+  const list = boxes[key] || [];
+  if (!list.length) return null;
+  return list.find(b => b.run === preferTrace) || list[0];
+}
+
+// ---- render ----------------------------------------------------------------
+function render() {
+  const world = document.getElementById('world');
+  const parts = [];
+  const defs = Object.entries(ROUTES).map(([name, r]) =>
+    `<marker id="arr-${name}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+       <path d="M0,0 L8,4 L0,8 z" fill="${r.color}"/></marker>`).join('');
+  parts.push(`<defs>${defs}</defs>`);
+
+  // spine — now a day ruler, one stop per day rather than per run
+  if (days.length) {
+    const x2 = days[days.length - 1].x + COL_W;
+    parts.push(`<line x1="20" y1="${SPINE_Y + RUN_H / 2}" x2="${x2 + 30}" y2="${SPINE_Y + RUN_H / 2}"
+      stroke="${ROUTES.journey.color}" stroke-width="2" marker-end="url(#arr-journey)"/>`);
+    const perDay = {};
+    DATA.runs.forEach(r => {
+      const d = (r.created_at || '').slice(0, 10) || 'undated';
+      perDay[d] = (perDay[d] || 0) + 1;
+    });
+    days.forEach(colInfo => {
+      const n = perDay[colInfo.day] || 0;
+      parts.push(`<g>
+        <rect class="runbox" x="${colInfo.x}" y="${SPINE_Y}" width="${COL_W}" height="${RUN_H}" rx="10"/>
+        <text class="lbl" x="${colInfo.x + 10}" y="${SPINE_Y + 19}" font-weight="700">${escapeHtml(colInfo.day)}${colInfo.first ? '' : ' <span>(cont.)</span>'}</text>
+        <text class="sub" x="${colInfo.x + 10}" y="${SPINE_Y + 34}">${colInfo.first ? `${n} run${n === 1 ? '' : 's'} this day` : 'continued'}</text>
+      </g>`);
+    });
+  }
+
+  // run headers + items, stacked within their day's column
+  DATA.runs.forEach((run, i) => {
+    const x = runX[run.trace_id];
+    if (x === undefined) return;
+    parts.push(`<g class="run" data-trace="${run.trace_id}" data-nk="${escapeHtml(run.trace_id)}">
+      <rect class="runbox" x="${x}" y="${run._headY}" width="${COL_W}" height="${RUN_H}" rx="8"
+        onclick="openRunDetail('${run.trace_id}')" style="cursor:pointer"/>
+      <text class="lbl" x="${x + 10}" y="${run._headY + 18}" font-weight="700">${escapeHtml(run.mode)}</text>
+      <text class="sub" x="${x + 10}" y="${run._headY + 34}">${escapeHtml((run.created_at || '').slice(11, 16))} · ${escapeHtml(trunc(run.input_text, 24))}</text>`);
+    run.items.forEach((it, j) => {
+      const y = (boxes[it.key] || []).filter(b => b.run === run.trace_id)[0]?.y
+                ?? (run._headY + RUN_H + 8 + j * (ITEM_H + ITEM_GAP));
+      const cls = ['itembox'];
+      const contra = it.verdict === 'contradicted';
+      if (it.judgment === 'accepted') cls.push('accepted');
+      if (contra) cls.push('contradicted');
+      else if (it.judgment === 'rejected' || it.verdict === 'reject' || it.verdict === 'suspect') cls.push('rejected');
+      parts.push(`<g data-nk="${escapeHtml(it.key)}">
+        <rect class="${cls.join(' ')}" x="${x}" y="${y}" width="${ITEM_W}" height="${ITEM_H}" rx="8"
+          onclick="openDetail('${escapeHtml(it.key)}', '${run.trace_id}')"/>
+        <text class="glyph" x="${x + 9}" y="${y + 25}" fill="${contra ? css('--bad') : routeColorForKind(it.kind)}">${contra ? '⊘' : (GLYPH[it.kind] || '·')}</text>
+        <text class="lbl" x="${x + 26}" y="${y + 17}">${escapeHtml(trunc(it.label, 24))}</text>
+        <text class="sub" x="${x + 26}" y="${y + 31}" ${contra ? `fill="${css('--bad')}"` : ''}>${escapeHtml(contra ? 'contradicts its anchor' : dispositionLabel(it))}</text>
+      </g>`);
+    });
+    parts.push('</g>');
+    // journey connector: day ruler down to this run's header
+    parts.push(`<line x1="${x + COL_W / 2}" y1="${SPINE_Y + RUN_H}" x2="${x + COL_W / 2}" y2="${run._headY}"
+      stroke="${ROUTES.journey.color}" stroke-width="1.2" class="route-journey" ${visible.journey ? '' : 'display="none"'}/>`);
+  });
+
+  // edges
+  let skipped = 0;
+  DATA.edges.forEach(e => {
+    const routeName = REL_ROUTE[e.rel];
+    if (!routeName) return;
+    if (e.rel === 'continued_from') { // run→run: draw run-box to run-box
+      const x1 = runX[e.source.key], x2 = runX[e.target.key];
+      const y1 = runY[e.source.key], y2 = runY[e.target.key];
+      if (x1 === undefined || x2 === undefined) { skipped++; return; }
+      parts.push(edgePath(x1 + COL_W, y1 - 8, x2, y2 - 8,
+        ROUTES.sprout.color, '', 'sprout', '', false, e.edge_id));
+      return;
+    }
+    const tb = findBox(e.target.key, e.run_trace_id);
+    const sb = findBox(e.source.key, e.run_trace_id) ||
+               (tb ? nearestBefore(e.source.key, tb.runIdx) : null);
+    if (!sb || !tb) { skipped++; return; }
+    if (sb === tb) return;
+    const ghost = e.verdict === 'reject' || e.verdict === 'suspect';
+    const dash = REL_DASH[e.rel] || ROUTES[routeName].dash;
+    if (sb.run === tb.run) {
+      // same column: route down the LEFT side as a bracket, arriving
+      // left-to-right so the arrowhead reads in the direction of travel
+      const bow = 26;
+      parts.push(`<path class="route-${routeName} ${ghost ? 'ghost' : ''}" data-ek="${escapeHtml(e.edge_id || '')}"
+        d="M${sb.x},${sb.y + ITEM_H / 2} C${sb.x - bow},${sb.y + ITEM_H / 2} ${tb.x - bow},${tb.y + ITEM_H / 2} ${tb.x},${tb.y + ITEM_H / 2}"
+        fill="none" stroke="${ROUTES[routeName].color}" stroke-width="1.6"
+        ${dash ? `stroke-dasharray="${dash}"` : ''} marker-end="url(#arr-${routeName})">
+        <title>${escapeHtml(e.rel + (e.verdict ? ' · ' + e.verdict : ''))}</title></path>`);
+    } else {
+      parts.push(edgePath(sb.x + ITEM_W, sb.y + ITEM_H / 2, tb.x, tb.y + ITEM_H / 2,
+        ROUTES[routeName].color, dash, routeName, e.verdict, ghost, e.edge_id));
+    }
+  });
+
+  // recurrence warps — arcs above the spine, geometrically apart from the
+  // in-run edge lanes so their color never has to fight the lane colors.
+  // Labels live in tooltips, not on the arcs: with dozens of warps the
+  // always-on labels collided into unreadable overprint at the apexes.
+  let warpIdx = 0;
+  DATA.warps.forEach(w => {
+    const traceList = w.traces.filter(t => runX[t] !== undefined).sort((a, b) => runX[a] - runX[b]);
+    for (let i = 0; i + 1 < traceList.length; i++) {
+      const b1 = findBox(w.key, traceList[i]), b2 = findBox(w.key, traceList[i + 1]);
+      if (!b1 || !b2) continue;
+      parts.push(arcPath(b1.x + ITEM_W / 2, b1.y, b2.x + ITEM_W / 2, b2.y,
+        ROUTES.warp.color, ROUTES.warp.dash, 'warp',
+        'recurs: ' + w.label, warpIdx++, 1.6));
+    }
+  });
+
+  // alias warps — different titles, one shared concept_id (the
+  // isograde/tetrace case). Thicker solid arc: this is recorded carried
+  // identity, stronger than a same-title recurrence.
+  (DATA.alias_warps || []).forEach(w => {
+    for (let i = 0; i + 1 < w.keys.length; i++) {
+      const b1 = findBox(w.keys[i], null), b2 = findBox(w.keys[i + 1], null);
+      if (!b1 || !b2) continue;
+      parts.push(arcPath(b1.x + ITEM_W / 2, b1.y, b2.x + ITEM_W / 2, b2.y,
+        ROUTES.warp.color, '', 'warp',
+        'same concept: ' + w.labels.join(' ⇄ '), warpIdx++, 3));
+    }
+  });
+
+  // disputes — same target, conflicting verdicts across runs. Rare and
+  // important, so these DO keep an always-visible ⚠ label.
+  DATA.disputes.forEach(d => {
+    const list = (boxes[d.target_key] || []);
+    for (let i = 0; i + 1 < list.length; i++) {
+      parts.push(arcPath(list[i].x + ITEM_W / 2, list[i].y, list[i + 1].x + ITEM_W / 2, list[i + 1].y,
+        ROUTES.dispute.color, ROUTES.dispute.dash, 'dispute',
+        '', warpIdx++, 1.8,
+        '⚠ ' + trunc(d.label, 16) + ': ' + tallyStr(d)));
+    }
+  });
+
+  world.innerHTML = parts.join('');
+  applyRouteVisibility();
+  applyCamera();
+  drawMinimap();
+  document.getElementById('empty').style.display = DATA.runs.length ? 'none' : 'flex';
+  window._skippedEdges = skipped;
+  renderLegend(skipped);
+}
+
+function trunc(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+function tallyStr(d) {
+  // "holds ×54 vs strained ×3", never an unbounded verdict-per-run run-on
+  const t = d.tally || {};
+  return Object.entries(t).map(([v, n]) => n > 1 ? `${v} ×${n}` : v).join(' vs ');
+}
+function routeColorForKind(kind) {
+  return { concept: css('--route-word'), word: css('--route-word'),
+           external: css('--route-sprout'), translation: css('--route-refract'),
+           source: css('--route-source'), component: css('--route-source') }[kind] || css('--muted');
+}
+function nearestBefore(key, runIdx) {
+  const list = (boxes[key] || []).filter(b => b.runIdx <= runIdx);
+  return list.length ? list[list.length - 1] : (boxes[key] || [])[0] || null;
+}
+function edgePath(x1, y1, x2, y2, color, dash, route, verdict, ghost, ek) {
+  const mx = (x1 + x2) / 2;
+  return `<path class="route-${route} ${ghost ? 'ghost' : ''}" ${ek ? `data-ek="${escapeHtml(ek)}"` : ''} d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"
+    fill="none" stroke="${color}" stroke-width="1.6" ${dash ? `stroke-dasharray="${dash}"` : ''}
+    marker-end="url(#arr-${route})"><title>${escapeHtml(verdict || route)}</title></path>`;
+}
+function arcPath(x1, y1, x2, y2, color, dash, route, tooltip, idx, width, label) {
+  // arcs bow ABOVE the spine; apex height staggers by index so parallel
+  // warps separate instead of stacking on one line. No arrowhead:
+  // resemblance, not direction. Identification is by hover tooltip;
+  // only disputes carry an always-on label (rare + important).
+  const top = SPINE_Y - 26 - ((idx || 0) % 6) * 13 - Math.min(40, Math.abs(x2 - x1) / 80);
+  const midX = (x1 + x2) / 2;
+  return `<g class="route-${route}" opacity="0.8">
+    <path d="M${x1},${y1} C${x1},${top} ${x2},${top} ${x2},${y2}" fill="none"
+      stroke="${color}" stroke-width="${width || 1.6}" ${dash ? `stroke-dasharray="${dash}"` : ''}>
+      ${tooltip ? `<title>${escapeHtml(tooltip)}</title>` : ''}</path>
+    ${label ? `<text class="sub" x="${midX}" y="${top - 4}" text-anchor="middle" fill="${color}">${escapeHtml(label)}</text>` : ''}
+  </g>`;
+}
+function applyRouteVisibility() {
+  for (const name of Object.keys(ROUTES)) {
+    document.querySelectorAll(`.route-${name}`).forEach(el =>
+      el.style.display = visible[name] ? '' : 'none');
+  }
+}
+
+// ---- toggles / legend -------------------------------------------------------
+function renderToggles() {
+  document.getElementById('toggles').innerHTML = Object.entries(ROUTES).map(([name, r]) => `
+    <label><input type="checkbox" ${visible[name] ? 'checked' : ''} onchange="toggleRoute('${name}', this.checked)">
+      <span class="swatch" style="border-color:${r.color};border-top-style:${r.dash ? 'dashed' : 'solid'}"></span>${r.label}</label>`).join('');
+}
+function toggleRoute(name, on) {
+  visible[name] = on;
+  try { localStorage.setItem('overworld_routes', JSON.stringify(visible)); } catch (e) {}
+  applyRouteVisibility();
+}
+function renderLegend(skipped) {
+  document.getElementById('legend-routes').innerHTML = Object.entries(ROUTES).map(([name, r]) => `
+    <div class="row"><svg width="34" height="6"><line x1="0" y1="3" x2="34" y2="3" stroke="${r.color}"
+      stroke-width="2.5" ${r.dash ? `stroke-dasharray="${r.dash}"` : ''}/></svg>${r.label}</div>`).join('');
+  document.getElementById('legend-limits').innerHTML =
+    (DATA.limits || []).map(l => `<p>· ${escapeHtml(l)}</p>`).join('') +
+    (skipped ? `<p>· ${skipped} edge(s) not drawn — an endpoint isn't on the map (usually a run whose snapshot predates result storage).</p>` : '');
+}
+
+// ---- camera: pan / zoom / semantic detail / minimap --------------------------
+let _camRaf = 0;
+function applyCamera() {
+  document.getElementById('world').setAttribute('transform',
+    `translate(${cam.x},${cam.y}) scale(${cam.k})`);
+  const svg = document.getElementById('stage');
+  svg.classList.toggle('zoom-mid', cam.k < 0.55 && cam.k >= 0.28);
+  svg.classList.toggle('zoom-far', cam.k < 0.28);
+  // Everything below is cosmetic bookkeeping: coalesce it to one frame.
+  // Repainting the minimap on every pointermove was most of the drag lag.
+  if (_camRaf) return;
+  _camRaf = requestAnimationFrame(() => {
+    _camRaf = 0;
+    drawMinimap();
+    try { localStorage.setItem('overworld_cam', JSON.stringify(cam)); } catch (e) {}
+  });
+}
+function zoomBy(f) {
+  const vp = document.getElementById('viewport').getBoundingClientRect();
+  const cx = vp.width / 2, cy = vp.height / 2;
+  cam.x = cx - (cx - cam.x) * f; cam.y = cy - (cy - cam.y) * f; cam.k *= f;
+  cam.k = Math.max(0.05, Math.min(3, cam.k));
+  applyCamera();
+}
+function fitAll() {
+  // A fit that actually fits — the whole world on one screen. Below the
+  // detail threshold the AERIAL layer takes over legibility (dates and
+  // your accepted words at constant screen size), so the old floor that
+  // kept the fit from ever reaching aerial scale is gone: that floor
+  // guaranteed the one view the map most needed could never exist.
+  const vp = document.getElementById('viewport').getBoundingClientRect();
+  cam.k = Math.min(1, Math.min(vp.width / worldW, vp.height / worldH));
+  cam.x = 20; cam.y = 10;
+  applyCamera();
+}
+
+function jumpToEnd() {
+  const vp = document.getElementById('viewport').getBoundingClientRect();
+  cam.x = Math.min(20, vp.width - (worldW + 40) * cam.k);
+  cam.y = 10;
+}
+(function wireInput() {
+  const vp = document.getElementById('viewport');
+  let drag = null;
+  vp.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; vp.classList.add('dragging'); });
+  window.addEventListener('pointermove', e => {
+    if (!drag) return;
+    cam.x += e.clientX - drag.x; cam.y += e.clientY - drag.y;
+    drag = { x: e.clientX, y: e.clientY };
+    applyCamera();
+  });
+  window.addEventListener('pointerup', () => { drag = null; vp.classList.remove('dragging'); });
+  // Wheel PANS. It used to always zoom, which meant a Mac trackpad's
+  // ordinary two-finger scroll — the most natural way to move around a
+  // map — was consumed by the zoom, leaving no way to travel the world
+  // except dragging it a screen at a time. Zoom now needs a modifier,
+  // which is also how macOS reports trackpad pinch (wheel + ctrlKey), so
+  // pinching still zooms without any special handling.
+  vp.addEventListener('wheel', e => {
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+      const f = e.deltaY < 0 ? 1.12 : 0.9;
+      const r = vp.getBoundingClientRect();
+      const px = e.clientX - r.left, py = e.clientY - r.top;
+      cam.x = px - (px - cam.x) * f; cam.y = py - (py - cam.y) * f;
+      cam.k = Math.max(0.02, Math.min(3, cam.k * f));
+    } else {
+      // shift+wheel is the long-standing convention for "scroll sideways"
+      // on hardware that only reports a vertical axis
+      const dx = e.shiftKey ? e.deltaY : e.deltaX;
+      const dy = e.shiftKey ? 0 : e.deltaY;
+      cam.x -= dx; cam.y -= dy;
+    }
+    applyCamera();
+  }, { passive: false });
+  // Keyboard, because a 400-screen world needs travel that isn't
+  // proportional to arm movement.
+  window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    const step = e.shiftKey ? 900 : 180;
+    const vpr = vp.getBoundingClientRect();
+    const moves = {
+      ArrowLeft:  () => cam.x += step,  ArrowRight: () => cam.x -= step,
+      ArrowUp:    () => cam.y += step,  ArrowDown:  () => cam.y -= step,
+      PageUp:     () => cam.x += vpr.width * 0.9,
+      PageDown:   () => cam.x -= vpr.width * 0.9,
+      Home:       () => { cam.x = 20; cam.y = 10; },
+      End:        () => jumpToEnd(),
+      '0':        () => fitAll(),
+      '=':        () => zoomBy(1.25), '+': () => zoomBy(1.25), '-': () => zoomBy(0.8),
+    };
+    if (!moves[e.key]) return;
+    e.preventDefault();
+    moves[e.key]();
+    applyCamera();
+  });
+  // Minimap: click OR drag to travel — the drag is the fastest way across
+  // a thirty-screen world, so it must not be click-only.
+  const mm = document.getElementById('minimap');
+  let mmDrag = false;
+  const mmGo = e => {
+    const r = mm.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+    const vpr = vp.getBoundingClientRect();
+    cam.x = vpr.width / 2 - fx * worldW * cam.k;
+    cam.y = vpr.height / 2 - fy * worldH * cam.k;
+    applyCamera();
+  };
+  mm.addEventListener('pointerdown', e => { mmDrag = true; mm.setPointerCapture(e.pointerId); mmGo(e); });
+  mm.addEventListener('pointermove', e => { if (mmDrag) mmGo(e); });
+  mm.addEventListener('pointerup', () => { mmDrag = false; });
+})();
+function drawMinimap() {
+  const c = document.getElementById('minimap'), ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  if (!DATA) return;
+  const sx = c.width / worldW, sy = c.height / worldH;
+  ctx.fillStyle = css('--muted');
+  DATA.runs.forEach(run => {
+    const x = runX[run.trace_id], y = runY[run.trace_id];
+    if (x === undefined) return;
+    ctx.fillRect(x * sx, y * sy, Math.max(2, COL_W * sx),
+                 Math.max(2, (RUN_H + run.items.length * (ITEM_H + ITEM_GAP)) * sy));
+  });
+  const vp = document.getElementById('viewport').getBoundingClientRect();
+  ctx.strokeStyle = css('--accent');
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(-cam.x / cam.k * sx, -cam.y / cam.k * sy, vp.width / cam.k * sx, vp.height / cam.k * sy);
+}
+
+// ---- detail panel -------------------------------------------------------------
+function closeDetail() { document.getElementById('detail').classList.remove('open'); }
+function openRunDetail(trace) {
+  const run = DATA.runs.find(r => r.trace_id === trace);
+  if (!run) return;
+  showDetail(`<h2>${escapeHtml(run.mode)} run</h2>
+    <p class="sub" style="color:var(--muted);font-size:12px">${escapeHtml(run.created_at || '')}</p>
+    <p>${escapeHtml(run.input_text)}</p>
+    ${run.summary ? `<p style="color:var(--muted);font-size:12px">${escapeHtml(run.summary)}</p>` : ''}
+    <p style="font-size:12px"><a href="/" style="color:var(--accent)">Open Wordicon</a> — this run's trace: <code style="font-size:11px">${escapeHtml(trace)}</code></p>`);
+}
+async function openDetail(key, trace) {
+  const box = findBox(key, trace);
+  if (!box) return;
+  const it = box.item;
+  // Every edge touching this node, with its verdict — the relationships
+  // ARE the record here; disputes surface as differing verdicts side by side.
+  const touching = DATA.edges.filter(e => e.source.key === key || e.target.key === key);
+  // Group identical rows (same rel + direction + verdict) with a count —
+  // a target refracted sixty times must not render sixty identical lines.
+  const grouped = {};
+  touching.forEach(e => {
+    const dir = e.source.key === key ? `→ ${e.target.label}` : `← ${e.source.label}`;
+    const gk = `${e.rel}|${dir}|${e.verdict || ''}`;
+    grouped[gk] = grouped[gk] || { e, dir, n: 0, synth: true };
+    grouped[gk].n++;
+    if (!e.synthesized) grouped[gk].synth = false;
+  });
+  const edgeRows = Object.values(grouped).map(g => `
+    <p style="margin:3px 0;font-size:12.5px">${escapeHtml(g.e.rel)} ${escapeHtml(g.dir)}
+      ${g.e.verdict ? `<span class="tag ${escapeHtml(g.e.verdict)}">Friction: ${escapeHtml(g.e.verdict)}</span>` : ''}
+      ${g.n > 1 ? `<span style="color:var(--muted)">×${g.n}</span>` : ''}
+      ${g.synth ? `<span style="color:var(--muted);font-size:10px">(reconstructed from snapshot)</span>` : ''}</p>`
+  ).join('') || '<p style="color:var(--muted)">No recorded relationships.</p>';
+  const inDispute = DATA.disputes.find(d => d.target_key === key);
+  showDetail(`<h2>${GLYPH[it.kind] || ''} ${escapeHtml(it.label)}</h2>
+    <p style="color:var(--muted);font-size:12px">${escapeHtml(it.kind)}
+      ${it.verdict ? `<span class="tag ${escapeHtml(it.verdict)}">Friction: ${escapeHtml(it.verdict)}</span>` : ''}
+      ${it.judgment ? `<span class="tag ${escapeHtml(it.judgment)}">you: ${escapeHtml(it.judgment)}</span>` : ''}</p>
+    ${inDispute ? `<p style="color:var(--route-dispute);font-size:12.5px">⚠ Disputed across runs: ${escapeHtml(tallyStr(inDispute))}. Same target, different verdicts — the map shows both; reconciling them is a judgment, and it's yours.</p>` : ''}
+    <div style="border-top:1px solid var(--border);margin:10px 0;padding-top:8px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:4px">Relationships</div>
+      ${edgeRows}</div>
+    <div id="detail-extra"><p style="color:var(--muted);font-size:12px">loading run detail…</p></div>`);
+  try {
+    const r = await fetch(`/api/result/${encodeURIComponent(box.run)}`);
+    const extra = document.getElementById('detail-extra');
+    if (!r.ok) { extra.innerHTML = ''; return; }
+    const snap = await r.json();
+    const cand = (snap.candidates || []).find(c => (c.bff || {}).title === it.label);
+    if (cand && cand.bff && cand.bff.flesh) {
+      const f = cand.bff.flesh, fr = cand.bff.friction || {};
+      extra.innerHTML = `<div style="border-top:1px solid var(--border);padding-top:8px">
+        <p style="font-size:13px">${escapeHtml(f.definition || '')}</p>
+        ${f.central_contradiction ? `<p style="font-size:12.5px;color:var(--muted)"><em>Contradiction:</em> ${escapeHtml(f.central_contradiction)}</p>` : ''}
+        ${f.axiom ? `<p style="font-size:12.5px;color:var(--muted)"><em>Axiom:</em> ${escapeHtml(f.axiom)}</p>` : ''}
+        ${fr.hostile_read ? `<p style="font-size:12px;color:var(--muted)"><em>Friction:</em> ${escapeHtml(fr.hostile_read)}</p>` : ''}
+      </div>`;
+    } else {
+      const th = (snap.threads || []).find(t => it.label.startsWith(t.anchor_name || ' '));
+      const rf = (snap.refractions || []).find(x => it.label.startsWith((x.romanization || x.term || ' ')));
+      const note = (th && th.review_note) || (rf && rf.review_note) || '';
+      extra.innerHTML = note ? `<div style="border-top:1px solid var(--border);padding-top:8px">
+        <p style="font-size:12.5px;color:var(--muted)"><em>Reviewer:</em> ${escapeHtml(note)}</p></div>` : '';
+    }
+  } catch (e) { document.getElementById('detail-extra').innerHTML = ''; }
+}
+function showDetail(html) {
+  document.getElementById('detail-body').innerHTML = html;
+  document.getElementById('detail').classList.add('open');
+}
+
+// ---- Wayfinder -------------------------------------------------------------
+// Route strategies over the roads that actually exist. Every road on a
+// plotted route identifies itself: recorded (in the edge log, as it
+// happened), reconstructed from snapshot (the event happened, the road was
+// written down late), declared (you ruled that it exists), or inferred (a
+// model proposed it just now — it is NOT part of the record, and becomes a
+// road only if you declare it). The system proposes the route; you decide
+// whether the road truly exists. Measured 2026-08-29: 3% of accepted-pair
+// journeys have any road at all, so "no road exists" is the usual true
+// answer and is rendered as a result, not an error.
+const LINEAGE_RELS = ['produced','renamed_as','compressed_as','reworked_into',
+                      'decomposed_into','forged_as','continued_from'];
+const STRATEGY_LABEL = { lineage: 'Lineage', direct: 'Direct', history: 'History',
+                         welltrodden: 'Well-trodden', proposed: 'Proposed',
+                         resonance: 'Resonance', friction: 'Friction' };
+let inferredRoads = [];   // session-only; the page never persists these
+let wfFindings = [];
+const cssEsc = s => (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&');
+
+function roadType(e) {
+  if (e.inferred) return 'inferred';
+  if (e.rel === 'declared_road') return 'declared';
+  return e.synthesized ? 'reconstructed' : 'recorded';
+}
+const ROAD_TYPE_PLAIN = {
+  recorded: 'recorded', reconstructed: 'reconstructed from snapshot',
+  declared: 'declared — yours', inferred: 'inferred — not part of the record' };
+
+function labelFor(key) {
+  const run = DATA.runs.find(r => r.trace_id === key);
+  if (run) return `${run.mode} run · ${(run.created_at || '').slice(0, 10)}`;
+  const b = (boxes[key] || [])[0];
+  return b ? b.item.label : key;
+}
+function keyForLabel(lbl) {
+  const norm = s => String(s || '').toLowerCase().trim();
+  const want = norm(lbl);
+  if (!want) return null;
+  for (const key of Object.keys(boxes))
+    if (norm(boxes[key][0].item.label) === want) return key;
+  for (const key of Object.keys(boxes)) {
+    const have = norm(boxes[key][0].item.label);
+    if (have.startsWith(want) || want.startsWith(have)) return key;
+  }
+  return null;
+}
+function edgeList(strategy) {
+  if (strategy === 'lineage')
+    return DATA.edges.filter(e => LINEAGE_RELS.includes(e.rel));
+  let es = DATA.edges.slice();
+  if (strategy === 'resonance' || strategy === 'friction')
+    es = es.concat(inferredRoads);
+  return es;
+}
+function wfAdj(es) {
+  const adj = {};
+  es.forEach(e => {
+    (adj[e.source.key] = adj[e.source.key] || []).push({ to: e.target.key, e });
+    (adj[e.target.key] = adj[e.target.key] || []).push({ to: e.source.key, e });
+  });
+  return adj;
+}
+function bfsRoute(fromKey, toKey, es) {
+  const adj = wfAdj(es);
+  const prev = { [fromKey]: null };
+  const q = [fromKey];
+  while (q.length) {
+    const x = q.shift();
+    if (x === toKey) break;
+    (adj[x] || []).forEach(({ to, e }) => {
+      if (!(to in prev)) { prev[to] = { from: x, e }; q.push(to); }
+    });
+  }
+  if (!(toKey in prev)) return null;
+  const steps = [];
+  let cur = toKey;
+  while (prev[cur]) { steps.unshift({ node: cur, from: prev[cur].from, e: prev[cur].e }); cur = prev[cur].from; }
+  return { start: fromKey, steps };
+}
+function islandSize(key, es) {
+  const adj = wfAdj(es);
+  const seen = new Set([key]);
+  const q = [key];
+  while (q.length) {
+    const x = q.pop();
+    (adj[x] || []).forEach(({ to }) => { if (!seen.has(to)) { seen.add(to); q.push(to); } });
+  }
+  return seen.size;
+}
+// History: how the thinking actually moved — BFS over run CO-OCCURRENCE
+// (two runs are adjacent when they share a node), fully recorded, no
+// inference. The route is the chain of runs, each step naming what carried
+// it from one run to the next.
+function historyRoute(fromKey, toKey) {
+  const memb = DATA.runs.map(r => {
+    const s = new Set(r.items.map(i => i.key)); s.add(r.trace_id); return s;
+  });
+  const byKey = {};
+  memb.forEach((s, i) => s.forEach(k => (byKey[k] = byKey[k] || []).push(i)));
+  const starts = (byKey[fromKey] || []), goals = new Set(byKey[toKey] || []);
+  if (!starts.length || !goals.size) return null;
+  const prev = {};
+  const q = [];
+  starts.forEach(i => { prev[i] = null; q.push(i); });
+  let hit = -1;
+  while (q.length) {
+    const i = q.shift();
+    if (goals.has(i)) { hit = i; break; }
+    memb[i].forEach(k => (byKey[k] || []).forEach(j => {
+      if (!(j in prev)) { prev[j] = { from: i, via: k }; q.push(j); }
+    }));
+  }
+  if (hit < 0) return null;
+  const path = [];
+  let cur = hit;
+  while (cur !== null && cur !== undefined) {
+    path.unshift({ idx: cur, via: prev[cur] ? prev[cur].via : null });
+    cur = prev[cur] ? prev[cur].from : null;
+  }
+  return path;
+}
+
+function wfShow(html) {
+  document.getElementById('wf-out-body').innerHTML = html;
+  document.getElementById('wf-out').classList.add('open');
+}
+function clearHighlight() {
+  const svg = document.getElementById('stage');
+  svg.classList.remove('routing');
+  document.querySelectorAll('.on-route, .on-route-holder').forEach(el =>
+    el.classList.remove('on-route', 'on-route-holder'));
+  document.querySelectorAll('path.inferred-road').forEach(el => el.remove());
+}
+function clearRoute() {
+  clearHighlight();
+  inferredRoads = []; wfFindings = []; wfState = null; wfProposalTrace = '';
+  document.getElementById('wf-out').classList.remove('open');
+}
+function brightenKeys(keys) {
+  keys.forEach(k => {
+    document.querySelectorAll(`g[data-nk="${cssEsc(k)}"]`).forEach(g => {
+      g.classList.add('on-route');
+      const p = g.parentElement;
+      if (p && p.classList && p.classList.contains('run')) p.classList.add('on-route-holder');
+      if (g.classList.contains('run')) g.classList.add('on-route-holder');
+    });
+  });
+}
+function brightenEdge(e) {
+  if (e.inferred) {
+    const b1 = findBox(e.source.key, null), b2 = findBox(e.target.key, null);
+    if (b1 && b2)
+      document.getElementById('world').insertAdjacentHTML('beforeend',
+        `<path class="inferred-road on-route" d="M${b1.x + ITEM_W / 2},${b1.y + ITEM_H / 2} L${b2.x + ITEM_W / 2},${b2.y + ITEM_H / 2}">
+           <title>inferred — not part of the record</title></path>`);
+    return;
+  }
+  if (e.edge_id)
+    document.querySelectorAll(`path[data-ek="${cssEsc(e.edge_id)}"]`).forEach(p =>
+      p.classList.add('on-route'));
+}
+function runDate(e) {
+  const run = DATA.runs.find(r => r.trace_id === e.run_trace_id);
+  return run ? (run.created_at || '').slice(0, 10) : '';
+}
+function roadLine(e) {
+  const t = roadType(e);
+  const run = DATA.runs.find(r => r.trace_id === e.run_trace_id);
+  const when = run ? ` · ${run.mode} ${(run.created_at || '').slice(0, 10)}` : '';
+  const rel = e.verb || String(e.rel || '').replace(/_/g, ' ');
+  const detail = e.detail || e.basis || '';
+  // A ratified proposal keeps both halves of its history on its face.
+  const origin = (t === 'declared' && e.proposed_by === 'model')
+    ? '<span class="basis"> · proposed by the model, ratified by you</span>' : '';
+  return `<em>${escapeHtml(rel)}</em>
+    <span class="roadchip ${t}">${escapeHtml(ROAD_TYPE_PLAIN[t])}</span>${origin}
+    ${detail ? `<span class="basis"> — ${escapeHtml(trunc(detail, 140))}</span>` : ''}
+    <span class="basis">${escapeHtml(when)}</span>`;
+}
+function stopSpan(key) {
+  const b = (boxes[key] || [])[0];
+  const trace = b ? b.run : key;
+  return `<span class="stop" onclick="${b ? `openDetail('${escapeHtml(key)}','${escapeHtml(trace)}')` : `openRunDetail('${escapeHtml(key)}')`}">${escapeHtml(labelFor(key))}</span>`;
+}
+function wfLog(ev) {
+  try { fetch('/api/map/log', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ev) }); }
+  catch (e) {}
+}
+
+// ---- multiple routes, like the alternatives on a road map ------------------
+// One Find computes every honest strategy at once: Direct (fewest steps),
+// Lineage (ancestry roads only), Well-trodden (prefers roads the record
+// has traveled most), History (the chain of runs your thinking actually
+// took). Proposed routes stay behind their own buttons: the model never
+// enters uninvited.
+function multiplicity(es) {
+  const m = {};
+  es.forEach(e => {
+    if (e.source.key === e.target.key) return;
+    const k = [e.source.key, e.target.key].sort().join('|');
+    m[k] = (m[k] || 0) + 1;
+  });
+  return m;
+}
+function dijkstraRoute(fromKey, toKey, es) {
+  // weight 1/(times recorded): a road written down sixty times is smooth
+  // tarmac, a road written once is gravel.
+  const m = multiplicity(es);
+  const adj = wfAdj(es);
+  const dist = { [fromKey]: 0 };
+  const prev = {};
+  const seen = new Set();
+  while (true) {
+    let cur = null;
+    for (const k in dist) if (!seen.has(k) && (cur === null || dist[k] < dist[cur])) cur = k;
+    if (cur === null) return null;
+    if (cur === toKey) break;
+    seen.add(cur);
+    (adj[cur] || []).forEach(({ to, e }) => {
+      const w = 1 / (m[[e.source.key, e.target.key].sort().join('|')] || 1);
+      if (!(to in dist) || dist[cur] + w < dist[to]) {
+        dist[to] = dist[cur] + w;
+        prev[to] = { from: cur, e };
+      }
+    });
+  }
+  const steps = [];
+  let cur = toKey;
+  while (prev[cur]) { steps.unshift({ node: cur, from: prev[cur].from, e: prev[cur].e }); cur = prev[cur].from; }
+  return { start: fromKey, steps };
+}
+function pathSummary(path) {
+  const tally = {};
+  path.steps.forEach(st => { const t = roadType(st.e); tally[t] = (tally[t] || 0) + 1; });
+  const dates = path.steps.map(st => runDate(st.e)).filter(Boolean).sort();
+  const span = dates.length ? (dates[0] === dates[dates.length - 1] ? dates[0]
+    : `${dates[0]} → ${dates[dates.length - 1]}`) : '';
+  return `${path.steps.length} step${path.steps.length === 1 ? '' : 's'} · `
+    + Object.entries(tally).map(([t, n]) => `${n} ${t}`).join(' · ')
+    + (span ? ` · ${span}` : '');
+}
+function computeAlternatives(fromKey, toKey) {
+  const alts = [];
+  const seen = new Set();
+  const push = (strategy, path) => {
+    if (!path) return;
+    const sig = [path.start, ...path.steps.map(st => st.node)].join('>');
+    const hit = alts.find(a => a.sig === sig);
+    if (hit) { hit.names.push(STRATEGY_LABEL[strategy]); return; }
+    alts.push({ sig, strategy, names: [STRATEGY_LABEL[strategy]], path });
+  };
+  push('direct', bfsRoute(fromKey, toKey, edgeList('direct')));
+  push('lineage', bfsRoute(fromKey, toKey, edgeList('lineage')));
+  push('welltrodden', dijkstraRoute(fromKey, toKey, edgeList('direct')));
+  return alts;
+}
+let wfState = null;
+function findRoutes() {
+  clearHighlight();
+  const fromL = document.getElementById('wf-from').value.trim();
+  const toL = document.getElementById('wf-to').value.trim();
+  if (!fromL || !toL) { wfShow('<h3>Wayfinder</h3><p class="basis">Give it both ends of the journey.</p>'); return; }
+  const fromKey = keyForLabel(fromL), toKey = keyForLabel(toL);
+  const missing = [[fromL, fromKey], [toL, toKey]].filter(x => !x[1]).map(x => x[0]);
+  if (missing.length) {
+    wfShow(`<h3>Not on the map</h3><p class="basis">${missing.map(m =>
+      `“${escapeHtml(m)}” is not on the map.`).join(' ')} The Wayfinder only travels between
+      places that exist — it will not invent one.</p>`);
+    return;
+  }
+  if (fromKey === toKey) { wfShow('<h3>Wayfinder</h3><p class="basis">That is one place, not a journey.</p>'); return; }
+  const alts = computeAlternatives(fromKey, toKey);
+  const hist = historyRoute(fromKey, toKey);
+  wfState = { fromKey, toKey, fromL, toL, alts, hist, chosen: -1 };
+  wfLog({ type: 'find', from: labelFor(fromKey), to: labelFor(toKey),
+          from_key: fromKey, to_key: toKey,
+          found: alts.map(a => a.names.join('/')).concat(hist ? ['History'] : []),
+          none: !alts.length && !hist });
+  if (!alts.length && !hist) { wfNoRoute(fromKey, toKey, 'direct'); return; }
+  renderAlternatives();
+  if (alts.length) selectAlt(0); else selectAlt(alts.length); // history-only
+}
+function renderAlternatives() {
+  const w = wfState;
+  const rows = w.alts.map((a, i) => `
+    <div class="alt ${w.chosen === i ? 'chosen' : ''}" onclick="selectAlt(${i})">
+      <span class="altname">${a.names.map(escapeHtml).join(' / ')}</span>
+      <span class="altsum">${escapeHtml(pathSummary(a.path))}</span>
+    </div>`);
+  if (w.hist) rows.push(`
+    <div class="alt ${w.chosen === w.alts.length ? 'chosen' : ''}" onclick="selectAlt(${w.alts.length})">
+      <span class="altname">History</span>
+      <span class="altsum">${w.hist.length} run${w.hist.length === 1 ? '' : 's'} — the chain your thinking actually took</span>
+    </div>`);
+  const findingRows = wfFindings.length
+    ? `<div class="cand"><strong>Checked in code:</strong>${wfFindings.map(f =>
+        `<p class="basis">· ${escapeHtml(f)}</p>`).join('')}</div>` : '';
+  wfShow(`<h3>${escapeHtml(w.fromL)} → ${escapeHtml(w.toL)} · ${w.alts.length + (w.hist ? 1 : 0)} route(s)</h3>
+    <div id="wf-alts">${rows.join('')}</div>
+    <p class="basis">Ask the model to propose more:
+      <button onclick="proposeRoads('resonance')">Resonance roads</button>
+      <button onclick="proposeRoads('friction')">Friction roads</button>
+      — proposals arrive labelled inferred and editable; they become real only if you declare them.</p>
+    ${findingRows}
+    <div id="wf-strip"></div>`);
+}
+function selectAlt(i) {
+  const w = wfState;
+  if (!w) return;
+  w.chosen = i;
+  clearHighlight();
+  document.querySelectorAll('#wf-alts .alt, #wf-out .alt').forEach((el, j) =>
+    el.classList.toggle('chosen', j === i));
+  const strip = document.getElementById('wf-strip');
+  if (w.hist && i === w.alts.length) {
+    document.getElementById('stage').classList.add('routing');
+    const runKeys = w.hist.map(st => DATA.runs[st.idx].trace_id);
+    brightenKeys([w.fromKey, w.toKey, ...runKeys, ...w.hist.map(st => st.via).filter(Boolean)]);
+    strip.innerHTML = `<p class="basis">The chain of runs your thinking actually travelled — recorded order, no inference.</p>`
+      + w.hist.map((st, j) => {
+        const r = DATA.runs[st.idx];
+        return `<p class="step">${j === 0 ? 'It began in' : 'then'}
+          <span class="stop" onclick="openRunDetail('${escapeHtml(r.trace_id)}')">${escapeHtml(r.mode)} · ${escapeHtml((r.created_at || '').slice(0, 10))}</span>
+          ${st.via ? `<span class="basis"> — carried by ${escapeHtml(labelFor(st.via))}</span>` : ''}</p>`;
+      }).join('');
+    wfLog({ type: 'select', route: 'History' });
+    return;
+  }
+  const a = w.alts[i];
+  if (!a) return;
+  renderStrip(a);
+  wfLog({ type: 'select', route: a.names.join('/'), n_steps: a.path.steps.length });
+}
+function renderStrip(a) {
+  const path = a.path;
+  const keys = [path.start, ...path.steps.map(st => st.node)];
+  const lines = [`<p class="step">Start at ${stopSpan(path.start)}.</p>`];
+  path.steps.forEach((st, i) => {
+    const last = i === path.steps.length - 1;
+    const inf = st.e.inferred;
+    lines.push(`<p class="step">${last ? 'Arrive at' : 'Continue to'} ${stopSpan(st.node)} — ${roadLine(st.e)}
+      ${inf ? `<button onclick="ratifyRoad('${escapeHtml(st.e.edge_id)}')">Make it a road</button>
+               <button onclick="dropRoad('${escapeHtml(st.e.edge_id)}')">Remove</button>` : ''}</p>`);
+  });
+  const note = a.strategy === 'proposed'
+    ? '<p class="basis">This route uses inferred roads — proposals, not the record. Declare the ones that are true; remove the ones that are not.</p>' : '';
+  document.getElementById('wf-strip').innerHTML = note + lines.join('')
+    + `<p><button onclick="analyzeRoute()">Analyze this route</button>
+       <span class="basis">— a run over this journey's recorded materials; claims from the record must cite these roads, interpretation is labelled.</span></p>
+       <div id="wf-analysis"></div>`;
+  document.getElementById('stage').classList.add('routing');
+  brightenKeys(keys);
+  path.steps.forEach(st => brightenEdge(st.e));
+}
+function wfNoRoute(fromKey, toKey, strategy) {
+  const es = edgeList(strategy);
+  const a = islandSize(fromKey, es), b = islandSize(toKey, es);
+  const findingRows = wfFindings.map(f => `<p class="basis">· ${escapeHtml(f)}</p>`).join('');
+  wfShow(`<h3>No road exists</h3>
+    <p class="basis">No road connects
+    “${escapeHtml(labelFor(fromKey))}” and “${escapeHtml(labelFor(toKey))}” — not by lineage,
+    distance, traffic, or shared runs.
+    The first sits on an island of ${a} place${a === 1 ? '' : 's'}; the second on an island of ${b}.
+    The map does not invent connections: ask <em>Resonance</em> or <em>Friction</em> to propose
+    roads (they arrive labelled inferred and editable), or declare one yourself if you know it exists.</p>
+    <p><button onclick="proposeRoads('resonance')">Resonance roads</button>
+       <button onclick="proposeRoads('friction')">Friction roads</button></p>
+    ${findingRows}
+    <div class="cand">Declare it: ${escapeHtml(labelFor(fromKey))}
+      <input id="wf-verb" placeholder="how the first relates to the second…">
+      ${escapeHtml(labelFor(toKey))}
+      <button onclick="declareManual('${escapeHtml(fromKey)}','${escapeHtml(toKey)}')">Make it a road</button>
+      <p class="basis">A declared road goes into the same append-only log as every recorded road, marked as yours.</p>
+    </div>`);
+}
+let wfProposalTrace = '';
+async function fetchInferred(fromL, toL, kind) {
+  wfFindings = [];
+  try {
+    const r = await fetch('/api/map/roads/suggest', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: fromL, to: toL, kind }) });
+    const d = await r.json();
+    if (d.error) { wfFindings = [d.error]; return; }
+    wfFindings = d.findings || [];
+    wfProposalTrace = d.trace_id || '';
+    inferredRoads = (d.candidates || []).map((c, i) => ({
+      edge_id: 'inf_' + i + '_' + Date.now(),
+      rel: c.kind, verb: c.verb, basis: c.basis, inferred: true,
+      source: { key: c.a_key, label: c.a_label, kind: c.a_kind },
+      target: { key: c.b_key, label: c.b_label, kind: c.b_kind },
+      run_trace_id: '', verdict: '', detail: c.basis, synthesized: false }));
+  } catch (e) { wfFindings = ['The road-proposing stage could not be reached.']; }
+}
+async function proposeRoads(kind) {
+  const w = wfState;
+  const fromL = w ? w.fromL : document.getElementById('wf-from').value.trim();
+  const toL = w ? w.toL : document.getElementById('wf-to').value.trim();
+  if (!fromL || !toL) return;
+  await fetchInferred(fromL, toL, kind);
+  recomputeProposed();
+}
+function recomputeProposed() {
+  const w = wfState;
+  if (!w) return;
+  w.alts = w.alts.filter(a => a.strategy !== 'proposed');
+  const path = bfsRoute(w.fromKey, w.toKey, edgeList('resonance'));
+  if (path && path.steps.some(st => st.e.inferred)) {
+    w.alts.push({ sig: 'proposed', strategy: 'proposed', names: ['Proposed'], path });
+    renderAlternatives();
+    selectAlt(w.alts.length - 1);
+  } else if (path) {
+    // proposals arrived but a real-road route already covers it
+    renderAlternatives();
+    if (w.chosen >= 0) selectAlt(Math.min(w.chosen, w.alts.length - 1));
+  } else {
+    renderAlternatives();
+    document.getElementById('wf-strip').innerHTML =
+      '<p class="basis">Even with the proposed roads there is no route — the honest outcome stands.</p>';
+  }
+}
+async function ratifyRoad(edgeId) {
+  const road = inferredRoads.find(r => r.edge_id === edgeId);
+  if (!road) return;
+  try {
+    const r = await fetch('/api/map/road', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ a: road.source, b: road.target,
+                             verb: road.verb, note: road.basis,
+                             origin: { proposed_by: 'model',
+                                       proposal_trace_id: wfProposalTrace,
+                                       kind: road.rel, basis: road.basis } }) });
+    const d = await r.json();
+    if (d.error) { wfFindings.push(d.error); renderAlternatives(); return; }
+    road.rel = 'declared_road'; road.inferred = false;
+    road.proposed_by = 'model';
+    DATA.edges.push({ edge_id: 'local_' + Date.now(), rel: 'declared_road',
+      source: road.source, target: road.target, run_trace_id: 'owner_declared',
+      verdict: '', detail: road.verb + (road.basis ? ' — ' + road.basis : ''),
+      proposed_by: 'model', ratified_by: 'owner', created_at: '' });
+    if (wfState) { wfState.alts = []; findRoutes(); }
+  } catch (e) { wfFindings.push('Could not reach the server to declare the road.'); }
+}
+function dropRoad(edgeId) {
+  inferredRoads = inferredRoads.filter(r => r.edge_id !== edgeId);
+  wfLog({ type: 'discard', edge_id: edgeId });
+  recomputeProposed();
+}
+async function declareManual(fromKey, toKey) {
+  const verb = (document.getElementById('wf-verb') || {}).value || '';
+  const n = k => { const b = (boxes[k] || [])[0];
+    return b ? { key: k, label: b.item.label, kind: b.item.kind } : { key: k, label: labelFor(k), kind: 'run' }; };
+  try {
+    const r = await fetch('/api/map/road', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ a: n(fromKey), b: n(toKey), verb, note: '',
+                             origin: { proposed_by: 'owner' } }) });
+    const d = await r.json();
+    if (d.error) { wfFindings = [d.error]; wfNoRoute(fromKey, toKey, 'direct'); return; }
+    DATA.edges.push({ edge_id: 'local_' + Date.now(), rel: 'declared_road',
+      source: d.source, target: d.target, run_trace_id: 'owner_declared',
+      verdict: '', detail: d.verb, proposed_by: 'owner', ratified_by: 'owner',
+      created_at: '' });
+    layout(); render();
+    findRoutes();
+  } catch (e) {}
+}
+
+// ---- route analysis: the journey becomes the input to a run ---------------
+async function analyzeRoute() {
+  const w = wfState;
+  if (!w || w.chosen < 0 || w.chosen >= w.alts.length) return;
+  const a = w.alts[w.chosen];
+  const out = document.getElementById('wf-analysis');
+  out.innerHTML = '<p class="basis">Reading the journey…</p>';
+  const stops = [a.path.start, ...a.path.steps.map(st => st.node)]
+    .map(k => ({ key: k, label: labelFor(k) }));
+  const roads = a.path.steps.map(st => ({
+    edge_id: st.e.edge_id || '', rel: st.e.rel || '', verb: st.e.verb || '',
+    from: (st.e.source || {}).label || '', to: (st.e.target || {}).label || '',
+    road_type: roadType(st.e), detail: st.e.detail || st.e.basis || '',
+    when: runDate(st.e) }));
+  try {
+    const r = await fetch('/api/map/route/analyze', { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stops, roads, strategy: a.names.join('/') }) });
+    const d = await r.json();
+    if (d.error) { out.innerHTML = `<p class="basis">${escapeHtml(d.error)}</p>`; return; }
+    const roadRef = id => {
+      const m = (d.roads || []).find(x => x.id === id);
+      return m ? `${m.from} → ${m.to}` : id;
+    };
+    out.innerHTML = `<div class="cand">
+      ${d.through_line ? `<p class="step">${escapeHtml(d.through_line)}</p>` : ''}
+      ${(d.readings || []).map(rd => `<p class="step">
+        <span class="roadchip ${rd.type === 'from_record' ? 'recorded' : 'inferred'}">${rd.type === 'from_record' ? 'from the record' : 'interpretation'}</span>
+        ${escapeHtml(rd.claim)}
+        ${rd.cites && rd.cites.length ? `<span class="basis"> — via ${rd.cites.map(roadRef).map(escapeHtml).join('; ')}</span>` : ''}</p>`).join('')}
+      ${d.what_is_missing ? `<p class="basis"><strong>What this route does not establish:</strong> ${escapeHtml(d.what_is_missing)}</p>` : ''}
+      ${(d.findings || []).length ? `<p class="basis"><strong>Checked in code:</strong></p>` + d.findings.map(f => `<p class="basis">· ${escapeHtml(f)}</p>`).join('') : ''}
+      <p class="basis">Written from this route's recorded materials only; nothing was searched. Interpretation is labelled and cannot be promoted by citation.</p>
+    </div>`;
+  } catch (e) { out.innerHTML = '<p class="basis">The analysis stage could not be reached.</p>'; }
+}
+
+// ---- statistics: what you did, counted raw --------------------------------
+async function showStats() {
+  clearHighlight();
+  let d;
+  try { d = await (await fetch('/api/map/stats')).json(); }
+  catch (e) { wfShow('<h3>Statistics</h3><p class="basis">Could not reach the server.</p>'); return; }
+  window._stats = d;
+  const acts = Object.entries(d.acts || {}).map(([t, n]) => `${t} ×${n}`).join(' · ') || 'nothing yet';
+  wfShow(`<h3>Statistics</h3>
+    <p class="step">Wayfinder acts: <span class="basis">${escapeHtml(acts)}</span></p>
+    <p class="step">${d.plots || 0} route search${d.plots === 1 ? '' : 'es'} · ${d.no_road || 0} found no road ·
+      ${d.declared_roads || 0} declared road${d.declared_roads === 1 ? '' : 's'}
+      (${d.ratified_from_model || 0} ratified from ${d.proposals_shown || 0} model proposal${d.proposals_shown === 1 ? '' : 's'})</p>
+    ${(d.top_pairs || []).length ? `<p class="step">Most-searched journeys:</p>` + d.top_pairs.map(x =>
+      `<p class="basis">· ${escapeHtml(x.pair)} ×${x.n}</p>`).join('') : ''}
+    ${(d.most_traveled || []).length ? `<p class="step">Most-traveled roads (times the record wrote them):</p>` + d.most_traveled.map(x =>
+      `<p class="basis">· ${escapeHtml(x.a)} ↔ ${escapeHtml(x.b)} ×${x.n}</p>`).join('') : ''}
+    <p class="step">The archipelago: ${(d.islands || {}).n || 0} islands. Click one to light it.</p>
+    ${((d.islands || {}).top || []).map((isl, i) =>
+      `<div class="alt" onclick="brightenIsland(${i})"><span class="altname">${isl.size} places</span>
+        <span class="altsum">${isl.labels.map(escapeHtml).join(' · ')}…</span></div>`).join('')}
+    <p class="basis">${escapeHtml(d.note || '')}</p>`);
+}
+function brightenIsland(i) {
+  const isl = (((window._stats || {}).islands || {}).top || [])[i];
+  if (!isl) return;
+  clearHighlight();
+  document.getElementById('stage').classList.add('routing');
+  brightenKeys(isl.keys);
+  // fit the camera to the island's boxes
+  let x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9, any = false;
+  isl.keys.forEach(k => (boxes[k] || []).forEach(b => {
+    any = true;
+    x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y);
+    x2 = Math.max(x2, b.x + ITEM_W); y2 = Math.max(y2, b.y + ITEM_H);
+  }));
+  if (!any) return;
+  const vp = document.getElementById('viewport').getBoundingClientRect();
+  cam.k = Math.max(0.06, Math.min(1, Math.min(vp.width / (x2 - x1 + 120), vp.height / (y2 - y1 + 120))));
+  cam.x = 40 - x1 * cam.k; cam.y = 40 - y1 * cam.k;
+  applyCamera();
+}
+
+// ---- aerial: the whole corpus as a legible calendar -----------------------
+function buildAerial() {
+  const perCol = new Map();
+  DATA.runs.forEach(r => {
+    const x = runX[r.trace_id];
+    if (x === undefined) return;
+    if (!perCol.has(x)) perCol.set(x, { day: (r.created_at || '').slice(0, 10) || 'undated', n: 0, words: [] });
+    const c = perCol.get(x);
+    c.n++;
+    r.items.forEach(it => {
+      if (it.judgment === 'accepted' && !c.words.includes(it.label)) c.words.push(it.label);
+    });
+  });
+  document.getElementById('aerial-grid').innerHTML = [...perCol.entries()].map(([x, c]) => `
+    <div class="air-cell" onclick="diveTo(${x})">
+      <div class="d">${escapeHtml(c.day)}</div>
+      <div class="n">${c.n} run${c.n === 1 ? '' : 's'}</div>
+      <div class="w">${c.words.length
+        ? c.words.slice(0, 6).map(escapeHtml).join(' · ') + (c.words.length > 6 ? ` <span class="none">+${c.words.length - 6}</span>` : '')
+        : '<span class="none">nothing accepted</span>'}</div>
+    </div>`).join('');
+}
+function openAerial() { buildAerial(); document.getElementById('aerial-overlay').classList.add('open'); }
+function closeAerial() { document.getElementById('aerial-overlay').classList.remove('open'); }
+function diveTo(colX) {
+  closeAerial();
+  const vp = document.getElementById('viewport').getBoundingClientRect();
+  cam.k = 0.8;
+  cam.x = vp.width / 2 - (colX + COL_W / 2) * cam.k;
+  cam.y = 10;
+  applyCamera();
+}
+
+// ---- boot -----------------------------------------------------------------
+(async function boot() {
+  renderToggles();
+  try {
+    const r = await fetch('/api/overworld');
+    DATA = await r.json();
+  } catch (e) {
+    document.getElementById('empty').style.display = 'flex';
+    document.getElementById('empty').textContent = "Couldn't reach the server.";
+    return;
+  }
+  layout();
+  render();
+  // Wayfinder destinations: every place on the map, by its visible label.
+  const seenL = new Set();
+  document.getElementById('wf-places').innerHTML = Object.keys(boxes).map(k => {
+    const l = boxes[k][0].item.label;
+    if (seenL.has(l)) return ''; seenL.add(l);
+    return `<option value="${escapeHtml(l)}">`;
+  }).join('');
+  let restored = false;
+  try { const s = localStorage.getItem('overworld_cam'); if (s) { cam = JSON.parse(s); restored = true; } } catch (e) {}
+  if (restored) applyCamera(); else fitAll();
+})();
+</script>
+</body>
+</html>

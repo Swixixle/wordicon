@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/concept.schema.json",
+  "title": "Concept",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "object_type", "name", "status", "version"],
+  "properties": {
+    "id": { "type": "string" },
+    "object_type": { "const": "concept" },
+    "name": { "type": "string", "minLength": 1 },
+    "definition": { "type": "string" },
+    "central_contradiction": { "type": "string" },
+    "status": { "type": "string", "enum": ["canonical", "candidate", "rejected", "superseded"] },
+    "supporting_claims": { "type": "array", "items": { "type": "string", "pattern": "^claim_[a-z0-9_]+$" } },
+    "governing_constraints": { "type": "array", "items": { "type": "string", "pattern": "^dc_[a-z0-9_]+$" } },
+    "related_mechanisms": { "type": "array", "items": { "type": "string" } },
+    "version": { "type": "integer", "minimum": 1 }
+  }
+}

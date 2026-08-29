@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/receipt.schema.json",
+  "title": "Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["receipt_id", "trace_id", "created_at", "operation", "input_hash", "kernel_version", "engine_version", "sources", "claims", "redaction_policy"],
+  "properties": {
+    "receipt_id": { "type": "string", "pattern": "^receipt_[a-zA-Z0-9_]+$" },
+    "trace_id": { "type": "string", "pattern": "^trace_[a-zA-Z0-9_]+$" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "operation": { "type": "string", "enum": ["crack", "forge", "crossbreed", "audit", "distill"] },
+    "input_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "kernel_version": { "type": "integer" },
+    "engine_version": { "type": "string" },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_id", "use", "visibility", "egress"],
+        "properties": {
+          "source_id": { "type": "string" },
+          "fragment_id": { "type": "string" },
+          "use": { "type": "string" },
+          "visibility": { "type": "string", "enum": ["private", "public"] },
+          "egress": { "type": "string", "enum": ["none", "derived_only", "excerpt", "full"] },
+          "public_quote_cleared": { "type": "boolean", "description": "Private-receipt-only bookkeeping: whether build_public_receipt may surface this source. Never itself copied into a public receipt." }
+        }
+      }
+    },
+    "derived_constraints_applied": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["constraint_id", "kernel_version", "visibility"],
+        "properties": {
+          "constraint_id": { "type": "string" },
+          "kernel_version": { "type": "integer" },
+          "visibility": { "const": "private" }
+        }
+      }
+    },
+    "claims": { "type": "array", "items": { "type": "object" } },
+    "transformations": { "type": "array" },
+    "candidates": { "type": "array" },
+    "rejections": { "type": "array" },
+    "warnings": { "type": "array" },
+    "model_calls": { "type": "array" },
+    "revocation_annotations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["revocation_event_id", "annotated_at", "note"],
+        "properties": {
+          "revocation_event_id": { "type": "string" },
+          "annotated_at": { "type": "string", "format": "date-time" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "redaction_policy": { "type": "string" }
+  }
+}

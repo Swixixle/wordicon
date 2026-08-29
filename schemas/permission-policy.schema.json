@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/permission-policy.schema.json",
+  "title": "PermissionPolicy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["retrieve_raw", "send_to_external_model", "derive_constraints", "quote_in_private_receipt", "quote_in_public_receipt", "use_for_training"],
+  "properties": {
+    "retrieve_raw": {
+      "description": "false, or a list of contexts allowed to retrieve raw text (e.g. owner_local_processing, private_cloud_processing).",
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      ]
+    },
+    "send_to_external_model": {
+      "description": "false, or a list of approved vendor identifiers per ADR-002 (empty list = no vendor approved yet). Never a bare true.",
+      "oneOf": [
+        { "type": "boolean", "const": false },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
+    "derive_constraints": { "type": "boolean" },
+    "quote_in_private_receipt": { "type": "boolean" },
+    "quote_in_public_receipt": { "type": "boolean" },
+    "transform_creatively": { "type": "boolean" },
+    "use_for_evaluation": { "type": "boolean" },
+    "use_for_training": { "type": "boolean" },
+    "share_with_collaborators": { "type": "boolean" },
+    "export": { "type": "boolean" }
+  }
+}

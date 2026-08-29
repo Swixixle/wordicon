@@ -1,0 +1,38 @@
+# Receipt redaction policies (blueprint v1.2 §12). Governs how a private
+# forensic receipt is reduced to a public receipt. Redaction is EXCLUSION,
+# not obfuscation — a field either survives untouched or is dropped; nothing
+# is partially masked in a way that could be reversed by an attentive reader.
+
+policies:
+  public_v1:
+    description: Default redaction policy for this delivery.
+    include:
+      - operation
+      - kernel_version          # version number only, not its contents
+      - claims                  # factual claims, with type + confidence
+      - transformations         # high-level description only
+      - warnings
+      - redaction_policy
+    include_conditionally:
+      # Sources are included ONLY if their sensitivity is public/internal AND
+      # their permissions_profile allows quote_in_public_receipt.
+      - field: sources
+        condition: "sensitivity in [public, internal] and permissions.quote_in_public_receipt == true"
+      - field: derived_constraints_applied
+        condition: always_summarized_never_enumerated
+        replacement: >
+          A single boolean-equivalent statement: "a proprietary derived
+          constraint from the Sovereign Corpus contributed to this result."
+          Never the constraint text, id, or derived_from chain.
+    always_exclude:
+      - any field named source_id, fragment_id, or derived_from where the
+        underlying object's sensitivity is private_raw, derived_only, or sealed
+      - raw fragment text under any circumstance
+      - conversation titles, participant lists, or timestamps for private sources
+      - candidates and rejections that reference private material by name
+    forensic_only:
+      # Present in the private receipt, never in any public view.
+      - full sources list regardless of sensitivity
+      - derived_constraints_applied[].constraint_id and .derived_from chain
+      - model_calls
+      - complete rejections list with reasoning

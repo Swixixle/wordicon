@@ -1,0 +1,162 @@
+# Named permission-profile presets (blueprint v1.2 §4.5a).
+#
+# These are independent capability bundles, NOT an ordinal ladder — a profile
+# further down this file is not "more open" than one above it in every
+# dimension. `derived_only`, for instance, behaves nothing like `private_raw`
+# even though a naive reading might put them "next to each other."
+#
+# Each profile sets every flag from permission-policy.schema.json explicitly.
+# An object may override individual flags only via a recorded exception
+# (see source.schema.json#/permission_overrides) — never silently.
+
+profiles:
+
+  private_raw:
+    description: >
+      Default for freshly ingested personal material before curator review.
+      Usable for local processing and deriving constraints; nothing leaves
+      the vault, nothing is quoted anywhere, nothing trains anything.
+    retrieve_raw: [owner_local_processing]
+    send_to_external_model: false
+    derive_constraints: true
+    quote_in_private_receipt: true
+    quote_in_public_receipt: false
+    transform_creatively: false
+    use_for_evaluation: false
+    use_for_training: false
+    share_with_collaborators: false
+    export: true
+
+  private_retrieval:
+    description: >
+      Raw text may be retrieved for processing in owner-local or private-cloud
+      contexts (Zone B), but never sent to an external model, never quoted
+      publicly, never used for training.
+    retrieve_raw: [owner_local_processing, private_cloud_processing]
+    send_to_external_model: false
+    derive_constraints: true
+    quote_in_private_receipt: true
+    quote_in_public_receipt: false
+    transform_creatively: true
+    use_for_evaluation: true
+    use_for_training: false
+    share_with_collaborators: false
+    export: true
+
+  derived_only:
+    description: >
+      Raw text never leaves owner-local processing under any circumstance.
+      Only reviewed, curator-or-model-derived abstractions (Derived
+      Constraints) may leave the vault, and only as resolved text with no
+      pointer back to this source in anything but the forensic receipt.
+    retrieve_raw: false
+    send_to_external_model: false
+    derive_constraints: true
+    quote_in_private_receipt: false
+    quote_in_public_receipt: false
+    transform_creatively: false
+    use_for_evaluation: false
+    use_for_training: false
+    share_with_collaborators: false
+    export: false
+
+  constraint_text_external_approved:
+    description: >
+      Scoped ONLY to Derived Constraint objects — never assignable to a
+      Source, and rejected at ingestion if it is (see
+      corpus_service.CorpusService.ingest). This is the profile that makes
+      the blueprint's own stated design ("only reviewed, curator-or-model-
+      derived abstractions may leave the vault, as resolved text with no
+      pointer back to the source") actually operable: derived_only on the
+      SOURCE keeps its raw text sealed forever, while this profile on the
+      CONSTRAINT object lets its resolved text specifically be sent to an
+      approved external vendor. Until ADR-002 names a vendor, the list
+      below stays empty and this profile behaves identically to
+      derived_only's send_to_external_model=false. No ingestion route
+      defaults to this profile — it is only ever applied by explicit
+      curator action to an already-`approved`, already-reviewed
+      DerivedConstraint, after the owner has signed off on ADR-002 for at
+      least one vendor.
+    retrieve_raw: false
+    send_to_external_model: []   # populated per-vendor once ADR-002 is closed; empty = none approved yet
+    derive_constraints: true
+    quote_in_private_receipt: true
+    quote_in_public_receipt: false
+    transform_creatively: false
+    use_for_evaluation: false
+    use_for_training: false
+    share_with_collaborators: false
+    export: false
+
+  private_citation:
+    description: >
+      May be quoted in the owner's private forensic receipt with full
+      provenance, but never in a public receipt and never sent externally.
+    retrieve_raw: [owner_local_processing, private_cloud_processing]
+    send_to_external_model: false
+    derive_constraints: true
+    quote_in_private_receipt: true
+    quote_in_public_receipt: false
+    transform_creatively: true
+    use_for_evaluation: true
+    use_for_training: false
+    share_with_collaborators: false
+    export: true
+
+  public_source:
+    description: >
+      Public or properly licensed external material. May be cited publicly,
+      sent to an approved external model (per ADR-002's vendor allowlist),
+      and used to support Bone claims.
+    retrieve_raw: [owner_local_processing, private_cloud_processing]
+    send_to_external_model: []   # populated per-vendor once ADR-002 is closed; empty = none approved yet
+    derive_constraints: true
+    quote_in_private_receipt: true
+    quote_in_public_receipt: true
+    transform_creatively: true
+    use_for_evaluation: true
+    use_for_training: false
+    share_with_collaborators: true
+    export: true
+
+  training_approved:
+    description: >
+      Never inferred automatically (blueprint §4.5a). Requires explicit
+      curator action on top of an already-reviewed object, and only for
+      nonsecret decision patterns or synthetic examples per §9.1 Stage 3 —
+      never the raw private corpus.
+    retrieve_raw: [owner_local_processing, private_cloud_processing]
+    send_to_external_model: []
+    derive_constraints: true
+    quote_in_private_receipt: true
+    quote_in_public_receipt: true
+    transform_creatively: true
+    use_for_evaluation: true
+    use_for_training: true
+    share_with_collaborators: true
+    export: true
+
+  sealed:
+    description: >
+      Retained but never automatically retrieved, quoted, transformed, or
+      trained on. Default profile alongside private_raw for anything the
+      curator hasn't classified yet, and the terminal state for anything the
+      owner wants preserved without ever influencing output again.
+    retrieve_raw: false
+    send_to_external_model: false
+    derive_constraints: false
+    quote_in_private_receipt: false
+    quote_in_public_receipt: false
+    transform_creatively: false
+    use_for_evaluation: false
+    use_for_training: false
+    share_with_collaborators: false
+    export: false
+
+default_profile_by_ingestion_route:
+  personal_ai_conversation: private_raw
+  personal_writing: private_raw
+  licensed_reference: private_citation
+  public_domain_reference: public_source
+  owned_media: private_raw
+  manual_entry: sealed   # unclassified manual entries stay inert until a curator picks a profile

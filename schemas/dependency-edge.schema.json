@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/dependency-edge.schema.json",
+  "title": "DependencyEdge",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["from_id", "to_id", "relationship", "materiality", "created_at"],
+  "properties": {
+    "from_id": { "type": "string" },
+    "to_id": { "type": "string" },
+    "relationship": {
+      "type": "string",
+      "enum": ["supports", "contradicts", "derived_from", "symbolic_extension_of", "shares_mechanism_with", "becomes_pathological_as", "accepted_by", "rejected_by", "revises", "culturally_constrained_by", "member_of_kernel", "built_from", "produced_output", "cites_in_receipt"]
+    },
+    "materiality": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/materiality" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string" },
+    "applicable_version": { "type": ["integer", "null"] },
+    "visibility": { "type": "string", "enum": ["private", "public"] }
+  }
+}

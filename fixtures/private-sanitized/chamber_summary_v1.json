@@ -1,0 +1,12 @@
+{
+  "id": "chamber_summary_personal_v1",
+  "object_type": "chamber_summary",
+  "chamber": "personal_corpus",
+  "summary_text": "Recurring personal-corpus themes as of v1: resistance from within containment, distrust of automatic redemption, preference for mechanism over moral labeling.",
+  "built_from": [
+    { "object_id": "src_personal_sanitized_001", "relationship": "derived_from", "materiality": "essential" }
+  ],
+  "review_status": "approved",
+  "regenerable": true,
+  "version": 1
+}

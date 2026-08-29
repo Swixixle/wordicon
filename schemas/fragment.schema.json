@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/fragment.schema.json",
+  "title": "Fragment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "object_type", "source_id", "locator", "sensitivity", "version"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^frag_[a-z0-9_]+$" },
+    "object_type": { "const": "fragment" },
+    "source_id": { "type": "string", "pattern": "^src_[a-z0-9_]+$" },
+    "locator": { "type": "string", "description": "Bounded pointer into the source (offsets, timestamps, page range) rather than raw text duplicated here." },
+    "text_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "text": { "type": "string", "description": "Present only for sanitized fixtures / local processing contexts; omitted when serialized for any external-facing view." },
+    "sensitivity": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/sensitivity" },
+    "themes": { "type": "array", "items": { "type": "string" } },
+    "version": { "type": "integer", "minimum": 1 }
+  }
+}

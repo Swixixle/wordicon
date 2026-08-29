@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/chamber-summary.schema.json",
+  "title": "ChamberSummary",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "object_type", "chamber", "summary_text", "built_from", "review_status", "version"],
+  "properties": {
+    "id": { "type": "string" },
+    "object_type": { "const": "chamber_summary" },
+    "chamber": { "type": "string", "enum": ["personal_corpus", "language_etymology", "clinical_psychological", "medicine_anatomy", "natural_science", "myth_religion_folklore", "history_institutional_power", "thinkers_artists_figures", "anti_corpus"] },
+    "summary_text": { "type": "string" },
+    "built_from": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["object_id", "materiality"],
+        "properties": {
+          "object_id": { "type": "string" },
+          "relationship": { "type": "string" },
+          "materiality": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/materiality" }
+        }
+      }
+    },
+    "review_status": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/review_status" },
+    "regenerable": { "type": "boolean", "default": true },
+    "version": { "type": "integer", "minimum": 1 }
+  }
+}

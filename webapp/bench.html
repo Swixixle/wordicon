@@ -1,0 +1,971 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wordicon — The Bench</title>
+<meta name="theme-color" content="#11161d">
+<style>
+  /* Links: the ruled palette (measured >=8.4:1 on these surfaces),
+     underlined; inline-styled links keep their chosen colors. */
+  a { color: #8cc8ff; text-decoration: underline; text-underline-offset: 2px; }
+  a:visited { color: #d9b3ff; }
+  a:hover, a:focus-visible { color: #ffe08a; }
+  a:focus-visible { outline: 2px solid #ffe08a; outline-offset: 2px; border-radius: 3px; }
+
+  /* Same tokens as the rest of the app, so the Bench reads as one product. */
+  :root {
+    --bg: #11161d; --panel: #181f29; --panel-2: #1f2833; --border: #2a3441;
+    --text: #e7ecf3; --muted: #8b98a9; --accent: #78aaff;
+    --good: #6fcf97; --bad: #e08a8a; --warn: #d9a441;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%; }
+  header { display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5;
+    background: rgba(17,22,29,0.95); backdrop-filter: blur(6px); }
+  header h1 { font-size: 16px; margin: 0; font-weight: 700; }
+  header a { color: var(--accent); text-decoration: none; font-size: 13px; }
+  main { max-width: 720px; margin: 0 auto; padding: 16px 16px 80px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 14px; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin-bottom: 6px; }
+  .word { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 4px; }
+  .defn { font-size: 15px; line-height: 1.5; color: var(--text); opacity: 0.9; margin: 0; }
+  .body { font-size: 14px; line-height: 1.55; margin: 6px 0; }
+  .muted { color: var(--muted); }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px;
+    vertical-align: middle; }
+  .tag.recorded { background: rgba(111,207,151,0.18); color: var(--good); }
+  .tag.proposed { background: rgba(217,164,65,0.18); color: var(--warn); }
+  .tag.reading  { background: rgba(139,152,169,0.18); color: var(--muted); }
+  .tag.kept     { background: rgba(111,207,151,0.18); color: var(--good); }
+  .tag.lost     { background: rgba(224,138,138,0.18); color: var(--bad); }
+  .keep-box { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
+  .keep-in { width: 100%; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px;
+    font-size: 13.5px; font-family: inherit; margin-bottom: 6px; }
+  .hist-row { padding: 8px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .hist-row:last-of-type { border-bottom: none; }
+  .hist-title { font-size: 14px; font-weight: 600; }
+  .hist-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .tag.weakened { background: rgba(217,164,65,0.18); color: var(--warn); }
+  .tag.unstated { background: rgba(139,152,169,0.18); color: var(--muted); }
+
+  .part { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0;
+    border-bottom: 1px solid var(--border); }
+  .part:last-child { border-bottom: none; }
+  .lock { background: none; border: none; cursor: pointer; font-size: 15px; padding: 0 2px;
+    line-height: 1.4; color: var(--good); }
+  .lock.open { color: var(--warn); }
+  .part-name { font-weight: 600; font-size: 14px; }
+  .part-gist { font-size: 13px; color: var(--muted); }
+  .part-edit { width: 100%; background: transparent; border: none; border-bottom: 1px dashed var(--border);
+    color: var(--text); font-family: inherit; font-size: 14px; font-weight: 600; padding: 2px 0; }
+  .part-edit.gist { font-size: 13px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+  .part-edit:focus { outline: none; border-bottom-color: var(--accent); }
+  .locked-away { opacity: 0.45; pointer-events: none; }
+
+  .axis { padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .axis:last-child { border-bottom: none; }
+  .axis-name { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); margin-bottom: 3px; }
+
+  .chip { display: inline-block; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 20px; padding: 6px 12px; font-size: 13px;
+    margin: 0 6px 7px 0; cursor: pointer; user-select: none; }
+  .chip.on { background: var(--accent); color: #0a121f; border-color: var(--accent); }
+  .chip:disabled { opacity: 0.4; cursor: default; }
+
+  button.go { width: 100%; padding: 12px; border-radius: 10px; border: none; font-size: 15px;
+    font-weight: 600; cursor: pointer; background: var(--accent); color: #0a121f; }
+  button.go:disabled { background: var(--panel-2); color: var(--muted); cursor: default; }
+  button.ghost { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
+
+  select, input[type=text] { background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; font-size: 14px;
+    width: 100%; font-family: inherit; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+  .build { border-left: 3px solid var(--border); padding-left: 11px; margin: 12px 0; }
+  .build.broken { border-left-color: var(--bad); }
+  .build.ok { border-left-color: var(--good); }
+  .build-word { font-size: 20px; font-weight: 700; margin: 0 0 3px; }
+  .spinner { display: inline-block; width: 11px; height: 11px; margin-right: 7px;
+    border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite; vertical-align: -1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error { color: var(--bad); font-size: 13.5px; line-height: 1.5; }
+  .verdict-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 3px 0; }
+  .fix { font-size: 11px; color: var(--muted); }
+  .fixbtn { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
+    border-radius: 20px; padding: 1px 8px; font-size: 11px; cursor: pointer; margin-left: 3px;
+    font-family: inherit; }
+  .fixbtn.on { background: var(--accent); color: #0a121f; border-color: var(--accent); }
+  .fixbtn.agree { border-style: dashed; }
+  .foot { font-size: 12px; color: var(--muted); line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>The Bench</h1>
+  <a href="/">← back to Wordicon</a>
+  <span class="muted" style="margin-left:auto;font-size:11.5px" id="hdr-note">prototype</span>
+</header>
+
+<main>
+  <div class="card" id="picker">
+    <div class="label">Open one of your words</div>
+    <select id="word-select"><option>loading your lexicon…</option></select>
+    <p class="body muted" style="font-size:12.5px">Open a word and the first thing it tells you
+      is whether its construction was recorded when you coined it, or has to be guessed at from
+      the spelling. The guess is labeled as one. Twelve of your words have a record; the rest don't.</p>
+    <button class="go" id="open-btn" onclick="openWord()" disabled>Open on the Bench</button>
+  </div>
+
+  <div class="card" id="shelf">
+    <div class="label">Already on the Bench</div>
+    <div id="shelf-body"><p class="body muted" style="font-size:12.5px">…</p></div>
+  </div>
+
+  <div id="stage"></div>
+</main>
+
+<script>
+let LEX = [], CUR = null, SEL = {}, METHOD = 'blend', CONFIRMED = false;
+let MAT_PART = {};   // material word -> the contract part it was offered under
+let LAST_BUILDS = [];
+
+const METHODS = [
+  ['compound', 'Compound — put whole words together'],
+  ['blend', 'Blend — fuse their sounds'],
+  ['suffix', 'Add an ending'],
+  ['prefix', 'Add a beginning'],
+  ['classical', 'Use Greek or Latin roots'],
+  ['let Wordicon choose', 'Let Wordicon choose'],
+];
+
+// A failed request and a failing server are different facts and must not
+// print the same sentence. The first version said "couldn't reach the
+// server" whenever fetch OR json() threw — so a 500 carrying a perfectly
+// clear message (an empty account, in the first live run) was reported as
+// a network problem, sending the owner to look at the wrong thing.
+async function readJson(r) {
+  const text = await r.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    return {error: r.ok
+      ? 'The server replied with something that is not a result. Check the server log.'
+      : `The server refused this request (HTTP ${r.status}) and did not say why. Check the server log — the reason is printed there.`};
+  }
+}
+
+// for a title going into an onclick attribute — an apostrophe in a coined
+// word would otherwise close the handler string
+function escJs(s) {
+  return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+async function loadLexicon() {
+  const sel = document.getElementById('word-select');
+  try {
+    const r = await fetch('/api/library');
+    const d = await readJson(r);
+    if (d.error) {
+      sel.innerHTML = `<option>${esc(d.error)}</option>`;
+      return;
+    }
+    // Aliases are other names for a concept already on the shelf; the Bench
+    // works on the concept, so it opens from the lead name.
+    LEX = (d.lexicon || []).filter(c => !c.alias_of && (c.name || '').trim());
+  } catch (e) {
+    sel.innerHTML = '<option>could not reach the server at all</option>';
+    return;
+  }
+  LEX.sort((a, b) => (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
+  sel.innerHTML = LEX.map((c, i) =>
+    `<option value="${i}">${esc(c.name)}${c.definition ? '' : ' — no definition stored'}</option>`
+  ).join('');
+  document.getElementById('open-btn').disabled = !LEX.length;
+  const q = new URLSearchParams(location.search).get('word');
+  if (q) {
+    const i = LEX.findIndex(c => (c.name || '').toLowerCase() === q.toLowerCase());
+    if (i >= 0) { sel.value = String(i); openWord(); }
+  }
+}
+
+async function openWord(fresh) {
+  const i = parseInt(document.getElementById('word-select').value, 10);
+  const c = LEX[i];
+  if (!c) return;
+  const stage = document.getElementById('stage');
+  stage.innerHTML = `<div class="card"><p class="body muted"><span class="spinner"></span>Taking “${esc(c.name)}” apart…</p></div>`;
+  let d;
+  try {
+    const r = await fetch('/api/bench/open', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({title: c.name, definition: c.definition || '',
+                            fresh_contract: fresh ? '1' : ''}),
+    });
+    d = await readJson(r);
+  } catch (e) {
+    stage.innerHTML = `<div class="card"><p class="error">Couldn't reach the server at all — it may not be running.</p></div>`;
+    return;
+  }
+  if (d.error) {
+    stage.innerHTML = `<div class="card"><p class="error">${esc(d.error)}</p></div>`;
+    return;
+  }
+  CUR = d; SEL = {}; METHOD = 'blend';
+  // A contract he confirmed on an earlier day is still confirmed. Making
+  // him re-confirm it every session is the repetition he asked to be rid
+  // of — and re-confirming by reflex is how a wrong part gets waved
+  // through, so the gate is worth less when it fires on things he has
+  // already read carefully.
+  CONFIRMED = d.contract_source === 'owner_confirmed';
+  renderBench();
+}
+
+// What this word has already been through. Counts only — a number of builds
+// is not a claim that any of them worked, and this line must never grow into
+// one. It exists so he can see the record survived, and reach it.
+function historyHtml(d) {
+  const h = d.history || {};
+  if (!h.opens || h.opens <= 1) return '';
+  const bits = [`opened ${h.opens} times`];
+  if (h.build_rounds) bits.push(`${h.build_rounds} build round${h.build_rounds === 1 ? '' : 's'}`);
+  if ((h.words_built || []).length) bits.push(`coined so far: ${h.words_built.map(esc).join(', ')}`);
+  if (h.first_opened) bits.push(`first opened ${esc(h.first_opened.slice(0, 10))}`);
+  return `<p class="foot" style="margin-top:8px">${bits.join(' · ')} — kept in the Bench library.</p>`;
+}
+
+// Everything below exists because the record was invisible from here. The
+// Bench stores its work, and the Library on the main page lists it, but he
+// was standing on /bench with no way to see what /bench had already done —
+// which is the same as it not being stored, from where he was standing.
+let SHELF = null;
+
+async function loadShelf() {
+  const body = document.getElementById('shelf-body');
+  try {
+    const r = await fetch('/api/bench/library');
+    SHELF = await readJson(r);
+  } catch (e) {
+    body.innerHTML = `<p class="body muted" style="font-size:12.5px">Couldn't reach the server.</p>`;
+    return;
+  }
+  const words = (SHELF && SHELF.words) || [];
+  if (!words.length) {
+    body.innerHTML = `<p class="body muted" style="font-size:12.5px">Nothing has been taken apart yet.
+      Open a word above and whatever happens is kept — the contract you fix, the materials you pick,
+      every coin it builds and every verdict you overrule.</p>`;
+    return;
+  }
+  const c = SHELF.counts || {};
+  body.innerHTML = words.map(w => {
+    // Deduped. Two rounds that both produced "Genoblivion" listed it twice
+    // in a row of names, and the Library — which used a set — said 5 where
+    // this said 6. Two places disagreeing about the same count is worse
+    // than either number being wrong.
+    // attempts / distinct forms / kept — three different numbers reported as
+    // one word, "coins". A form the Bench emitted and nobody kept is an
+    // attempt, not a coin, and counting it as one rebuilds the Library's own
+    // inflation problem (53 names shown as 53 ideas, about 40 real) under a
+    // new name one week later.
+    const forms = w.forms || [];
+    const keptSet = new Set((w.kept_forms || []).map(x => x.toLowerCase()));
+    const mine = w.contract_source === 'owner_confirmed';
+    return `<div class="hist-row" onclick="openByTitle('${escJs(w.title)}')">
+      <div class="hist-title">${esc(w.title)}</div>
+      ${forms.length ? `<div class="hist-meta">tried: ${forms.map(f =>
+        keptSet.has(f.toLowerCase()) ? `<strong style="color:var(--good)">${esc(f)} ✓kept</strong>` : esc(f)).join(' · ')}</div>` : ''}
+      <div class="hist-meta">${mine ? 'your contract, confirmed' : "a model's split — not confirmed"}
+        · ${w.attempts || 0} attempt${w.attempts === 1 ? '' : 's'} · ${forms.length} distinct form${forms.length === 1 ? '' : 's'}
+        · ${(w.kept_forms || []).length} kept · ${esc((w.updated_at || '').slice(0, 10))}</div>
+    </div>`;
+  }).join('') +
+  // Counts of what is on disk versus what is live. A reconsidered verdict is
+  // still something he did, and it is not the same as a second correction.
+  `<p class="foot" style="margin-top:8px">${c.words} word(s) · ${c.builds} build attempt(s) ·
+     ${c.distinct_forms} distinct form(s) · ${c.kept} kept</p>
+   <details style="margin-top:4px"><summary class="foot" style="cursor:pointer">the bookkeeping</summary>
+     <p class="foot">${c.corrections} live verdict(s) you overruled${
+       c.superseded_corrections ? ` · ${c.superseded_corrections} you later changed your mind about (kept, not counted)` : ''}${
+       c.duplicate_corrections ? ` · ${c.duplicate_corrections} repeat click(s) of the same verdict` : ''}${
+       c.orphan_corrections ? ` · ${c.orphan_corrections} correction(s) from before the Bench kept records, with nothing left to attach to` : ''}.
+       Kept because a reconsidered verdict is still something you did — but it is audit trail, not score.</p>
+   </details>`;
+}
+
+function openByTitle(title) {
+  const sel = document.getElementById('word-select');
+  const o = [...sel.options].find(x => x.textContent.trim() === title);
+  if (!o) return;
+  sel.value = o.value;
+  openWord();
+}
+
+// What this word has been through, shown on the word's own screen.
+function roundsHtml(d) {
+  const rounds = (d.history && d.history.rounds) || [];
+  if (!rounds.length) return '';
+  return `<div class="card">
+    <div class="label">What you have already done with this word</div>
+    ${rounds.map(r => `
+      <div class="hist-row" style="cursor:default">
+        <div class="hist-title">${(r.words || []).map(w => esc(w.word)).join(' · ') || '(no coins)'}</div>
+        <div class="hist-meta">${esc(r.method)} · from ${(r.materials || []).map(esc).join(' + ')} · ${esc((r.at || '').slice(0, 10))}</div>
+        ${(r.words || []).map(w => {
+          const kept = Object.values(w.contract || {}).filter(v => v === 'kept').length;
+          const tot = Object.keys(w.contract || {}).length;
+          return `<div class="hist-meta">${esc(w.word)}: kept ${kept} of ${tot}${
+            (w.corrections || []).length ? ` · you overruled ${w.corrections.map(c => esc(c.part_name) + ' → ' + esc(c.owner_says)).join(', ')}` : ''}</div>`;
+        }).join('')}
+        ${r.contract_changed_since ? `<div class="hist-meta" style="color:var(--warn)">
+          Judged against a different contract than the one above — it read
+          <em>${(r.contract_then || []).map(esc).join(' · ')}</em>. These verdicts are about that
+          version of the meaning, not this one.</div>` : ''}
+      </div>`).join('')}
+    <p class="foot">Kept exactly as it was recorded. Nothing here was re-judged just now.</p>
+  </div>`;
+}
+
+// The construction is the one place on this screen where a fact and a guess
+// could be confused for each other, so they are not rendered by the same
+// branch and never share a shape.
+function constructionHtml(k) {
+  if (k.source === 'recorded') {
+    return `<div class="card">
+      <div class="label">Construction <span class="tag recorded">recorded when you coined it</span></div>
+      <p class="body">${esc(k.note)}</p>
+      ${k.from_trace ? `<p class="foot">From your own run <a href="/?trace=${encodeURIComponent(k.from_trace)}" style="color:var(--accent)">${esc(k.from_trace.slice(0, 18))}</a>. If it's wrong, the run is wrong — this is not a guess about the spelling.</p>` : ''}
+    </div>`;
+  }
+  return `<div class="card">
+    <div class="label">Construction <span class="tag proposed">not recorded — these are guesses</span></div>
+    <p class="body muted" style="font-size:13px">Your run never wrote down what this was built
+      from, so Wordicon is reading the spelling backwards. A word invented last week has no
+      history to look up. Pick the one you meant, or none of them.</p>
+    ${(k.readings || []).map(r => `<p class="body">· ${esc(r)}</p>`).join('') ||
+      '<p class="body muted">No reading offered.</p>'}
+  </div>`;
+}
+
+function renderBench() {
+  const d = CUR;
+  const axisLabels = {meaning: 'Does it carry the meaning?', construction: 'How it is built',
+                      category: 'What the shape makes a listener expect',
+                      sound: 'Whether it can be said'};
+  // Every ingredient has a JOB, not just a lock. The plain wording is the
+  // interface; the role word rides in the tooltip.
+  const ROLES = [
+    ['required', 'required — remove this and it becomes a different concept'],
+    ['supporting', 'supporting — clarifies it, but the concept survives without it'],
+    ['consequence', 'consequence — something the core mechanism produces'],
+    ['tension', 'tension — the contradiction that gives it its charge'],
+    ['boundary', 'boundary — what separates it from a neighboring idea']];
+  const contractHtml = d.contract.map((p, i) => `
+    <div class="part">
+      <button class="lock ${p.locked ? '' : 'open'}" id="lock-${i}" onclick="toggleLock(${i})"
+              title="${p.locked ? 'locked — a new word must carry this' : 'unlocked — this may shift'}">${p.locked ? '🔒' : '🔓'}</button>
+      <div style="flex:1">
+        <input class="part-edit" id="pname-${i}" value="${esc(p.name)}" oninput="editPart(${i},'name',this.value)">
+        <input class="part-edit gist" id="pgist-${i}" value="${esc(p.gist)}" oninput="editPart(${i},'gist',this.value)">
+        <select class="part-edit" style="font-size:11.5px;margin-top:3px" id="prole-${i}"
+                onchange="editPart(${i},'role',this.value)"
+                title="what job this piece does in the concept">
+          ${ROLES.map(([v, l]) => `<option value="${v}"${(p.role || (p.locked ? 'required' : 'supporting')) === v ? ' selected' : ''}>${l}</option>`).join('')}
+        </select>
+      </div>
+      <button class="lock" style="color:var(--bad)" title="remove this part" onclick="removePart(${i})">×</button>
+    </div>`).join('');
+
+  const materialsHtml = (d.materials || []).map(m => {
+    const part = d.contract.find(p => p.key === m.part);
+    m.options.forEach(o => { MAT_PART[o] = m.part; });
+    return `<div style="margin-bottom:10px">
+      <div class="label" style="margin-bottom:5px">${esc(part ? part.name : m.part)}</div>
+      ${m.options.map(o => `<span class="chip" id="m-${esc(o)}" onclick="toggleMaterial('${esc(o).replace(/'/g, "\\'")}')">${esc(o)}</span>`).join('')}
+    </div>`;
+  }).join('');
+
+  document.getElementById('stage').innerHTML = `
+    <div class="card">
+      <p class="word">${esc(d.title)}</p>
+      <p class="defn">${esc(d.definition)}</p>
+      ${historyHtml(d)}
+    </div>
+
+    ${roundsHtml(d)}
+
+    ${constructionHtml(d.construction)}
+
+    <div class="card" id="contract-card">
+      <div class="label">What the word has to carry — <span style="text-transform:none;letter-spacing:0">check this before anything else</span></div>
+      ${d.reused_contract ? `
+        <p class="body" style="margin-top:0"><strong>This is your contract, not a fresh one.</strong>
+          You confirmed it${d.contract_confirmed_at ? ' on ' + esc(d.contract_confirmed_at.slice(0, 10)) : ''}
+          and it was reloaded from disk, so you don't have to write it again. Edit any part and it
+          reopens for confirmation as usual.</p>
+        ${d.contract_differs_from_now ? `
+          <p class="body muted" style="font-size:12.5px">Opening the word ran the split again, and the
+            model came back with something different this time — <em>${(d.contract_proposed_now || [])
+            .map(p => esc(p.name)).join(' · ')}</em>. Yours is what is being used. The disagreement is
+            shown rather than hidden because a model that reads your definition differently on a second
+            pass is telling you something about the definition.</p>` : ''}
+        <button class="ghost" style="margin-bottom:6px" onclick="openWord(true)">start over from the model's split</button>
+      ` : `<p class="body muted" style="font-size:12.5px;margin-top:0">A model read your definition and
+        split it into these parts. It can split it <em>wrong</em> — and if it does, every build
+        below gets measured against the wrong idea and the failures will look like your word's
+        fault. Fix the wording, drop a part, add a missing one. Then confirm.</p>`}
+      ${contractHtml}
+      <button class="ghost" style="margin-top:8px" onclick="addPart()">+ add a part it missed</button>
+      <p class="foot" style="margin-top:8px">🔒 must survive any rebuild. Unlock one only when you
+        want the meaning itself to move.</p>
+      <button class="go" id="confirm-btn" style="margin-top:8px" onclick="confirmContract()">This is the concept — confirm</button>
+    </div>
+
+    <div class="card">
+      <div class="label">What's going on with it</div>
+      <details>
+        <summary>Why? — four separate readings, one per axis</summary>
+        <div style="margin-top:6px">
+        ${Object.keys(axisLabels).map(a => `
+          <div class="axis">
+            <div class="axis-name">${axisLabels[a]} <span class="tag ${esc(d.diagnosis[a].label)}">${esc(d.diagnosis[a].label === 'unverified' ? 'checkable — not checked' : d.diagnosis[a].label)}</span></div>
+            <div class="body" style="margin:0">${esc(d.diagnosis[a].text) || '<span class="muted">nothing said</span>'}</div>
+            ${d.diagnosis[a].contradiction ? `<div class="body" style="margin:3px 0 0;font-size:12.5px;color:var(--bad)">
+              Checked in code — this line disagrees with itself: ${esc(d.diagnosis[a].contradiction)}.</div>` : ''}
+            ${d.diagnosis[a].truncated ? `<div class="muted" style="margin:3px 0 0;font-size:11.5px">
+              truncated in code: ran ${d.diagnosis[a].truncated.ran} characters, ${d.diagnosis[a].truncated.cut} cut — the untouched text survives in this open's raw output.</div>` : ''}
+          </div>`).join('')}
+        <p class="foot" style="margin-top:8px">Four separate questions. There is no overall score,
+          on purpose — “awkward” is what hides which of these four is actually wrong.
+          <strong>checkable — not checked</strong> means that line contains something with a right
+          answer somewhere (a count, a stress pattern, an etymology) that nothing here looked up.
+          Treat those as leads, not facts.</p>
+        </div>
+      </details>
+    </div>
+
+    <div class="card locked-away" id="relations-card">
+      <div class="label">How the pieces relate</div>
+      <p class="body muted" style="font-size:12.5px;margin-top:0">Four nouns in a bag are not a
+        concept — the concept lives in the verbs. Say how the pieces drive each other; the
+        structure below has to use every relation you declare, and the code reports any it
+        silently drops.</p>
+      <div id="relations-rows"></div>
+      <button class="ghost" style="margin-top:6px" onclick="addRelation()">+ add a relation</button>
+      <datalist id="rel-verbs"></datalist>
+      <button class="go" id="concept-btn" style="margin-top:10px" onclick="buildConcept()">Build the concept</button>
+    </div>
+
+    <div id="concept-area"></div>
+
+    <div class="card locked-away" id="coinage-toggle-card">
+      <p class="body muted" style="font-size:12.5px;margin:0">The coinage lab still exists — the
+        strange little laboratory that squeezes meanings into a pronounceable string. It is no
+        longer responsible for delivering the payoff.
+        <button class="ghost" style="margin-left:8px" onclick="toggleLab()">Try a coined form</button></p>
+    </div>
+
+    <div class="card locked-away" id="materials-card" style="display:none">
+      <div class="label">The coinage lab — materials</div>
+      ${materialsHtml || '<p class="body muted">None offered.</p>'}
+      <div class="label" style="margin-top:12px">Method</div>
+      <select id="method-select" onchange="METHOD=this.value;refreshBuildBtn()">
+        ${METHODS.map(([v, l]) => `<option value="${v}"${v === 'blend' ? ' selected' : ''}>${l}</option>`).join('')}
+      </select>
+      <p class="foot" style="margin:9px 0">Pick as many materials as you want, then build.
+        Past two or three stems a coin usually gets long and strange — that is a result, not a
+        rule, and anything you pick that a build never touches is named underneath it.</p>
+      <div id="capacity-warn"></div>
+      <button class="go" id="build-btn" onclick="build()" disabled>Build</button>
+    </div>
+
+    <div id="builds"></div>
+
+    <div class="card">
+      <p class="foot">${esc(d.evidence_note)}</p>
+    </div>`;
+  afterRender();
+}
+
+// Editing a contract part un-confirms it. The whole point of the gate is
+// that the thing built against is the thing the owner signed off on; a part
+// edited after confirmation was never signed off on.
+function editPart(i, field, value) {
+  if (!CUR.contract[i]) return;
+  CUR.contract[i][field] = value;
+  unconfirm();
+}
+
+function addPart() {
+  CUR.contract.push({key: 'own_' + CUR.contract.length, name: '', gist: '', locked: true});
+  CONFIRMED = false;
+  renderBench();
+}
+
+function removePart(i) {
+  CUR.contract.splice(i, 1);
+  CONFIRMED = false;
+  renderBench();
+}
+
+function unconfirm() {
+  if (!CONFIRMED) return;
+  CONFIRMED = false;
+  // The stored label has to drop too. A file that still reads
+  // "owner_confirmed" after he took the confirmation back would hand
+  // tomorrow's session an approval he withdrew today.
+  saveContract(false);
+  const b = document.getElementById('confirm-btn');
+  if (b) { b.textContent = 'This is the concept — confirm'; b.disabled = false; }
+  const m = document.getElementById('materials-card');
+  if (m) m.classList.add('locked-away');
+  refreshBuildBtn();
+}
+
+// Written to disk on the spot, not at build time: a contract he corrected
+// and then walked away from is exactly the work that used to evaporate.
+// Keeping a coin is the only path by which anything the Bench makes leaves
+// the Bench. Before it existed the Bench built words and dropped them: they
+// could never enter the Lexicon, so they could never be opened here, so the
+// verified-slice construction record had nothing it could ever apply to.
+async function keepCoin(j, word) {
+  const box = document.getElementById(`keep-${j}-${word}`);
+  if (!box) return;
+  const said = box.querySelector('.keep-said');
+  const definition = (box.querySelector('.keep-in').value || '').trim();
+  said.textContent = 'saving…';
+  try {
+    const r = await fetch('/api/bench/keep', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({parent_title: CUR.title, word, definition}),
+    });
+    const d = await readJson(r);
+    if (d.error) { said.style.color = 'var(--bad)'; said.textContent = d.error; return; }
+    said.style.color = 'var(--good)';
+    said.textContent = d.construction_recorded
+      ? 'kept — and its construction is recorded, not guessed'
+      : 'kept — construction still unrecorded (the seam account did not check out)';
+    box.querySelector('.keep-btn').disabled = true;
+    loadLexicon(); loadShelf();
+  } catch (e) { said.style.color = 'var(--bad)'; said.textContent = 'Could not reach the server.'; }
+}
+
+async function saveContract(confirmed) {
+  if (!CUR || !CUR.title) return;
+  try {
+    const r = await fetch('/api/bench/contract', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({title: CUR.title, contract: CUR.contract, confirmed: !!confirmed}),
+    });
+    const d = await readJson(r);   // never raw json(): a non-JSON 500 must not read as offline
+    if (d && d.contract_source) {
+      CUR.contract_source = d.contract_source;
+      CUR.contract_confirmed_at = d.contract_confirmed_at || '';
+    }
+  } catch (e) { /* the Bench still works unsaved; it just forgets */ }
+}
+
+function confirmContract() {
+  CUR.contract = CUR.contract.filter(p => (p.name || '').trim());
+  if (!CUR.contract.length) { alert('A contract needs at least one part.'); return; }
+  CONFIRMED = true;
+  saveContract(true);
+  const b = document.getElementById('confirm-btn');
+  b.textContent = '✓ confirmed — edit any part to reopen';
+  b.disabled = true;
+  // Meaning first, structure second, language third, coinage last — and
+  // sometimes never. Confirming the ingredients opens the CONCEPT lane;
+  // the coinage lab unlocks with it but stays folded away.
+  for (const id of ['relations-card', 'coinage-toggle-card', 'materials-card']) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('locked-away');
+  }
+  renderRelations();
+  refreshBuildBtn();
+}
+
+// ---- relations: the verbs the concept lives in --------------------------
+let RELATIONS = [];
+// Suggestions, not a vocabulary: the verb field is free text (the concept
+// lives in YOUR verbs), these just seed the datalist. Max 80 chars — the
+// same cap the server enforces, so nothing is ever silently cut in transit.
+const REL_VERBS = ['conceals', 'causes', 'persists despite', 'becomes evidence against',
+                   'converts into', 'makes less knowable',
+                   'is outwardly identical to, but internally undecidable from'];
+document.addEventListener('DOMContentLoaded', () => {
+  const dl = document.getElementById('rel-verbs');
+  if (dl) dl.innerHTML = REL_VERBS.map(v => `<option value="${esc(v)}">`).join('');
+});
+
+function addRelation() {
+  const names = CUR.contract.map(p => p.name);
+  RELATIONS.push({a_name: names[0] || '', verb: REL_VERBS[0], b_name: names[1] || names[0] || ''});
+  renderRelations();
+}
+function setRel(i, field, v) { if (RELATIONS[i]) RELATIONS[i][field] = v; }
+function dropRel(i) { RELATIONS.splice(i, 1); renderRelations(); }
+function renderRelations() {
+  const box = document.getElementById('relations-rows');
+  if (!box) return;
+  const names = CUR.contract.map(p => p.name);
+  box.innerHTML = RELATIONS.map((r, i) => `
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+      <select class="part-edit" style="flex:1;min-width:110px" onchange="setRel(${i},'a_name',this.value)">
+        ${names.map(n => `<option${n === r.a_name ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>
+      <input class="part-edit" style="flex:1.4;min-width:150px" list="rel-verbs" maxlength="80"
+        value="${esc(r.verb)}" placeholder="how A drives B — your own verb phrase"
+        oninput="setRel(${i},'verb',this.value)">
+      <select class="part-edit" style="flex:1;min-width:110px" onchange="setRel(${i},'b_name',this.value)">
+        ${names.map(n => `<option${n === r.b_name ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>
+      <button class="lock" style="color:var(--bad)" onclick="dropRel(${i})">×</button>
+    </div>`).join('') ||
+    '<p class="foot" style="margin:0">No relations yet. The build still runs, working from the roles alone — but the relations are usually where the concept is.</p>';
+}
+
+function toggleLab() {
+  const m = document.getElementById('materials-card');
+  if (m) m.style.display = (m.style.display === 'none') ? '' : 'none';
+}
+
+// ---- build the concept ---------------------------------------------------
+async function buildConcept() {
+  const btn = document.getElementById('concept-btn');
+  btn.disabled = true; btn.textContent = 'building…';
+  const area = document.getElementById('concept-area');
+  try {
+    const r = await fetch('/api/bench/concept', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({title: CUR.title, definition: CUR.definition,
+        ingredients: CUR.contract.map(p => ({key: p.key, name: p.name, gist: p.gist,
+          role: p.role || (p.locked ? 'required' : 'supporting')})),
+        relations: RELATIONS, contract_confirmed: CONFIRMED})});
+    const d = await readJson(r);
+    if (d.error) { area.innerHTML = `<div class="card"><p class="body" style="color:var(--bad)">${esc(d.error)}</p></div>`; return; }
+    area.innerHTML = conceptHtml(d);
+  } catch (e) {
+    area.innerHTML = '<div class="card"><p class="body" style="color:var(--bad)">Could not reach the server.</p></div>';
+  } finally { btn.disabled = false; btn.textContent = 'Build the concept'; }
+}
+
+const ANAT_PLAIN = {object: 'what kind of thing this is about',
+  visible: 'what an observer actually sees', hidden: 'what cannot be directly observed',
+  mechanism: 'how the parts drive each other', tension: 'the contradiction at the core',
+  boundary: 'the nearest thing this is not',
+  near_miss: 'a real case that almost fits — recall, not looked up',
+  consequence: 'what follows if you accept it'};
+
+function conceptHtml(d) {
+  LAST_CONCEPT = d;
+  const cov = (d.coverage || []).map(c => `
+    <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:4px">
+      <span class="tag ${c.verdict === 'kept' ? 'recorded' : 'unverified'}">${esc(c.verdict)}</span>
+      <span class="body" style="margin:0"><strong>${esc(c.name)}</strong>
+        <span class="muted" style="font-size:11.5px">(${esc(c.role)})</span>
+        ${c.note ? ' — ' + esc(c.note) : ''}</span>
+    </div>`).join('');
+  // The server sorts JSON keys, which rendered the skeleton alphabetically
+  // — boundary before object. Structure has an order; alphabet is not it.
+  const ANAT_ORDER = ['object', 'visible', 'hidden', 'mechanism', 'tension',
+                      'boundary', 'near_miss', 'consequence'];
+  const anat = ANAT_ORDER.map(k => [k, (d.anatomy || {})[k]]).filter(([k, v]) => v).map(([k, v]) => `
+    <div style="margin-bottom:6px"><span class="label" style="font-size:10px">${esc(ANAT_PLAIN[k] || k)}</span>
+      <p class="body" style="margin:2px 0 0">${esc(v)}</p></div>`).join('');
+  return `<div class="card">
+    <div class="label">The concept, built</div>
+    <p class="body" style="font-size:15.5px">${esc(d.statement)}</p>
+    ${(d.findings || []).map(f => `<p class="body" style="font-size:12.5px;color:var(--warn)">Checked in code: ${esc(f)}</p>`).join('')}
+    <details style="margin-top:8px" open>
+      <summary>Its anatomy</summary>
+      <div style="margin-top:6px">${anat}</div>
+    </details>
+    <details open style="margin-top:8px">
+      <summary>What happened to each ingredient</summary>
+      <div style="margin-top:6px">${cov || '<p class="body" style="color:var(--bad);margin:0">No accounting came back for the ingredients — that is a failure of the build\'s bookkeeping, not a clean bill. The round\'s raw output holds whatever the model actually said.</p>'}</div>
+    </details>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="go" style="flex:0 1 auto" onclick="saveConcept()">Save this concept</button>
+      <button class="ghost" onclick="exploreNames()">Explore names — optional</button>
+    </div>
+    <div id="names-area"></div>
+    <p class="foot" style="margin-top:8px">Saving replaces the word's definition with this
+      statement — the old sentence is kept and labelled, and the grounding resets, exactly as
+      when you rewrite a meaning on the shelf. The name stays whatever it is.</p>
+  </div>`;
+}
+
+let LAST_CONCEPT = null;
+
+async function saveConcept() {
+  if (!LAST_CONCEPT || !LAST_CONCEPT.statement) return;
+  const r = await fetch('/api/definition', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({title: CUR.title, definition: LAST_CONCEPT.statement,
+      reason: 'built on the Bench from ' + (LAST_CONCEPT.ingredients || []).length +
+              ' ingredient(s) and ' + (LAST_CONCEPT.relations || []).length + ' relation(s)'})});
+  const d = await readJson(r);
+  alert(d.changed ? 'Saved. The old definition is kept underneath, and the grounding reset.'
+                  : 'Not saved: ' + (d.why || d.error || 'unknown'));
+}
+
+async function exploreNames() {
+  const area = document.getElementById('names-area');
+  area.innerHTML = '<p class="foot">weighing names against the one it has…</p>';
+  try {
+    const r = await fetch('/api/bench/concept/names', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({title: CUR.title, statement: LAST_CONCEPT.statement,
+                            anatomy: LAST_CONCEPT.anatomy || {}})});
+    const d = await readJson(r);
+    if (d.error) { area.innerHTML = `<p class="body" style="color:var(--bad)">${esc(d.error)}</p>`; return; }
+    area.innerHTML = namesHtml(d);
+  } catch (e) { area.innerHTML = '<p class="body" style="color:var(--bad)">Could not reach the server.</p>'; }
+}
+
+function namesHtml(d) {
+  // Keep-the-existing-name is the first option BY CODE, and the standing
+  // verdict unless the reviewer staked an improvement. A naming stage that
+  // must manufacture something cannot protect a good name.
+  return `<div style="margin-top:10px">
+    ${(d.options || []).map((o, i) => `
+      <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:4px">
+        <span class="tag ${o.lane === d.best ? 'recorded' : 'unverified'}">${o.lane === d.best ? 'standing' : 'offered'}</span>
+        <span class="body" style="margin:0">${o.lane === 'keep_existing'
+          ? `<strong>${esc(o.plain)}</strong>`
+          : `${esc(o.text)} <span class="muted" style="font-size:11.5px">(${esc(o.plain)})</span>`}</span>
+      </div>`).join('')}
+    <p class="foot" style="margin-top:6px">${esc(d.why || '')}${d.any_improves ? '' :
+      ' No proposed name improves on the one it has — keeping it is the verdict, not a failure.'}</p>
+    <p class="foot">Want a coined form anyway? The lab is below — <a href="#" onclick="toggleLab();return false" style="color:var(--accent)">try one</a>.</p>
+  </div>`;
+}
+
+// Locked parts vs what the method can physically carry. Four locked parts
+// and a blend cannot both be satisfied; saying so before the button is the
+// difference between a lesson and three baffling failures.
+// The FLOOR each method needs. There is no ceiling: pick every material on
+// the screen if you want to. A coin made of eleven stems is a bad coin, not
+// an invalid request, and which of those it is was never this tool's call.
+const FLOOR = {compound: 2, blend: 2, classical: 2, suffix: 1, prefix: 1, 'let Wordicon choose': 1};
+
+function refreshBuildBtn() {
+  const n = Object.keys(SEL).length;
+  const btn = document.getElementById('build-btn');
+  if (!btn) return;
+  const floor = FLOOR[METHOD] === undefined ? 2 : FLOOR[METHOD];
+  const ok = CONFIRMED && n >= floor;
+  btn.disabled = !ok;
+  btn.textContent = !CONFIRMED ? 'confirm the contract first'
+    : n < floor ? `“${METHOD}” needs at least ${floor} material${floor === 1 ? '' : 's'}`
+    : `Build from ${n}`;
+  const warn = document.getElementById('capacity-warn');
+  if (warn) {
+    // NOT stem-counting. An earlier version said four locked parts against
+    // a two-stem blend "guarantees" a loss, which is false — one stem can
+    // carry several parts at once, the way amnesty carries both pardon and
+    // deliberate forgetting. What actually predicts a loss is a locked part
+    // with no material chosen for it.
+    const chosen = new Set(Object.keys(SEL).map(w => MAT_PART[w]));
+    const bare = CUR.contract.filter(p => p.locked && !chosen.has(p.key)).map(p => p.name);
+    warn.innerHTML = bare.length
+      ? `<p class="body" style="font-size:12.5px;color:var(--warn);margin:0 0 8px">
+           Nothing selected for <strong>${bare.map(esc).join('</strong>, <strong>')}</strong>.
+           A stem can carry more than one part, so this isn't certain — but a locked part with no
+           material chosen has nothing to ride in on.</p>`
+      : '';
+  }
+}
+
+// The owner overruling one verdict. Not a second model: a build reporting
+// "culpability: kept" when the material was *shame* is a semantic slip, and
+// asking another model whether "sha" carries culpability is the same kind
+// of thing making the same kind of call. These corrections are what such a
+// reviewer would have to be measured against, so they get collected first.
+async function correct(j, key, modelSaid, ownerSays) {
+  const row = document.getElementById(`v-${j}-${key}`);
+  const build = (LAST_BUILDS || [])[j] || {};
+  const part = (CUR.contract.find(p => p.key === key) || {});
+  const note = ownerSays === modelSaid ? '' :
+    (prompt(`Why is “${part.name || key}” ${ownerSays} rather than ${modelSaid}? (optional)`) || '');
+  try {
+    await fetch('/api/bench/correct', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({title: CUR.title, word: build.word, part_key: key,
+                            part_name: part.name || key, model_said: modelSaid,
+                            owner_says: ownerSays, note}),
+    });
+  } catch (e) { /* a lost correction is not worth an alert mid-pilot */ }
+  if (row) {
+    row.querySelectorAll('.fixbtn').forEach(b => b.classList.remove('on'));
+    const hit = [...row.querySelectorAll('.fixbtn')]
+      .find(b => b.textContent === ownerSays || (b.textContent === 'agree' && ownerSays === modelSaid));
+    if (hit) hit.classList.add('on');
+    // Replace, never append. This used to insertAdjacentHTML on every click,
+    // so changing your mind about one part stamped the row "recorded
+    // recorded" — which was the visible half of a worse problem: the click
+    // also POSTs, so the same part now had two stored verdicts and no way to
+    // tell which one he meant.
+    row.querySelectorAll('.recorded-stamp').forEach(e => e.remove());
+    row.insertAdjacentHTML('beforeend',
+      `<span class="fix recorded-stamp" style="color:var(--good)">recorded${note ? ' with your reason' : ''}</span>`);
+  }
+}
+
+function afterRender() {
+  // the button must state the gate on arrival, not only after the first click
+  refreshBuildBtn();
+}
+
+function toggleLock(i) {
+  CUR.contract[i].locked = !CUR.contract[i].locked;
+  const b = document.getElementById(`lock-${i}`);
+  b.textContent = CUR.contract[i].locked ? '🔒' : '🔓';
+  b.classList.toggle('open', !CUR.contract[i].locked);
+  refreshBuildBtn();
+}
+
+function toggleMaterial(word) {
+  if (SEL[word]) delete SEL[word]; else SEL[word] = true;
+  const el = document.getElementById(`m-${word}`);
+  if (el) el.classList.toggle('on', !!SEL[word]);
+  refreshBuildBtn();
+}
+
+async function build() {
+  const area = document.getElementById('builds');
+  const btn = document.getElementById('build-btn');
+  btn.disabled = true;
+  area.innerHTML = `<div class="card"><p class="body muted"><span class="spinner"></span>Building…</p></div>`;
+  let d;
+  try {
+    const r = await fetch('/api/bench/build', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({title: CUR.title, definition: CUR.definition,
+                            contract: CUR.contract, materials: Object.keys(SEL), method: METHOD,
+                            contract_confirmed: CONFIRMED,
+                            material_parts: Object.fromEntries(Object.keys(SEL).map(w => [w, MAT_PART[w]]))}),
+    });
+    d = await readJson(r);
+  } catch (e) {
+    area.innerHTML = `<div class="card"><p class="error">Couldn't reach the server at all — it may not be running.</p></div>`;
+    btn.disabled = false; return;
+  }
+  btn.disabled = false;
+  if (d.error) {
+    area.innerHTML = `<div class="card"><p class="error">${esc(d.error)}</p></div>`;
+    return;
+  }
+  const byKey = {};
+  CUR.contract.forEach(p => byKey[p.key] = p);
+  LAST_BUILDS = d.builds;
+  // One line per build, then everything else behind Why?. The first live
+  // run put three words, twelve contract verdicts and three seam analyses
+  // on screen at once and the actual finding — that all three were
+  // arithmetically doomed — was invisible inside it.
+  const total = CUR.contract.length;
+  area.innerHTML = `<div class="card">
+    <div class="label">Built from ${esc(Object.keys(SEL).join(' + '))} by ${esc(d.method)}</div>
+    ${(d.uncovered || []).length ? `<p class="body" style="font-size:13px;color:var(--warn)">
+      No material was selected for <strong>${d.uncovered.map(esc).join('</strong>, <strong>')}</strong>,
+      so that part had nothing to arrive in. Losing it says more about the materials you picked than
+      about these words.</p>` : ''}
+    ${(d.unused_materials || []).length ? `<p class="body" style="font-size:13px;color:var(--warn)">
+      Nothing built here used <strong>${d.unused_materials.map(esc).join('</strong>, <strong>')}</strong>.
+      Read off the letters each build actually declared, not asked of the model. Pick three and you can
+      see for yourself what went in; pick eleven and a coin made of four of them looks exactly like a
+      coin made of all eleven.</p>` : ''}
+    ${d.builds.map((b, j) => {
+      const kept = Object.values(b.contract).filter(v => v === 'kept').length;
+      // Was `v !== 'kept'` under a heading that read "lost" — so a part the
+      // build WEAKENED, and a part it never mentioned at all, were both
+      // announced as lost in the summary while the panel underneath stated
+      // them correctly. The four-value vocabulary exists precisely to stop
+      // that collapse, and the headline was undoing it in the harsh
+      // direction: on wagrievolvent the note said wage is "thin even though
+      // it's technically present" — a textbook weakened — above a line
+      // saying lost. Silence read as loss is worse still; the footer on this
+      // very card says unstated means "silence, not survival", and then the
+      // headline convicted it.
+      const byState = v => Object.entries(b.contract).filter(([, x]) => x === v)
+        .map(([k]) => (byKey[k] || {}).name || k);
+      const groups = [['weakened', byState('weakened')], ['lost', byState('lost')],
+                      ['not stated', byState('unstated')]]
+        .filter(([, names]) => names.length)
+        .map(([label, names]) => ` · ${label} <strong>${names.map(esc).join('</strong>, <strong>')}</strong>`)
+        .join('');
+      return `
+      <div class="build ${b.standing === 'contract_broken' ? 'broken' : 'ok'}">
+        <p class="build-word">${esc(b.word)}</p>
+        <p class="body" style="margin:2px 0;font-size:13.5px">Kept ${kept} of ${total} meaning parts${groups}
+          ${b.seam_check && !b.seam_check.verified
+            ? `<span class="tag lost" style="margin-left:6px">its seam description doesn't add up</span>` : ''}</p>
+        <details>
+          <summary>Why?</summary>
+          <div style="margin-top:6px">
+            ${Object.entries(b.contract).map(([k, v]) => `
+              <div class="verdict-row" id="v-${j}-${esc(k)}">
+                <span class="tag ${esc(v)}">${esc((byKey[k] || {}).name || k)}: ${esc(v)}</span>
+                <span class="fix">you:
+                  ${/* 'unstated' was displayable but not choosable: when the build said
+                        unstated, none of the three options matched, so no "agree" button
+                        existed and the one verdict he could not register was agreement
+                        with silence. */
+                    ['kept','weakened','lost','unstated'].map(o => `<button class="fixbtn${o === v ? ' agree' : ''}"
+                     onclick="correct(${j},'${esc(k)}','${esc(v)}','${o}')">${o === v ? 'agree' : (o === 'unstated' ? 'not stated' : o)}</button>`).join('')}
+                </span>
+              </div>`).join('')}
+            ${b.seam ? `<p class="body muted" style="font-size:13px"><em>At the seam:</em> ${esc(b.seam)}</p>` : ''}
+            ${(b.parts || []).length ? `<p class="body muted" style="font-size:12.5px">Declared slices: ${
+              b.parts.map(x => `${esc(x.parent)} → keep <strong>${esc(x.keep)}</strong>${x.drop ? `, drop ${esc(x.drop)}` : ''}`).join(' · ')}${
+              b.overlap ? ` · overlap on “${esc(b.overlap)}”` : ''}</p>` : ''}
+            ${b.seam_check ? (b.seam_check.verified
+              ? `<p class="body muted" style="font-size:12.5px">Checked in code: those slices do rebuild
+                 <strong>${esc(b.seam_check.rebuilt)}</strong> — so that is genuinely where the letters
+                 came from. It proves nothing about meaning: whether a listener still hears the parent
+                 word in a clipped slice is not checked here, and a coin can keep the ancestry of its
+                 letters while losing the ancestry of its sense.</p>`
+              : `<p class="body" style="font-size:12.5px;color:var(--bad)">Checked in code, and the seam
+                 description fails:<br>${b.seam_check.problems.map(x => '· ' + esc(x)).join('<br>')}<br>
+                 The coin may still be good — what can't be trusted is the account of how it was made.</p>`) : ''}
+            ${b.note ? `<p class="body" style="font-size:13.5px">${esc(b.note)}</p>` : ''}
+            <div class="keep-box" id="keep-${j}-${esc(b.word)}">
+              <p class="body muted" style="font-size:12.5px;margin-bottom:4px">Keep this one? It joins your
+                Lexicon${b.seam_check && b.seam_check.verified
+                  ? ' with its construction <strong>recorded</strong> — the slices above were checked in code, so the record is firmer than a coining run\'s own account about <em>where the letters came from</em>. It is not firmer about the parents: the Bench has no dictionary, the materials are a model\'s proposals, and some of them are not words'
+                  : ' — but with <strong>no recorded construction</strong>, because the seam account above did not check out'}.
+                Write what <em>this coin</em> means; the parent's definition is not offered, because the
+                report above says which parts this build dropped.</p>
+              <input class="keep-in" placeholder="what does ${esc(b.word)} mean?">
+              <button class="ghost keep-btn" onclick="keepCoin(${j},'${escJs(b.word)}')">keep it</button>
+              <span class="keep-said body muted" style="font-size:12.5px;margin-left:8px"></span>
+            </div>
+          </div>
+        </details>
+      </div>`;}).join('')}
+    <p class="foot" style="margin-top:10px">“unstated” means the build never said what it did to
+      that part — read as silence, not as survival. A build that drops a locked part is a result,
+      not a failure; it tells you which piece the material couldn't carry.</p>
+  </div>`;
+
+  loadShelf();   // the coin just built is part of the record now
+}
+
+loadLexicon();
+loadShelf();
+</script>
+</body>
+</html>

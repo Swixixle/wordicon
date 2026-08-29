@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/enums.schema.json",
+  "epistemic_class": {
+    "type": "string",
+    "enum": ["external_factual_authority", "primary_historical_source", "secondary_scholarship", "personal_authority", "creative_source", "speculative_framework", "negative_example", "quarantined_research"]
+  },
+  "sensitivity": {
+    "type": "string",
+    "enum": ["public", "internal", "confidential", "private_raw", "derived_only", "sealed"]
+  },
+  "permissions_profile": {
+    "type": "string",
+    "enum": ["private_raw", "private_retrieval", "derived_only", "constraint_text_external_approved", "private_citation", "public_source", "training_approved", "sealed"]
+  },
+  "materiality": {
+    "type": "string",
+    "enum": ["essential", "supporting", "historical"]
+  },
+  "review_status": {
+    "type": "string",
+    "enum": ["unreviewed", "approved", "invalid", "review_required", "degraded", "superseded"]
+  }
+}

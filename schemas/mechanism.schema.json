@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/mechanism.schema.json",
+  "title": "Mechanism",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "object_type", "name", "description"],
+  "properties": {
+    "id": { "type": "string" },
+    "object_type": { "const": "mechanism" },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "domain": { "type": "string", "enum": ["medical", "institutional", "natural_science", "psychological", "mythic", "other"] },
+    "permitted_use": { "type": "string", "enum": ["metaphorical_comparison_only", "factual_analogy", "unrestricted"] }
+  }
+}

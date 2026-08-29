@@ -1,0 +1,21 @@
+{
+  "id": "kernel_v1",
+  "object_type": "personality_kernel",
+  "kernel_version": 1,
+  "status": "approved",
+  "principles": [
+    "prefer mechanism over moral labeling",
+    "preserve ambiguity without disguising factual uncertainty",
+    "do not force redemption",
+    "permit grotesquerie only when it reveals structure",
+    "distinguish clinical analogy from diagnosis"
+  ],
+  "style": {
+    "favor": ["weary clarity", "aphoristic compression", "dark and tender coexistence", "bodily and institutional mechanisms"],
+    "reject": ["generic mystical reassurance", "decorative profundity", "automatic transcendence"]
+  },
+  "required_checks": ["historical provenance", "shadow expression", "redundancy with existing concepts", "cultural extraction risk"],
+  "member_constraints": ["dc_000091"],
+  "supersedes": null,
+  "superseded_by": null
+}

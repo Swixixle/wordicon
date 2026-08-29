@@ -1,0 +1,24 @@
+{
+  "id": "src_personal_sanitized_001",
+  "object_type": "source",
+  "title": "Conversation on Ulcerian Defiance (sanitized fixture — not the owner's real conversation)",
+  "created_at": "2025-11-29T00:00:00Z",
+  "provenance": { "origin": "personal_ai_conversation", "author": "owner", "external_participants": ["assistant"] },
+  "epistemic_class": "personal_authority",
+  "sensitivity": "derived_only",
+  "permissions_profile": "derived_only",
+  "permissions": {
+    "retrieve_raw": false,
+    "send_to_external_model": false,
+    "derive_constraints": true,
+    "quote_in_private_receipt": false,
+    "quote_in_public_receipt": false,
+    "use_for_training": false
+  },
+  "permission_overrides": [],
+  "tags": ["resistance", "medical_metaphor", "institutional_power", "survivor_guilt"],
+  "review_status": "approved",
+  "revoked": false,
+  "version": 1,
+  "_fixture_note": "Structurally realistic stand-in only. No real private conversation text is stored here or anywhere in this repository (blueprint §18)."
+}

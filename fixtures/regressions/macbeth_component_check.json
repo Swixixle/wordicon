@@ -1,0 +1,40 @@
+{
+  "_why": "The 26 Aug 2026 Lady Macbeth run. A component asserted a fact about the passage that the passage denies, three candidates were generated under it, and all three were convicted individually of an error that was the component's. This fixture pins that case so the component check can be tested offline, forever, with no model call.",
+  "source": "Come, you spirits That tend on mortal thoughts, unsex me here, And fill me from the crown to the toe top-full Of direst cruelty. Make thick my blood, Stop up the access and passage to remorse, That no compunctious visitings of nature Shake my fell purpose, nor keep peace between The effect and it. Come to my woman's breasts, And take my milk for gall, you murdering ministers, Wherever in your sightless substances You wait on nature's mischief. Come, thick night, And pall thee in the dunnest smoke of hell, That my keen knife see not the wound it makes, Nor heaven peep through the blanket of the dark, To cry 'Hold, hold!'",
+  "components": [
+    {
+      "label": "Withheld cry of restraint",
+      "gist": "The speech ends by naming the very interruption she fears and wants prevented, an imagined cry of 'Hold, hold!' whose speaker is never identified, leaving open whether it would come from heaven, nature, or her own conscience.",
+      "anchor": "To cry 'Hold, hold!'",
+      "constraints": "The source of the cry must remain unspecified as in the text; nothing identifies whether it is heaven, nature, or an internal voice, and that ambiguity should not be resolved.",
+      "grounding": "reading",
+      "expected_verdict": "contradicted",
+      "_why": "'Nor heaven peep through the blanket of the dark, / To cry Hold, hold!' — heaven is the subject of both 'peep' and the infinitive 'to cry'. Verified against the Shakespeare Navigators text. The component's constraint asserts an ambiguity the grammar does not leave open.",
+      "children": ["The Unaddressed Plea", "The Ownerless Alarm", "The Summoned Refusal"],
+      "_children_note": "0 of 3 survived. Two were killed by the anchor-support check for the SAME reason; the third sidestepped the crux entirely. One root error, counted three times."
+    },
+    {
+      "label": "Unsexing petition",
+      "gist": "Lady Macbeth asks unseen spirits to strip her of female nature so that womanly softness cannot interfere with the murder she is planning.",
+      "anchor": "unsex me here",
+      "constraints": "The request must remain addressed to spirits as an external agency acting on her, not something she claims to already possess; the location 'here' ties it to the moment of speaking.",
+      "grounding": "explicit",
+      "expected_verdict": "supported",
+      "_why": "The imperative and its addressee are both on the page. A correct component must NOT be flagged, or the check is noise."
+    },
+    {
+      "label": "Remorse-blocking physiology",
+      "gist": "She asks that her blood be thickened and the bodily passage to remorse be sealed.",
+      "anchor": "Stop up the access and passage to remorse",
+      "constraints": "The blocking must be framed as a physical, almost surgical intervention ('thick my blood', 'access and passage'), not a purely psychological resolve.",
+      "grounding": "explicit",
+      "expected_verdict": "supported",
+      "_why": "Correct component whose CONSTRAINT nonetheless outruns its single anchor — 'thick my blood' is a line away. constraint_beyond_anchor reports thick/blood here. The two checks answer different questions and this fixture holds both."
+    }
+  ],
+  "fabricated_span_probe": {
+    "_why": "A 'contradicted' verdict resting on a quote that is not in the source is worth nothing, and is the most dangerous output this check can produce: a confident refutation built on a misquote. Code must downgrade it.",
+    "verdict": "contradicted",
+    "spans": ["Nor angels peep through the curtain of the night"]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "case_id": "revocation_case_001",
+  "description": "Revoking the sole essential source behind dc_000091 must invalidate dc_000091 and, because dc_000091 is kernel_v1's only member constraint, must mark kernel_v1 invalid/review-required rather than silently patching it. A regenerable chamber summary built from the same source must be queued for regeneration, not silently left stale.",
+  "setup": {
+    "objects_ingested": ["src_personal_sanitized_001", "dc_000091", "kernel_v1", "chamber_summary_personal_v1"],
+    "edges": [
+      { "from_id": "src_personal_sanitized_001", "to_id": "dc_000091", "relationship": "derived_from", "materiality": "essential" },
+      { "from_id": "dc_000091", "to_id": "kernel_v1", "relationship": "member_of_kernel", "materiality": "essential" },
+      { "from_id": "src_personal_sanitized_001", "to_id": "chamber_summary_personal_v1", "relationship": "built_from", "materiality": "essential" }
+    ]
+  },
+  "action": { "revoke": "src_personal_sanitized_001", "revoked_by": "owner", "reason": "fixture demonstration of §13a revocation cascade" },
+  "expected": {
+    "dependents_invalidated": ["dc_000091", "kernel_v1"],
+    "dependents_degraded": [],
+    "dependents_queued_for_review": ["kernel_v1"],
+    "chamber_summaries_queued_for_regeneration": ["chamber_summary_personal_v1"],
+    "kernel_v1_status_after": "invalid",
+    "dc_000091_review_status_after": "invalid",
+    "prior_receipts_that_cited_dc_000091": "annotated, not mutated",
+    "new_forge_operations_using_kernel_v1": "must be refused until a reviewed kernel_v2 exists"
+  }
+}

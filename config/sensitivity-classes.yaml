@@ -1,0 +1,29 @@
+# Sensitivity classes (blueprint v1.2 §4.4). Governs exposure, independent of
+# epistemic authority (see epistemic-classes.yaml) and independent of which
+# permission profile is applied (see permission-profiles.yaml) — though in
+# practice each sensitivity class has a natural default profile.
+
+classes:
+  public:
+    meaning: May appear in public results and receipts.
+    natural_default_profile: public_source
+
+  internal:
+    meaning: Usable by the system but not exposed as raw material.
+    natural_default_profile: private_retrieval
+
+  confidential:
+    meaning: Excerpts may be used only under restricted processing.
+    natural_default_profile: private_citation
+
+  private_raw:
+    meaning: Remains inside owner-controlled processing.
+    natural_default_profile: private_raw
+
+  derived_only:
+    meaning: Raw text may never leave; only reviewed abstractions may be returned.
+    natural_default_profile: derived_only
+
+  sealed:
+    meaning: Retained but never automatically retrieved.
+    natural_default_profile: sealed

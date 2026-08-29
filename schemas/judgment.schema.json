@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/judgment.schema.json",
+  "title": "Judgment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "object_type", "decision", "candidate_text", "originating_operation", "decision_source", "confidence", "review_status"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^jdg_[a-z0-9_]+$" },
+    "object_type": { "const": "judgment" },
+    "decision": { "type": "string", "enum": ["accepted", "rejected", "revised", "unresolved"] },
+    "candidate_text": { "type": "string" },
+    "concept_id": { "type": "string" },
+    "originating_operation": { "type": "string", "pattern": "^trace_[a-z0-9_]+$" },
+    "decision_source": { "type": "string", "enum": ["owner", "curator", "validator", "model_critic"] },
+    "reason": { "type": "string" },
+    "failure_axis": { "type": "string", "enum": ["style", "factuality", "redundancy", "cultural_risk", "conceptual_weakness"] },
+    "scope": { "type": "string", "enum": ["local_to_concept", "general_style_prohibition"], "default": "local_to_concept" },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "review_status": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/review_status" }
+  }
+}
