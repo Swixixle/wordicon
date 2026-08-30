@@ -381,6 +381,13 @@
   </div>
 </header>
 
+<!-- The vault strip: quiet when backups are healthy, red and specific the
+     moment they are not. Per the wiring rule it renders only what
+     /api/vault/status actually said — an unreachable status is itself a
+     red fact, never a blank. -->
+<div id="vault-strip" hidden
+     style="font-size:12px;padding:3px 24px;color:var(--muted);border-bottom:1px solid var(--border);background:var(--panel)"></div>
+
 <main>
   <details class="card" style="padding:12px 16px">
     <summary style="cursor:pointer;font-size:13px;color:var(--muted);font-weight:600">What is Wordicon?</summary>
@@ -5849,7 +5856,48 @@ async function submitMedRule(cid) {
     loadMediaCrossings();
   } catch (e) {}
 }
+function vaultAge(iso) {
+  // "how long ago", honestly rounded — never a fake precision
+  if (!iso) return 'never';
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (!isFinite(s) || s < 0) return iso;
+  if (s < 90) return 'just now';
+  if (s < 5400) return Math.round(s / 60) + ' min ago';
+  if (s < 129600) return Math.round(s / 3600) + ' h ago';
+  return Math.round(s / 86400) + ' d ago';
+}
+
+async function loadVaultStrip() {
+  const el = document.getElementById('vault-strip');
+  if (!el) return;
+  const red = () => { el.style.color = 'var(--bad)'; el.hidden = false; };
+  try {
+    const v = await (await fetch('/api/vault/status')).json();
+    el.style.color = 'var(--muted)';
+    if (!v.initialized) {
+      el.textContent = 'No vault — the corpus exists on this disk only. '
+        + 'Set up encrypted backups: python3 scripts/vault.py init';
+      red(); return;
+    }
+    const bits = ['Vault: sealed ' + vaultAge(v.last_seal_at),
+                  'drilled ' + vaultAge(v.last_drill_at), v.cloud,
+                  v.n_vaults + ' vault(s), '
+                  + Math.round((v.total_bytes || 0) / 1024) + ' KB'];
+    if (v.failure) bits.push(v.failure);
+    else if (v.stale_red) bits.push('unsealed changes for '
+      + Math.round(v.dirty_seconds / 60) + ' min');
+    el.textContent = bits.join(' · ');
+    if (v.stale_red) red(); else el.hidden = false;
+  } catch (e) {
+    el.textContent = 'Vault status UNREACHABLE — backups may not be '
+      + 'running (' + e + ')';
+    red();
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  loadVaultStrip();
+  setInterval(loadVaultStrip, 60000);
   loadDocs();
   loadWorksRegistry();
   loadMedia().then(() => {

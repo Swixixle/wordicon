@@ -69,10 +69,20 @@ crossing, and journal entry — lives only on the owner's machine and is ignored
 along with `.env` (API keys), generated reports, environments, and caches. A fresh clone
 runs, but it runs *empty*; that is the boundary working, not a defect. The
 same boundary cuts the other way and deserves saying plainly: **GitHub backs
-up the code, not the corpus.** `local_state/` exists on one disk until the
-encrypted backup-and-restore pass lands — treat it accordingly. The corpus
-travels only through the tool's own export, which writes a checksum manifest so a copy
-can prove it was not edited after the fact.
+up the code, not the corpus.** The corpus's own protection is the Vault
+(`scripts/vault.py`): every server start, and after every quiet quarter-hour
+of changes, `local_state/` is sealed crash-consistently into a standard
+[age](https://age-encryption.org)-format file — openable by any age tool
+forever, even if Wordicon dies — encrypted to the owner's recipient, verified
+by a real decrypt before it counts, and proven by a restore drill that boots
+an isolated Wordicon against the restored copy and checks it against the
+vault's own interior manifest. The recovery secret exists in exactly two
+places, neither of them a computer: the owner's password manager and a
+handwritten paper copy, both proven by full re-entry at setup. Auth material,
+`.env`, and the rebuildable search index never ride a vault; a restored
+corpus demands fresh pairing, exactly like a new install. The corpus
+additionally travels through the tool's own export, which writes a checksum
+manifest so a copy can prove it was not edited after the fact.
 
 ## Running it
 
@@ -80,8 +90,8 @@ can prove it was not edited after the fact.
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp /path/to/your/.env .        # ANTHROPIC_API_KEY=… and WORDICON_MODEL=…
-python3 server.py              # loopback only — this Mac
-WORDICON_LAN=1 python3 server.py   # reachable on your Wi-Fi, behind the gate
+python server.py               # loopback only — this Mac
+WORDICON_LAN=1 python server.py    # reachable on your Wi-Fi, behind the gate
 ```
 
 The server prints its port (default 8420) and a **pairing code**. Every
@@ -96,6 +106,27 @@ on your own Wi-Fi, not confidential on shared or hospital networks. Model
 calls happen only through lanes you explicitly invoke, on your own key;
 importing, searching, crossing, and ruling are constitutionally zero-model
 and work with no key at all.
+
+Back up the corpus before trusting the tool with anything you care about —
+from the SAME activated virtual environment as everything above (otherwise
+`pyrage` lives in `.venv` while a bare `python3` launches a different
+interpreter):
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements.txt   # includes pinned pyrage
+python scripts/vault.py init                # one-time custody ritual
+python scripts/vault.py drill --blob <downloaded copy> --off-device
+```
+
+`init` shows the recovery secret once and proves you stored it twice
+(password manager + paper) before the first vault seals; the off-device
+drill of a copy downloaded back from your cloud destination is what makes
+a backup real. `status`, `backup`, and `restore --blob … --out …` do what
+they say — and a standalone `init`/`backup` refuses while the server is
+running (the server holds an OS-level corpus lease for its lifetime; two
+writers on one corpus is how backups go silently wrong). The page shows a
+one-line vault strip that turns red the moment sealing stalls or fails.
 
 ## The map of the machine
 

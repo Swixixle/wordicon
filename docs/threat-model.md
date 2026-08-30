@@ -78,8 +78,7 @@ summary-thin.
 
 ## 4. What is explicitly not addressed yet
 
-Encrypted transport (HTTPS/overlay). Encrypted, restore-tested corpus
-backup (authorized next). Multi-user anything — this is one owner's tool;
+Encrypted transport (HTTPS/overlay). Multi-user anything — this is one owner's tool;
 the moment a second user exists, most assumptions here expire. OS-level
 compromise of the Mac itself — a keylogger or root malware defeats every
 boundary above, and no application design changes that.
@@ -90,6 +89,12 @@ Append-only logs (tampering is visible as absence-of-history, not silence);
 byte-intact originals with content addresses (substitution is detectable);
 export manifests with checksums (a copy can prove it was not edited);
 default-deny route gating proven by tests that attack it (12 gate mutations
-caught at last run); and the wiring rule — every rendered surface must prove
+caught at last run); encrypted, drill-proven corpus vaults in the standard
+age format — sealed crash-consistently under a writers lock, verified by
+real decrypt before completion, excluded of all auth material so a stolen
+vault plus its secret still cannot impersonate a paired device, refusing
+hostile archive members out loud rather than neutralizing them, with
+generational retention that can never prune the newest drill-proven vault
+(17 vault mutations caught at last run); and the wiring rule — every rendered surface must prove
 its data arrived — so a starved surface reads as failure, never as an empty
 corpus.

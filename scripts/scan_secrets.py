@@ -19,6 +19,7 @@ import sys
 
 HARD = [
     (re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}"), "anthropic key literal"),
+    (re.compile(r"AGE-SECRET-KEY-1[A-Z0-9]{8,}"), "age identity literal"),
     (re.compile(r"\bsk-[A-Za-z0-9]{20,}"), "sk- key literal"),
     (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "AWS access key"),
     (re.compile(r"BEGIN [A-Z ]*PRIVATE KEY"), "private key block"),

@@ -6468,7 +6468,8 @@ console.log(out.join('\\n'));
     # and — since the Work Room (block 86) — /api/works*. Block 86 holds the
     # actual property (socket + gateway poisoned); this pin holds the shape.
     if any(not (f.startswith("api/library") or f.startswith("api/works")
-                or f.startswith("api/media")) for f in _fetches84):
+                or f.startswith("api/media")
+                or f == "api/vault/status") for f in _fetches84):
         failures.append(f"84: the Documents card fetches outside the "
                         f"zero-model lanes: {sorted(_fetches84)}")
 
@@ -6876,7 +6877,8 @@ console.log(out.join('\\n'));
     _djs85 = _idx85[_idx85.index("// ---- Documents (the Library wing"):]
     _f85 = set(re.findall(r"fetch\([`'\"]/?([a-z/]+)", _djs85))
     if any(not (f.startswith("api/library") or f.startswith("api/works")
-                or f.startswith("api/media")) for f in _f85):
+                or f.startswith("api/media")
+                or f == "api/vault/status") for f in _f85):
         failures.append(f"85: the Documents JS fetches outside the "
                         f"zero-model lanes: {sorted(_f85)}")
 
@@ -9390,6 +9392,651 @@ console.log(out.join('\\n'));
         if "REFUSING to call emptiness clean" not in _stxt89:
             failures.append("89: the scanner can pass vacuously on zero "
                             "files")
+
+    # ---- 90. THE VAULT (encrypted backup + restore, owner's go) ------
+    # A backup is real only if the RESTORE is: roundtrip byte-exactness,
+    # tamper refusal at both layers, exclusions that never ride, a drill
+    # judged against the vault's own manifest, retention that cannot eat
+    # the proven vault, and an identity that exists nowhere on disk.
+    import io as _io90
+    import json as _json90
+    import os as _os90
+    import tarfile as _tar90
+    import time as _time90
+    import vault as _v90
+    import pyrage as _pyrage90
+    _old_ls90 = cli.LOCAL_STATE
+    _old_dirty90 = dict(_v90._DIRTY)
+    _old_fail90 = dict(_v90._LAST_FAILURE)
+    try:
+        # -- a mini corpus with real shape: concepts, results, a planted
+        #    .env, live auth material, and a rebuildable search index --
+        _st90 = _SCRATCH / "vault90_state"
+        for _d90 in ("results", "receipts", "library", "auth"):
+            (_st90 / _d90).mkdir(parents=True, exist_ok=True)
+        (_st90 / "accepted_concepts.json").write_text(
+            '[{"title": "first"}, {"title": "second"}]')
+        for _i90 in range(3):
+            (_st90 / "results" / f"trace_v90_{_i90}.json").write_text(
+                '{"mode": "forge"}')
+        (_st90 / "blob90.bin").write_bytes(bytes(range(256)) * 8)
+        (_st90 / ".env").write_text(
+            "ANTHROPIC_API_KEY=sk-ant-" + "planted90" * 2 + "\n")
+        (_st90 / "auth" / "master_secret").write_bytes(b"\x01" * 32)
+        (_st90 / "auth" / "sessions.jsonl").write_text('{"type":"session"}\n')
+        (_st90 / "library" / "search.db").write_bytes(b"SQLite format 3\x00")
+        cli.LOCAL_STATE = _st90
+        _v90._DIRTY.update({"since": None, "last_mark": None})
+        _v90._LAST_FAILURE["msg"] = ""
+
+        _dest90 = _SCRATCH / "vault90_dest"
+        _got90 = _v90.init_vault(dest=str(_dest90))
+        _ident90 = _got90["identity"]
+        if not _ident90.startswith("AGE-SECRET-KEY-1"):
+            failures.append("90: init did not yield a standard age identity")
+        _cfg90 = _v90.load_config()
+        for _k90 in ("recipient", "recipient_fingerprint", "pyrage_version",
+                     "destination", "created_at"):
+            if not _cfg90.get(_k90):
+                failures.append(f"90: vault config lacks {_k90!r}")
+        if _ident90 in (_st90 / "vault" / "config.json").read_text():
+            failures.append("90: the SECRET landed in the vault config")
+
+        # -- two same-corpus, same-second backups: both must survive,
+        #    with DISTINCT ciphertext (per-backup ephemeral is fresh) --
+        _n90a = _v90.backup(reason="suite")
+        _n90b = _v90.backup(reason="suite")
+        if not _n90a or not _n90b:
+            failures.append("90: backup failed: "
+                            + _v90._LAST_FAILURE["msg"])
+        elif _n90a == _n90b:
+            failures.append("90: a same-second backup RENAMED ONTO the "
+                            "previous vault")
+        _blobs90 = sorted(_dest90.glob("wordicon-vault-*.enc"))
+        if len(_blobs90) != 2:
+            failures.append(f"90: expected 2 sealed vaults, found "
+                            f"{len(_blobs90)}")
+        elif _blobs90[0].read_bytes() == _blobs90[1].read_bytes():
+            failures.append("90: identical ciphertext for two backups — "
+                            "the verify ephemeral is not fresh per backup")
+        if list(_dest90.glob("*.partial")):
+            failures.append("90: a completed backup left a .partial behind")
+
+        # -- sidecar + manifest completeness, semantic truthfulness --
+        _v1_90 = _dest90 / _n90a
+        _side90 = _json90.loads((_dest90 / (_n90a + ".json")).read_text())
+        if _side90.get("blob_sha256") != _hashlib.sha256(
+                _v1_90.read_bytes()).hexdigest():
+            failures.append("90: the sidecar hash does not match the blob")
+        # the seal's verification is named for exactly what it proved:
+        # payload decrypts and matches the manifest — NOT owner recovery
+        if _side90.get("payload_verified_locally") is not True:
+            failures.append("90: the sidecar does not carry "
+                            "payload_verified_locally")
+        if not any(_r90.get("type") == "sealed"
+                   and _r90.get("payload_verified_locally") is True
+                   for _r90 in _v90._log_rows()):
+            failures.append("90: sealed rows lack the honest "
+                            "payload_verified_locally label")
+        if _v90.status().get("last_seal_verification") \
+                != "payload_verified_locally":
+            failures.append("90: status upgrades the seal's verification "
+                            "beyond payload_verified_locally")
+        _rest90 = _SCRATCH / "vault90_restored"
+        _man90 = _v90.restore(str(_v1_90), str(_rest90), _ident90)
+        for _k90 in ("schema", "created_at", "reason", "app_commit",
+                     "pyrage_version", "recipient_fingerprint", "files",
+                     "exclusions", "findings", "semantic"):
+            if _k90 not in _man90:
+                failures.append(f"90: manifest lacks {_k90!r}")
+        if _man90["semantic"].get("accepted_concepts") != 2 \
+                or _man90["semantic"].get("results") != 3:
+            failures.append("90: manifest semantic counts are wrong "
+                            f"({_man90['semantic']})")
+
+        # -- roundtrip byte-exactness: every restored file equals its
+        #    source; every excluded thing is absent BY NAME --
+        _paths90 = [f["path"] for f in _man90["files"]]
+        _r_ls90 = _rest90 / "local_state"
+        for _p90 in _paths90:
+            if (_r_ls90 / _p90).read_bytes() != (_st90 / _p90).read_bytes():
+                failures.append(f"90: restored {_p90!r} differs from source")
+                break
+        for _bad90, _why90 in [("auth/master_secret", "the gate master"),
+                               ("auth/sessions.jsonl", "live sessions"),
+                               (".env", "credentials"),
+                               ("library/search.db", "the search index")]:
+            if _bad90 in _paths90 or (_r_ls90 / _bad90).exists():
+                failures.append(f"90: {_why90} RODE THE VAULT ({_bad90})")
+            if _bad90 not in _man90["exclusions"]:
+                failures.append(f"90: {_bad90!r} not recorded as excluded")
+        if not any(".env" in _f90 for _f90 in _man90["findings"]):
+            failures.append("90: a planted .env produced no finding")
+        if (_r_ls90 / "auth").exists():
+            failures.append("90: a restored corpus carries an auth dir — "
+                            "fresh pairing is not being demanded")
+
+        # -- tamper refusal, both layers, and the wrong identity --
+        _tam90 = _SCRATCH / "vault90_tampered.enc"
+        _tb90 = bytearray(_v1_90.read_bytes())
+        _tb90[len(_tb90) // 2] ^= 0xFF
+        _tam90.write_bytes(bytes(_tb90))
+        try:
+            _v90.restore(str(_tam90), str(_SCRATCH / "v90_x1"), _ident90)
+            failures.append("90: a bit-flipped vault DECRYPTED")
+        except Exception:
+            pass
+        _buf90 = _io90.BytesIO()
+        with _tar90.open(fileobj=_buf90, mode="w:gz") as _tf90:
+            _mtxt90 = _json90.dumps({"files": [{"path": "a.txt", "bytes": 5,
+                "sha256": _hashlib.sha256(b"hello").hexdigest()}]}).encode()
+            _ti90 = _tar90.TarInfo("manifest.json")
+            _ti90.size = len(_mtxt90)
+            _tf90.addfile(_ti90, _io90.BytesIO(_mtxt90))
+            _ti90 = _tar90.TarInfo("local_state/a.txt")
+            _ti90.size = 5
+            _tf90.addfile(_ti90, _io90.BytesIO(b"HELLO"))   # wrong bytes
+        _lie90 = _SCRATCH / "vault90_lying.enc"
+        _lie90.write_bytes(_pyrage90.encrypt(
+            _buf90.getvalue(),
+            [_pyrage90.x25519.Recipient.from_str(_cfg90["recipient"])]))
+        try:
+            _v90.restore(str(_lie90), str(_SCRATCH / "v90_x2"), _ident90)
+            failures.append("90: an interior file NOT matching its "
+                            "manifest hash was accepted")
+        except Exception as _e90:
+            if "a.txt" not in str(_e90):
+                failures.append("90: the interior-tamper refusal does not "
+                                "name the file")
+        if (_SCRATCH / "v90_x2").exists():
+            failures.append("90: a refused restore left a partially "
+                            "restored tree behind")
+        try:
+            _v90.restore(str(_v1_90), str(_SCRATCH / "v90_x3"),
+                         str(_pyrage90.x25519.Identity.generate()))
+            failures.append("90: a WRONG identity opened the vault")
+        except Exception:
+            pass
+
+        # -- hostile archives, the owner's ruling: EVERY hostile member
+        #    class is refused OUT LOUD before anything extracts — an
+        #    absolute path is never quietly rewritten into a relative one
+        #    (that would change the archive); a symlink is refused even
+        #    when its target looks harmless (a corpus holds regular files
+        #    and directories, nothing else); one hostile member refuses
+        #    the WHOLE archive; and a refusal leaves NO partial tree --
+        def _hostile_tar90(*members):
+            _b90 = _io90.BytesIO()
+            with _tar90.open(fileobj=_b90, mode="w:gz") as _tf90:
+                for _nm90, _ty90, _ln90, _data90 in members:
+                    _ti90 = _tar90.TarInfo(_nm90)
+                    if _ty90:
+                        _ti90.type = _ty90
+                        _ti90.linkname = _ln90
+                    else:
+                        _ti90.size = len(_data90)
+                    _tf90.addfile(_ti90,
+                                  _io90.BytesIO(_data90) if _data90
+                                  else None)
+            return _b90.getvalue()
+        for _case90, _members90 in [
+            ("absolute path", [("/tmp/evil90_absolute", None, "",
+                                b"evil")]),
+            ("parent escape", [("../evil90", None, "", b"evil")]),
+            ("windows drive path", [("C:\\evil90", None, "", b"evil")]),
+            ("symlink (even a harmless-looking one)",
+             [("innocent_link", _tar90.SYMTYPE, "manifest.json", b"")]),
+            ("hard link", [("hard90", _tar90.LNKTYPE, "manifest.json",
+                            b"")]),
+            ("fifo", [("fifo90", _tar90.FIFOTYPE, "", b"")]),
+            ("one hostile member among honest ones",
+             [("honest.txt", None, "", b"fine"),
+              ("../evil90", None, "", b"evil")]),
+        ]:
+            _hdest90 = _SCRATCH / "v90_hostile"
+            _shutil.rmtree(_hdest90, ignore_errors=True)
+            try:
+                with _tar90.open(
+                        fileobj=_io90.BytesIO(_hostile_tar90(*_members90)),
+                        mode="r:gz") as _tf90:
+                    _v90._safe_extract(_tf90, _hdest90)
+                failures.append(f"90: a hostile tar ({_case90}) was "
+                                "ACCEPTED")
+            except Exception as _e90:
+                if "REFUSED" not in str(_e90):
+                    failures.append(f"90: the {_case90} refusal is not "
+                                    "loud")
+            if _hdest90.exists() and any(_hdest90.rglob("*")):
+                failures.append(f"90: a refused archive ({_case90}) left "
+                                "a partial tree — even its honest members "
+                                "must not extract")
+        if _pathlib.Path("/tmp/evil90_absolute").exists():
+            failures.append("90: an absolute-path tar member ESCAPED the "
+                            "destination")
+        _hb90 = _io90.BytesIO()
+        with _tar90.open(fileobj=_hb90, mode="w:gz") as _tf90:
+            _ti90 = _tar90.TarInfo("innocent")
+            _ti90.type = _tar90.SYMTYPE
+            _ti90.linkname = "../../outside90"
+            _tf90.addfile(_ti90)
+        try:
+            with _tar90.open(fileobj=_io90.BytesIO(_hb90.getvalue()),
+                               mode="r:gz") as _tf90:
+                _v90._safe_extract(_tf90, _SCRATCH / "v90_hostile")
+            failures.append("90: a symlink pointing outside extracted")
+        except Exception:
+            pass
+        _vsrc90 = (Path(cli.__file__).parent / "vault.py").read_text()
+        if 'hasattr(tarfile, "data_filter")' not in _vsrc90 \
+                or 'filter="data"' not in _vsrc90:
+            failures.append("90: safe extraction does not require the "
+                            "data filter")
+
+        # -- a planted .partial is never counted as a vault --
+        (_dest90 / "wordicon-vault-99999999T999999.enc.partial") \
+            .write_bytes(b"crashed mid-seal")
+        if _v90.newest_vault().name.endswith(".partial"):
+            failures.append("90: newest_vault counted a .partial")
+        if _v90.status()["n_vaults"] != 2:
+            failures.append("90: status counted a .partial as a vault")
+
+        # -- a failed verify destroys its partial and completes nothing --
+        _real_dec90 = _pyrage90.decrypt
+        _pyrage90.decrypt = lambda *_a90, **_k90: (_ for _ in ()).throw(
+            RuntimeError("simulated verify failure"))
+        try:
+            if _v90.backup(reason="suite"):
+                failures.append("90: a backup whose verify FAILED still "
+                                "reported success")
+        finally:
+            _pyrage90.decrypt = _real_dec90
+        if len(sorted(_dest90.glob("wordicon-vault-*.enc"))) != 2:
+            failures.append("90: a failed backup still produced a vault")
+        if [p for p in _dest90.glob("*.partial")
+                if "99999999" not in p.name]:
+            failures.append("90: a failed verify left its partial behind")
+        if "simulated verify failure" not in _v90._LAST_FAILURE["msg"]:
+            failures.append("90: a backup failure was not surfaced")
+        _v90._LAST_FAILURE["msg"] = ""
+
+        # -- the corpus lock: a held writer stalls the stager (refusing,
+        #    not tarring a torn tree); release lets it through; and a
+        #    waiting stager blocks NEW writers (writer preference) --
+        _v90.acquire_corpus_write()
+        try:
+            if _v90.backup(reason="suite", stage_timeout=0.4):
+                failures.append("90: a backup STAGED while a corpus "
+                                "writer held the lock")
+            if "pause writers" not in _v90._LAST_FAILURE["msg"]:
+                failures.append("90: the stalled-stager failure is mute")
+        finally:
+            _v90.release_corpus_write()
+        _v90._LAST_FAILURE["msg"] = ""
+        import threading as _th90
+        _v90.acquire_corpus_write()
+        _order90 = []
+        _t1_90 = _th90.Thread(target=lambda: (
+            _v90._LOCK.acquire_exclusive(5), _order90.append("writer"),
+            _v90._LOCK.release_exclusive()))
+        _t1_90.start()
+        for _i90 in range(200):
+            if _v90._LOCK._writer_waiting:
+                break
+            _time90.sleep(0.01)
+        _t2_90 = _th90.Thread(target=lambda: (
+            _v90.acquire_corpus_write(), _order90.append("reader"),
+            _v90.release_corpus_write()))
+        _t2_90.start()
+        _time90.sleep(0.25)
+        if "reader" in _order90:
+            failures.append("90: a NEW corpus writer jumped a waiting "
+                            "stager — writer preference is gone")
+        _v90.release_corpus_write()
+        _t1_90.join(5)
+        _t2_90.join(5)
+        if _order90 != ["writer", "reader"]:
+            failures.append(f"90: lock handoff out of order ({_order90})")
+
+        # -- the LITERAL concurrency proof, owner's ruling: a background
+        #    job whose HTTP request returned long ago is still writing —
+        #    through the server's own _run_job wrapper, no request context
+        #    anywhere — and the stager must wait for it, refusing rather
+        #    than tar a torn tree. When the job ends, staging proceeds. --
+        _job_in90 = _th90.Event()
+        _job_go90 = _th90.Event()
+
+        def _mid_write_body90(_j90, _m90, _i90):
+            _job_in90.set()          # the job is mid-persistence
+            _job_go90.wait(20)       # …and stays there until released
+        _orig_body90 = server._run_job_body
+        server._run_job_body = _mid_write_body90
+        try:
+            _jt90 = _th90.Thread(target=server._run_job,
+                                 args=("job_v90", "forge", "x"),
+                                 daemon=True)
+            _jt90.start()
+            if not _job_in90.wait(5):
+                failures.append("90: the background job never entered its "
+                                "body — the wrapper is broken")
+            if _v90.backup(reason="suite", stage_timeout=0.4):
+                failures.append("90: a backup STAGED while a background "
+                                "job (its request long since returned) "
+                                "was still writing")
+            if "pause writers" not in _v90._LAST_FAILURE["msg"]:
+                failures.append("90: the job-blocked stager failure is "
+                                "mute")
+            _v90._LAST_FAILURE["msg"] = ""
+            _job_go90.set()
+            _jt90.join(10)
+            if not _v90.backup(reason="suite"):
+                failures.append("90: staging still refused AFTER the job "
+                                "finished: " + _v90._LAST_FAILURE["msg"])
+        finally:
+            server._run_job_body = _orig_body90
+
+        # -- the corpus lease (owner's ruling): one PROCESS owns the
+        #    corpus. A pretend server holds the OS flock; the CLI's own
+        #    guard must refuse with an honest message; release frees it.
+        #    flock treats fds independently even in one process, so this
+        #    exercises the real cross-process conflict path. --
+        import fcntl as _fcntl90
+        _lp90 = _v90.lease_path()
+        _lp90.parent.mkdir(parents=True, exist_ok=True)
+        _raw90 = _os90.open(_lp90, _os90.O_RDWR | _os90.O_CREAT, 0o600)
+        _fcntl90.flock(_raw90, _fcntl90.LOCK_EX | _fcntl90.LOCK_NB)
+        _os90.ftruncate(_raw90, 0)
+        _os90.write(_raw90, b"pretend server (pid 424242)\n")
+        try:
+            if _v90.hold_lease("suite-second-writer"):
+                failures.append("90: a SECOND corpus lease was granted "
+                                "while one was held")
+                _v90.release_lease()
+            import contextlib as _ctx90
+            _cap90 = _io90.StringIO()
+            with _ctx90.redirect_stdout(_cap90):
+                _ok90 = _v90._cli_lease_or_refuse("backup")
+            _msg90 = _cap90.getvalue()
+            if _ok90:
+                failures.append("90: a standalone backup RAN while the "
+                                "server held the corpus")
+            if "REFUSED" not in _msg90 or "pretend server" not in _msg90:
+                failures.append("90: the lease refusal is not honest "
+                                f"about the holder ({_msg90[:80]!r})")
+        finally:
+            _fcntl90.flock(_raw90, _fcntl90.LOCK_UN)
+            _os90.close(_raw90)
+        if not _v90.hold_lease("suite-after-release"):
+            failures.append("90: the lease did not free when its holder "
+                            "let go")
+        _v90.release_lease()
+        if "vault/lease" not in _v90.EXCLUDE_REL:
+            failures.append("90: the lease file would RIDE a vault")
+        for _pin90, _why90 in [
+            ('vault.hold_lease("wordicon server")',
+             "the server never takes the corpus lease"),
+            ("REFUSED to start", "a second server would not refuse"),
+        ]:
+            if _pin90 not in (Path(cli.__file__).parent.parent
+                              / "server.py").read_text():
+                failures.append(f"90: {_why90}")
+        _vsrc90b = (Path(cli.__file__).parent / "vault.py").read_text()
+        for _pin90, _why90 in [
+            ('_cli_lease_or_refuse("backup")',
+             "standalone backup skips the lease guard"),
+            ('_cli_lease_or_refuse("init")',
+             "standalone init skips the lease guard"),
+        ]:
+            if _pin90 not in _vsrc90b:
+                failures.append(f"90: {_why90}")
+
+        # -- the drill: live corpus MOVES ON, the old vault still passes,
+        #    because it is judged against its own manifest --
+        (_st90 / "accepted_concepts.json").write_text(
+            '[{"title": "first"}, {"title": "second"}, {"title": "third"}]')
+        try:
+            _dr90 = _v90.drill(_ident90, blob=str(_v1_90))
+            if _dr90["proof"].get("no_auth_dir") != "yes":
+                failures.append("90: the drill did not prove no-auth")
+            if _dr90["proof"].get("unpaired_refused") != "yes":
+                failures.append("90: the drilled corpus did not demand "
+                                "fresh pairing")
+            if _dr90["proof"].get("accepted_concepts") != "2":
+                failures.append("90: the drill read the LIVE corpus, not "
+                                "the vault's manifest")
+        except Exception as _e90:
+            failures.append(f"90: the drill failed: {str(_e90)[:200]}")
+        _rows90 = _v90._log_rows()
+        if not any(_r90.get("type") == "drilled"
+                   and _r90.get("name") == _n90a
+                   and _r90.get("off_device") is False
+                   for _r90 in _rows90):
+            failures.append("90: the drill left no honest log row")
+
+        # -- status: three cloud states, and staleness turns red --
+        if _v90.status()["cloud"] != ("sealed locally — cloud "
+                                      "synchronization unverified"):
+            failures.append("90: a local-only vault claims more than "
+                            "'sealed locally'")
+        _v90._log({"type": "drilled", "name": _v90.newest_vault().name,
+                   "off_device": True, "proof": {"suite": "simulated"}})
+        if _v90.status()["cloud"] != "verified off-device":
+            failures.append("90: an off-device drill did not verify the "
+                            "cloud copy")
+        _st_now90 = _v90.status()
+        if _st_now90["stale_red"]:
+            failures.append("90: a healthy vault shows red")
+        _v90._DIRTY["since"] = _time90.monotonic() - (_v90.CEILING_SECONDS + 60)
+        _v90._DIRTY["last_mark"] = _time90.monotonic()
+        if not _v90.status()["stale_red"]:
+            failures.append("90: unsealed changes beyond the ceiling do "
+                            "not turn red — the exception exists")
+        _v90._DIRTY.update({"since": None, "last_mark": None})
+        _v90._LAST_FAILURE["msg"] = "backup has been failing"
+        if not _v90.status()["stale_red"]:
+            failures.append("90: a failing backup does not turn red")
+        _v90._LAST_FAILURE["msg"] = ""
+
+        # -- retention: never before the first REAL drill stamp (sealed
+        #    rows, payload_verified_locally included, do not count); the
+        #    drilled vault is immortal; a vault this log never sealed
+        #    (unknown history) is untouchable; buckets thin honestly;
+        #    prunes are logged --
+        _st2_90 = _SCRATCH / "vault90_state2"
+        (_st2_90 / "vault").mkdir(parents=True, exist_ok=True)
+        cli.LOCAL_STATE = _st2_90
+        _dest2_90 = _SCRATCH / "vault90_dest2"
+        _dest2_90.mkdir(parents=True, exist_ok=True)
+        (_st2_90 / "vault" / "config.json").write_text(_json90.dumps(
+            {"schema": 1, "recipient": _cfg90["recipient"],
+             "recipient_fingerprint": _cfg90["recipient_fingerprint"],
+             "pyrage_version": _cfg90["pyrage_version"],
+             "destination": str(_dest2_90), "created_at": cli._now()}))
+        import datetime as _dt90
+        _mk90 = {}
+        for _tag90, _age_d90 in [("new2", 0.04), ("new1", 0.08),
+                                 ("d32", 3.2), ("foreign33", 3.3),
+                                 ("d37", 3.7),
+                                 ("w10", 10), ("m40", 40),
+                                 ("drilled66", 66), ("m70", 70)]:
+            _when90 = _dt90.datetime.now() - _dt90.timedelta(days=_age_d90)
+            _nm90 = ("wordicon-vault-"
+                     + _when90.strftime("%Y%m%dT%H%M%S") + ".enc")
+            (_dest2_90 / _nm90).write_bytes(b"v")
+            _ts90 = _when90.timestamp()
+            _os90.utime(_dest2_90 / _nm90, (_ts90, _ts90))
+            _mk90[_tag90] = _nm90
+        # every vault except foreign33 gets a sealed row in THIS log —
+        # foreign33 is the pre-disaster vault a restored machine sees
+        with open(_st2_90 / "vault" / "vault.jsonl", "a") as _f90:
+            for _tag90, _nm90 in _mk90.items():
+                if _tag90 == "foreign33":
+                    continue
+                _f90.write(_json90.dumps(
+                    {"type": "sealed", "name": _nm90,
+                     "payload_verified_locally": True,
+                     "at": cli._now()}) + "\n")
+        if _v90.prune() != []:
+            failures.append("90: sealed rows alone enabled pruning — "
+                            "payload verification is NOT drill "
+                            "verification")
+        with open(_st2_90 / "vault" / "vault.jsonl", "a") as _f90:
+            _f90.write(_json90.dumps({"type": "drilled",
+                                    "name": _mk90["drilled66"],
+                                    "at": cli._now()}) + "\n")
+        _pruned90 = _v90.prune()
+        _left90 = {p.name for p in _dest2_90.glob("*.enc")}
+        if _mk90["drilled66"] not in _left90:
+            failures.append("90: RETENTION ATE THE DRILLED VAULT")
+        if _mk90["foreign33"] not in _left90:
+            failures.append("90: RETENTION ATE A VAULT THIS LOG NEVER "
+                            "SEALED — unknown history must be untouchable")
+        for _tag90 in ("new2", "new1", "d37", "w10", "m40", "m70"):
+            if _mk90[_tag90] not in _left90:
+                failures.append(f"90: retention wrongly pruned {_tag90}")
+        if _mk90["d32"] in _left90:
+            failures.append("90: a redundant same-bucket vault survived — "
+                            "retention is not thinning")
+        if _pruned90 != [_mk90["d32"]]:
+            failures.append(f"90: unexpected prune set {_pruned90}")
+        if not any(_r90.get("type") == "pruned"
+                   and _r90.get("name") == _mk90["d32"]
+                   for _r90 in _v90._log_rows()):
+            failures.append("90: a prune left no log row")
+
+        # -- the post-disaster boundary (owner's ruling): a RESTORED
+        #    installation — config rode the vault, the log did not — looks
+        #    at its pre-disaster vaults and can prune NOTHING: not with an
+        #    empty log, and not even after its own first new drill,
+        #    because those vaults have no sealed rows in this history --
+        _st3_90 = _SCRATCH / "vault90_state3"
+        (_st3_90 / "vault").mkdir(parents=True, exist_ok=True)
+        cli.LOCAL_STATE = _st3_90
+        _dest3_90 = _SCRATCH / "vault90_dest3"
+        _dest3_90.mkdir(parents=True, exist_ok=True)
+        (_st3_90 / "vault" / "config.json").write_text(_json90.dumps(
+            {"schema": 1, "recipient": _cfg90["recipient"],
+             "recipient_fingerprint": _cfg90["recipient_fingerprint"],
+             "pyrage_version": _cfg90["pyrage_version"],
+             "destination": str(_dest3_90), "created_at": cli._now()}))
+        _old3_90 = []
+        for _i90 in range(5):        # five pre-disaster vaults, one daily
+            _when90 = _dt90.datetime.now() - _dt90.timedelta(
+                days=3.1 + _i90 / 10)   # bucket: maximally prunable
+            _nm90 = ("wordicon-vault-"
+                     + _when90.strftime("%Y%m%dT%H%M%S") + ".enc")
+            (_dest3_90 / _nm90).write_bytes(b"old")
+            _ts90 = _when90.timestamp()
+            _os90.utime(_dest3_90 / _nm90, (_ts90, _ts90))
+            _old3_90.append(_nm90)
+        if _v90.prune() != []:
+            failures.append("90: a restored installation with NO history "
+                            "pruned its pre-disaster vaults")
+        _new3_90 = ("wordicon-vault-" + _dt90.datetime.now()
+                    .strftime("%Y%m%dT%H%M%S") + "x000000001.enc")
+        (_dest3_90 / _new3_90).write_bytes(b"new")
+        with open(_st3_90 / "vault" / "vault.jsonl", "a") as _f90:
+            _f90.write(_json90.dumps(
+                {"type": "sealed", "name": _new3_90,
+                 "payload_verified_locally": True,
+                 "at": cli._now()}) + "\n")
+            _f90.write(_json90.dumps(
+                {"type": "drilled", "name": _new3_90, "off_device": True,
+                 "at": cli._now()}) + "\n")
+        if _v90.prune() != []:
+            failures.append("90: after its first NEW drill, a restored "
+                            "installation pruned vaults its history "
+                            "never sealed")
+        if {p.name for p in _dest3_90.glob("*.enc")} \
+                != set(_old3_90) | {_new3_90}:
+            failures.append("90: the post-disaster destination lost a "
+                            "vault")
+
+        # -- the identity exists NOWHERE the machine keeps: not in the
+        #    state, not beside the vaults, not in any log --
+        for _root90 in (_st90, _st2_90, _st3_90, _dest90, _dest2_90, _dest3_90):
+            for _p90 in _root90.rglob("*"):
+                if _p90.is_file() and _ident90.encode() in _p90.read_bytes():
+                    failures.append(f"90: THE SECRET IS ON DISK at {_p90}")
+        for _pin90, _why90 in [
+            ("getpass.getpass", "identity entry is not an unechoed prompt"),
+            ('reason="debounce"', "the quiet debounce is gone"),
+            ('reason="ceiling"', "the staleness ceiling is gone"),
+        ]:
+            if _pin90 not in _vsrc90:
+                failures.append(f"90: {_why90}")
+        for _absent90, _why90 in [
+            ("--identity", "an argv path to the identity exists"),
+            ("WORDICON_VAULT_IDENTITY", "an env path to the identity "
+             "exists"),
+        ]:
+            if _absent90 in _vsrc90:
+                failures.append(f"90: {_why90}")
+        if _v90.QUIET_SECONDS != 900 or _v90.CEILING_SECONDS != 3600:
+            failures.append("90: the ruled cadence constants moved")
+        _req90 = (Path(cli.__file__).parent.parent
+                  / "requirements.txt").read_text()
+        if "pyrage==1.4.0" not in _req90:
+            failures.append("90: pyrage is not pinned by exact version")
+
+        # -- the scanner refuses the identity format outright --
+        _scan90 = Path(cli.__file__).parent / "scan_secrets.py"
+        _plant90 = _SCRATCH / "planted_age90.txt"
+        _plant90.write_text("key = 'AGE-SECRET-KEY-1"
+                            + "Q" * 50 + "'\n")
+        import subprocess as _sp90
+        _p90 = _sp90.run([sys.executable, str(_scan90), str(_plant90)],
+                         capture_output=True, text=True)
+        if _p90.returncode != 1:
+            failures.append("90: the scanner passed a planted age "
+                            "identity")
+        if "Q" * 20 in _p90.stdout + _p90.stderr:
+            failures.append("90: the scanner ECHOED the planted identity")
+
+        # -- the server wiring + the strip: the surface proves the vault
+        #    data arrives, and failure turns red --
+        _ssrc90 = (Path(cli.__file__).parent.parent
+                   / "server.py").read_text()
+        for _pin90, _why90 in [
+            ("vault.acquire_corpus_write()", "mutating requests do not "
+             "hold the corpus lock"),
+            ("def _vault_release", "the lock release teardown is gone"),
+            ("with vault.corpus_write():", "background jobs do not hold "
+             "the corpus lock"),
+            ("vault.start_scheduler()", "the debounce scheduler never "
+             "starts"),
+            ("atexit.register", "no shutdown backup is registered"),
+            ('reason="start"', "no server-start backup"),
+            ("vault.mark_dirty()", "mutations never mark the corpus "
+             "dirty"),
+        ]:
+            if _pin90 not in _ssrc90:
+                failures.append(f"90: {_why90}")
+        if server.app.test_client().get("/api/vault/status") \
+                .status_code != 401:
+            failures.append("90: /api/vault/status is OUTSIDE the gate")
+        _vs90 = _paired(server.app.test_client()).get("/api/vault/status")
+        _vd90 = _vs90.get_json() or {}
+        for _k90 in ("initialized", "last_seal_at",
+                     "last_seal_verification", "last_drill_at",
+                     "cloud", "n_vaults", "stale_red", "failure",
+                     "dirty_seconds"):
+            if _k90 not in _vd90:
+                failures.append(f"90: the status payload lacks {_k90!r}")
+        _idx90 = (Path(cli.__file__).parent.parent / "webapp"
+                  / "index.html").read_text()
+        for _pin90, _why90 in [
+            ('id="vault-strip"', "the vault strip element is gone"),
+            ("loadVaultStrip()", "the strip is never loaded"),
+            ("setInterval(loadVaultStrip", "the strip never refreshes"),
+            ("UNREACHABLE", "an unreachable status renders as nothing"),
+            ("var(--bad)", "the strip cannot turn red"),
+        ]:
+            if _pin90 not in _idx90:
+                failures.append(f"90: {_why90}")
+    finally:
+        cli.LOCAL_STATE = _old_ls90
+        _v90._DIRTY.update(_old_dirty90)
+        _v90._LAST_FAILURE.update(_old_fail90)
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

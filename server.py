@@ -65,11 +65,12 @@ def _load_dotenv() -> None:
 
 _load_dotenv()
 
-from flask import Flask, Response, jsonify, redirect, request, send_from_directory  # noqa: E402
+from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory  # noqa: E402
 
 import wordicon_cli as cli  # noqa: E402
 import library as library  # noqa: E402  (the Library wing — zero model calls)
 import gate  # noqa: E402
+import vault  # noqa: E402  (encrypted backup — the corpus-writers lock lives there)
 import notify  # noqa: E402
 from wordicon_corpus.objects import Judgment  # noqa: E402
 
@@ -110,6 +111,14 @@ def _gate_check():
                 host = origin.split("://", 1)[-1].split("/", 1)[0]
                 if host != request.host:
                     return jsonify({"error": "cross-site request refused"}), 403
+            # every mutating request holds the corpus-writers lock for its
+            # whole life (released in _vault_release), so a vault staging
+            # copy never catches a half-written file. Dirty is marked on
+            # the way IN — conservative: a failed mutation may cost one
+            # extra backup, a missed mark could cost real work.
+            vault.acquire_corpus_write()
+            g._corpus_shared = True
+            vault.mark_dirty()
         return None
     if path.startswith("/api/"):
         return jsonify({"error": "not paired — this Wordicon only answers "
@@ -117,6 +126,12 @@ def _gate_check():
                                   "pairing code from the server terminal to "
                                   "/api/pair."}), 401
     return redirect("/pair")
+
+
+@app.teardown_request
+def _vault_release(exc):
+    if g.pop("_corpus_shared", False):
+        vault.release_corpus_write()
 
 
 @app.route("/pair")
@@ -211,6 +226,13 @@ def api_auth_revoke():
     if not gate.revoke(str(data.get("session_id") or "")):
         return jsonify({"error": "no such session"}), 400
     return jsonify({"revoked": True})
+
+
+@app.route("/api/vault/status")
+def api_vault_status():
+    """Gated like everything else. A failing or stale vault is data the
+    owner must see — the page's strip renders this, red when it matters."""
+    return jsonify(vault.status())
 
 # ---- jobs -------------------------------------------------------------
 #
@@ -319,6 +341,19 @@ def _shape_operation_result(mode: str, gateway_name: str, cli_result) -> dict:
 
 
 def _run_job(job_id: str, mode: str, input_text: str) -> None:
+    """Background jobs persist receipts and results mid-run, interleaved
+    with model calls inside cli — so the WHOLE body holds the shared side
+    of the corpus-writers lock, and a vault staging copy waits for the job
+    rather than tar a half-written receipt. Dirty is marked when the job
+    ends, so the quiet-debounce clock starts after the work, not during."""
+    with vault.corpus_write():
+        try:
+            _run_job_body(job_id, mode, input_text)
+        finally:
+            vault.mark_dirty()
+
+
+def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
     def on_progress(stage: str, detail: str) -> None:
         # stage_changed_at lets the UI show how long the CURRENT step has
         # been running — a stalled API call then looks like a stall
@@ -2502,6 +2537,16 @@ if __name__ == "__main__":
               "each pairs again with the code printed at the next start.")
         raise SystemExit(0)
     port = int(os.environ.get("PORT", 8420))
+    # The corpus lease: this process becomes the corpus's only writer for
+    # its whole life (flock — released by the OS even on a crash). A
+    # standalone `vault.py init|backup`, or a second server on the same
+    # corpus, refuses instead of racing.
+    if not vault.hold_lease("wordicon server"):
+        print("REFUSED to start: the corpus is already in use by "
+              f"{vault.lease_holder() or 'another process'}.\n"
+              "Two writers on one corpus is how backups go silently "
+              "wrong. Stop that process first.")
+        raise SystemExit(3)
     host = gate.bind_host()
     gate.ensure_master()
     code = gate.new_pairing_code()
@@ -2545,6 +2590,19 @@ if __name__ == "__main__":
     print("Jobs run in the background: this Terminal window and your Mac need to "
           "stay open and awake for a submitted job to finish, even though the "
           "phone app itself can be closed.\n")
+    _vst = vault.status()
+    if _vst["initialized"]:
+        print(f"Vault: {_vst['n_vaults']} vault(s), "
+              f"{_vst['total_bytes'] // 1024} KB at {vault.destination()}")
+        threading.Thread(target=lambda: vault.backup(reason="start"),
+                         daemon=True).start()
+    else:
+        print("Vault: NOT INITIALIZED — the corpus exists on this disk only. "
+              "Set up encrypted backups with: python3 scripts/vault.py init")
+    vault.start_scheduler()
+    import atexit
+    atexit.register(lambda: bool(vault.load_config())
+                    and vault.backup(reason="shutdown", stage_timeout=10))
     # threaded=True so a poll request (GET /api/jobs/<id>) isn't blocked behind
     # a job submission — the job itself already runs on its own thread, this
     # is just about the dev server being able to serve more than one request
