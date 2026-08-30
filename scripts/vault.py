@@ -321,9 +321,28 @@ def interactive_init() -> int:
     two = getpass.getpass("Re-enter it from your PAPER copy: ").strip()
     if one != ident or two != ident:
         config_path().unlink()
-        print("\nA re-entry did not match. The config was destroyed — run "
-              "init again and store the new secret properly. Nothing was "
-              "backed up.")
+        # Say WHICH leg failed, and the length — never a byte of the key.
+        # Three blind failures at a real keyboard taught this: a ritual
+        # that will not say which half went wrong is not stricter, only
+        # crueler. Length alone (every age secret is the same size)
+        # diagnoses a truncated paste or an empty entry without echoing
+        # anything.
+        print()
+        for _label, _got in (("PASSWORD MANAGER", one), ("PAPER", two)):
+            if _got != ident:
+                if not _got:
+                    _why = " — nothing was entered"
+                elif len(_got) != len(ident):
+                    _why = (f" — your entry was {len(_got)} characters; "
+                            f"the secret is {len(ident)}")
+                else:
+                    _why = (" — right length, at least one wrong "
+                            "character")
+                print(f"  The {_label} re-entry did not match{_why}.")
+            else:
+                print(f"  The {_label} re-entry matched.")
+        print("\nThe config was destroyed — run init again and store the "
+              "new secret properly. Nothing was backed up.")
         return 1
     print("\nCustody proven. Sealing the first vault…")
     name = backup(reason="init")
