@@ -375,8 +375,11 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
 
     try:
         if mode == "deep":
+            with JOBS_LOCK:
+                _gesture = JOBS[job_id].get("gesture") or "trial"
             cli_result = cli.run_deep(input_text, gateway, interactive=False, on_progress=on_progress,
-                                        avoid_titles=avoid_titles, prior_attempts=prior_attempts)
+                                        avoid_titles=avoid_titles, prior_attempts=prior_attempts,
+                                        gesture=_gesture)
             groups = []
             for g in cli_result["groups"]:
                 deep_common = {
@@ -413,6 +416,7 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
                 })
             result = {"mode": "deep", "source_text": cli_result["source_text"],
                        "attack": cli_result["attack"],
+                       "gesture": cli_result.get("gesture", "trial"),
                        "partial": cli_result.get("partial", False),
                        "n_failed": cli_result.get("n_failed", 0),
                        "groups": groups, "gateway": gateway.name}
@@ -1304,11 +1308,19 @@ def api_config():
 def api_create_job():
     data = request.get_json(force=True) or {}
     mode = data.get("mode")
-    if mode not in ("auto", "deep", "forge", "crack", "decompose", "riff", "revise", "sprout",
-                    "refract", "verify", "archetype", "recheck", "etymon"):
+    if mode not in ("auto", "deep", "forge", "crack", "decompose", "riff", "play", "revise",
+                    "sprout", "refract", "verify", "archetype", "recheck", "etymon"):
         return jsonify({"error": "mode must be 'auto', 'deep', 'forge', 'crack', 'decompose', "
-                                 "'riff', 'revise', 'sprout', 'refract', 'archetype', "
+                                 "'riff', 'play', 'revise', 'sprout', 'refract', 'archetype', "
                                  "'recheck', 'etymon', or 'verify'"}), 400
+    # The gesture rides only the deep workup (the chooser's Interpret /
+    # Put-it-on-trial choices); Play is its own mode, and anything else
+    # carrying a gesture is a caller bug worth refusing out loud.
+    gesture = str(data.get("gesture") or "trial")
+    if gesture not in ("trial", "interpret"):
+        return jsonify({"error": "gesture must be 'trial' or 'interpret'"}), 400
+    if gesture != "trial" and mode != "deep":
+        return jsonify({"error": "a gesture applies only to mode 'deep'"}), 400
 
     original, claims_detail = None, None
     owner_note, prior_friction = None, None
@@ -1435,7 +1447,7 @@ def api_create_job():
     job_id = _new_job_id()
     with JOBS_LOCK:
         JOBS[job_id] = {
-            "id": job_id, "mode": mode, "input_text": input_text,
+            "id": job_id, "mode": mode, "gesture": gesture, "input_text": input_text,
             "original": original, "claims_detail": claims_detail,
             "owner_note": owner_note, "prior_friction": prior_friction,
             "wordify": wordify, "parent_trace_id": parent_trace_id, "via": via,

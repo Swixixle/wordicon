@@ -106,7 +106,16 @@
     border-radius: 20px; padding: 1px 8px; font-size: 11px; cursor: pointer; margin-left: 3px;
     font-family: inherit; }
   .fixbtn.on { background: var(--accent); color: #0a121f; border-color: var(--accent); }
-  .fixbtn.agree { border-style: dashed; }
+  /* The ruling table (owner's ruling): fixed columns, fixed option order.
+     The model's reading is its own column — never a moving "agree" button
+     — and the owner's ruling is visually separate and sovereign. */
+  .ruling-table { border-collapse: collapse; width: 100%; margin: 4px 0 8px;
+    font-size: 12.5px; }
+  .ruling-table th { text-align: left; color: var(--muted); font-weight: 600;
+    font-size: 11px; padding: 3px 8px 3px 0; border-bottom: 1px solid var(--border); }
+  .ruling-table td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--border);
+    vertical-align: top; }
+  .r-meaning { max-width: 320px; line-height: 1.4; }
   .foot { font-size: 12px; color: var(--muted); line-height: 1.5; }
 </style>
 </head>
@@ -799,8 +808,10 @@ async function correct(j, key, modelSaid, ownerSays) {
   const row = document.getElementById(`v-${j}-${key}`);
   const build = (LAST_BUILDS || [])[j] || {};
   const part = (CUR.contract.find(p => p.key === key) || {});
+  const RL = {kept: 'fully present', weakened: 'partly present',
+              lost: 'missing', unstated: "something you can't tell"};
   const note = ownerSays === modelSaid ? '' :
-    (prompt(`Why is “${part.name || key}” ${ownerSays} rather than ${modelSaid}? (optional)`) || '');
+    (prompt(`Why is “${part.gist || part.name || key}” ${RL[ownerSays] || ownerSays} rather than ${RL[modelSaid] || modelSaid}? (optional)`) || '');
   try {
     await fetch('/api/bench/correct', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -812,7 +823,7 @@ async function correct(j, key, modelSaid, ownerSays) {
   if (row) {
     row.querySelectorAll('.fixbtn').forEach(b => b.classList.remove('on'));
     const hit = [...row.querySelectorAll('.fixbtn')]
-      .find(b => b.textContent === ownerSays || (b.textContent === 'agree' && ownerSays === modelSaid));
+      .find(b => b.dataset.v === ownerSays);
     if (hit) hit.classList.add('on');
     // Replace, never append. This used to insertAdjacentHTML on every click,
     // so changing your mind about one part stamped the row "recorded
@@ -820,8 +831,10 @@ async function correct(j, key, modelSaid, ownerSays) {
     // also POSTs, so the same part now had two stored verdicts and no way to
     // tell which one he meant.
     row.querySelectorAll('.recorded-stamp').forEach(e => e.remove());
-    row.insertAdjacentHTML('beforeend',
-      `<span class="fix recorded-stamp" style="color:var(--good)">recorded${note ? ' with your reason' : ''}</span>`);
+    // The stamp lives INSIDE the ruling cell — a <tr> cannot host a bare
+    // span, and the ruling column is where the owner's act belongs.
+    (row.querySelector('td:last-child') || row).insertAdjacentHTML('beforeend',
+      `<span class="fix recorded-stamp" style="color:var(--good);margin-left:6px">recorded${note ? ' with your reason' : ''}</span>`);
   }
 }
 
@@ -871,6 +884,14 @@ async function build() {
   }
   const byKey = {};
   CUR.contract.forEach(p => byKey[p.key] = p);
+  // Display vocabulary (owner's ruling): plain words on the page, the
+  // internal enum in the record. In the MODEL column silence has its own
+  // established meaning ("not stated" — the footer defines it); in YOUR
+  // ruling the honest fourth option is "Can't tell".
+  const V_LABEL = {kept: 'Fully present', weakened: 'Partly present',
+                   lost: 'Missing', unstated: 'Not stated'};
+  const R_LABEL = {kept: 'Fully present', weakened: 'Partly present',
+                   lost: 'Missing', unstated: "Can't tell"};
   LAST_BUILDS = d.builds;
   // One line per build, then everything else behind Why?. The first live
   // run put three words, twelve contract verdicts and three seam analyses
@@ -900,34 +921,46 @@ async function build() {
       // saying lost. Silence read as loss is worse still; the footer on this
       // very card says unstated means "silence, not survival", and then the
       // headline convicted it.
-      const byState = v => Object.entries(b.contract).filter(([, x]) => x === v)
-        .map(([k]) => (byKey[k] || {}).name || k);
-      const groups = [['weakened', byState('weakened')], ['lost', byState('lost')],
-                      ['not stated', byState('unstated')]]
-        .filter(([, names]) => names.length)
-        .map(([label, names]) => ` · ${label} <strong>${names.map(esc).join('</strong>, <strong>')}</strong>`)
-        .join('');
+      // Plain-counts summary (owner's ruling): "Keeps one meaning, partly
+      // keeps one, drops two." The four states stay distinct — the earlier
+      // collapse bug is guarded by naming each state its own verb.
+      const nOf = v => Object.values(b.contract).filter(x => x === v).length;
+      const num = x => ['zero','one','two','three','four','five','six','seven',
+                        'eight','nine'][x] || String(x);
+      const segs = [];
+      if (nOf('kept')) segs.push(`keeps ${num(nOf('kept'))} meaning${nOf('kept') === 1 ? '' : 's'}`);
+      if (nOf('weakened')) segs.push(`partly keeps ${num(nOf('weakened'))}`);
+      if (nOf('lost')) segs.push(`drops ${num(nOf('lost'))}`);
+      if (nOf('unstated')) segs.push(`is silent on ${num(nOf('unstated'))}`);
+      let plain = segs.length ? segs.join(', ') : 'says nothing about any meaning part';
+      plain = plain.charAt(0).toUpperCase() + plain.slice(1) + '.';
       return `
       <div class="build ${b.standing === 'contract_broken' ? 'broken' : 'ok'}">
         <p class="build-word">${esc(b.word)}</p>
-        <p class="body" style="margin:2px 0;font-size:13.5px">Kept ${kept} of ${total} meaning parts${groups}
+        <p class="body" style="margin:2px 0;font-size:13.5px">${plain}
           ${b.seam_check && !b.seam_check.verified
             ? `<span class="tag lost" style="margin-left:6px">its seam description doesn't add up</span>` : ''}</p>
         <details>
           <summary>Why?</summary>
           <div style="margin-top:6px">
-            ${Object.entries(b.contract).map(([k, v]) => `
-              <div class="verdict-row" id="v-${j}-${esc(k)}">
-                <span class="tag ${esc(v)}">${esc((byKey[k] || {}).name || k)}: ${esc(v)}</span>
-                <span class="fix">you:
-                  ${/* 'unstated' was displayable but not choosable: when the build said
-                        unstated, none of the three options matched, so no "agree" button
-                        existed and the one verdict he could not register was agreement
-                        with silence. */
-                    ['kept','weakened','lost','unstated'].map(o => `<button class="fixbtn${o === v ? ' agree' : ''}"
-                     onclick="correct(${j},'${esc(k)}','${esc(v)}','${o}')">${o === v ? 'agree' : (o === 'unstated' ? 'not stated' : o)}</button>`).join('')}
-                </span>
-              </div>`).join('')}
+            <table class="ruling-table">
+              <thead><tr><th>Meaning the word should preserve</th>
+                <th>Model's reading</th><th>Your ruling</th></tr></thead>
+              <tbody>
+              ${Object.entries(b.contract).map(([k, v]) => `
+                <tr class="verdict-row" id="v-${j}-${esc(k)}">
+                  <td class="r-meaning">${esc((byKey[k] || {}).gist || (byKey[k] || {}).name || k)}</td>
+                  <td><span class="tag ${esc(v)}">${V_LABEL[v] || esc(v)}</span></td>
+                  <td>
+                    ${/* Options ALWAYS in the same order; agreeing is just
+                          choosing the same value — the model's judgment never
+                          disguises itself as a moving button. */
+                      ['kept','weakened','lost','unstated'].map(o => `<button class="fixbtn" data-v="${o}"
+                       onclick="correct(${j},'${esc(k)}','${esc(v)}','${o}')">${R_LABEL[o]}</button>`).join('')}
+                  </td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
             ${b.seam ? `<p class="body muted" style="font-size:13px"><em>At the seam:</em> ${esc(b.seam)}</p>` : ''}
             ${(b.parts || []).length ? `<p class="body muted" style="font-size:12.5px">Declared slices: ${
               b.parts.map(x => `${esc(x.parent)} → keep <strong>${esc(x.keep)}</strong>${x.drop ? `, drop ${esc(x.drop)}` : ''}`).join(' · ')}${

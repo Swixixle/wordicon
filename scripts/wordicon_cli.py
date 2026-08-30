@@ -2029,6 +2029,27 @@ class MockGateway(Gateway):
                      "example_sentence": "It was pure lonemercy — he covered the shift and never mentioned it."},
                 ]
             })
+        if prompt.startswith("You are the play stage"):
+            return json.dumps({
+                "candidates": [
+                    {
+                        "title": "Glandmark decision",
+                        "definition": "A ruling everyone pretends was reached by pure reason when it was obviously driven by appetite.",
+                        "central_contradiction": "Wears judicial robes over a naked urge.",
+                        "axiom": "The gavel bangs where the gland points.",
+                        "plain_gloss": "An official-sounding choice that was really just a craving.",
+                        "example_sentence": "Ordering the fourth round was a glandmark decision and the whole table ratified it.",
+                    },
+                    {
+                        "title": "Beigewash",
+                        "definition": "To scrub a filthy, alive phrase into respectable oatmeal and call the result an improvement.",
+                        "central_contradiction": "Cleans the mechanism right out of the joke.",
+                        "axiom": "A washed mouth says less.",
+                        "plain_gloss": "Making something boring on purpose and calling it polish.",
+                        "example_sentence": "The editor beigewashed the whole chapter and wondered where the voice went.",
+                    },
+                ]
+            })
         if prompt.startswith("You are the riff stage"):
             return json.dumps({
                 "candidates": [
@@ -2553,6 +2574,79 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
 }}"""
 
 
+def build_play_prompt(seed: dict, input_text: str,
+                      avoid_titles: "list[str] | None" = None,
+                      prior_attempts: "list[dict] | None" = None) -> str:
+    """Play is the constitutionally protected wordplay lane (owner's
+    ruling, 2026-08-30): the material-first stance of Riff with the
+    courtroom explicitly off. Guardrails belong on consequential actions,
+    not on language. The regression fixture for this law is the owner's
+    own coinage 'Ehlersian Labial Mitters' — if a future version launders
+    that phrase into respectable beige, the suite fails."""
+    kernel = seed["kernel"]
+    constraint = seed["constraint"]
+
+    return f"""You are the play stage of a Wordicon operation — the owner has chosen
+PLAY for this material, on purpose, with a visible click. Your job is to
+play with it the way its own energy asks to be played with: follow the
+sound, the vulgarity, the grotesquerie, the pun, the rhythm, and the
+suggestive ambiguity wherever they actually lead.
+
+The lane's constitutional protections, in force here and enforced by the
+test suite:
+- Profanity, sexuality, body humor, grotesquerie, and absurdity are
+  legitimate materials. Their presence is never itself a defect.
+- Absurdity is not a coherence defect. An unexplained word is an
+  invitation before it is a deficiency — nobody here demands a referent.
+- Do not launder the material into respectable beige language, scold it,
+  moralize about it, or retreat to the safest reading. If the phrase's
+  joke lives in register collision — fake-taxonomic authority pressed
+  against anatomical vulgarity, erudition at the same table as filth —
+  the register collision IS the mechanism: keep it, sharpen it, never
+  defuse it.
+- Every meaning you give is INVENTED and is labeled so by the lane
+  itself. Invent boldly; the labeling, not timidity, is what keeps it
+  honest.
+
+Governing principles (a Personality Kernel — stable rules you must follow):
+{chr(10).join('- ' + p for p in kernel['principles'])}
+
+Style: favor {', '.join(kernel['style']['favor'])}; reject {', '.join(kernel['style']['reject'])}.
+
+Governing constraint (a reviewed rule derived from private material you never see):
+- {constraint['text']}
+
+The material: {input_text}{_prior_block(avoid_titles, prior_attempts)}
+
+Coin 1-3 things from this material — a new word, a mock-term, a
+definition the phrase turns out to deserve. Return fewer than three if
+the material honestly supports fewer; never pad with a form you would
+wince at. For each: the definition is the meaning you are INVENTING for
+it, committed to fully; central_contradiction is the tension that makes
+it funny or alive (register collision counts); axiom is the one claim it
+makes about the world; plain_gloss is one breath of plain words; and
+example_sentence is the thing used naturally in a sentence a real person
+might actually say, in the register the material calls for.
+
+Form rules still hold — a coinage must be pronounceable on first sight
+and survive being said aloud; every field stays speakable, readable
+English (Latin alphabet only).
+
+Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
+{{
+  "candidates": [
+    {{
+      "title": "...",
+      "definition": "...",
+      "central_contradiction": "...",
+      "axiom": "...",
+      "plain_gloss": "...",
+      "example_sentence": "..."
+    }}
+  ]
+}}"""
+
+
 def build_revise_prompt(seed: dict, original: dict, wordify: bool = False) -> str:
     """Revise = the judgment 'right meaning, wrong word' made generative.
     The definition/contradiction/axiom are FROZEN; only the word-form is
@@ -2792,10 +2886,54 @@ bone_claims array when nothing genuinely applies.{ENGLISH_PROSE_RULE}"""
 
 
 def build_adversarial_prompt(candidate: dict, riff: bool = False,
+                               play: bool = False,
                                task: str | None = None,
                                anchor: str | None = None,
                                stance: str | None = None,
                                background: str | None = None) -> str:
+    if play:
+        # The Play lane's Friction contract (owner's ruling): judge
+        # whether the coin is ALIVE — never whether it is respectable.
+        return f"""You are the Friction stage reviewing one Wordicon PLAY coinage — a
+piece of deliberate wordplay whose meaning was INVENTED on purpose, in a
+lane where profanity, sexuality, body humor, grotesquerie, and absurdity
+are legitimate materials. Judge it the way a filthy-minded
+poet-lexicographer would: on whether the coin is ALIVE.
+
+Your rubric, and the whole of it:
+- Is it alive — does it have actual energy, or is it a dead arrangement?
+- Is it memorable — would someone repeat it tomorrow?
+- Is it internally fitted — do its parts (sound, register, invented
+  meaning, example) belong to each other?
+- Is it faithful to the chosen meaning and to the material's own energy —
+  or did it retreat into respectable beige, defuse the register
+  collision, or swap the joke for a safer one?
+
+What is NOT an objection here, ever: that it is obscene, grotesque,
+absurd, tasteless, or unexplained; that it resembles no established
+term; that it lacks a referent; that it would not survive a seminar.
+Absurdity is not a coherence defect. Do not moralize the material. A
+borrowed joke, a dead sound, a wince-inducing seam, an example sentence
+nobody would say — THOSE are objections.
+
+Candidate:
+Title: {candidate['title']}
+Definition: {candidate['definition']}
+Central contradiction: {candidate.get('central_contradiction', '')}
+Axiom: {candidate.get('axiom', '')}
+Plain gloss: {candidate.get('plain_gloss', '')}
+Example: {candidate.get('example_sentence', '')}
+
+Verdict "keep" when the coin is alive even if flawed; "reject" only when
+it is genuinely dead. The verdict "existing" is NOT available here — an
+invented meaning cannot collide with an established term, and resembling
+one can be part of the joke. Also tag the register: "kitchen" if a
+normal person could pick it up from one gloss, "seminar" if it needs the
+room it was coined in — a description, not a penalty, and never an
+objection. Your verdict is advice; the owner decides.
+
+Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
+{{"hostile_read": "...", "redundancy_note": "", "verdict": "keep" or "reject", "register": "kitchen" or "seminar", "reason": "..."}}{ENGLISH_PROSE_RULE}"""
     if riff:
         # A sound-first coinage is a sketch by design — judging it by
         # finished-concept standards (is the axiom earned, does the
@@ -3713,7 +3851,15 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
     # know "riff" (same discipline as decompose: new prompts, not new
     # object types).
     is_riff = mode == "riff"
-    if is_riff:
+    is_play = mode == "play"
+    wordplay = is_riff or is_play
+    if is_play:
+        # Play: the protected lane. Same pipeline, its own prompts, the
+        # courtroom never convened (the attack stage is deep-only and
+        # plain runs have none — structural, not suppressed).
+        gen_prompt = build_play_prompt(seed, input_text, avoid_titles=avoid_titles,
+                                        prior_attempts=prior_attempts)
+    elif is_riff:
         gen_prompt = build_riff_prompt(seed, input_text, avoid_titles=avoid_titles,
                                         prior_attempts=prior_attempts)
     else:
@@ -3739,9 +3885,33 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
     _t = time.monotonic()
     raw = gateway.complete(gen_prompt)
     metrics.record("generation", time.monotonic() - _t)
-    parsed = _extract_json(raw)
+    try:
+        parsed = _extract_json(raw)
+    except ValueError:
+        if is_play and _looks_like_refusal(raw):
+            # Constitutional honesty (owner's ruling): a provider refusal
+            # is preserved as a PROVIDER refusal — never presented as
+            # Wordicon judging the owner or the material.
+            raise RuntimeError(
+                "the hosted model DECLINED to play with this material — a "
+                "provider rule, not Wordicon judging you or your words. "
+                "Your input is preserved untouched. Retry, rephrase, or "
+                "wait for the local-model lane. The provider said: "
+                f"{raw[:300]!r}")
+        raise
     candidates = parsed.get("candidates", [])
     if not candidates:
+        if is_play and _looks_like_refusal(raw):
+            # Constitutional honesty (owner's ruling): a provider refusal
+            # is preserved as a PROVIDER refusal — never presented as
+            # Wordicon judging the owner or the material. The input is
+            # untouched; nothing was sanitized; nothing was judged.
+            raise RuntimeError(
+                "the hosted model DECLINED to play with this material — a "
+                "provider rule, not Wordicon judging you or your words. "
+                "Your input is preserved untouched. Retry, rephrase, or "
+                "wait for the local-model lane. The provider said: "
+                f"{raw[:300]!r}")
         raise RuntimeError(f"model returned no candidates: {raw[:300]!r}")
 
     # Bone attachment is a separate call, deliberately: the generation call
@@ -3785,10 +3955,11 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
 
     def _adversarial(c: dict) -> dict:
         return _extract_json(gateway.complete(build_adversarial_prompt(
-            c, riff=is_riff, task=None if is_riff else input_text,
-            anchor=None if is_riff else anchor,
-            stance=None if is_riff else stance,
-            background=None if is_riff else background)))
+            c, riff=is_riff, play=is_play,
+            task=None if wordplay else input_text,
+            anchor=None if wordplay else anchor,
+            stance=None if wordplay else stance,
+            background=None if wordplay else background)))
 
     t_fric = time.monotonic()
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(candidates))) as pool:
@@ -3924,7 +4095,7 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
 
     private_receipt = receipts_mod.build_private_receipt(
         receipt_id=f"receipt_{trace_id}", trace_id=trace_id,
-        operation="forge" if is_riff else mode, input_text=input_text,
+        operation="forge" if wordplay else mode, input_text=input_text,
         kernel_version=seed["kernel"]["kernel_version"], engine_version="cli-0.2.0",
         sources=sources_for_receipt, derived_constraints_applied=constraint_entries,
         claims=all_claims_for_receipt,
@@ -4727,6 +4898,19 @@ def door_was_opened(door_id: str) -> "list[str]":
     return [h for h in hits if h]
 
 
+def _looks_like_refusal(raw: str) -> bool:
+    """A provider refusal is prose, not JSON, and says no in a familiar
+    handful of ways. Heuristic, used only to LABEL a failure honestly as
+    the provider's — never to change what happened or what is kept."""
+    if "{" in (raw or ""):
+        return False
+    r = (raw or "").lower()
+    return any(p in r for p in (
+        "i can't", "i cannot", "i won't", "i will not", "unable to",
+        "not able to", "i'm not going to", "can't help with",
+        "cannot help with", "content filtering", "content policy"))
+
+
 def explain_component_failure(err) -> str:
     """Turn a raw provider exception into a sentence about EXECUTION, not
     about the component's intellectual merit.
@@ -4764,10 +4948,11 @@ def explain_component_failure(err) -> str:
         return ("The provider is overloaded right now and nothing ran. Wait a moment "
                 "and retry; nothing was judged either way.")
     if "content filtering" in e or "content_filter" in e or "blocked by" in e:
-        return ("The model provider refused to return output for this component. "
-                "Nothing was generated and nothing was judged — this says nothing "
-                "about whether the component was worth extracting. Retry it, or "
-                "run it on a different model.")
+        return ("The model provider refused to return output for this component — "
+                "a provider rule, not Wordicon judging you or the material. "
+                "Nothing was generated and nothing was judged; this says nothing "
+                "about whether the component was worth extracting, and your input "
+                "is preserved untouched. Retry it, or run it on a different model.")
     if "timeout" in e or "timed out" in e:
         return ("The model call timed out for this component. Nothing was judged. "
                 "Retry it — completed components are already saved.")
@@ -9117,7 +9302,7 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
 {text}""")
 
 
-def build_attack_prompt(text: str) -> "Cacheable":
+def build_attack_prompt(text: str, gesture: str = "trial") -> "Cacheable":
     stable = f"""You are the input-attack stage of a Wordicon deep workup: a sharp,
 demanding critic reviewing the OWNER'S INPUT ITSELF, as given — before
 any generation happens.
@@ -9178,6 +9363,21 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
     # The owner's text is the only thing that varies, so it moves to the
     # user turn, which also puts the passage last where long-context
     # guidance wants it. The two pressures agree here; they do not always.
+    if gesture == "interpret":
+        # The INTERPRET gesture (owner's ruling): readings are wanted,
+        # authority is not, and a bare phrase owes nobody a referent.
+        _marker = "Respond with ONLY a JSON object"
+        stable = stable.replace(_marker, (
+            "The owner chose INTERPRET for this input, with a visible "
+            "click: lay out its possible readings, none pretending to "
+            "authority. Unexplained words are invitations before they "
+            "are deficiencies — do not demand a claim or a referent, and "
+            "do not treat their absence as a defect. The verdict "
+            '"existing" is NOT available for an interpret gesture; use '
+            '"keep" when the material invites readings worth laying out, '
+            '"reject" only when it genuinely invites none. Say which '
+            "readings the words can actually carry and which would be "
+            "impositions — that line is the whole job.\n\n" + _marker), 1)
     return Cacheable(stable, f"""Input on trial:
 {quoted_source(text)}""")
 
@@ -9185,7 +9385,8 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
 def run_deep(text: str, gateway: Gateway, interactive: bool = True,
               on_progress: "Callable[[str, str], None] | None" = None,
               avoid_titles: "list[str] | None" = None,
-              prior_attempts: "list[dict] | None" = None) -> dict:
+              prior_attempts: "list[dict] | None" = None,
+              gesture: str = "trial") -> dict:
     def progress(stage: str, detail: str) -> None:
         if on_progress:
             on_progress(stage, detail)
@@ -9218,7 +9419,7 @@ def run_deep(text: str, gateway: Gateway, interactive: bool = True,
 
     print(f"[{gateway.name}] attacking the input as given...")
     progress("friction", "Friction on the input as given…")
-    attack = _extract_json(gateway.complete(build_attack_prompt(text)))
+    attack = _extract_json(gateway.complete(build_attack_prompt(text, gesture=gesture)))
     attack = {k: attack.get(k) for k in
               ("input_kind", "hostile_read", "redundancy_note", "verdict", "reason")}
     # Enforced in code, not just asked for in the prompt: "already named"
@@ -9304,6 +9505,7 @@ def run_deep(text: str, gateway: Gateway, interactive: bool = True,
 
     n_failed = sum(1 for g in groups if g.get("failed"))
     return {"source_text": text, "attack": attack, "groups": groups,
+            "gesture": gesture,
             "partial": bool(n_failed), "n_failed": n_failed}
 
 

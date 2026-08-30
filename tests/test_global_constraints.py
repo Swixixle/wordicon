@@ -2606,8 +2606,13 @@ def main() -> int:
     # the first screen is calm: diagnosis and build mechanics behind Why?
     if flat_ui.count("<summary>Why?</summary>") < 1 or "four separate readings" not in flat_ui:
         failures.append("the diagnosis is back on the first surface")
-    if "Kept ${kept} of ${total} meaning parts" not in flat_ui:
-        failures.append("build results no longer lead with a one-line summary")
+    # The one-line summary now reads in plain counts (owner's ruling):
+    # "Keeps one meaning, partly keeps one, drops two." — each of the four
+    # states gets its own verb, so the old weakened/unstated-collapse bug
+    # cannot re-enter through the headline.
+    if "segs.push(`keeps ${num(nOf('kept'))}" not in flat_ui \
+            or "partly keeps" not in flat_ui:
+        failures.append("build results no longer lead with the plain-counts summary")
 
     # 40. WHAT THE SECOND LIVE RUN CORRECTED. guiltsomnia produced honest
     # seams and a right contract, and exposed three softer errors:
@@ -8145,13 +8150,11 @@ console.log(out.join('\\n'));
     # note about the bug instead of the bug. Fourth time in this project.
     if "filter(([, v]) => v !== 'kept')" in _bench_html2:
         failures.append("the build summary lumps weakened and unstated in with lost again")
-    if "byState('weakened')" not in _bench_html2 or "byState('unstated')" not in _bench_html2:
-        failures.append("the build summary no longer separates weakened and unstated from lost")
-    # the WHOLE pairing, not the label alone: the button that lets him agree
-    # with silence also renders the words "not stated", so a bare probe for
-    # that phrase passed while the summary group was relabelled to "lost".
-    # My own fix supplied the string that made the test vacuous.
-    if "['not stated', byState('unstated')]" not in _bench_html2:
+    if "if (nOf('weakened')) segs.push(`partly keeps" not in _bench_html2:
+        failures.append("the build summary no longer separates weakened from lost")
+    # silence keeps its OWN verb in the summary — "is silent on" — so a
+    # part the build never mentioned can never be read as a loss.
+    if "if (nOf('unstated')) segs.push(`is silent on" not in _bench_html2:
         failures.append("silence is being reported as loss in the summary")
     # and the fourth verdict has to be affirmable, not just displayable
     if "['kept','weakened','lost','unstated']" not in _bench_html2:
@@ -10037,6 +10040,263 @@ console.log(out.join('\\n'));
         cli.LOCAL_STATE = _old_ls90
         _v90._DIRTY.update(_old_dirty90)
         _v90._LAST_FAILURE.update(_old_fail90)
+
+    # ---- 91. THE PLAY LANE (constitutionally protected wordplay) ------
+    # Owner's ruling: guardrails belong on consequential actions, not on
+    # language. A bare phrase gets a VISIBLE four-way choice; Play runs a
+    # lane where the courtroom is structurally absent, Friction judges
+    # aliveness rather than respectability, meanings are invented and
+    # labeled so, and a provider refusal is preserved as the PROVIDER'S —
+    # never as Wordicon judging the owner. Regression fixture, by ruling:
+    # "Ehlersian Labial Mitters". If a future version clinically launders
+    # it, this block is what fails.
+    import vault as _v91  # noqa: F401  (import parity with the suite head)
+
+    class _Cap91(cli.MockGateway):
+        def __init__(self):
+            self.prompts = []
+
+        def complete(self, prompt):
+            _p91 = str(prompt)
+            self.prompts.append(_p91)
+            return super().complete(prompt)
+
+    _cap91 = _Cap91()
+    _fx91 = "Ehlersian Labial Mitters"
+    _res91 = cli.run("play", _fx91, _cap91, interactive=False)
+    if not _res91.get("candidates"):
+        failures.append("91: the play lane produced no candidates")
+    if any(_p91.startswith("You are the input-attack stage")
+           for _p91 in _cap91.prompts):
+        failures.append("91: THE COURTROOM CONVENED ON A PLAY RUN — the "
+                        "fixture was put on trial")
+    _gen91 = " ".join(next((_p91 for _p91 in _cap91.prompts
+                   if _p91.startswith("You are the play stage")), "")
+                   .split())
+    if not _gen91:
+        failures.append("91: no play-stage generation prompt was sent")
+    for _pin91, _why91 in [
+        ("Profanity, sexuality, body humor, grotesquerie, and absurdity "
+         "are legitimate materials", "the materials protection is gone"),
+        ("Absurdity is not a coherence defect",
+         "absurdity is a defect again"),
+        ("invitation before it is a deficiency",
+         "unexplained words are deficiencies again"),
+        ("register collision IS the mechanism",
+         "the register-collision protection is gone"),
+        ("Do not launder the material into respectable beige",
+         "the anti-beige clause is gone"),
+        ("INVENTED", "invented meanings are no longer named as such"),
+    ]:
+        if _pin91 not in _gen91:
+            failures.append(f"91: play generation — {_why91}")
+    _fr91 = " ".join(next((_p91 for _p91 in _cap91.prompts
+                  if "PLAY coinage" in _p91), "").split())
+    if not _fr91:
+        failures.append("91: Friction never received the play contract")
+    for _pin91, _why91 in [
+        ("on whether the coin is ALIVE", "aliveness is not the rubric"),
+        ("Do not moralize the material", "Friction may moralize again"),
+        ("would not survive a seminar",
+         "seminar-resemblance is not excluded as an objection"),
+        ('"verdict": "keep" or "reject", "register"',
+         "the play verdict vocabulary drifted"),
+        ('The verdict "existing" is NOT available',
+         "an invented meaning can be called already-named"),
+    ]:
+        if _pin91 not in _fr91:
+            failures.append(f"91: play Friction — {_why91}")
+
+    # -- trial purity: the protected lane leaks NOTHING into the trial --
+    _cap91b = _Cap91()
+    cli.run("forge", "a brief description of an ordinary tension",
+            _cap91b, interactive=False)
+    for _p91 in _cap91b.prompts:
+        if "legitimate materials" in _p91 or \
+                _p91.startswith("You are the play stage"):
+            failures.append("91: the play contract LEAKED into the trial "
+                            "lane")
+            break
+
+    # -- the deep gestures: interpret is a visible choice, trial is the
+    #    byte-identical default --
+    _at91 = cli.build_attack_prompt("some text")
+    _at91t = cli.build_attack_prompt("some text", gesture="trial")
+    if (_at91.stable, _at91.variable) != (_at91t.stable, _at91t.variable):
+        failures.append("91: the default attack prompt is not "
+                        "byte-identical to gesture='trial'")
+    _at91i = cli.build_attack_prompt("some text", gesture="interpret")
+    for _pin91, _why91 in [
+        ("chose INTERPRET", "the interpret gesture never reaches the "
+         "court"),
+        ("Unexplained words are invitations before they are deficiencies",
+         "interpret still demands a referent"),
+        ('"existing" is NOT available', "interpret can still be told the "
+         "material is already named"),
+    ]:
+        if _pin91 not in _at91i.stable:
+            failures.append(f"91: {_why91}")
+    if "already adequately named" not in _at91.stable:
+        failures.append("91: the TRIAL court lost its courtroom — the "
+                        "gestures were meant to separate, not soften")
+    _cap91c = _Cap91()
+    _dr91 = cli.run_deep("bare little phrase", _cap91c, interactive=False,
+                         gesture="interpret")
+    if _dr91.get("gesture") != "interpret":
+        failures.append("91: run_deep does not record its gesture")
+    if not any("chose INTERPRET" in _p91 for _p91 in _cap91c.prompts):
+        failures.append("91: the interpret gesture never reached the "
+                        "attack prompt")
+    _dr91b = cli.run_deep("bare little phrase", _Cap91(),
+                          interactive=False)
+    if _dr91b.get("gesture") != "trial":
+        failures.append("91: the default deep gesture is not 'trial'")
+
+    # -- server: play is a mode, gestures are validated, the job records
+    #    what was chosen --
+    _pc91 = _paired(server.app.test_client())
+    _r91 = _pc91.post("/api/jobs", json={"mode": "forge", "input_text": "x",
+                                          "gesture": "interpret"})
+    if _r91.status_code != 400:
+        failures.append("91: a gesture on a non-deep mode was accepted")
+    _r91 = _pc91.post("/api/jobs", json={"mode": "deep", "input_text": "x",
+                                          "gesture": "bogus"})
+    if _r91.status_code != 400:
+        failures.append("91: an unknown gesture was accepted")
+    # The job thread asks server_gateway() for its model — which reads
+    # the environment, and on a machine where .env holds a real key the
+    # suite would spend a LIVE call. Offline by design means forcing the
+    # mock here, not hoping no key is present.
+    _orig_gw91 = server.server_gateway
+    server.server_gateway = lambda: cli.MockGateway()
+    _r91 = _pc91.post("/api/jobs", json={"mode": "play",
+                                          "input_text": _fx91})
+    if _r91.status_code != 200:
+        server.server_gateway = _orig_gw91
+        failures.append(f"91: mode 'play' refused ({_r91.status_code})")
+    else:
+        _jid91 = (_r91.get_json() or {}).get("job_id", "")
+        _job91 = {}
+        for _i91 in range(120):
+            _job91 = _pc91.get(f"/api/jobs/{_jid91}").get_json() or {}
+            if _job91.get("status") in ("complete", "failed"):
+                break
+            _time90.sleep(0.25)
+        if _job91.get("status") != "complete":
+            failures.append(f"91: the play job did not complete "
+                            f"({_job91.get('status')}: "
+                            f"{str(_job91.get('error'))[:120]})")
+        elif not (_job91.get("result") or {}).get("candidates"):
+            failures.append("91: the play job returned no candidates")
+        server.server_gateway = _orig_gw91
+
+    # -- provider refusals stay the PROVIDER'S --
+    if not cli._looks_like_refusal("I can't help with that request."):
+        failures.append("91: an obvious refusal is not recognized")
+    if cli._looks_like_refusal('{"candidates": []}'):
+        failures.append("91: JSON is being read as a refusal")
+    _ex91 = cli.explain_component_failure("Output blocked by content "
+                                          "filtering policy")
+    if "not Wordicon judging" not in _ex91 or "says nothing" not in _ex91:
+        failures.append("91: a filter block is not honestly attributed "
+                        "to the provider")
+
+    class _Refuse91(cli.MockGateway):
+        def complete(self, prompt):
+            _p91 = prompt.stable if hasattr(prompt, "stable") else str(prompt)
+            if _p91.startswith("You are the play stage"):
+                return "I can't help with that."
+            return super().complete(prompt)
+    try:
+        cli.run("play", _fx91, _Refuse91(), interactive=False)
+        failures.append("91: a refused play run pretended to succeed")
+    except Exception as _e91:
+        if "not Wordicon judging" not in str(_e91) \
+                or "preserved untouched" not in str(_e91):
+            failures.append("91: a play refusal is not labeled as the "
+                            f"provider's ({str(_e91)[:120]})")
+
+    # -- the chooser and the labels: a visible choice, never a guess --
+    _idx91 = (Path(cli.__file__).parent.parent / "webapp"
+              / "index.html").read_text()
+    for _pin91, _why91 in [
+        (">Play with it</button>", "the Play choice is gone"),
+        ("tell you what it means</button>", "the Define choice is gone"),
+        (">Interpret it</button>", "the Interpret choice is gone"),
+        (">Put it on trial</button>", "the Trial choice is gone"),
+        ("function isBarePhrase", "bare phrases are no longer detected"),
+        ("BARE_PHRASE_MAX_WORDS = 7", "the bare-phrase threshold moved"),
+        ("addEventListener('input', updateGestureChooser)",
+         "the chooser never updates"),
+        ("meaning, in my words:", "the Define gloss no longer becomes "
+         "visible source text"),
+        ("PLAY</strong> — meanings invented on purpose",
+         "play results are not labeled invented"),
+        ("INTERPRET</strong> — readings offered, none authoritative",
+         "interpret results claim authority"),
+        ("play:       {v: '--mode-forge',   label: 'play'}",
+         "play has no mode style"),
+        ("'riff','play','deep'", "play results cannot re-run"),
+        ("'riff','play']", "play results do not render as candidates"),
+    ]:
+        if _pin91 not in _idx91:
+            failures.append(f"91: {_why91}")
+
+    # -- the panel carries the constitution, verbatim, pinned so it
+    #    cannot quietly disappear --
+    _ps91 = _idx91.index('font-weight:600">What is Wordicon?')
+    _pe91 = _idx91.index('<textarea id="input-text"', _ps91)
+    _panel91 = " ".join(_idx91[_ps91:_pe91].split())
+    for _pin91, _why91 in [
+        ("Guardrails belong on consequential actions, not on language.",
+         "the constitutional line is gone from the panel"),
+        ("That erudition-meets-filth register is part of your voice—the "
+         "Trickster-Sage and the grotesquerie at the same table. Wordicon "
+         "is supposed to give that voice more room and more structure, "
+         "not wash its mouth out with soap.",
+         "the register paragraph was laundered or removed"),
+    ]:
+        if _pin91 not in _panel91:
+            failures.append(f"91: {_why91}")
+    if "python scripts/vault.py init" not in _idx91 \
+            or "python3 scripts/vault.py init" in _idx91:
+        failures.append("91: the vault strip hint is not venv-consistent")
+
+    # ---- 92. THE RULING TABLE (Bench coin corrections) ----------------
+    # Owner's ruling: fixed columns, fixed option order, the model's
+    # reading in its own column and never a moving "agree" button, plain
+    # sentences instead of internal labels, "Can't tell" for the owner's
+    # fourth option, candidates never reordering, and a summary in plain
+    # counts.
+    _b92 = (Path(cli.__file__).parent.parent / "webapp"
+            / "bench.html").read_text()
+    for _pin92, _why92 in [
+        ("Meaning the word should preserve", "the meaning column is gone"),
+        ("Model's reading", "the model's own column is gone"),
+        ("Your ruling", "the sovereign ruling column is gone"),
+        ('data-v="${o}"', "options are not addressed by value — the "
+         "moving-label bug can return"),
+        ("['kept','weakened','lost','unstated']",
+         "the four options are not all offered in fixed order"),
+        (".gist || (byKey[k] || {}).name",
+         "internal labels replaced the plain sentences again"),
+        ('"Can\'t tell"', "the owner's honest fourth option is gone"),
+        ("'Not stated'", "the model column lost its silence label"),
+        ("td:last-child", "the recorded stamp is stranded outside the "
+         "ruling cell"),
+        ("d.builds.map((b, j)", "builds do not render in arrival order"),
+    ]:
+        if _pin92 not in _b92:
+            failures.append(f"92: {_why92}")
+    for _bad92, _why92 in [
+        ("o === v ? ' agree'", "the MOVING agree button is back"),
+        ("o === v ? 'agree'", "the moving agree label is back"),
+        ("d.builds.sort", "builds reorder after judgment"),
+        ("${esc((byKey[k] || {}).name || k)}: ${esc(v)}",
+         "the internal accounting label leaks onto the page again"),
+    ]:
+        if _bad92 in _b92:
+            failures.append(f"92: {_why92}")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

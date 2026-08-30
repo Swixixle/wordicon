@@ -326,7 +326,7 @@
   .v-none .vdot { opacity: .45; }
   .case > summary { cursor: pointer; font-size: 12px; opacity: .7; margin: 6px 0 2px;
                     list-style: none; }
-  .case > summary::before { content: '\u25B8 '; }
+  .case > summary::before { content: '▸ '; }
   .case[open] > summary::before { content: '\u25BE '; }
   .part-row { display: none; margin-top: 10px; flex-wrap: wrap; gap: 6px; align-items: center; }
   .part-label { flex: 1 1 100%; font-size: 11.5px; color: var(--muted); margin-bottom: 2px; }
@@ -429,6 +429,10 @@
       browser's own, which marks and offers and never rewrites; <strong>autocorrect is off</strong>,
       because a phone keyboard is most confident that a coined word is a mistake. <strong>Esc</strong>
       leaves.</p>
+      <p class="body"><strong>Guardrails belong on consequential actions, not on language.</strong>
+      That erudition-meets-filth register is part of your voice—the Trickster-Sage and the
+      grotesquerie at the same table. Wordicon is supposed to give that voice more room and more
+      structure, not wash its mouth out with soap.</p>
       <p class="body"><strong>⫞ split</strong> puts the room beside <em>the page itself</em> — the
       same shelf, cards, documents and controls fitted into half the window,
       <strong>not a miniature lookup</strong> and not a recolour. ⇄ swaps sides, the divider drags,
@@ -819,6 +823,26 @@
     <button class="go-btn" id="go-btn" onclick="runOperation(false)">Run it</button>
     <button class="go-btn" id="deep-btn" onclick="runOperation(true)"
       style="background:var(--panel-2);color:var(--text);border:1px solid var(--border)">Go deep — full workup</button>
+    <!-- The gesture chooser (owner's ruling): a bare unexplained phrase
+         gets a VISIBLE four-way choice — never an automatic guess about
+         which gesture was meant. The Play lane is constitutionally
+         protected; the courtroom is one choice among four, not a default
+         verdict on wordplay. -->
+    <div id="gesture-chooser" style="display:none">
+      <div class="body muted" style="font-size:12px;margin:8px 0 6px">A bare phrase gets a visible
+      choice — nothing guesses which you meant:</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="go-btn" style="flex:1;min-width:130px" onclick="gesturePlay()">Play with it</button>
+        <button class="go-btn" style="flex:1;min-width:130px;background:var(--panel-2);color:var(--text);border:1px solid var(--border)" onclick="gestureDefine()">I'll tell you what it means</button>
+        <button class="go-btn" style="flex:1;min-width:130px;background:var(--panel-2);color:var(--text);border:1px solid var(--border)" onclick="gestureInterpret()">Interpret it</button>
+        <button class="go-btn" style="flex:1;min-width:130px;background:var(--panel-2);color:var(--text);border:1px solid var(--border)" onclick="gestureTrial()">Put it on trial</button>
+      </div>
+      <div id="gloss-row" style="display:none;margin-top:8px">
+        <input id="gesture-gloss" placeholder="what does it mean, in your words?"
+          style="width:68%;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:14px">
+        <button class="go-btn" style="width:auto;padding:8px 14px" onclick="gestureDefineRun()">Run with your meaning</button>
+      </div>
+    </div>
   </div>
 
   <!-- One line, above the result and outside it, because every render of
@@ -1099,6 +1123,7 @@ async function loadConfig() {
 const MODE_STYLE = {
   forge:      {v: '--mode-forge',   label: 'forge'},
   riff:       {v: '--mode-forge',   label: 'riff'},
+  play:       {v: '--mode-forge',   label: 'play'},
   crack:      {v: '--mode-forge',   label: 'crack'},
   decompose:  {v: '--mode-source',  label: 'decompose'},
   deep:       {v: '--mode-source',  label: 'deep'},
@@ -1275,6 +1300,52 @@ function clearInput() {
   box.focus();
 }
 
+// ---- the gesture chooser -------------------------------------------
+const BARE_PHRASE_MAX_WORDS = 7;
+function isBarePhrase(t) {
+  const s = (t || '').trim();
+  if (!s || s.includes('\n')) return false;
+  if (/[.!?]$/.test(s)) return false;
+  return s.split(/\s+/).length <= BARE_PHRASE_MAX_WORDS;
+}
+function updateGestureChooser() {
+  const bare = isBarePhrase(document.getElementById('input-text').value);
+  document.getElementById('gesture-chooser').style.display = bare ? '' : 'none';
+  document.getElementById('go-btn').style.display = bare ? 'none' : '';
+  document.getElementById('deep-btn').style.display = bare ? 'none' : '';
+  if (!bare) document.getElementById('gloss-row').style.display = 'none';
+}
+function gesturePlay() {
+  const t = document.getElementById('input-text').value.trim();
+  if (t) submitRun('play', t);
+}
+function gestureInterpret() {
+  const t = document.getElementById('input-text').value.trim();
+  if (t) submitRun('deep', t, null, 'interpret');
+}
+function gestureTrial() {
+  const t = document.getElementById('input-text').value.trim();
+  if (t) submitRun('deep', t);
+}
+function gestureDefine() {
+  const row = document.getElementById('gloss-row');
+  const show = row.style.display === 'none';
+  row.style.display = show ? '' : 'none';
+  if (show) document.getElementById('gesture-gloss').focus();
+}
+function gestureDefineRun() {
+  const t = document.getElementById('input-text').value.trim();
+  const g = document.getElementById('gesture-gloss').value.trim();
+  if (!t || !g) return;
+  // The combined text is what actually runs, written into the box first —
+  // nothing is submitted that you cannot see. Your meaning becomes the
+  // source; the ordinary pipeline holds candidates to it.
+  const combined = t + ' — meaning, in my words: ' + g;
+  document.getElementById('input-text').value = combined;
+  updateGestureChooser();
+  submitRun('auto', combined);
+}
+
 async function runOperation(deep, explicitMode) {
   const typed = document.getElementById('input-text').value.trim();
   // An attached file's read text becomes the input when you haven't typed
@@ -1287,7 +1358,7 @@ async function runOperation(deep, explicitMode) {
             typed ? null : (ATTACHED && ATTACHED.artifact.artifact_id));
 }
 
-async function submitRun(submitMode, text, fromArtifact) {
+async function submitRun(submitMode, text, fromArtifact, gesture) {
   const goBtn = document.getElementById('go-btn');
   const deepBtn = document.getElementById('deep-btn');
   goBtn.disabled = true; deepBtn.disabled = true;
@@ -1302,6 +1373,7 @@ async function submitRun(submitMode, text, fromArtifact) {
     const r = await fetch('/api/jobs', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({mode: submitMode, input_text: text,
+                            gesture: gesture || undefined,
                             from_artifact: fromArtifact || ''}),
     });
     const d = await r.json();
@@ -1387,11 +1459,18 @@ async function watchJob(jobId) {
     if (job.status === 'complete') {
       localStorage.removeItem(ACTIVE_JOB_KEY);
       pendingDecisions = {}; cardTraceId = {}; cardData = {}; cardIndex = 0;
-      if (['forge','crack','decompose','riff','deep'].includes(job.mode)) {
+      if (['forge','crack','decompose','riff','play','deep'].includes(job.mode)) {
         lastSubmission = {mode: job.mode, input_text: job.input_text};
       }
       const result = job.result || {};
-      const header = routingHeader(job);
+      let header = routingHeader(job);
+      // The lane says what it is: invented meanings are LABELED invented,
+      // and interpret claims no authority — on the surface, not in a doc.
+      if (job.mode === 'play') {
+        header += '<div class="card" style="padding:8px 14px;font-size:12px;color:var(--muted)"><strong style="color:var(--text)">PLAY</strong> — meanings invented on purpose, labeled so; Friction judged whether the coin is alive, never whether it is respectable.</div>';
+      } else if (job.mode === 'deep' && result.gesture === 'interpret') {
+        header += '<div class="card" style="padding:8px 14px;font-size:12px;color:var(--muted)"><strong style="color:var(--text)">INTERPRET</strong> — readings offered, none authoritative; nothing here demanded a referent.</div>';
+      }
       if (job.mode === 'etymon') {
         document.getElementById('result-area').innerHTML = header + buildEtymonHtml(result);
         appendRetryCard();
@@ -1502,7 +1581,7 @@ async function loadPastResult(traceId, shelf, label, restoring) {
     area.innerHTML = buildEtymonHtml(d);
     return;
   }
-  if (['forge','crack','decompose','riff'].includes(d.mode)) {
+  if (['forge','crack','decompose','riff','play'].includes(d.mode)) {
     lastSubmission = {mode: d.mode, input_text: d.input_text};
     seenAttempts = (d.candidates || []).filter(c => c.title).map(c => ({
       title: c.title,
@@ -5876,7 +5955,7 @@ async function loadVaultStrip() {
     el.style.color = 'var(--muted)';
     if (!v.initialized) {
       el.textContent = 'No vault — the corpus exists on this disk only. '
-        + 'Set up encrypted backups: python3 scripts/vault.py init';
+        + 'Set up encrypted backups: python scripts/vault.py init';
       red(); return;
     }
     const bits = ['Vault: sealed ' + vaultAge(v.last_seal_at),
@@ -5896,6 +5975,8 @@ async function loadVaultStrip() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('input-text').addEventListener('input', updateGestureChooser);
+  updateGestureChooser();
   loadVaultStrip();
   setInterval(loadVaultStrip, 60000);
   loadDocs();
