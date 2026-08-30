@@ -1,0 +1,25 @@
+# The repository proves its own commits. Every push and pull request runs
+# the complete constraint suite — offline by design (MockGateway, scratch
+# state), no secrets available, no corpus present — plus the owned secret
+# scanner. Python is pinned to the Mac's actual version, not an invented
+# matrix.
+name: suite
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Secret scan (owned code, values never echoed)
+        run: python3 scripts/scan_secrets.py --tracked
+      - name: Full constraint suite (offline — no keys, no corpus)
+        run: python3 tests/test_global_constraints.py

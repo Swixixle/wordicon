@@ -67,7 +67,10 @@ sanitized fixtures, and the constitution documents under `docs/`.
 It is **not** the corpus. `local_state/` — every concept, judgment, document, recording,
 crossing, and journal entry — lives only on the owner's machine and is ignored by git,
 along with `.env` (API keys), generated reports, environments, and caches. A fresh clone
-runs, but it runs *empty*; that is the boundary working, not a defect. The corpus
+runs, but it runs *empty*; that is the boundary working, not a defect. The
+same boundary cuts the other way and deserves saying plainly: **GitHub backs
+up the code, not the corpus.** `local_state/` exists on one disk until the
+encrypted backup-and-restore pass lands — treat it accordingly. The corpus
 travels only through the tool's own export, which writes a checksum manifest so a copy
 can prove it was not edited after the fact.
 
@@ -76,15 +79,23 @@ can prove it was not edited after the fact.
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp /path/to/your/.env .   # ANTHROPIC_API_KEY=… and WORDICON_MODEL=…
-python3 server.py
+cp /path/to/your/.env .        # ANTHROPIC_API_KEY=… and WORDICON_MODEL=…
+python3 server.py              # loopback only — this Mac
+WORDICON_LAN=1 python3 server.py   # reachable on your Wi-Fi, behind the gate
 ```
 
-The server prints its port (default 8420) and binds `0.0.0.0`, so a phone on the same
-Wi-Fi can open `http://<computer-ip>:8420` and install the page as a PWA. Model calls
-happen only through lanes you explicitly invoke, on your own key; importing documents
-and recordings, searching them, crossing spans, and ruling on claims are all
-constitutionally zero-model and work with no key at all.
+The server prints its port (default 8420) and a **pairing code**. Every
+corpus, media, export, mutation, and model-spending route is closed until a
+device pairs: open `http://<computer-ip>:8420` (phone, same Wi-Fi, LAN mode)
+or `http://localhost:8420` (this Mac), land on the pairing screen, type the
+code once. The code travels only in a POST body; the session lives in an
+HttpOnly, SameSite=Strict cookie; devices are revocable one by one on
+`/pair`, and `python3 server.py --rotate-secret` signs out everything at
+once. Honest boundary: this is a home-LAN access gate over plain HTTP — fine
+on your own Wi-Fi, not confidential on shared or hospital networks. Model
+calls happen only through lanes you explicitly invoke, on your own key;
+importing, searching, crossing, and ruling are constitutionally zero-model
+and work with no key at all.
 
 ## The map of the machine
 
@@ -103,8 +114,13 @@ word). `src/wordicon_corpus/` holds the schema-validated corpus service; `schema
 ## How it is tested, which is most of the point
 
 ```bash
-python3 tests/test_global_constraints.py
+python3 tests/test_global_constraints.py   # the whole suite, offline
+python3 scripts/scan_secrets.py --tracked  # the owned secret scanner
 ```
+
+Both also run on every push and pull request via GitHub Actions
+(`.github/workflows/suite.yml`), keyless and corpusless, so the repository
+proves its own commits.
 
 One file, no framework, currently 88 blocks — and the discipline matters more than the
 count. Invariants are enforced in code and then *attacked*: every capability ships with

@@ -65,16 +65,152 @@ def _load_dotenv() -> None:
 
 _load_dotenv()
 
-from flask import Flask, Response, jsonify, request, send_from_directory  # noqa: E402
+from flask import Flask, Response, jsonify, redirect, request, send_from_directory  # noqa: E402
 
 import wordicon_cli as cli  # noqa: E402
 import library as library  # noqa: E402  (the Library wing — zero model calls)
+import gate  # noqa: E402
 import notify  # noqa: E402
 from wordicon_corpus.objects import Judgment  # noqa: E402
 
 WEBAPP_DIR = REPO_ROOT / "webapp"
 
 app = Flask(__name__, static_folder=str(WEBAPP_DIR), static_url_path="")
+
+# ---------------------------------------------------------------------------
+# The access gate (hardening pass, owner's go 2026-08-29). DEFAULT-DENY:
+# every route — corpus reads, media streaming (Range included), exports,
+# mutations, model-spending lanes, and the static file server itself — is
+# closed to an unpaired client. The allowlist below is the ENTIRE public
+# surface: the pairing page, the pairing POST, and the PWA's manifest and
+# icons (no corpus in any of them). Unpaired API calls get an explicit 401
+# JSON; unpaired browsers get the pairing screen, never an empty Wordicon.
+# This is a home-LAN access gate, NOT encrypted transport: traffic is plain
+# HTTP, so on shared or hostile Wi-Fi the gate keeps strangers off the
+# routes but does not hide the bytes.
+
+_GATE_PUBLIC = {"/pair", "/api/pair", "/manifest.json"}
+
+
+def _gate_session():
+    return gate.verify(request.cookies.get(gate.SESSION_COOKIE, ""))
+
+
+@app.before_request
+def _gate_check():
+    path = request.path
+    if path in _GATE_PUBLIC or path.startswith("/icons/"):
+        return None
+    sess = _gate_session()
+    if sess is not None:
+        # paired — but still refuse cross-site state changes outright
+        if request.method not in ("GET", "HEAD", "OPTIONS"):
+            origin = request.headers.get("Origin", "")
+            if origin:
+                host = origin.split("://", 1)[-1].split("/", 1)[0]
+                if host != request.host:
+                    return jsonify({"error": "cross-site request refused"}), 403
+        return None
+    if path.startswith("/api/"):
+        return jsonify({"error": "not paired — this Wordicon only answers "
+                                  "devices its owner has paired. POST the "
+                                  "pairing code from the server terminal to "
+                                  "/api/pair."}), 401
+    return redirect("/pair")
+
+
+@app.route("/pair")
+def pair_page():
+    """Self-contained: the pairing form for a stranger, the device manager
+    for a paired owner. No corpus content either way."""
+    paired = _gate_session() is not None
+    manage = ""
+    if paired:
+        rows = "".join(
+            f"<div class='dev'>{d['device']} · {d['created_at'][:10]}"
+            + (" · <b>revoked</b>" if d["revoked"] else
+               f" <button onclick=\"revoke('{d['session_id']}')\">revoke</button>")
+            + "</div>" for d in gate.devices())
+        manage = ("<h2>Paired devices</h2>" + (rows or "<div class='dev'>none</div>")
+                  + "<p class='note'>Revoking a device signs it out everywhere, "
+                  "immediately and append-only. Rotating the master secret "
+                  "(<code>python3 server.py --rotate-secret</code>, then restart) "
+                  "signs out every device at once.</p>"
+                  "<p><a href='/' style='color:#8cc8ff'>back to Wordicon</a></p>")
+    return f"""<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wordicon — pair this device</title><style>
+body {{ background:#11161d; color:#e7ecf3; font-family:-apple-system,system-ui,sans-serif;
+  display:flex; justify-content:center; padding:12vh 20px 40px; }}
+.card {{ max-width:430px; }}
+h1 {{ font-size:20px; }} h2 {{ font-size:15px; margin-top:28px; }}
+input {{ background:#1f2833; color:#e7ecf3; border:1px solid #2a3441; border-radius:10px;
+  padding:12px 14px; font-size:18px; width:100%; box-sizing:border-box; letter-spacing:2px; }}
+button {{ background:#1f2833; color:#8cc8ff; border:1px solid #8cc8ff; border-radius:10px;
+  padding:10px 18px; font-size:15px; margin-top:10px; cursor:pointer; }}
+.note {{ color:#8a94a3; font-size:13px; line-height:1.5; }}
+.dev {{ border-top:1px solid #2a3441; padding:8px 0; font-size:14px; }}
+.dev button {{ font-size:12px; padding:3px 10px; margin:0 0 0 8px; }}
+#err {{ color:#e08a8a; font-size:14px; min-height:20px; }}</style></head><body>
+<div class="card"><h1>Pair this device with Wordicon</h1>
+<p class="note">This Wordicon answers only devices its owner has paired.
+The pairing code is printed in the terminal window where the server is
+running — it never travels in a link. Type it here once; this device stays
+paired until revoked.</p>
+<input id="code" placeholder="000-000-000" autocomplete="one-time-code" inputmode="numeric">
+<div id="err"></div>
+<button onclick="pair()">Pair — the code stays out of the URL</button>
+<p class="note">Honest boundary: this is a home-LAN access gate, not
+encrypted transport. Traffic is plain HTTP — fine on your own Wi-Fi,
+not confidential on shared or hospital networks.</p>
+{manage}</div>
+<script>
+async function pair() {{
+  const r = await fetch('/api/pair', {{ method:'POST',
+    headers: {{'Content-Type':'application/json'}},
+    body: JSON.stringify({{ code: document.getElementById('code').value.trim(),
+                            device: navigator.platform || 'device' }}) }});
+  if (r.ok) {{ location.href = '/'; return; }}
+  const d = await r.json().catch(() => ({{}}));
+  document.getElementById('err').textContent = d.error || 'that code was not accepted';
+}}
+async function revoke(id) {{
+  await fetch('/api/auth/revoke', {{ method:'POST',
+    headers: {{'Content-Type':'application/json'}},
+    body: JSON.stringify({{ session_id: id }}) }});
+  location.reload();
+}}
+</script></body></html>"""
+
+
+@app.route("/api/pair", methods=["POST"])
+def api_pair():
+    data = request.get_json(force=True, silent=True) or {}
+    got = gate.pair(str(data.get("code") or ""),
+                    device=str(data.get("device") or ""))
+    if got is None:
+        return jsonify({"error": "wrong or expired code — read the current "
+                                  "one off the server terminal (a fresh code "
+                                  "is printed at every start)"}), 401
+    resp = jsonify({"paired": True, "device": got["device"],
+                     "session_id": got["session_id"]})
+    resp.set_cookie(gate.SESSION_COOKIE, got["token"],
+                    max_age=gate.SESSION_DAYS * 86400, httponly=True,
+                    samesite="Strict", path="/")
+    return resp
+
+
+@app.route("/api/auth/devices")
+def api_auth_devices():
+    return jsonify({"devices": gate.devices()})
+
+
+@app.route("/api/auth/revoke", methods=["POST"])
+def api_auth_revoke():
+    data = request.get_json(force=True) or {}
+    if not gate.revoke(str(data.get("session_id") or "")):
+        return jsonify({"error": "no such session"}), 400
+    return jsonify({"revoked": True})
 
 # ---- jobs -------------------------------------------------------------
 #
@@ -971,13 +1107,35 @@ def api_media_list():
     return jsonify({"media": items})
 
 
+MEDIA_UPLOAD_CAP = 30 * 1024 * 1024      # temporary, until streamed ingestion
+TRANSCRIPT_UPLOAD_CAP = 2 * 1024 * 1024
+
+
+def _capped_upload(f, cap, what):
+    """Bounded read — the whole recording must not land in memory. Reads
+    cap+1 bytes so an oversize file is DETECTED, never swallowed."""
+    if request.content_length and request.content_length > cap + 4096:
+        return None
+    data = f.read(cap + 1)
+    if len(data) > cap:
+        return None
+    return data
+
+
 @app.route("/api/media/ingest", methods=["POST"])
 def api_media_ingest():
     f = request.files.get("file")
     if f is None:
         return jsonify({"error": "no file arrived"}), 400
+    data = _capped_upload(f, MEDIA_UPLOAD_CAP, "recording")
+    if data is None:
+        return jsonify({"error": "streamed ingestion is not built yet — "
+                        "recordings over 30 MB are refused plainly rather "
+                        "than loaded whole into memory. A full-length "
+                        "episode waits for the streaming pass; a short "
+                        "recording or an excerpt works today."}), 413
     try:
-        got = library.ingest_media(f.read(), filename=f.filename or "",
+        got = library.ingest_media(data, filename=f.filename or "",
                                     source=request.form.get("source", ""),
                                     title=request.form.get("title", ""))
     except ValueError as e:
@@ -990,9 +1148,14 @@ def api_media_transcript():
     f = request.files.get("file")
     if f is None:
         return jsonify({"error": "no transcript file arrived"}), 400
+    data = _capped_upload(f, TRANSCRIPT_UPLOAD_CAP, "transcript")
+    if data is None:
+        return jsonify({"error": "that transcript is over 2 MB — refused "
+                        "plainly; a transcript that size is almost "
+                        "certainly not a transcript."}), 413
     try:
         got = library.add_transcript(
-            request.form.get("media_id", ""), f.read(),
+            request.form.get("media_id", ""), data,
             filename=f.filename or "",
             origin=request.form.get("origin", ""),
             source=request.form.get("source", ""))
@@ -2332,11 +2495,29 @@ def api_library():
 
 
 if __name__ == "__main__":
+    import sys as _sys
+    if "--rotate-secret" in _sys.argv:
+        gate.rotate_master()
+        print("Master secret rotated. Every paired device is signed out; "
+              "each pairs again with the code printed at the next start.")
+        raise SystemExit(0)
     port = int(os.environ.get("PORT", 8420))
+    host = gate.bind_host()
+    gate.ensure_master()
+    code = gate.new_pairing_code()
     print(f"\nWordicon server starting on port {port}.")
-    print("On your PHONE (same Wi-Fi as this computer), open:")
-    print(f"  http://<this-computer's-local-IP>:{port}")
-    print("Find your local IP with: ipconfig getifaddr en0   (or en1 on some Macs)\n")
+    if host == "0.0.0.0":
+        print("LAN: ON — reachable by devices on this Wi-Fi, behind the gate.")
+        print("On your PHONE (same Wi-Fi as this computer), open:")
+        print(f"  http://<this-computer's-local-IP>:{port}")
+        print("Find your local IP with: ipconfig getifaddr en0   (or en1 on some Macs)")
+    else:
+        print("LAN: OFF — loopback only. For the phone, start with: "
+              "WORDICON_LAN=1 python3 server.py")
+    print(f"\nPAIRING CODE for new devices (typed once, on /pair): {code}")
+    print("The gate is a home-LAN access lock, not encrypted transport — "
+          "plain HTTP is fine on your own Wi-Fi, not confidential on shared "
+          "or hospital networks.\n")
     # Which gateway is actually about to run, said out loud. Without this
     # a missing key degrades to the mock gateway in silence, and a mock run
     # is indistinguishable from a real one at a glance — same layout, same
@@ -2368,4 +2549,4 @@ if __name__ == "__main__":
     # a job submission — the job itself already runs on its own thread, this
     # is just about the dev server being able to serve more than one request
     # at a time.
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+    app.run(host=host, port=port, debug=False, threaded=True)

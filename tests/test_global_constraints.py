@@ -168,6 +168,15 @@ def main() -> int:
     # 5. server shaping passes global_constraints through
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     import server  # noqa: E402
+    import gate as _gate  # noqa: E402
+
+    def _paired(c):
+        """A test client with a freshly minted session cookie. The mint is
+        server-side (nothing over HTTP reaches it without the pairing
+        code); the gate itself stays enforced for every request below."""
+        c.set_cookie(_gate.SESSION_COOKIE,
+                     _gate.issue_session("suite")["token"])
+        return c
     shaped = server._shape_operation_result("decompose", gw.name, result)
     if shaped.get("global_constraints") != gc:
         failures.append("server did not pass global_constraints through")
@@ -2960,7 +2969,7 @@ def main() -> int:
         if cli.persist_accepted_concept("zzgrowthprobe", "d", "t_g") is not False:
             failures.append("58: a duplicate acceptance reported itself as a new entry")
 
-        _c = _srv.app.test_client()
+        _c = _paired(_srv.app.test_client())
         _r1 = _c.post("/api/judge", json={"trace_id": "t_g2", "candidate_title": "zzsecondprobe",
                                           "decision": "a", "definition": "a meaning"}).get_json()
         if not _r1.get("lexicon_added"):
@@ -3063,7 +3072,7 @@ console.log(JSON.stringify(out));
         # carry both halves: what is RUNNING (memory) and what was TYPED
         # (disk). A failed run appears only in the second.
         import server as _srv59
-        _r59 = _srv59.app.test_client().get("/api/inflight")
+        _r59 = _paired(_srv59.app.test_client()).get("/api/inflight")
         if _r59.status_code != 200:
             failures.append(f"59: /api/inflight is not reachable ({_r59.status_code})")
         else:
@@ -3505,7 +3514,7 @@ console.log(JSON.stringify(els['input-text'].value));
             _cs63.unlink()
         if _cj63.exists():
             _cj63.unlink()
-        _c63 = _srv.app.test_client()
+        _c63 = _paired(_srv.app.test_client())
         _c63.post("/api/judge", json={"trace_id": "t63", "candidate_title": "zzfresheyes",
                                       "decision": "a", "definition": "a meaning"})
         if "zzfresheyes" not in [c["name"] for c in cli.load_accepted_concepts()]:
@@ -3604,7 +3613,7 @@ console.log(JSON.stringify(els['input-text'].value));
     _in64 = cli.INPUTS_LOG.read_text(encoding="utf-8") if cli.INPUTS_LOG.exists() else None
     try:
         cli.record_input("job_zz64", "forge", "zz an entry that must reach the journal")
-        _c64 = _srv.app.test_client()
+        _c64 = _paired(_srv.app.test_client())
         for _kind64, _ext64 in (("writing", ".md"), ("lexicon", ".md"),
                                 ("table", ".jsonl"), ("corpus", ".tar.gz")):
             _r64 = _c64.get(f"/api/export/{_kind64}")
@@ -3902,7 +3911,7 @@ console.log(JSON.stringify({ok: true, nodes: INK.childNodes.length, len: TA.valu
             failures.append("66: the untouched materials are computed and never shown")
 
     # The floor is arithmetic and stays enforced where it cannot be bypassed.
-    _c66 = _srv.app.test_client()
+    _c66 = _paired(_srv.app.test_client())
     _r66 = _c66.post("/api/bench/build", json={
         "title": "zz", "definition": "d", "contract_confirmed": True,
         "contract": [{"key": "k", "name": "n", "gist": "g"}],
@@ -4060,7 +4069,7 @@ console.log(JSON.stringify({ok: true, nodes: INK.childNodes.length, len: TA.valu
     # for '"archetype"' passed with the mode struck from the allow-list,
     # because the dispatcher below still names it — the string survived in
     # code that could no longer be reached.
-    _mr68 = _srv.app.test_client().post("/api/jobs", json={
+    _mr68 = _paired(_srv.app.test_client()).post("/api/jobs", json={
         "mode": "archetype",
         "original": {"title": "Zz Gate", "definition": "a definition long enough to pass"}})
     if _mr68.status_code != 200 or "mode must be" in str((_mr68.get_json() or {}).get("error", "")):
@@ -4353,7 +4362,7 @@ console.log(JSON.stringify({ok: true, nodes: INK.childNodes.length, len: TA.valu
         failures.append(f"72: the empty Bone box does not say why it is empty ({_bs72[:60]!r})")
 
     # Reachable, and wired to the shelf.
-    _c72 = _srv.app.test_client()
+    _c72 = _paired(_srv.app.test_client())
     _mr72 = _c72.post("/api/jobs", json={"mode": "recheck",
                                           "original": {"title": "zz", "definition": "d"}})
     if _mr72.status_code != 200 or "mode must be" in str((_mr72.get_json() or {}).get("error", "")):
@@ -5734,7 +5743,7 @@ console.log(bad.join('\\n'));
     # The confirmation gate is BEHAVIORAL, not a string: the fuser's route
     # carries the same guard text, so a needle passed with this route's
     # guard deleted. Post to the live route and expect the refusal.
-    _tc81 = server.app.test_client()
+    _tc81 = _paired(server.app.test_client())
     _resp81 = _tc81.post("/api/bench/concept", json={
         "title": "T", "definition": "d",
         "ingredients": [{"key": "k", "name": "N", "gist": "g", "role": "required"}],
@@ -5935,7 +5944,7 @@ console.log(bad.join('\\n'));
             pass
 
     # (g) the server routes: label-dead pages served, validation live
-    _tc82 = server.app.test_client()
+    _tc82 = _paired(server.app.test_client())
     if _tc82.get("/map").status_code != 200 or _tc82.get("/map/world").status_code != 200:
         failures.append("82: /map or /map/world does not serve")
     if _tc82.get("/overworld").status_code != 200:
@@ -9160,6 +9169,227 @@ console.log(out.join('\\n'));
             not in _flat86:
         failures.append("88: the consulted-sources list lost its breathing "
                         "room — back to the solid blue wall")
+
+    # ---- 89. THE ACCESS GATE (hardening pass — owner's go) -----------
+    # Default-deny proven from outside: an unpaired client cannot read the
+    # Library, stream media (Range included), export, mutate a ruling, or
+    # spend a model call. A paired client can do everything — which the
+    # ENTIRE suite above already proves, since every client it makes is a
+    # paired device. Pairing is POST-only; the cookie is HttpOnly and
+    # SameSite=Strict; revocation and rotation actually revoke and rotate.
+    _u89 = server.app.test_client()          # deliberately UNPAIRED
+    for _path89, _why89 in [
+        ("/api/library", "read the Library"),
+        ("/api/anchors", "read Sources"),
+        ("/api/works", "read the works registry"),
+        ("/api/media", "list recordings"),
+        ("/api/export/corpus/manifest", "export the corpus"),
+        ("/api/trails", "read Trails"),
+    ]:
+        _r89 = _u89.get(_path89)
+        if _r89.status_code != 401:
+            failures.append(f"89: an unpaired client could {_why89} "
+                            f"({_path89} -> {_r89.status_code})")
+        elif "not paired" not in (_r89.get_json() or {}).get("error", ""):
+            failures.append(f"89: the 401 for {_path89} is not explicit JSON")
+    _r89 = _u89.get(f"/api/media/blob/{_m87['media_id']}",
+                    headers={"Range": "bytes=0-99"})
+    if _r89.status_code != 401:
+        failures.append("89: an unpaired client STREAMED MEDIA via Range "
+                        f"({_r89.status_code})")
+    if _u89.post("/api/library/support/rule", json={
+            "crossing_id": "x", "bearing": "supports",
+            "mode": "direct"}).status_code != 401:
+        failures.append("89: an unpaired client reached a mutation route")
+    if _u89.post("/api/jobs", json={"mode": "forge",
+                                     "text": "x"}).status_code != 401:
+        failures.append("89: an unpaired client reached a MODEL-SPENDING "
+                        "route")
+    _r89 = _u89.get("/", follow_redirects=False)
+    if _r89.status_code != 302 or "/pair" not in _r89.headers.get(
+            "Location", ""):
+        failures.append("89: an unpaired browser did not land on the "
+                        "pairing screen")
+    _r89 = _u89.get("/index.html", follow_redirects=False)
+    if _r89.status_code != 302:
+        failures.append("89: the static file server leaks around the gate")
+    _pair89 = _u89.get("/pair")
+    _pg89 = _pair89.get_data(as_text=True)
+    if _pair89.status_code != 200:
+        failures.append("89: the pairing screen itself is unreachable")
+    for _n89 in ("encrypted transport", "hospital"):
+        if _n89 not in " ".join(_pg89.split()):
+            failures.append(f"89: the pairing page lost its honest "
+                            f"transport boundary ({_n89!r})")
+    if _u89.get("/manifest.json").status_code != 200:
+        failures.append("89: the PWA manifest fell behind the gate")
+
+    # -- pairing: POST-only, code verified, brake after failures --------
+    import gate as _g89
+    _code89 = _g89.new_pairing_code()
+    if _u89.post("/api/pair", json={"code": "000-000-000"}) \
+            .status_code == 200 and _code89 != "000-000-000":
+        failures.append("89: a wrong pairing code was accepted")
+    _r89 = _u89.post("/api/pair", json={"code": _code89,
+                                         "device": "block89 phone"})
+    if _r89.status_code != 200:
+        failures.append("89: the correct pairing code was refused")
+    _ck89 = _r89.headers.get("Set-Cookie", "")
+    if "HttpOnly" not in _ck89 or "SameSite=Strict" not in _ck89:
+        failures.append(f"89: the session cookie lost its flags ({_ck89!r})")
+    if _code89 in _pg89 or _code89 in _r89.get_data(as_text=True):
+        failures.append("89: the pairing code leaked into a response body")
+    if _u89.get("/api/library").status_code != 200:
+        failures.append("89: a freshly paired device cannot read")
+    # the brake: burn the failure budget, then even the RIGHT code refuses
+    _codeB9 = _g89.new_pairing_code()
+    _fresh89 = server.app.test_client()
+    for _i89 in range(_g89.PAIR_MAX_FAILURES):
+        _fresh89.post("/api/pair", json={"code": "999-999-999"})
+    if _fresh89.post("/api/pair", json={"code": _codeB9}).status_code == 200:
+        failures.append("89: the pairing brake does not lock after "
+                        "repeated failures")
+    _g89.new_pairing_code()   # reset the lane
+    # a code in a URL must be worthless: GET /api/pair with the right code
+    # in the query string may never mint a session
+    _q89 = server.app.test_client()
+    _q89.get("/api/pair?code=" + _g89.current_code())
+    if _q89.get("/api/library").status_code != 401:
+        failures.append("89: a pairing code in a URL minted a session — "
+                        "codes must travel only in POST bodies")
+
+    # -- cross-site refusal and no CORS ---------------------------------
+    if _u89.post("/api/works", json={"canonical_title": "gate test"},
+                 headers={"Origin": "http://evil.example"}) \
+            .status_code != 403:
+        failures.append("89: a cross-site state change was accepted")
+    for _resp89 in (_u89.get("/api/library"), _u89.get("/pair")):
+        if "Access-Control-Allow-Origin" in _resp89.headers:
+            failures.append("89: permissive CORS appeared")
+            break
+
+    # -- revocation and rotation actually bite --------------------------
+    _dev89 = (_u89.get("/api/auth/devices").get_json() or {}).get(
+        "devices", [])
+    _mine89 = next((d for d in _dev89 if d["device"] == "block89 phone"),
+                   None)
+    if not _mine89:
+        failures.append("89: the paired device is missing from the manager")
+    else:
+        _u89.post("/api/auth/revoke",
+                  json={"session_id": _mine89["session_id"]})
+        if _u89.get("/api/library").status_code != 401:
+            failures.append("89: revocation did not sign the device out")
+    _tokA89 = _g89.issue_session("rotation-a")["token"]
+    _cA89 = server.app.test_client()
+    _cA89.set_cookie(_g89.SESSION_COOKIE, _tokA89)
+    if _cA89.get("/api/library").status_code != 200:
+        failures.append("89: a minted session did not verify")
+    _g89.rotate_master()
+    if _cA89.get("/api/library").status_code != 401:
+        failures.append("89: rotation did not invalidate old sessions")
+    _rows89 = _g89._rows()
+    if not any(r.get("type") == "rotation" for r in _rows89) or \
+            not any(r.get("type") == "revoke" for r in _rows89):
+        failures.append("89: rotation/revocation are not append-only rows")
+    import stat as _stat89
+    _mode89 = _stat89.S_IMODE(__import__("os").stat(
+        _g89.master_path()).st_mode)
+    if _mode89 != 0o600:
+        failures.append(f"89: the master secret is not 0600 ({oct(_mode89)})")
+    if _g89.bind_host() != "127.0.0.1":
+        failures.append("89: without WORDICON_LAN the bind is not loopback")
+    __import__("os").environ["WORDICON_LAN"] = "1"
+    if _g89.bind_host() != "0.0.0.0":
+        failures.append("89: WORDICON_LAN=1 does not open LAN binding")
+    del __import__("os").environ["WORDICON_LAN"]
+
+    # -- bounded reads: the temporary brake before streaming ------------
+    # a paired client is needed past the gate; the suite's _tc82 is one,
+    # but rotation above killed every session — mint a fresh one
+    _tcB89 = server.app.test_client()
+    _tcB89.set_cookie(_g89.SESSION_COOKIE,
+                      _g89.issue_session("bounded")["token"])
+    _big89 = _io87.BytesIO(b"\x00" * (30 * 1024 * 1024 + 4096))
+    _r89 = _tcB89.post("/api/media/ingest", data={
+        "file": (_big89, "toolong.wav")},
+        content_type="multipart/form-data")
+    if _r89.status_code != 413 or "streamed ingestion is not built yet" \
+            not in (_r89.get_json() or {}).get("error", ""):
+        failures.append("89: an oversize recording was not refused plainly "
+                        f"({_r89.status_code})")
+    _bigt89 = _io87.BytesIO(b"a" * (2 * 1024 * 1024 + 4096))
+    if _tcB89.post("/api/media/transcript", data={
+            "file": (_bigt89, "toolong.srt"),
+            "media_id": _m87["media_id"],
+            "origin": "publisher-supplied"},
+            content_type="multipart/form-data").status_code != 413:
+        failures.append("89: an oversize transcript was not refused")
+
+    # -- the sources say what they must ---------------------------------
+    _srv89 = (Path(cli.__file__).parent.parent / "server.py").read_text()
+    for _n89, _w89 in [
+        ('_GATE_PUBLIC = {"/pair", "/api/pair", "/manifest.json"}',
+         "the public allowlist widened or moved"),
+        ("@app.before_request", "the chokepoint is unregistered"),
+        ("streamed ingestion is not built yet",
+         "the bounded-read refusal lost its honesty"),
+        ('host = gate.bind_host()', "the boot ignores the bind rule"),
+        ("not confidential on shared", "the boot print lost the transport "
+         "honesty"),
+        ("--rotate-secret", "rotation has no owner path"),
+    ]:
+        if _n89 not in _srv89:
+            failures.append(f"89: {_w89} ({_n89[:40]!r})")
+    _gsrc89 = (Path(cli.__file__).parent.parent / "scripts"
+               / "gate.py").read_text()
+    for _n89, _w89 in [
+        ("secrets.token_bytes(32)", "the master is not from secrets"),
+        ("secrets.token_urlsafe(32)", "session tokens are not from secrets"),
+        ("hmac.compare_digest", "comparisons are not constant-time"),
+        ("0o600", "the master file permission pin is gone"),
+        ("PAIR_MAX_FAILURES", "the pairing brake is gone"),
+    ]:
+        if _n89 not in _gsrc89:
+            failures.append(f"89: {_w89}")
+    if "print(" in _gsrc89.split('"""', 2)[2]:
+        failures.append("89: gate.py prints — the code or secret could "
+                        "reach a log from library code")
+
+    # -- CI and the scanner: the repo proves its own commits -------------
+    _wf89 = Path(cli.__file__).parent.parent / ".github" / "workflows" \
+        / "suite.yml"
+    if not _wf89.exists():
+        failures.append("89: no CI workflow exists")
+    else:
+        _wtxt89 = _wf89.read_text()
+        for _n89, _w89 in [
+            ('python-version: "3.14"', "CI is not on the Mac's Python"),
+            ("pip install -r requirements.txt", "CI skips dependencies"),
+            ("python3 tests/test_global_constraints.py",
+             "CI does not run the suite"),
+            ("scripts/scan_secrets.py --tracked", "CI skips the scanner"),
+            ("pull_request", "CI ignores pull requests"),
+        ]:
+            if _n89 not in _wtxt89:
+                failures.append(f"89: {_w89}")
+    _scan89 = Path(cli.__file__).parent.parent / "scripts" / "scan_secrets.py"
+    if not _scan89.exists():
+        failures.append("89: the owned secret scanner is missing")
+    else:
+        # it must catch a planted credential and refuse a vacuous pass
+        import subprocess as _sp89
+        _bad89 = _SCRATCH / "planted.txt"
+        _bad89.write_text("api_key = \"" + "A" * 24 + "\"\n")
+        _p89 = _sp89.run([__import__("sys").executable, str(_scan89),
+                          str(_bad89)], capture_output=True, text=True)
+        if _p89.returncode != 1 or "A" * 24 in _p89.stdout:
+            failures.append("89: the scanner missed a planted credential "
+                            "or echoed its value")
+        _stxt89 = _scan89.read_text()
+        if "REFUSING to call emptiness clean" not in _stxt89:
+            failures.append("89: the scanner can pass vacuously on zero "
+                            "files")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

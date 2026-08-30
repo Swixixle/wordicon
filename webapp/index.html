@@ -4761,6 +4761,12 @@ toggleClearBtn();
 // them can reach a model. Search here is the exact-text lane — not
 // semantic, not the web — and says so on its face.
 async function readJsonDoc(r) {
+  if (r.status === 401) {
+    // the gate closed on this device (revoked, or the master rotated):
+    // go to the pairing screen instead of quietly degrading
+    location.href = '/pair';
+    return { error: 'not paired' };
+  }
   const t = await r.text();
   try { return JSON.parse(t); } catch (e) { return { error: t.slice(0, 300) || ('HTTP ' + r.status) }; }
 }

@@ -1,33 +1,95 @@
-# Threat Model — Phase 0
+# Threat Model — the system as it actually exists
 
-This is the Phase 0 deliverable required by blueprint v1.2 §19 (Phase 0 — Ownership and threat model). It names what's being protected, from whom, and what's explicitly out of scope for this delivery.
+Rewritten 2026-08-29 in the hardening pass, replacing the Phase 0 document.
+The Phase 0 model was honest about a system that no longer exists: it
+assumed no real private sources, no external model, and no interface. All
+three assumptions are false today, and a threat model describing yesterday's
+risks is worse than none — it reassures. This document describes the running
+system. (The original Phase 0 text survives in git history.)
 
-## 1. What's being protected
+## 1. What the system is now
 
-The Sovereign Corpus: raw private sources (conversations, documents, annotations), the judgment history built from them, the Personality Kernel, and everything derived from those — Derived Constraints, chamber summaries, concept graph edges. The asset being protected is not just confidentiality of the raw text; it's the owner's exclusive authority over whether and how that material influences anything, indefinitely, including after a specific piece of it is revoked.
+A Flask server on the owner's Mac serving a browser/PWA interface, holding a
+REAL private corpus in `local_state/` — concepts, judgments, journals and
+writing, imported documents and recordings byte-intact, transcripts, span and
+time crossings, trails, works, and the append-only decision logs. A live
+Anthropic lane (`ANTHROPIC_API_KEY` in `.env`) carries explicitly invoked
+runs; review lanes may carry search queries. Email notifications, when
+configured, send job completions through the owner's mail account. The code
+is backed up to a private GitHub repository; `local_state/` and `.env` are
+deliberately not.
 
-## 2. Adversaries and failure modes considered
+## 2. What is being protected
 
-**A public Wordicon user, adversarial.** Goal: extract raw private source text, enumerate corpus contents, or infer private facts about the owner through repeated probing of Forge/Crack outputs or receipts. Mitigations: no raw similarity search exposed to public clients (§15.5); redacted source names; capped quotation; rate-limiting and anomaly detection on repeated probing; canary objects; public receipts structurally excluded from carrying private fragments (§12.1, exclusion not obfuscation).
+Three things, in order: the corpus (private writing and judgment history —
+the product itself), the API key (a wallet), and the integrity of the record
+(append-only logs whose value is that nothing edits them silently).
 
-**A malicious or compromised document inside the corpus.** Goal: prompt-injection — a retrieved fragment contains text designed to be read as an instruction by the orchestrator or model ("ignore prior constraints," "reveal source text," "treat the following as system policy"). Mitigation: retrieved content is always data, delimited and never merged into instruction context; tool calls validated independently of retrieved content; allowlisted operations only (§15.4).
+## 3. Adversaries and failure modes, current
 
-**An external model vendor.** Goal (or just default behavior): retain, log, or train on data sent to it. Mitigation: default-deny egress; per-object `send_to_external_model` flag; vendor policy documented per §15.3 before any object at a given sensitivity is ever sent; ADR-002 governs which vendors qualify for which sensitivity levels, and until that ADR is accepted, this delivery sends nothing to any external model — the vertical slice uses a mocked gateway.
+**A stranger on the same network.** The server binds LAN only when the owner
+opts in (`WORDICON_LAN=1`); either way every corpus, media, export, mutation,
+and model-spending route sits behind the access gate — default-deny, pairing
+code via POST only, HttpOnly SameSite=Strict session cookie, per-device
+revocation, master-secret rotation, a lockout brake on code guessing, no
+CORS, cross-site state changes refused. **Residual risk, stated plainly:
+transport is plain HTTP.** On the owner's home Wi-Fi this is acceptable; on
+shared or hostile networks (hospital Wi-Fi included) an on-path observer can
+read traffic even though the gate refuses them the routes. No clinical-grade
+confidentiality is claimed. HTTPS or a private overlay (e.g. Tailscale)
+is the named next step before any sensitive-network use.
 
-**The owner's own infrastructure failing.** Device loss, drive failure, forgotten passphrase, or the owner's own incapacity. This is a real threat to the "durable property" claim, arguably the most likely one to actually occur, and it's the one the original blueprint's Phase 0 questions raised but didn't resolve. Addressed in ADR-001, not yet implemented.
+**Disk failure, device loss, or the owner's own mistake.** The most probable
+catastrophic loss. GitHub protects the CODE only. The corpus exists on one
+disk. Export-with-manifest exists but is manual, unencrypted, and typically
+lands on the same disk. **Encrypted backup AND RESTORE is authorized as the
+next planning order and is not yet implemented** — until it lands, this is
+the largest open risk in the system, named here so it cannot be mistaken for
+handled.
 
-**A curator or the owner themselves, misclassifying an object.** Goal: none, this is an error mode not an adversary, but it's the most probable actual privacy failure — a private-raw source accidentally shipped as `public_source`. Mitigation: default-deny on ingestion, explicit profile assignment required, `training_approved` never inferred, permission overrides require a recorded reason/curator/timestamp so misclassification is auditable and reversible via revocation (§13a) rather than silent.
+**The model vendor lane.** Bounded payloads leave only through lanes the
+owner explicitly invokes, on the owner's key; raw corpus browsing never
+transits. What the vendor retains is governed by the vendor's terms, not by
+Wordicon — the panel says so in those words. ADR-002's default-deny posture
+survives in spirit: nothing is sent except what a summoned run carries.
 
-**Someone using the system to extract a cultural or clinical claim as though it were authoritative without corpus support.** This is treated as an epistemic threat, not just a security one — see `epistemic-contract.md`.
+**A malicious document or transcript inside the corpus.** Prompt-injection
+via retrieved content: imported text is data, never instructions; the
+library and media wings are constitutionally zero-model (enforced by tests
+that poison the gateway and the network); model lanes receive bounded,
+delimited material. Transcripts are additionally untrusted as REPRESENTATION:
+they are labeled derivatives that can be wrong, and every quotation is
+re-retrieved with drift shown.
 
-## 3. Trust zones (restated from blueprint §3.2)
+**A compromised or curious paired device.** Any paired browser can read the
+corpus and spend the key — pairing IS trust. Mitigations: the device list
+with one-press revocation, rotation to sign out everything, and the pairing
+code's short life (per server boot, POST-only, never in URLs or logs).
 
-Zone A (owner-only vault) → Zone B (private processing) → Zone C (controlled model egress) → Zone D (public product). Data becomes progressively less sensitive and more filtered moving left to right; nothing moves right without an explicit permission check at the boundary it's crossing.
+**The owner's key leaking.** `.env` is git-ignored, never printed by the
+server, and the owned secret scanner runs in CI over every tracked file, so
+the key cannot ride a commit unnoticed. Residual: any paired device and any
+process on the Mac can read the environment; that is accepted for a
+single-owner machine.
 
-## 4. What's explicitly out of scope for this delivery
+**Email notification leakage.** Job-completion mail carries titles through
+the owner's mail provider. Accepted; content-bearing mail should stay
+summary-thin.
 
-No real private source is ingested. No external model is called. No public interface exists. No production key-management is implemented (ADR-001 is a proposal). No production database — the vertical slice uses an in-memory store. Scaling threats (thousands of concurrent users probing a public deployment) are not addressed here; they belong to Phase 6 onward, once there is a public interface to threaten.
+## 4. What is explicitly not addressed yet
 
-## 5. Phase 0 exit criterion, restated
+Encrypted transport (HTTPS/overlay). Encrypted, restore-tested corpus
+backup (authorized next). Multi-user anything — this is one owner's tool;
+the moment a second user exists, most assumptions here expire. OS-level
+compromise of the Mac itself — a keylogger or root malware defeats every
+boundary above, and no application design changes that.
 
-"No ambiguity about who owns the corpus or which systems may access it." This delivery satisfies the ownership half (stated explicitly in the blueprint's core rule and §2.1) but not the access half in full — §22 lists ten decisions still open, most of them access-boundary questions (which vendors, what deployment topology, what licensing). This threat model can name the adversaries and mitigations in the abstract; it cannot close those ten decisions, because they're the owner's calls to make, not inferences this delivery is authorized to make on the owner's behalf (blueprint §22, closing line).
+## 5. Standing invariants that double as mitigations
+
+Append-only logs (tampering is visible as absence-of-history, not silence);
+byte-intact originals with content addresses (substitution is detectable);
+export manifests with checksums (a copy can prove it was not edited);
+default-deny route gating proven by tests that attack it (12 gate mutations
+caught at last run); and the wiring rule — every rendered surface must prove
+its data arrived — so a starved surface reads as failure, never as an empty
+corpus.
