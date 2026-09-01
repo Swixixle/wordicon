@@ -1124,8 +1124,17 @@ def main() -> int:
         # stable identity: same external name → same key, regardless of run
         if cli.node_external("The Tower of Babel")["key"] != cli.node_external("Tower of Babel")["key"]:
             failures.append("node_external does not normalize leading articles into one identity")
-        if cli.node_concept("concept_x", "Isograde")["key"] != cli.node_word("isograde")["key"]:
-            failures.append("concept and word keys diverged for the same title — edges would miss boxes")
+        # EVOLVED under the concept-first ADR (block 94): this line once
+        # required concept and word nodes to SHARE a key for the same
+        # title — correct under the word-first schema, and the exact
+        # collision the identity law now forbids (two concepts titled
+        # alike would share one box). The invariant it protected — legacy
+        # word-keyed edges still landing on concept boxes — moved to
+        # build_overworld's served-view resolution, pinned in block 94.
+        if cli.node_concept("concept_x", "Isograde")["key"] != "concept:concept_x":
+            failures.append("node_concept with a concept_id must key by the id, not the title")
+        if cli.node_concept("", "Isograde")["key"] != cli.node_word("isograde")["key"]:
+            failures.append("legacy concept node (no id) no longer shares the word key — old edges would miss boxes")
         if cli.node_concept("concept_x", "T").get("concept_id") != "concept_x":
             failures.append("node_concept dropped the concept_id field")
 
@@ -10997,6 +11006,17 @@ console.log(out.join('\\n'));
     if len({e.get("id") for e in _cg94}) != 2 \
             or len({e.get("concept_id") for e in _cg94}) != 2:
         _f94("the two same-titled concepts share an id")
+    # ...and the LOADER serves both. The file held two rows while
+    # load_accepted_concepts title-deduped down to one, so the Library,
+    # the Bench list, and the already-named check all showed a shelf that
+    # disagreed with the disk. Found by the browser journey, not by the
+    # file-reading checks above — which is why this line reads through
+    # the loader and not the file.
+    _cgl94 = [c for c in cli.load_accepted_concepts()
+              if c.get("name") == "Common Ground"]
+    if len(_cgl94) != 2:
+        _f94(f"load_accepted_concepts serves {len(_cgl94)} of the 2 "
+             "same-titled concepts — the loader still title-dedupes")
 
     # 2. idempotence keys on the CONCEPT now
     if cli.persist_accepted_concept("Common Ground", "changed words",
@@ -11048,9 +11068,11 @@ console.log(out.join('\\n'));
     _dm94 = cli.concept_display_names()
     if _dm94.get(_cidA, {}).get("primary") != "Where Both Can Stand":
         _f94("the primary display name did not take")
-    _entryA = [e for e in _lex94() if e.get("concept_id") == _cidA][0]
-    if _entryA.get("name") != "Common Ground" \
-            or not _entryA.get("id", "").startswith("acc2_"):
+    _entryA_l = [e for e in _lex94() if e.get("concept_id") == _cidA]
+    if not _entryA_l:
+        _f94("concept A is gone from the shelf entirely")
+    elif _entryA_l[0].get("name") != "Common Ground" \
+            or not _entryA_l[0].get("id", "").startswith("acc2_"):
         _f94("renaming reached into the concept's own record")
     cli.record_concept_name(_cidB, "Groundhold", "coinage",
                             ruling="rejected")
@@ -11345,6 +11367,277 @@ console.log(out.join('\\n'));
     # behavior; this pins the address).
     if "rows.push(['Unclaimed'" in _idx94:
         _f94("Unclaimed is back on the concept strip")
+
+    # 19. growth lanes attach through the concept id: an expansion of a
+    # concept whose title is shared belongs to the CONCEPT — rename can
+    # orphan nothing. A candidate without an id keys bit-identically to
+    # the old word node, so legacy behavior is unchanged.
+    _lane_cand94 = {"title": "ZZLane94", "definition": "a lane test sense",
+                    "concept_id": "concept_lane94"}
+    _lsp94 = cli.run_sprout(_lane_cand94, cli.MockGateway())
+    _lspE94 = [e for e in cli.load_edges()
+               if e["run_trace_id"] == _lsp94["trace_id"]
+               and e["rel"] == "parallels"]
+    if not _lspE94 or any(e["source"]["key"] != "concept:concept_lane94"
+                          for e in _lspE94):
+        _f94("sprout edges do not anchor at the concept key")
+    if any(e["source"].get("concept_id") != "concept_lane94"
+           for e in _lspE94):
+        _f94("sprout edge source dropped its concept_id")
+    _lar94 = cli.run_archetype(_lane_cand94, cli.MockGateway())
+    _larE94 = [e for e in cli.load_edges()
+               if e["run_trace_id"] == _lar94["trace_id"]
+               and e["rel"] == "archetype_of"]
+    if not _larE94 or _larE94[0]["source"]["key"] != "concept:concept_lane94":
+        _f94("archetype edge does not anchor at the concept key")
+    _lrf94 = cli.run_refract(_lane_cand94, cli.MockGateway())
+    _lrfE94 = [e for e in cli.load_edges()
+               if e["run_trace_id"] == _lrf94["trace_id"]
+               and e["rel"] in ("translated_as", "english_fossil")]
+    if not _lrfE94 or any(e["source"]["key"] != "concept:concept_lane94"
+                          for e in _lrfE94):
+        _f94("refract edges do not anchor at the concept key")
+    _lsp94b = cli.run_sprout({"title": "ZZLaneLegacy94",
+                              "definition": "no id"}, cli.MockGateway())
+    _lspE94b = [e for e in cli.load_edges()
+                if e["run_trace_id"] == _lsp94b["trace_id"]
+                and e["rel"] == "parallels"]
+    if _lspE94b and any(e["source"]["key"] != cli.node_word("ZZLaneLegacy94")["key"]
+                        for e in _lspE94b):
+        _f94("a candidate without a concept_id no longer keys like the "
+             "old word node — legacy edges would detach")
+
+    # 20. the served map is rename-proof: a concept box keys by id; a
+    # LEGACY word-keyed edge resolves onto that box; recording a new
+    # primary name changes the display label and NOTHING else — same key,
+    # same resolved road, satellites served on the box.
+    (cli.LOCAL_STATE / "results" / "trace_cli_ren94.json").write_text(
+        _j94.dumps({"trace_id": "trace_cli_ren94", "mode": "forge",
+                    "created_at": "2026-09-01T03:00:00+00:00",
+                    "input_text": "zz",
+                    "candidates": [{"bff": {
+                        "title": "ZZRename94",
+                        "concept_id": "concept_ren94",
+                        "flesh": {"definition": "the original phrasing"}}}]}))
+    cli.record_edge("declared_road",
+                    {"kind": "word", "key": "word:zzrename94",
+                     "label": "ZZRename94"},
+                    {"kind": "external", "key": "ext:zztarget94",
+                     "label": "ZZTarget94"},
+                    "owner_declared", verdict="", detail="legacy road")
+    _ow94 = cli.build_overworld()
+
+    def _find_item94(ow, cid):
+        for r in ow["runs"]:
+            for it in r["items"]:
+                if it.get("concept_id") == cid:
+                    return it
+        return None
+
+    _box94 = _find_item94(_ow94, "concept_ren94")
+    if not _box94 or _box94.get("key") != "concept:concept_ren94":
+        _f94("the concept box does not key by its id on the served map")
+    _road94 = [e for e in _ow94["edges"]
+               if e.get("rel") == "declared_road"
+               and e.get("detail") == "legacy road"]
+    if not _road94 or _road94[0]["source"].get("key") != "concept:concept_ren94":
+        _f94("a legacy word-keyed road did not resolve onto the concept box")
+    _raw_edge94 = [l for l in cli.EDGES_LOG.read_text().splitlines()
+                   if "legacy road" in l]
+    if not _raw_edge94 or '"word:zzrename94"' not in _raw_edge94[0]:
+        _f94("the served-view resolution rewrote the edge LOG — the "
+             "compatibility layer must never touch disk")
+    cli.record_concept_name("concept_ren94", "ZZRenamed94",
+                            "owner_title", "owner", "", "kept", primary=True)
+    _ow94b = cli.build_overworld()
+    _box94b = _find_item94(_ow94b, "concept_ren94")
+    if not _box94b or _box94b.get("key") != "concept:concept_ren94":
+        _f94("renaming changed the concept's identity on the map")
+    else:
+        if _box94b.get("display_label") != "ZZRenamed94":
+            _f94("the new primary name is not the served display label")
+        if "ZZRenamed94" not in (_box94b.get("names") or []):
+            _f94("name satellites are not served on the concept box")
+    _road94b = [e for e in _ow94b["edges"]
+                if e.get("rel") == "declared_road"
+                and e.get("detail") == "legacy road"]
+    if not _road94b or _road94b[0]["source"].get("key") != "concept:concept_ren94":
+        _f94("renaming broke the road — the exact orphaning the ADR forbids")
+
+    # 21. the suggest endpoint honors an owner's explicit choice: with
+    # from_key given, the ambiguous title is no longer a question — and a
+    # stale key ASKS again rather than being trusted.
+    class _RoadStub94:
+        name = "stub"
+
+        def complete(self, prompt):
+            return _j94.dumps({"roads": [
+                {"a": "ZZShared94", "b": "ZZRename94",
+                 "verb": "answers", "basis": "test basis"}]})
+
+    _l2k94c, _ = server._map_nodes()
+    _amb_keys94 = [c["key"] for c in
+                   (_l2k94c.get(cli._norm_title("ZZShared94")) or {}
+                    ).get("candidates", [])]
+    if len(_amb_keys94) < 2:
+        _f94("the ZZShared94 ambiguity seed lost a candidate")
+    else:
+        _real_sg94b = server.server_gateway
+        server.server_gateway = lambda: _RoadStub94()
+        try:
+            with server.app.test_client() as _c94k:
+                _paired(_c94k)
+                _rk94 = _c94k.post("/api/map/roads/suggest", json={
+                    "from": "ZZShared94", "to": "ZZRename94",
+                    "kind": "resonance",
+                    "from_key": _amb_keys94[0]})
+                _dk94 = _rk94.get_json() or {}
+                if _dk94.get("ambiguous"):
+                    _f94("suggest still asked after the owner said which "
+                         "concept he meant")
+                _kept94 = _dk94.get("candidates") or []
+                if not _kept94:
+                    _f94(f"the keyed suggest kept no roads: "
+                         f"{str(_dk94)[:160]}")
+                elif _kept94[0].get("a_key") != _amb_keys94[0]:
+                    _f94("the kept road did not land on the owner's "
+                         "chosen concept")
+                _rk94b = _c94k.post("/api/map/roads/suggest", json={
+                    "from": "ZZShared94", "to": "ZZRename94",
+                    "kind": "resonance",
+                    "from_key": "concept:concept_never_existed"})
+                _dk94b = _rk94b.get_json() or {}
+                if not _dk94b.get("ambiguous"):
+                    _f94("a stale key was trusted — suggest must ask "
+                         "again, not guess")
+        finally:
+            server.server_gateway = _real_sg94b
+
+    # 22. the Bench addresses concepts by id end to end (source pins: the
+    # behaviors are client-side; these hold the address).
+    _bench94 = (Path(cli.__file__).parent.parent / "webapp"
+                / "bench.html").read_text()
+    for _pin94 in ("window.CURRENT_CID = c.concept_id || ''",
+                   "params.get('concept_id')",
+                   "Pick the one you mean from the list",
+                   "dupCount[(c.name || '').toLowerCase()] > 1"):
+        if _pin94 not in _bench94:
+            _f94(f"bench.html lost the concept-addressing pin {_pin94!r}")
+    if _bench94.count("concept_id: window.CURRENT_CID || ''") < 6:
+        _f94("bench.html no longer threads the concept id into every "
+             "Bench call — same-titled concepts would share a workbench")
+    _srv94 = (Path(cli.__file__).parent.parent / "server.py").read_text()
+    for _pin94 in ('"concept_id": c.get("concept_id", "")',
+                   "The owner already said which one"):
+        if _pin94 not in _srv94:
+            _f94(f"server.py lost the concept-addressing pin {_pin94!r}")
+    # the lane starters carry the id from the card (check 19 proves the
+    # cli anchors by it; these prove the UI and routes actually FEED it)
+    if _idx94.count("concept_id: (data.bff && data.bff.concept_id) || ''") < 5:
+        _f94("a card lane starter dropped the concept id — browser-run "
+             "lanes would fall back to title keys")
+    if _srv94.count('"concept_id": str(original.get("concept_id") or "")[:64]') < 2:
+        _f94("the sprout/refract routes stopped sanitizing the lane "
+             "concept id")
+    if '"plain_gloss", "concept_id")}' not in _srv94:
+        _f94("the archetype route whitelist dropped concept_id")
+    _over94 = (Path(cli.__file__).parent.parent / "webapp"
+               / "overworld.html").read_text()
+    for _pin94 in ("display_label", "shared_title", "wfChoose",
+                   "from_key"):
+        if _pin94 not in _over94:
+            _f94(f"overworld.html lost the concept-first pin {_pin94!r}")
+
+    # 23. the export keeps same-titled concepts apart: identity leaves
+    # the app with the rows, and each row carries its OWN card — the
+    # title index would hand a sibling the wrong contradiction.
+    _exdirty94 = _ex.LOCAL_STATE
+    _ex.LOCAL_STATE = cli.LOCAL_STATE
+    try:
+        _ents94 = _ex.build_entries()
+    finally:
+        _ex.LOCAL_STATE = _exdirty94
+    _cg_ents94 = [e for e in _ents94 if e.get("word") == "Common Ground"]
+    # THREE by this point: A, B, and the recovered concept_suppressed94 —
+    # the first draft of this check said 2 and the exporter was right.
+    if len(_cg_ents94) != 3:
+        _f94(f"export holds {len(_cg_ents94)} Common Ground row(s), not 3 "
+             "— a silent subtraction with a confident count")
+    elif {e.get("concept_id") for e in _cg_ents94} \
+            != {_cidA, _cidB, "concept_suppressed94"}:
+        _f94("export rows lost their concept ids")
+    else:
+        _defs94 = {e["concept_id"]: e.get("definition", "")
+                   for e in _cg_ents94}
+        if _defs94.get(_cidA) == _defs94.get(_cidB):
+            _f94("the two exported Common Grounds collapsed onto one "
+                 "definition")
+        _tbl94 = _ex.table_jsonl(_cg_ents94)
+        if _cidA not in _tbl94 or _cidB not in _tbl94:
+            _f94("the jsonl table dropped concept identity")
+
+    # 24. growth lanes stay SUMMONED: a forge run produces its concept
+    # and stops — no lane runs itself, no lane edge appears unbidden.
+    _auto94 = [e for e in cli.load_edges()
+               if e["run_trace_id"] == _r94x["trace_id"]
+               and e["rel"] != "produced"]
+    if _auto94:
+        _f94(f"a forge run recorded {sorted({e['rel'] for e in _auto94})} "
+             "edges — an expansion lane ran without being summoned")
+
+    # 25. sanitized fixtures, checked against the store itself: when a
+    # REAL lexicon is present (on the owner's machine), no real title may
+    # NEWLY appear in the committed test or docs text. The suite cannot
+    # know the private corpus in CI — there, this is a no-op by
+    # construction, never a pass claim.
+    #
+    # The first live run of this guard flagged 21 titles and taught it
+    # the causality it had assumed backwards: the corpus was GROWN with
+    # this tool, so long-standing fixtures and live-session concepts
+    # (Parrot Box is in these tests by explicit ruling) are IN the
+    # lexicon — the fixtures became corpus, not the corpus leaking into
+    # fixtures — and the founding blueprint docs are the owner's own
+    # writing. Scrubbing them would rewrite ruled history. So existing
+    # matches are grandfathered by a committed BASELINE of
+    # (hashed-title, filename) pairs — hashes only, so the baseline file
+    # itself names nothing private — and any match not in it is a NEW
+    # appearance and fails. Growing the baseline is a visible diff in a
+    # commit, never a silent wave-through; the grandfathered set was
+    # reported to the owner in full, and he can order scrubs.
+    _real_lex94 = _REAL_STATE / "accepted_concepts.json"
+    if _real_lex94.exists():
+        try:
+            _rl94 = _j94.loads(_real_lex94.read_text())
+        except (_j94.JSONDecodeError, OSError):
+            _rl94 = []
+        _priv94 = {(e.get("name") or "").strip() for e in _rl94
+                   if isinstance(e, dict)
+                   and (len((e.get("name") or "").strip()) >= 8
+                        or " " in (e.get("name") or "").strip())}
+        _repo94 = Path(cli.__file__).parent.parent
+        _base_p94 = Path(__file__).resolve().parent / \
+            "sanitization_baseline.json"
+        try:
+            _base94 = set(_j94.loads(_base_p94.read_text())) \
+                if _base_p94.exists() else set()
+        except (_j94.JSONDecodeError, OSError):
+            _base94 = set()
+        import hashlib as _hl94
+        _scan94 = [Path(__file__)] + sorted((_repo94 / "docs").glob("*.md"))
+        for _sf94 in _scan94:
+            _txt94 = _sf94.read_text(encoding="utf-8").lower()
+            for _t94 in _priv94:
+                if not _t94 or _t94.lower() not in _txt94:
+                    continue
+                _pair94 = _hl94.sha256(
+                    _t94.casefold().encode()).hexdigest()[:16] \
+                    + ":" + _sf94.name
+                if _pair94 in _base94:
+                    continue  # grandfathered — reported, owner can scrub
+                _f94(f"the private corpus title {_t94!r} appears in "
+                     f"committed text: {_sf94.name} — new fixtures must "
+                     "be sanitized (an owner-sanctioned exception is a "
+                     "deliberate baseline addition, in its own diff)")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

@@ -782,11 +782,25 @@ def api_map_suggest_roads():
         return jsonify({"error": "both ends of the journey are required"}), 400
     label_to_key, _ = _map_nodes()
     _amb = []
-    for _l in (from_l, to_l):
+    for _l, _k in ((from_l, str(data.get("from_key") or "").strip()[:160]),
+                   (to_l, str(data.get("to_key") or "").strip()[:160])):
         _hit = label_to_key.get(cli._norm_title(_l))
-        if isinstance(_hit, dict) and _hit.get("ambiguous"):
-            _amb.append({"label": _l,
-                         "candidates": _hit.get("candidates") or []})
+        if not (isinstance(_hit, dict) and _hit.get("ambiguous")):
+            continue
+        if _k:
+            # The owner already said which one — no lookup, no ask. His
+            # chosen node replaces the ambiguous hit so the code check
+            # downstream lands roads on that concept instead of dropping
+            # every proposal that mentions the shared title.
+            _pick = next((c for c in _hit.get("candidates") or []
+                          if c.get("key") == _k), None)
+            if _pick:
+                label_to_key[cli._norm_title(_l)] = dict(_pick)
+                continue
+            # a key that matches no candidate is stale — ask again rather
+            # than trust it
+        _amb.append({"label": _l,
+                     "candidates": _hit.get("candidates") or []})
     if _amb:
         # The identity law: a typed title resolving to multiple concepts
         # is a QUESTION, never a coin flip. The UI shows the candidates
@@ -1515,13 +1529,17 @@ def api_create_job():
         inherited_verdict = str(original.get("inherited_verdict") or "")[:20]
         inherited_note = str(original.get("inherited_note") or "")[:1000]
         original = {**original, "inherited_verdict": inherited_verdict,
-                    "inherited_note": inherited_note}
+                    "inherited_note": inherited_note,
+                    # concept-first: the lane anchors its edges by this id
+                    "concept_id": str(original.get("concept_id") or "")[:64]}
         input_text = f"sprout: {original['title']}"
     elif mode == "refract":
         original = data.get("original") or {}
         if not original.get("title") or not original.get("definition"):
             return jsonify({"error": "refract requires original.title and original.definition"}), 400
         known_neighbors = str(data.get("known_neighbors") or "")[:800] or None
+        original = {**original,
+                    "concept_id": str(original.get("concept_id") or "")[:64]}
         input_text = f"refract: {original['title']}"
     elif mode == "recheck":
         original = data.get("original") or {}
@@ -1536,7 +1554,8 @@ def api_create_job():
         if not original.get("title") or not original.get("definition"):
             return jsonify({"error": "archetype requires original.title and original.definition"}), 400
         original = {k: str(original.get(k, ""))[:1500] for k in
-                    ("title", "definition", "central_contradiction", "axiom", "plain_gloss")}
+                    ("title", "definition", "central_contradiction", "axiom",
+                     "plain_gloss", "concept_id")}
         input_text = f"archetype: {original['title']}"
     elif mode == "verify":
         c = data.get("candidate") or {}
@@ -2215,7 +2234,9 @@ def api_bench_concept():
                                         server_gateway())
     except Exception as e:
         return jsonify({"error": cli.explain_component_failure(str(e))}), 500
-    cli.save_bench_concept(title, result)
+    cli.save_bench_concept(
+        title, result,
+        concept_id=str(data.get("concept_id") or "").strip()[:64])
     return jsonify(result)
 
 
@@ -2694,6 +2715,10 @@ def api_library():
 
     lexicon = [{
         "name": c.get("name", ""),
+        # Identity travels with the row: without it the Bench (and anything
+        # else the Library feeds) can only address concepts by title, which
+        # is the collision the ADR exists to end.
+        "concept_id": c.get("concept_id", ""),
         "definition": c.get("definition", ""),
         "accepted_from": c.get("accepted_from", ""),
         "accepted_at": c.get("accepted_at", ""),

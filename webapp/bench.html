@@ -203,14 +203,36 @@ async function loadLexicon() {
     return;
   }
   LEX.sort((a, b) => (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()));
-  sel.innerHTML = LEX.map((c, i) =>
-    `<option value="${i}">${esc(c.name)}${c.definition ? '' : ' — no definition stored'}</option>`
-  ).join('');
+  // Two concepts may legitimately share a title now. The list must make
+  // them tellable apart, so duplicates carry their own definitions.
+  const dupCount = {};
+  LEX.forEach(c => { const k = (c.name || '').toLowerCase();
+    dupCount[k] = (dupCount[k] || 0) + 1; });
+  sel.innerHTML = LEX.map((c, i) => {
+    const dup = dupCount[(c.name || '').toLowerCase()] > 1;
+    const tail = dup
+      ? ` — ${(c.definition || 'no definition stored').slice(0, 70)}`
+      : (c.definition ? '' : ' — no definition stored');
+    return `<option value="${i}">${esc(c.name)}${esc(tail)}</option>`;
+  }).join('');
   document.getElementById('open-btn').disabled = !LEX.length;
-  const q = new URLSearchParams(location.search).get('word');
+  const params = new URLSearchParams(location.search);
+  const cidParam = (params.get('concept_id') || '').trim();
+  if (cidParam) {
+    const i = LEX.findIndex(c => (c.concept_id || '') === cidParam);
+    if (i >= 0) { sel.value = String(i); openWord(); return; }
+  }
+  const q = params.get('word') || params.get('title');
   if (q) {
-    const i = LEX.findIndex(c => (c.name || '').toLowerCase() === q.toLowerCase());
-    if (i >= 0) { sel.value = String(i); openWord(); }
+    const hits = LEX.map((c, i) => [c, i])
+      .filter(([c]) => (c.name || '').toLowerCase() === q.toLowerCase());
+    if (hits.length === 1) { sel.value = String(hits[0][1]); openWord(); }
+    else if (hits.length > 1) {
+      // A typed title naming more than one concept is a question, never
+      // a coin flip — nothing auto-opens.
+      const stage = document.getElementById('stage');
+      if (stage) stage.innerHTML = `<div class="card"><p class="body">“${esc(q)}” names ${hits.length} concepts here. Pick the one you mean from the list — each shows its own definition.</p></div>`;
+    }
   }
 }
 
@@ -218,6 +240,9 @@ async function openWord(fresh) {
   const i = parseInt(document.getElementById('word-select').value, 10);
   const c = LEX[i];
   if (!c) return;
+  // The concept id rides with every Bench call from here on: two concepts
+  // sharing a title must never share a workbench.
+  window.CURRENT_CID = c.concept_id || '';
   const stage = document.getElementById('stage');
   stage.innerHTML = `<div class="card"><p class="body muted"><span class="spinner"></span>Taking “${esc(c.name)}” apart…</p></div>`;
   let d;
@@ -225,6 +250,7 @@ async function openWord(fresh) {
     const r = await fetch('/api/bench/open', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({title: c.name, definition: c.definition || '',
+                            concept_id: window.CURRENT_CID || '',
                             fresh_contract: fresh ? '1' : ''}),
     });
     d = await readJson(r);
@@ -561,7 +587,8 @@ async function keepCoin(j, word) {
   try {
     const r = await fetch('/api/bench/keep', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({parent_title: CUR.title, word, definition}),
+      body: JSON.stringify({parent_title: CUR.title, word, definition,
+                            concept_id: window.CURRENT_CID || ''}),
     });
     const d = await readJson(r);
     if (d.error) { said.style.color = 'var(--bad)'; said.textContent = d.error; return; }
@@ -579,7 +606,8 @@ async function saveContract(confirmed) {
   try {
     const r = await fetch('/api/bench/contract', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({title: CUR.title, contract: CUR.contract, confirmed: !!confirmed}),
+      body: JSON.stringify({title: CUR.title, contract: CUR.contract, confirmed: !!confirmed,
+                            concept_id: window.CURRENT_CID || ''}),
     });
     const d = await readJson(r);   // never raw json(): a non-JSON 500 must not read as offline
     if (d && d.contract_source) {
@@ -660,6 +688,7 @@ async function buildConcept() {
     const r = await fetch('/api/bench/concept', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({title: CUR.title, definition: CUR.definition,
+        concept_id: window.CURRENT_CID || '',
         ingredients: CUR.contract.map(p => ({key: p.key, name: p.name, gist: p.gist,
           role: p.role || (p.locked ? 'required' : 'supporting')})),
         relations: RELATIONS, contract_confirmed: CONFIRMED})});
@@ -738,6 +767,7 @@ async function exploreNames() {
     const r = await fetch('/api/bench/concept/names', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({title: CUR.title, statement: LAST_CONCEPT.statement,
+                            concept_id: window.CURRENT_CID || '',
                             anatomy: LAST_CONCEPT.anatomy || {}})});
     const d = await readJson(r);
     if (d.error) { area.innerHTML = `<p class="body" style="color:var(--bad)">${esc(d.error)}</p>`; return; }
@@ -817,7 +847,8 @@ async function correct(j, key, modelSaid, ownerSays) {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({title: CUR.title, word: build.word, part_key: key,
                             part_name: part.name || key, model_said: modelSaid,
-                            owner_says: ownerSays, note}),
+                            owner_says: ownerSays, note,
+                            concept_id: window.CURRENT_CID || ''}),
     });
   } catch (e) { /* a lost correction is not worth an alert mid-pilot */ }
   if (row) {
@@ -868,6 +899,7 @@ async function build() {
     const r = await fetch('/api/bench/build', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({title: CUR.title, definition: CUR.definition,
+                            concept_id: window.CURRENT_CID || '',
                             contract: CUR.contract, materials: Object.keys(SEL), method: METHOD,
                             contract_confirmed: CONFIRMED,
                             material_parts: Object.fromEntries(Object.keys(SEL).map(w => [w, MAT_PART[w]]))}),

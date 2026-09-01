@@ -400,15 +400,19 @@
   <details class="card" style="padding:12px 16px">
     <summary style="cursor:pointer;font-size:13px;color:var(--muted);font-weight:600">What is Wordicon?</summary>
     <div style="margin-top:10px">
-      <p class="body">Bring Wordicon a feeling with no name and it forges you candidates worth
-      arguing with. Bring it a book and the book stays a book — byte-intact, mechanically read,
-      every sentence an anchor you can hold a claim against. Bring it a recording and the
-      transcript scrolls under the sound, one click from any sentence to its exact second. Coin a
-      word at the Bench, cross a passage into evidence, walk the Map of everywhere your thinking
-      has been, enter a work the way you'd enter a room — and every step leaves a record you can
-      reopen, dispute, and re-rule, because in here <strong>the record is the product</strong>.
-      Wordicon is <strong>a private, evidence-bearing workshop</strong>: it began as a word-coiner,
-      and the words turned out to be the smallest part — what accumulates is the concepts, the
+      <p class="body">Bring Wordicon a feeling with no name and it forges you concept readings
+      worth arguing with — the idea's anatomy under a plain working title. Bring it a book and the
+      book stays a book — byte-intact, mechanically read, every sentence an anchor you can hold a
+      claim against. Bring it a recording and the transcript scrolls under the sound, one click
+      from any sentence to its exact second. Coin a word at the Bench when you want one, cross a
+      passage into evidence, walk the Map of everywhere your thinking has been, enter a work the
+      way you'd enter a room — and every step leaves a record you can reopen, dispute, and
+      re-rule, because in here <strong>the record is the product</strong>. Wordicon is <strong>a
+      private, evidence-bearing workshop</strong>: it began as a word-coiner, and use revealed
+      that naming was only one small part of the work — so it is now concept-first and
+      coinage-optional. An idea is allowed to exist without a coined name; a name is a handle for
+      a concept, not the concept itself, attached at the Bench when wanted; and "the phrase you
+      already have is sufficient" counts as success. What accumulates is the concepts, the
       sources, the documents, the recordings, and the record of what you decided and why.</p>
       <p class="body">Three laws hold everywhere in it: <strong>the critic advises and never
       decides</strong>; <strong>anything the tool isn't sure of says so</strong> instead of quietly
@@ -2542,7 +2546,8 @@ function startSproutFromCard(i, title) {
   startSproutInto(`sprout-area-${i}`,
     {title, definition: flesh.definition || '',
      central_contradiction: flesh.central_contradiction || '',
-     axiom: flesh.axiom || ''},
+     axiom: flesh.axiom || '',
+     concept_id: (data.bff && data.bff.concept_id) || ''},
     cardTraceId[i] || '', '');
 }
 
@@ -2572,6 +2577,7 @@ async function startSproutInto(areaId, original, parentTrace, via) {
         original: {title: original.title, definition: original.definition,
                    central_contradiction: original.central_contradiction || '',
                    axiom: original.axiom || '',
+                   concept_id: original.concept_id || '',
                    inherited_verdict: original.inheritedVerdict || '',
                    inherited_note: original.inheritedNote || ''},
         parent_trace_id: parentTrace || '', via: via || '',
@@ -2772,6 +2778,7 @@ function startRefractFromCard(i, title) {
     {title: title || (data.bff && data.bff.title) || '',
      definition: flesh.definition || '',
      plain_gloss: flesh.plain_gloss || '',
+     concept_id: (data.bff && data.bff.concept_id) || '',
      known_neighbors: friction.redundancy_note || ''});
 }
 
@@ -2785,7 +2792,8 @@ async function startRefractInto(areaId, original) {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({mode: 'refract',
         original: {title: original.title, definition: original.definition,
-                   plain_gloss: original.plain_gloss || ''},
+                   plain_gloss: original.plain_gloss || '',
+                   concept_id: original.concept_id || ''},
         known_neighbors: original.known_neighbors || ''}),
     });
     const d = await r.json();
@@ -2926,6 +2934,7 @@ function startArchetypeFromCard(i, title) {
     definition: flesh.definition || '',
     central_contradiction: flesh.central_contradiction || '',
     axiom: flesh.axiom || '', plain_gloss: flesh.plain_gloss || '',
+    concept_id: (data.bff && data.bff.concept_id) || '',
   });
 }
 

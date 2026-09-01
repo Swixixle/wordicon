@@ -77,8 +77,14 @@ def load_accepted():
     for x in (_load(LOCAL_STATE / "accepted_concepts.json") or []):
         if not isinstance(x, dict):
             continue
-        k = (x.get("name") or "").strip().lower()
-        if k and k not in seen:
+        # Identity is the concept id where one exists; the title is only
+        # the fallback for id-less legacy rows. Deduping by title alone
+        # silently dropped same-titled siblings — including recovered
+        # acceptances — while printing a confident count over the gap,
+        # which is the exact failure this file's docstring names.
+        k = (x.get("concept_id") or "").strip() \
+            or "title:" + (x.get("name") or "").strip().lower()
+        if k not in ("", "title:") and k not in seen:
             seen.add(k)
             out.append(x)
 
@@ -93,8 +99,16 @@ def load_accepted():
                 continue
             if j.get("decision") != "accepted":
                 continue
-            k = (j.get("candidate_text") or "").strip().lower()
-            if not k or k in seen:
+            jc = (j.get("concept_id") or "").strip()
+            k = jc or "title:" + (j.get("candidate_text") or "").strip().lower()
+            if k in ("", "title:") or k in seen:
+                continue
+            # an id-less judgment whose TITLE is already shelved is the
+            # old behavior, kept: without an id there is no way to know
+            # it names a second concept rather than the shelved one
+            if not jc and any((x.get("name") or "").strip().lower()
+                              == (j.get("candidate_text") or "").strip().lower()
+                              for x in out):
                 continue
             seen.add(k)
             out.append({
@@ -107,12 +121,14 @@ def load_accepted():
 
 
 def index_results():
-    """title -> the card that produced it, so the lexicon can carry the
-    contradiction and the axiom rather than the definition alone. Keyed by
-    normalized title because that is the identity the owner sees; where two
-    runs made the same title the LATEST wins, and the entry records which
-    trace it came from so the tie is inspectable rather than silent."""
-    by_title = {}
+    """(by_title, by_cid): the card that produced each acceptance, so the
+    lexicon can carry the contradiction and the axiom rather than the
+    definition alone. by_cid is the real identity (first wins — an id
+    names one candidate); by_title is the legacy fallback for id-less
+    rows, where two runs sharing a title mean the LATEST wins and the
+    entry records which trace it came from so the tie is inspectable
+    rather than silent."""
+    by_title, by_cid = {}, {}
     for p in sorted((LOCAL_STATE / "results").glob("*.json")):
         d = _load(p)
         if not isinstance(d, dict):
@@ -122,11 +138,15 @@ def index_results():
             t = (b.get("title") or "").strip().lower()
             if not t:
                 continue
+            cid = (b.get("concept_id") or "").strip()
+            if cid and cid not in by_cid:
+                # by id, first wins: a concept_id names ONE candidate
+                by_cid[cid] = {"bff": b, "run": d}
             prev = by_title.get(t)
             if prev and (prev["run"].get("created_at") or "") > (d.get("created_at") or ""):
                 continue
             by_title[t] = {"bff": b, "run": d}
-    return by_title
+    return by_title, by_cid
 
 
 def _entry(acc, hit):
@@ -147,6 +167,9 @@ def _entry(acc, hit):
         "accepted_at": acc.get("accepted_at") or "",
         "trace": acc.get("accepted_from") or ((hit or {}).get("run") or {}).get("trace_id", ""),
         "id": acc.get("id", ""),
+        # identity travels with the row: without it two same-titled
+        # concepts collapse into one line the moment they leave the app
+        "concept_id": acc.get("concept_id", ""),
         # Computed from what is actually present, never from which file the
         # entry came out of: a judgment-only acceptance whose run WAS kept
         # recovers its meaning through the results index and is not marked.
@@ -157,10 +180,17 @@ def _entry(acc, hit):
 
 
 def build_entries():
-    idx = index_results()
+    idx, by_cid = index_results()
     out = []
     for acc in load_accepted():
-        out.append(_entry(acc, idx.get((acc.get("name") or "").strip().lower())))
+        # A concept WITH an id gets its OWN card or none: borrowing a
+        # same-titled stranger's contradiction is worse than a stated
+        # gap. The title index serves only id-less legacy rows, where
+        # the title is all the identity that was ever recorded.
+        cid = (acc.get("concept_id") or "").strip()
+        hit = by_cid.get(cid) if cid \
+            else idx.get((acc.get("name") or "").strip().lower())
+        out.append(_entry(acc, hit))
     out.sort(key=lambda e: (e["word"] or "").lower())
     return out
 

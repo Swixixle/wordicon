@@ -954,25 +954,37 @@ def load_accepted_concepts() -> list[dict]:
     this wiring existed — those judgments never stored definitions, so
     their titles are all that can be recovered, but a title match is still
     enough for the overlap check to fire."""
-    concepts, seen = [], set()
+    concepts, seen, titles_seen = [], set(), set()
 
     if ACCEPTED_CONCEPTS_PATH.exists():
         for c in _load(ACCEPTED_CONCEPTS_PATH):
-            key = c.get("name", "").strip().lower()
-            if key and key not in seen:
+            # Identity is the concept id where one exists; the title only
+            # for id-less legacy rows. This loader title-deduped for its
+            # whole life, which made the SECOND same-titled concept
+            # invisible to every consumer — the Library payload, the
+            # Bench list, the already-named check — while the file held
+            # both. Found by the block-94 browser journey: the shelf had
+            # two rows and the page showed one. Third instance of the
+            # title-collapse class (persist, exporter, now this).
+            cid = (c.get("concept_id") or "").strip()
+            key = cid or ("title:" + c.get("name", "").strip().lower())
+            if key not in ("", "title:") and key not in seen:
                 seen.add(key)
+                titles_seen.add(c.get("name", "").strip().lower())
                 concepts.append(c)
 
     if JUDGMENTS_LOG.exists():
         # LATEST ruling per title, not every row that ever said "accepted".
         # Reading any accepted row as current meant a word you had since
         # rejected walked back onto the shelf through this fallback.
+        # (Title-keyed on purpose: these are pre-pivot receipt-only rows
+        # whose title is all the identity that was ever recorded.)
         for key, d in latest_decisions().items():
             if d["decision"] != "accepted":
                 continue
             j = {"candidate_text": d["title"]}
-            if key and key not in seen:
-                seen.add(key)
+            if key and key not in titles_seen:
+                titles_seen.add(key)
                 concepts.append({
                     "id": f"acc_{hashlib.sha256(key.encode()).hexdigest()[:8]}",
                     "object_type": "concept", "name": j["candidate_text"],
@@ -3445,18 +3457,21 @@ def node_word(title: str) -> dict:
 
 
 def node_concept(concept_id: str, title: str) -> dict:
-    # Keyed by the WORD (normalized title): the title is the visible
-    # identity a box on the map carries, and every edge that mentions a
-    # candidate must land on the same box its title renders as. The
-    # concept_id rides along as a field — it's what links DIFFERENT titles
-    # that share one frozen flesh (isograde/tetrace/diagnudge), and the
-    # overworld computes those alias-warps from it separately. Keying by
-    # concept_id here instead would collapse a revise run's five variants
-    # into one box, since they deliberately share an id.
-    n = _node("concept", "word:" + _norm_title(title), title)
+    # One meaning, one node (docs/adr-concept-first.md): a concept-aware
+    # candidate keys by its CONCEPT ID, so five revise variants sharing
+    # one frozen flesh are one box — that collapse used to be the bug
+    # this comment warned against and is now the ruled geometry, with the
+    # variant WORDS riding as name satellites. Same-titled DIFFERENT
+    # concepts become different boxes for the same reason, each wearing a
+    # short definition under the shared title. Legacy candidates without
+    # a concept_id keep the word-keyed identity their edges were recorded
+    # against; build_overworld resolves old word-keyed edges onto concept
+    # boxes so renaming never breaks a road.
     if concept_id:
+        n = _node("concept", "concept:" + concept_id, title)
         n["concept_id"] = concept_id
-    return n
+        return n
+    return _node("concept", "word:" + _norm_title(title), title)
 
 
 def node_external(name: str, where: str = "") -> dict:
@@ -3741,7 +3756,9 @@ def build_overworld() -> dict:
                 n = node_concept(bff.get("concept_id", ""), title)
                 verdict = (bff.get("friction") or {}).get("verdict", "")
                 items.append({**n, "verdict": verdict,
-                               "judgment": jmap.get(title, "")})
+                               "judgment": jmap.get(title, ""),
+                               "short_def": ((bff.get("flesh") or {})
+                                             .get("definition") or "")[:90]})
                 synth("produced", run_node, n, trace, verdict=verdict)
                 if m:
                     rel = {"revise": "renamed_as", "wordify": "compressed_as",
@@ -3862,6 +3879,50 @@ def build_overworld() -> dict:
                                             "source_label": e["source"]["label"],
                                             "verdict": e["verdict"]} for e in es[:20]]})
 
+    # ---- concept-first compatibility post-pass (SERVED view only; the
+    # edge log on disk is never rewritten). Old roads were recorded
+    # against word:<title> keys; concept-aware boxes now key by
+    # concept:<id>. Every edge endpoint is resolved onto the current box:
+    # exact key first, then the endpoint's own recorded concept_id, then
+    # an UNAMBIGUOUS title match — never a coin flip. Renaming a concept
+    # therefore moves no geography and orphans no road. Boxes also gain
+    # their name satellites and, where two concepts share a title, the
+    # short definition that tells them apart.
+    item_keys = set()
+    cid2key, norm2keys = {}, {}
+    for r in runs:
+        for it in r["items"]:
+            item_keys.add(it["key"])
+            if it.get("concept_id"):
+                cid2key.setdefault(it["concept_id"], it["key"])
+            norm2keys.setdefault(_norm_title(it.get("label", "")),
+                                 set()).add(it["key"])
+    for e in edges:
+        for endp in (e.get("source"), e.get("target")):
+            if not isinstance(endp, dict) or endp.get("key") in item_keys:
+                continue
+            cid = endp.get("concept_id")
+            if cid and cid in cid2key:
+                endp["key"] = cid2key[cid]
+                continue
+            k = endp.get("key", "")
+            if k.startswith("word:"):
+                cands = norm2keys.get(k[5:], set()) - {k}
+                if len(cands) == 1:
+                    endp["key"] = next(iter(cands))
+    dnames = concept_display_names()
+    for r in runs:
+        for it in r["items"]:
+            cid = it.get("concept_id")
+            if cid and cid in dnames:
+                forms = [n.get("form", "") for n in dnames[cid]["names"]]
+                if forms:
+                    it["names"] = forms
+                if dnames[cid].get("primary"):
+                    it["display_label"] = dnames[cid]["primary"]
+            nk = norm2keys.get(_norm_title(it.get("label", "")), set())
+            if len(nk) > 1 and it.get("short_def"):
+                it["shared_title"] = True
     return {"runs": runs, "edges": edges, "warps": warps,
             "alias_warps": alias_warps, "disputes": disputes,
             "generated_at": _now(),
@@ -3887,8 +3948,9 @@ def judgments_for_concept(concept_id: str) -> "list[dict]":
     unused in the log. Deliberately NOT a reconciliation feature: this
     returns what was recorded, it doesn't compare verdicts, dedupe re-runs,
     or warn before Sprout/Refract regenerate something already explored for
-    this concept — Sprout, Refract, and Verify don't even attach a
-    concept_id yet. Left for a real feature later, not solved here."""
+    this concept. (Since the concept-first ADR the growth lanes DO anchor
+    their edges by concept_id; the un-warned regeneration is what remains.)
+    Left for a real feature later, not solved here."""
     if not concept_id or not JUDGMENTS_LOG.exists():
         return []
     out = []
@@ -5997,7 +6059,12 @@ def run_sprout(candidate: dict, gateway: Gateway,
         # the Overworld notice when two runs judged the same parallel
         # differently instead of silently shipping both.
         if t.get("anchor_name"):
-            record_edge("parallels", node_word(title),
+            # Concept-first: the parallel belongs to the CONCEPT when the
+            # candidate carries an id — a rename must not orphan it. A
+            # candidate without an id (legacy, raw words) keys exactly as
+            # before.
+            record_edge("parallels",
+                         node_concept(candidate.get("concept_id") or "", title),
                          node_external(t["anchor_name"], t.get("culture_or_work", "")),
                          trace_id, verdict=t.get("review_verdict") or "",
                          detail=(t.get("parallel") or "")[:200])
@@ -7082,9 +7149,11 @@ def run_archetype(candidate: dict, gateway: Gateway,
         raise RuntimeError("archetype returned no usable facets")
 
     # An archetype is a claim ABOUT a concept, not a step in its history —
-    # same shape as a translation or a parallel, so it hangs off the word
-    # rather than carrying lineage through it.
-    record_edge("archetype_of", node_word(title),
+    # same shape as a translation or a parallel, so it hangs off the
+    # concept (by id when the candidate carries one) rather than carrying
+    # lineage through it.
+    record_edge("archetype_of",
+                 node_concept(candidate.get("concept_id") or "", title),
                  node_external(arch["figure"][:60] or "unnamed figure", "archetype"),
                  trace_id,
                  verdict="unfalsifiable" if arch["unfalsifiable"] else "falsifiable",
@@ -7188,7 +7257,8 @@ def run_refract(candidate: dict, gateway: Gateway,
         # edge — the two failures are independent (that's the two-axis
         # rule above) and the map keeps them apart the same way.
         if (r.get("romanization") or r.get("term") or "").strip():
-            record_edge("translated_as", node_word(title),
+            record_edge("translated_as",
+                         node_concept(candidate.get("concept_id") or "", title),
                          node_translation(r.get("language", ""),
                                            r.get("romanization") or r.get("term") or ""),
                          trace_id, verdict=r["review_verdict"],
@@ -7196,7 +7266,8 @@ def run_refract(candidate: dict, gateway: Gateway,
     fossil_verdict = (review_parsed.get("fossil_verdict") or "").strip()
     fossil_note = (review_parsed.get("fossil_note") or "").strip()
     if english_fossil:
-        record_edge("english_fossil", node_word(title),
+        record_edge("english_fossil",
+                     node_concept(candidate.get("concept_id") or "", title),
                      node_external(english_fossil[:60], "English etymology"),
                      trace_id, verdict=fossil_verdict, detail=fossil_check[:200])
 

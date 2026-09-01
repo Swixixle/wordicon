@@ -407,8 +407,8 @@ function render() {
         <rect class="${cls.join(' ')}" x="${x}" y="${y}" width="${ITEM_W}" height="${ITEM_H}" rx="8"
           onclick="openDetail('${escapeHtml(it.key)}', '${run.trace_id}')"/>
         <text class="glyph" x="${x + 9}" y="${y + 25}" fill="${contra ? css('--bad') : routeColorForKind(it.kind)}">${contra ? '⊘' : (GLYPH[it.kind] || '·')}</text>
-        <text class="lbl" x="${x + 26}" y="${y + 17}">${escapeHtml(trunc(it.label, 24))}</text>
-        <text class="sub" x="${x + 26}" y="${y + 31}" ${contra ? `fill="${css('--bad')}"` : ''}>${escapeHtml(contra ? 'contradicts its anchor' : dispositionLabel(it))}</text>
+        <text class="lbl" x="${x + 26}" y="${y + 17}">${escapeHtml(trunc(it.display_label || it.label, (it.names || []).length ? 17 : 24))}${(it.names || []).length ? `<tspan fill="${css('--muted')}" font-size="10" style="cursor:pointer" onclick="event.stopPropagation();this.textContent = this.textContent.startsWith('+') ? ' ${escapeHtml((it.names || []).map(n => trunc(n, 14)).join(' / '))}' : ' +${(it.names || []).length} name${(it.names || []).length === 1 ? '' : 's'}'"> +${(it.names || []).length} name${(it.names || []).length === 1 ? '' : 's'}</tspan>` : ''}</text>
+        <text class="sub" x="${x + 26}" y="${y + 31}" ${contra ? `fill="${css('--bad')}"` : ''}>${escapeHtml(contra ? 'contradicts its anchor' : (it.shared_title && it.short_def ? trunc(it.short_def, 34) : dispositionLabel(it)))}</text>
       </g>`);
     });
     parts.push('</g>');
@@ -800,17 +800,24 @@ function labelFor(key) {
   const b = (boxes[key] || [])[0];
   return b ? b.item.label : key;
 }
+let wfPick = {};  // owner's answers to which-one-did-you-mean
 function keyForLabel(lbl) {
   const norm = s => String(s || '').toLowerCase().trim();
   const want = norm(lbl);
   if (!want) return null;
-  for (const key of Object.keys(boxes))
-    if (norm(boxes[key][0].item.label) === want) return key;
+  if (wfPick[want]) return wfPick[want];
+  const exact = [], loose = [];
   for (const key of Object.keys(boxes)) {
     const have = norm(boxes[key][0].item.label);
-    if (have.startsWith(want) || want.startsWith(have)) return key;
+    if (have === want) exact.push(key);
+    else if (have.startsWith(want) || want.startsWith(have)) loose.push(key);
   }
-  return null;
+  const hits = exact.length ? exact : loose;
+  if (!hits.length) return null;
+  if (hits.length === 1) return hits[0];
+  // Two concepts carry this title. The identity law: Wordicon ASKS,
+  // never silently chooses the first.
+  return { ambiguous: want, candidates: hits };
 }
 function edgeList(strategy) {
   if (strategy === 'lineage')
@@ -1024,12 +1031,25 @@ function computeAlternatives(fromKey, toKey) {
   return alts;
 }
 let wfState = null;
+function wfChoose(normLabel, key) {
+  wfPick[normLabel] = key;
+  findRoutes();
+}
 function findRoutes() {
   clearHighlight();
   const fromL = document.getElementById('wf-from').value.trim();
   const toL = document.getElementById('wf-to').value.trim();
   if (!fromL || !toL) { wfShow('<h3>Wayfinder</h3><p class="basis">Give it both ends of the journey.</p>'); return; }
   const fromKey = keyForLabel(fromL), toKey = keyForLabel(toL);
+  const amb = [fromKey, toKey].filter(k => k && k.ambiguous);
+  if (amb.length) {
+    wfShow(`<h3>Which one do you mean?</h3>` + amb.map(a => `
+      <p class="basis">“${escapeHtml(a.ambiguous)}” names ${a.candidates.length} different concepts on this map — the title is shared; the ideas are not.</p>
+      ${a.candidates.map(k => { const it = boxes[k][0].item; return `
+        <div class="cand"><button onclick="wfChoose('${escapeHtml(a.ambiguous)}','${escapeHtml(k)}')">${escapeHtml(it.display_label || it.label)}</button>
+          <span class="basis"> ${escapeHtml(it.short_def || it.kind)}</span></div>`; }).join('')}`).join(''));
+    return;
+  }
   const missing = [[fromL, fromKey], [toL, toKey]].filter(x => !x[1]).map(x => x[0]);
   if (missing.length) {
     wfShow(`<h3>Not on the map</h3><p class="basis">${missing.map(m =>
@@ -1148,7 +1168,9 @@ async function fetchInferred(fromL, toL, kind) {
   try {
     const r = await fetch('/api/map/roads/suggest', { method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: fromL, to: toL, kind }) });
+      body: JSON.stringify({ from: fromL, to: toL, kind,
+        from_key: (wfState && wfState.fromKey) || wfPick[String(fromL || '').toLowerCase().trim()] || '',
+        to_key: (wfState && wfState.toKey) || wfPick[String(toL || '').toLowerCase().trim()] || '' }) });
     const d = await r.json();
     if (d.error) { wfFindings = [d.error]; return; }
     wfFindings = d.findings || [];
