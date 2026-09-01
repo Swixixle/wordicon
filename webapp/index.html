@@ -1994,19 +1994,27 @@ function renderCandidateCard(cand, traceId, extra) {
   return `
     <div class="card">
       <div class="result-title">${escapeHtml(bff.title)}
+        ${/\s/.test(bff.title) ? `<span class="decision-tag" style="text-transform:none;letter-spacing:0;vertical-align:middle;background:rgba(139,152,169,0.18);color:var(--muted)" title="a plain handle so the idea can exist — a name is optional, and the Bench is where one is tried">working title</span>` : ''}
         ${bff.repeat_note ? `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0;vertical-align:middle">repeats an earlier title</span>` : ''}
       </div>
       ${bff.repeat_note ? `<p class="body muted" style="font-size:12.5px;margin:2px 0 0">${escapeHtml(bff.repeat_note)}</p>` : ''}
       ${bff.form_note ? `<p class="body muted" style="font-size:13px;margin:2px 0 0"><em>${escapeHtml(bff.form_note)}</em></p>` : ''}
       ${(bff.flesh && (bff.flesh.plain_gloss || bff.flesh.example_sentence)) ? `
       <div style="margin:8px 0 2px;padding:8px 10px;border-left:3px solid var(--accent, #888);background:rgba(128,128,128,0.07);border-radius:4px">
-        ${bff.flesh.plain_gloss ? `<p class="body" style="margin:0;font-size:13.5px">${escapeHtml(bff.flesh.plain_gloss)}</p>` : ''}
+        ${bff.flesh.plain_gloss ? `<p class="body" style="margin:0;font-size:13.5px"><span style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);display:block">In one breath</span>${escapeHtml(bff.flesh.plain_gloss)}</p>` : ''}
         ${bff.flesh.example_sentence ? `<p class="body muted" style="margin:${bff.flesh.plain_gloss ? '4px' : '0'} 0 0;font-size:13px"><em>“${escapeHtml(bff.flesh.example_sentence)}”</em></p>` : ''}
       </div>` : ''}
 
+      <div class="section-label">The concept — what the idea is, before any name</div>
+      <p class="body">${escapeHtml(bff.flesh.definition || '')}</p>
+      ${bff.flesh.central_contradiction ? `<p class="body muted"><em>Tension:</em> ${escapeHtml(bff.flesh.central_contradiction)}</p>` : ''}
+      ${bff.flesh.mechanism ? `<p class="body muted"><em>Mechanism:</em> ${escapeHtml(bff.flesh.mechanism)}</p>` : ''}
+      ${bff.flesh.axiom ? `<p class="body muted"><em>Axiom:</em> ${escapeHtml(bff.flesh.axiom)}</p>` : ''}
+      ${bff.flesh.boundary ? `<p class="body muted"><em>Boundary:</em> ${escapeHtml(bff.flesh.boundary)}</p>` : ''}
+
       ${verdictHeadHtml(bff, extra)}
 
-      <details class="case"><summary>show the case \u2014 the evidence behind those three rows</summary>
+      <details class="case"><summary>show the case \u2014 the evidence behind those rows</summary>
 
       <div class="section-label">Bone</div>
       <p class="body muted">${escapeHtml(bff.bone.summary)}</p>
@@ -2014,15 +2022,8 @@ function renderCandidateCard(cand, traceId, extra) {
 
       ${twoTierHtml(bff)}
 
-      <div class="section-label">Flesh</div>
-      <p class="body">${escapeHtml(bff.flesh.definition || '')}</p>
-      <p class="body muted"><em>Contradiction:</em> ${escapeHtml(bff.flesh.central_contradiction || '')}</p>
-      <p class="body muted"><em>Axiom:</em> ${escapeHtml(bff.flesh.axiom || '')}</p>
-
       <div class="section-label">Friction — a verdict on CRAFT, advisory, not a gate
         ${verdictLabel ? `<span class="decision-tag ${verdictClass}" style="margin-left:6px;text-transform:none;letter-spacing:0">${escapeHtml(verdictLabel)}</span>` : ''}
-        ${bff.friction.register === 'kitchen' ? `<span class="decision-tag accepted" style="margin-left:6px;text-transform:none;letter-spacing:0">kitchen word</span>`
-          : bff.friction.register === 'seminar' ? `<span class="decision-tag revised" style="margin-left:6px;text-transform:none;letter-spacing:0">seminar term</span>` : ''}
       </div>
       <p class="body muted">${escapeHtml(bff.friction.hostile_read || '')}</p>
       ${bff.friction.redundancy_note ? `<p class="body muted"><em>Redundancy:</em> ${escapeHtml(bff.friction.redundancy_note)}</p>` : ''}
@@ -2031,11 +2032,11 @@ function renderCandidateCard(cand, traceId, extra) {
       ${bff.friction.source_fidelity_note ? `<p class="body muted"><em>Beyond the source:</em> ${escapeHtml(bff.friction.source_fidelity_note)}</p>` : ''}
       </details>
 
-      <div class="section-label">Your judgment — this is the authority that actually decides</div>
+      <div class="section-label">Your judgment on the CONCEPT — this is the authority that actually decides</div>
       <div class="judge-row">
-        <button class="judge-btn a" id="judge-a-${i}" onclick="pickDecision(${i},'a')">Accept</button>
-        <button class="judge-btn r" id="judge-r-${i}" onclick="pickDecision(${i},'r')">Reject</button>
-        <button class="judge-btn v" id="judge-v-${i}" onclick="pickDecision(${i},'v')">Revise</button>
+        <button class="judge-btn a" id="judge-a-${i}" onclick="pickDecision(${i},'a')">Keep this concept</button>
+        <button class="judge-btn r" id="judge-r-${i}" onclick="pickDecision(${i},'r')">Set it aside</button>
+        <button class="judge-btn v" id="judge-v-${i}" onclick="pickDecision(${i},'v')">Revise it</button>
       </div>
       <div class="part-row" id="part-row-${i}">
         <span class="part-label" id="part-label-${i}">What should change?</span>
@@ -2045,14 +2046,27 @@ function renderCandidateCard(cand, traceId, extra) {
       <div id="admit-area-${i}"></div>
       <input class="note" id="judge-note-${i}" placeholder="optional — only needed if the chips above don't cover it">
       <button class="submit-judgment" id="submit-judgment-${i}" onclick="submitJudgment(${i}, '${escapeJs(bff.title)}')">Record judgment</button>
-      ${/\s/.test(bff.title) ? `<button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="startWordify(${i}, '${escapeJs(bff.title)}')">Make it a word — compress this term into one speakable coin</button>` : ''}
       <button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="startSproutFromCard(${i}, '${escapeJs(bff.title)}')">⤷ Sprout — travel laterally from this one</button>
       <button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="startRefractFromCard(${i}, '${escapeJs(bff.title)}')">⇄ Refract — the same idea in other languages</button>
       <button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="startArchetypeFromCard(${i}, '${escapeJs(bff.title)}')">◈ Archetype — the figure this concept implies</button>
       ${(bff.friction && (bff.friction.redundancy_note || bff.friction.hostile_read || bff.friction.source_fidelity_note)) ? `
       <button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="startVerifyFromCard(${i})">✓ Verify — check Friction's own claims against live sources, as many times as you want</button>` : ''}
-      ${bff.concept_id ? `
-      <button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="showConceptHistory(${i})">⋈ Other word-forms recorded for this same concept</button>` : ''}
+      <button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="openBenchFromCard('${escapeJs(bff.title)}', '${escapeJs(bff.concept_id || '')}')">⚒ Take it to the Bench — refine its structure, or explore names</button>
+      <details class="case" style="margin-top:10px"><summary>Naming — the handle, not the concept; optional, and sometimes rightly never</summary>
+        ${(() => { const nn = namingNote(bff); return `
+        <div class="vrow v-${nn[0]}" style="margin-top:6px">
+          <span class="vdot">${DOT[nn[0]]}</span>
+          <span class="vlabel">Unclaimed</span>
+          <span class="vwhy">${escapeHtml(nn[1])}</span>
+        </div>`; })()}
+        ${bff.friction.register === 'kitchen' ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0">kitchen word — a judgment about the expression, not the idea</span>`
+          : bff.friction.register === 'seminar' ? `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">seminar term — a judgment about the expression, not the idea</span>` : ''}
+        <div>
+        ${/\s/.test(bff.title) ? `<button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="startWordify(${i}, '${escapeJs(bff.title)}')">Make it a word — compress this term into one speakable coin (deliberate, never required)</button>` : ''}
+        ${bff.concept_id ? `
+        <button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="showConceptHistory(${i})">⋈ Names and word-forms attached to this concept</button>` : ''}
+        </div>
+      </details>
       <div id="recorded-badge-${i}"></div>
       <div id="revise-area-${i}"></div>
       <div id="sprout-area-${i}"></div>
@@ -2062,6 +2076,11 @@ function renderCandidateCard(cand, traceId, extra) {
       <div id="concept-area-${i}"></div>
     </div>
   `;
+}
+
+function openBenchFromCard(title, conceptId) {
+  window.location.href = '/bench?title=' + encodeURIComponent(title)
+    + (conceptId ? '&concept_id=' + encodeURIComponent(conceptId) : '');
 }
 
 function escapeJs(s) {
@@ -2141,26 +2160,28 @@ function verdictRows(bff, extra) {
               contradicted: ['no', 'reads against the source it cites']}[f.verdict]
              || ['none', 'not reviewed'];
   rows.push(['Well-made', wm[0], wm[1]]);
-
-  // UNCLAIMED — is the territory free. Filled means free, so the row reads the
-  // same direction as the two above it.
-  const rn = (f.redundancy_note || '').toLowerCase();
-  let u, uWhy;
-  if (f.verdict === 'existing') { u = 'no'; uWhy = 'likely already named \u2014 verify, then the existing term wins'; }
-  else if (!rn) { u = 'none'; uWhy = 'no redundancy check recorded'; }
-  else if (/\bno (?:strong |clean |confident |single )?(?:existing|canonical|term|collision|match)/.test(rn)
-           || /nothing exact|no exact|not a (?:clean|straightforward) collision/.test(rn)) {
-    u = 'yes'; uWhy = 'nothing confident recalled \u2014 still recall, not a search';
-  } else { u = 'part'; uWhy = 'adjacent terms exist \u2014 read the note before you trust it'; }
-  rows.push(['Unclaimed', u, uWhy]);
   return rows;
 }
 
+// UNCLAIMED — is the territory free. A NAMING fact, not a concept fact
+// (docs/adr-concept-first.md): whether an expression is already in use
+// belongs to the naming layer, so it renders in the Naming section at
+// the card's end and never as one of the concept's defining rows. Same
+// logic as always; a different address.
+function namingNote(bff) {
+  const f = (bff && bff.friction) || {};
+  const rn = (f.redundancy_note || '').toLowerCase();
+  if (f.verdict === 'existing') return ['no', 'likely already named \u2014 verify, then the existing term wins'];
+  if (!rn) return ['none', 'no redundancy check recorded'];
+  if (/\bno (?:strong |clean |confident |single )?(?:existing|canonical|term|collision|match)/.test(rn)
+      || /nothing exact|no exact|not a (?:clean|straightforward) collision/.test(rn)) {
+    return ['yes', 'nothing confident recalled \u2014 still recall, not a search'];
+  }
+  return ['part', 'adjacent terms exist \u2014 read the note before you trust it'];
+}
+
 function verdictHeadHtml(bff, extra) {
-  const reg = bff.friction && bff.friction.register;
-  const tag = reg === 'kitchen' ? 'kitchen word' : reg === 'seminar' ? 'seminar term' : '';
   return `<div class="vhead">
-    ${tag ? `<div class="vreg">${tag}</div>` : ''}
     ${verdictRows(bff, extra).map(([label, state, why]) => `
       <div class="vrow v-${state}">
         <span class="vdot">${DOT[state]}</span>
@@ -2398,7 +2419,7 @@ async function submitJudgment(i, candidateTitle) {
     // looking like it grows. The server counts the corpus after writing;
     // this line never guesses.
     document.getElementById(`recorded-badge-${i}`).innerHTML =
-      `<div class="recorded-badge">Recorded: ${d.recorded}${lexiconNote(d)}</div>`;
+      `<div class="recorded-badge">Recorded: ${({accepted:'concept kept',rejected:'set aside',revised:'revised'})[d.recorded] || d.recorded}${lexiconNote(d)}</div>`;
     btn.textContent = 'Recorded';
     loadHistory();
     // The Library does not poll. Left open across an acceptance it showed

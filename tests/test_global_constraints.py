@@ -6893,12 +6893,13 @@ console.log(out.join('\\n'));
     #
     # A card used to carry nine verdict vocabularies and about twenty-five
     # labels sharing no words between them. They all answered one of three
-    # questions, so there are three rows now. Two things have to hold or the
-    # compression is worse than the sprawl it replaced: the rows must never
-    # move or vanish (a card whose shape changes teaches nothing), and FILLED
-    # must mean good-for-the-candidate on all three — which is why the third
-    # row is UNCLAIMED and not ALREADY TAKEN. Get the direction wrong on one
-    # row and the reader has to re-derive which way is up on every card.
+    # questions. Under the concept-first ruling (docs/adr-concept-first.md)
+    # the CONCEPT strip holds two of them — Grounded and Well-made — and the
+    # third, UNCLAIMED, is a fact about the NAMING layer: same logic, same
+    # direction (filled = good), rendered at the card's naming section via
+    # namingNote(). Evolved 2026-09-01 because the ruled product changed;
+    # the two remaining rows keep their semantics verbatim, and the naming
+    # note keeps Unclaimed's exact decision table.
     _page = (_pathlib.Path(cli.__file__).parent.parent / "webapp" / "index.html").read_text(encoding="utf-8")
     if "verdictRows" not in _page or "verdictHeadHtml" not in _page:
         failures.append("56: the three-row verdict header is gone from the card")
@@ -6909,43 +6910,52 @@ console.log(out.join('\\n'));
         _cases = [
             ("clean", {"friction": {"verdict": "keep", "redundancy_note": "No strong existing-term collision recalled."},
                        "anchor_integrity": {"status": "exact"}, "claim_support": {"support": "supported"}},
-             ["yes", "yes", "yes"]),
+             ["yes", "yes"], "yes"),
             ("half-grounded", {"friction": {"verdict": "keep", "redundancy_note": "Adjacent to presenteeism."},
                                "anchor_integrity": {"status": "exact"}, "claim_support": {"support": "partial"}},
-             ["part", "yes", "part"]),
+             ["part", "yes"], "part"),
             ("topical", {"friction": {"verdict": "reject", "redundancy_note": "Overlaps with the pathetic fallacy."},
                          "anchor_integrity": {"status": "exact"}, "claim_support": {"support": "topical"}},
-             ["no", "no", "part"]),
-            # An 'existing' verdict is not a CRAFT objection — it must land on
-            # the third row and leave the second one clean, or two different
+             ["no", "no"], "part"),
+            # An 'existing' verdict is not a CRAFT objection — it lands in
+            # the NAMING note and leaves Well-made clean, or two different
             # questions get answered by one dot again.
             ("already named", {"friction": {"verdict": "existing", "redundancy_note": "This is lex talionis."},
                                "anchor_integrity": {"status": "exact"}, "claim_support": {"support": "supported"}},
-             ["yes", "yes", "no"]),
+             ["yes", "yes"], "no"),
             # A word-form has no anchor by design. The row must say so, not disappear.
             ("word-form", {"form_note": "a new form", "friction": {"verdict": "keep", "redundancy_note": ""},
                            "anchor_integrity": {}, "claim_support": {}},
-             ["none", "yes", "none"]),
+             ["none", "yes"], "none"),
         ]
         if not _node:
             # No node here: fall back to checking the invariants that live in
             # the source text, and say plainly that the behaviour went unrun.
-            for _needle in ("rows.push(['Grounded'", "rows.push(['Well-made'", "rows.push(['Unclaimed'"):
+            for _needle in ("rows.push(['Grounded'", "rows.push(['Well-made'",
+                            "function namingNote"):
                 if _needle not in _src:
-                    failures.append(f"56: {_needle} missing — the three rows are not all pushed")
+                    failures.append(f"56: {_needle} missing — a concept row "
+                                    "or the naming note is gone")
+            if "rows.push(['Unclaimed'" in _src:
+                failures.append("56: Unclaimed is back on the CONCEPT strip "
+                                "— it belongs to the naming layer")
         else:
             _harness = _src + "\nfunction escapeHtml(x){return String(x);}\n" + (
-                "const CASES = " + _json.dumps([[n, b, w] for n, b, w in _cases]) + ";\n"
+                "const CASES = " + _json.dumps([[n, b, w, u] for n, b, w, u in _cases]) + ";\n"
                 "let bad = [];\n"
-                "for (const [name, bff, want] of CASES) {\n"
+                "for (const [name, bff, want, wantNote] of CASES) {\n"
                 "  const rows = verdictRows(bff, {});\n"
                 "  const got = rows.map(r => r[1]);\n"
                 "  const labels = rows.map(r => r[0]);\n"
-                "  if (JSON.stringify(labels) !== '[\"Grounded\",\"Well-made\",\"Unclaimed\"]')\n"
+                "  if (JSON.stringify(labels) !== '[\"Grounded\",\"Well-made\"]')\n"
                 "    bad.push(name + ': rows moved or vanished (' + labels.join(',') + ')');\n"
                 "  if (JSON.stringify(got) !== JSON.stringify(want))\n"
                 "    bad.push(name + ': got ' + got.join(',') + ' wanted ' + want.join(','));\n"
                 "  if (rows.some(r => !r[2])) bad.push(name + ': a row carries no reason');\n"
+                "  const nn = namingNote(bff);\n"
+                "  if (nn[0] !== wantNote)\n"
+                "    bad.push(name + ': naming note ' + nn[0] + ' wanted ' + wantNote);\n"
+                "  if (!nn[1]) bad.push(name + ': the naming note carries no reason');\n"
                 "}\n"
                 "console.log(bad.join('\\n'));\n")
             _tmp = _pathlib.Path("/tmp/_wordicon_vrows_test.js")
@@ -11271,6 +11281,70 @@ console.log(out.join('\\n'));
     if not (_q94.exists() and "zzabsent94" in _q94.read_text()
             and "needs_owner_ruling" in _q94.read_text()):
         _f94("the receipt-only case is missing from the review queue")
+
+    # 15. the DEFAULT generation contract asks for concept readings, not
+    # coinages — and the craft rule survives; Riff keeps its deliberate
+    # coining voice untouched.
+    _gen94 = cli.build_generation_prompt(cli.load_seed_corpus(), "forge",
+                                         "a task")
+    for _pin94 in ("CONCEPT READING", "two to eight readable words",
+                   "Do NOT invent a fused single-word coinage",
+                   '"mechanism"', '"boundary"',
+                   "what makes the pattern work",
+                   "what would look similar but does not qualify",
+                   "speakable, readable English"):
+        if " ".join(_pin94.split()) not in " ".join(_gen94.split()):
+            _f94(f"default generation contract lost: {_pin94!r}")
+    if "blend their morphemes" in _gen94:
+        _f94("riff's coining voice leaked into the default contract")
+    _riff94 = cli.build_riff_prompt(cli.load_seed_corpus(), "some ore")
+    if "coin new words" not in _riff94:
+        _f94("Riff lost its deliberate coining voice — the pivot was "
+             "never a ban on the forge")
+
+    # 16. the anatomy travels: a mock forge run carries mechanism and
+    # boundary into the result and its persisted snapshot.
+    _r94x = cli.run("forge", "an unnamed pull toward closed doors",
+                    CapturingMock(), interactive=False)
+    _fl94 = _r94x["candidates"][0]["bff"]["flesh"]
+    if not (_fl94.get("mechanism") and _fl94.get("boundary")):
+        _f94("mechanism/boundary missing from the run's flesh")
+    _snap94 = cli.RESULTS_DIR / f"{_r94x['trace_id']}.json"
+    if _snap94.exists():
+        _sv94 = _snap94.read_text()
+        if "mechanism" not in _sv94 or "boundary" not in _sv94:
+            _f94("mechanism/boundary did not persist to the snapshot")
+
+    # 17. the card leads with the concept and ends with naming — pins on
+    # the ruled hierarchy, plus the order itself.
+    _idx94 = (Path(cli.__file__).parent.parent / "webapp"
+              / "index.html").read_text()
+    for _pin94 in ("The concept — what the idea is, before any name",
+                   "<em>Tension:</em>", "<em>Mechanism:</em>",
+                   "<em>Boundary:</em>", "In one breath",
+                   ">working title</span>",
+                   "Keep this concept", "Set it aside", "Revise it",
+                   "Naming — the handle, not the concept",
+                   "openBenchFromCard", "concept kept",
+                   "function namingNote"):
+        if _pin94 not in _idx94:
+            _f94(f"index.html lost the concept-first pin {_pin94!r}")
+    _o1 = _idx94.find("The concept — what the idea is")
+    _o2 = _idx94.find("${verdictHeadHtml(bff, extra)}")
+    _o3 = _idx94.find("Your judgment on the CONCEPT")
+    _o4 = _idx94.find("Sprout — travel laterally")
+    _o5 = _idx94.find("Naming — the handle, not the concept")
+    if not (-1 < _o1 < _o2 < _o3 < _o4 < _o5):
+        _f94(f"the card hierarchy is out of the ruled order "
+             f"({_o1},{_o2},{_o3},{_o4},{_o5})")
+    if '<div class="section-label">Flesh</div>' in _idx94:
+        _f94("the anatomy is still hidden inside the collapsed case")
+
+    # 18. lexical novelty does not gate the concept: the strip source has
+    # no Unclaimed row — the naming note carries it (block 56 runs the
+    # behavior; this pins the address).
+    if "rows.push(['Unclaimed'" in _idx94:
+        _f94("Unclaimed is back on the concept strip")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

@@ -2222,6 +2222,8 @@ class MockGateway(Gateway):
                         "definition": "The stance of one who exits a containing system without pretending the exit resolves it.",
                         "central_contradiction": "Escape and belonging remain simultaneously true.",
                         "axiom": "Leaving does not close the ledger.",
+                        "mechanism": "Exit removes the pressure while the unresolved claim keeps accruing, so the stance must hold both at once.",
+                        "boundary": "Not mere quitting: one who leaves and declares the matter settled has closed the ledger, honestly or not.",
                         "plain_gloss": "Leaving something while admitting leaving didn't fix it.",
                         "example_sentence": "He quit the job but kept the refusenik posture about the whole industry.",
                     },
@@ -2230,6 +2232,8 @@ class MockGateway(Gateway):
                         "definition": "Generic liminal-space language describing standing at a boundary.",
                         "central_contradiction": "Being between two states feels significant.",
                         "axiom": "The doorway is meaningful.",
+                        "mechanism": "Transitions suspend both identities at once, and the suspension itself is felt as loss.",
+                        "boundary": "Not homesickness: missing a place you still belong to has no threshold in it.",
                         "plain_gloss": "Feeling sad about being between two stages of life.",
                         "example_sentence": "Senior year was one long threshold grief.",
                     },
@@ -2607,11 +2611,27 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
       "definition": "...",
       "central_contradiction": "...",
       "axiom": "...",
+      "mechanism": "...",
+      "boundary": "...",
       "plain_gloss": "...",
       "example_sentence": "..."
     }}
   ]
 }}
+CONCEPT-FIRST, the default contract (docs/adr-concept-first.md): each
+candidate is a CONCEPT READING, not a coinage. Its title is a plain,
+descriptive WORKING TITLE of roughly two to eight readable words — the
+owner's own phrasing when it already works, or an established term used
+plainly when one genuinely names the idea. Do NOT invent a fused
+single-word coinage here: coinage is a deliberate act that lives at the
+Bench and in Play, and an idea must be allowed to exist before anything
+auditions to rename it.
+
+mechanism is what makes the pattern work — the cause or engine
+underneath it, one or two sentences of machinery, not restatement.
+boundary is what would look similar but does not qualify — the nearest
+thing OUTSIDE the concept, named so the edge is real.
+
 For each candidate, plain_gloss is one breath of plain words — how you'd
 explain this to a coworker with no philosophy background, no jargon, no
 metaphor that needs its own gloss. If the concept honestly can't be said
@@ -2710,6 +2730,8 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
       "definition": "...",
       "central_contradiction": "...",
       "axiom": "...",
+      "mechanism": "...",
+      "boundary": "...",
       "plain_gloss": "...",
       "example_sentence": "..."
     }}
@@ -2783,6 +2805,8 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
       "definition": "...",
       "central_contradiction": "...",
       "axiom": "...",
+      "mechanism": "...",
+      "boundary": "...",
       "plain_gloss": "...",
       "example_sentence": "..."
     }}
@@ -4176,6 +4200,8 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
             "flesh": {"definition": candidate.get("definition"),
                       "central_contradiction": candidate.get("central_contradiction"),
                       "axiom": candidate.get("axiom"),
+                      "mechanism": candidate.get("mechanism") or "",
+                      "boundary": candidate.get("boundary") or "",
                       "plain_gloss": candidate.get("plain_gloss") or "",
                       "example_sentence": candidate.get("example_sentence") or ""},
             "friction": {k: adversarial.get(k) for k in
@@ -5522,7 +5548,9 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
                 "bone": {"summary": "0 claim(s) — meaning was reworked under your critique; "
                                      "the original's grounding was not carried over.",
                           "claims": []},
-                "flesh": {**{k: cand[k] for k in ("definition", "central_contradiction", "axiom")},
+                "flesh": {**{k: cand.get(k) or "" for k in
+                            ("definition", "central_contradiction", "axiom",
+                             "mechanism", "boundary")},
                           "plain_gloss": c.get("plain_gloss") or "",
                           "example_sentence": c.get("example_sentence") or ""},
                 "friction": {k: adversarial.get(k) for k in ("hostile_read", "redundancy_note", "verdict", "register")},
