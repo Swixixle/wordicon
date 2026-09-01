@@ -30,6 +30,7 @@ import argparse
 import concurrent.futures
 import difflib
 import hashlib
+import uuid
 import json
 import os
 import re
@@ -75,6 +76,7 @@ JUDGMENTS_LOG = LOCAL_STATE / "judgments.jsonl"
 RECEIPTS_DIR = LOCAL_STATE / "receipts"
 RESULTS_DIR = LOCAL_STATE / "results"
 ACCEPTED_CONCEPTS_PATH = LOCAL_STATE / "accepted_concepts.json"
+CONCEPT_NAMES_LOG = LOCAL_STATE / "concept_names.jsonl"
 # What the owner actually typed, written the moment a run is SUBMITTED
 # rather than when it finishes. A result snapshot is written on success
 # only, so until now a run that failed — or a server restarted while one
@@ -903,7 +905,7 @@ def latest_decisions() -> dict:
     return out
 
 
-def retract_accepted_concept(title: str) -> bool:
+def retract_accepted_concept(title: str, concept_id: str = "") -> bool:
     """The inverse of persist_accepted_concept, which had none.
 
     Without this, re-judging an accepted word as rejected wrote the new
@@ -911,12 +913,28 @@ def retract_accepted_concept(title: str) -> bool:
     judgment/lexicon divergence that put six words on the shelf with no
     definition behind them. A judgment you can make and cannot unmake is
     not a judgment, it is a trapdoor. Returns whether anything was removed.
-    """
+
+    Concept-aware: with a concept_id, ONLY that concept's entry is
+    retracted — rejecting one of two same-titled concepts must never
+    pull the other off the shelf. The bare-title path still removes by
+    name, but refuses to fire when the title is ambiguous across
+    concept-aware entries: an ambiguous retraction is a question for the
+    owner, not a coin flip."""
     if not ACCEPTED_CONCEPTS_PATH.exists():
         return False
     existing = _load(ACCEPTED_CONCEPTS_PATH)
-    want = title.strip().lower()
-    kept = [c for c in existing if c.get("name", "").strip().lower() != want]
+    concept_id = (concept_id or "").strip()
+    if concept_id:
+        kept = [c for c in existing if (c.get("concept_id") or "") != concept_id]
+    else:
+        want = title.strip().lower()
+        matches = [c for c in existing
+                   if c.get("name", "").strip().lower() == want]
+        distinct_cids = {c.get("concept_id") or "" for c in matches}
+        if len(matches) > 1 and len(distinct_cids) > 1:
+            return False  # ambiguous by design — caller must say which
+        kept = [c for c in existing
+                if c.get("name", "").strip().lower() != want]
     if len(kept) == len(existing):
         return False
     ACCEPTED_CONCEPTS_PATH.write_text(json.dumps(kept, indent=2))
@@ -1311,12 +1329,24 @@ def persist_accepted_concept(title: str, definition: str, trace_id: str,
                                status: str = "accepted",
                                alias_of: str = "",
                                declined_alias: dict | None = None,
-                               decline_reason: str = "") -> bool:
-    """Called when a judgment of 'accepted' is recorded. Idempotent on
-    title — accepting the same word twice doesn't duplicate it. status
-    distinguishes words you coined ("accepted") from established terms
-    you knowingly took in after Friction ruled the concept already named
-    ("adopted") — a library holds both, labeled.
+                               decline_reason: str = "",
+                               concept_id: str = "") -> bool:
+    """Called when a judgment of 'accepted' is recorded.
+
+    CONCEPT-FIRST IDENTITY (docs/adr-concept-first.md): when the caller
+    supplies the candidate's concept_id, idempotence is keyed on the
+    CONCEPT — accepting the same concept twice doesn't duplicate it, and
+    two DIFFERENT concepts that happen to share a title both survive.
+    The audit that forced this found three accepted concepts silently
+    suppressed by the old same-title-same-idea equation, two of them
+    siblings of the corpus's flagship. Legacy callers that pass no
+    concept_id keep the old title-keyed behavior byte-for-byte — their
+    records were made under the word-first contract and stay honest
+    about it.
+
+    status distinguishes words you coined ("accepted") from established
+    terms you knowingly took in ("adopted") — a library holds both,
+    labeled.
 
     RETURNS whether the corpus actually gained an entry. It used to return
     None whether it wrote or bailed, so every caller reported a cheerful
@@ -1326,8 +1356,12 @@ def persist_accepted_concept(title: str, definition: str, trace_id: str,
     appearing to grow while every button still says it worked."""
     LOCAL_STATE.mkdir(exist_ok=True)
     existing = _load(ACCEPTED_CONCEPTS_PATH) if ACCEPTED_CONCEPTS_PATH.exists() else []
-    if any(c.get("name", "").strip().lower() == title.strip().lower() for c in existing):
-        return False
+    concept_id = (concept_id or "").strip()
+    if concept_id:
+        if any((c.get("concept_id") or "") == concept_id for c in existing):
+            return False  # this CONCEPT is already on the shelf
+    elif any(c.get("name", "").strip().lower() == title.strip().lower() for c in existing):
+        return False  # legacy word-first path: title-idempotent, unchanged
     # An alias may never point at another alias: resolve to the family's
     # canonical entry first. Without this, accepting isograde as an alias
     # of tetrace (itself an alias of Diagnostic Ladder) would build a
@@ -1343,7 +1377,14 @@ def persist_accepted_concept(title: str, definition: str, trace_id: str,
         if _norm_title(alias_target) == _norm_title(title):
             alias_target = ""  # never let an entry alias itself
     existing.append({
-        "id": f"acc_{hashlib.sha256(title.strip().lower().encode()).hexdigest()[:8]}",
+        # Concept-aware entries mint their id from the concept, not the
+        # title — "no persistent identity may be derived solely from a
+        # mutable human-readable title." Legacy path keeps the old recipe
+        # so pre-pivot behavior is bit-stable.
+        "id": (f"acc2_{hashlib.sha256(concept_id.encode()).hexdigest()[:12]}"
+               if concept_id else
+               f"acc_{hashlib.sha256(title.strip().lower().encode()).hexdigest()[:8]}"),
+        "concept_id": concept_id,
         "object_type": "concept", "name": title, "definition": definition or "",
         "status": status if status in ("accepted", "adopted") else "accepted",
         # An alias is still ACCEPTED — you chose this word and it stays in
@@ -1368,6 +1409,82 @@ def persist_accepted_concept(title: str, definition: str, trace_id: str,
     })
     ACCEPTED_CONCEPTS_PATH.write_text(json.dumps(existing, indent=2))
     return True
+
+
+# ---- names as satellites of concepts (docs/adr-concept-first.md) ----------
+#
+# A name is a handle for a concept, not the concept itself. This store
+# holds name records ATTACHED to concepts: coinages kept at the Bench,
+# alternate forms, the owner's own titles. Append-only; a later record
+# for the same form supersedes by link, never by rewrite. The concept's
+# lexicon entry keeps its working title; a name record with primary=True
+# changes what the Map and Library DISPLAY, never what anything IS.
+
+NAME_KINDS = ("source_phrase", "descriptive_title", "established_term",
+              "coinage", "owner_title", "working_title")
+
+
+def record_concept_name(concept_id: str, form: str, kind: str,
+                        origin: str = "owner", proposed_by_trace: str = "",
+                        ruling: str = "kept", primary: bool = False) -> dict:
+    """Attach one name to a concept. Identity law: the record's id is
+    minted unique, never derived from the form."""
+    concept_id = (concept_id or "").strip()
+    form = (form or "").strip()
+    if not concept_id or not form:
+        raise ValueError("a name record needs both a concept_id and a form")
+    if kind not in NAME_KINDS:
+        kind = "descriptive_title"
+    prior = [n for n in load_concept_names(concept_id)
+             if _norm_title(n.get("form", "")) == _norm_title(form)]
+    row = {"name_uid": "name_" + uuid.uuid4().hex[:16],
+           "concept_id": concept_id, "form": form, "kind": kind,
+           "one_word": (" " not in form.strip()),
+           "origin": origin, "proposed_by_trace": proposed_by_trace,
+           "ruling": ruling, "primary": bool(primary),
+           "supersedes": prior[-1]["name_uid"] if prior else "",
+           "at": _now()}
+    LOCAL_STATE.mkdir(exist_ok=True)
+    with CONCEPT_NAMES_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return row
+
+
+def load_concept_names(concept_id: str = "") -> "list[dict]":
+    if not CONCEPT_NAMES_LOG.exists():
+        return []
+    out = []
+    for line in CONCEPT_NAMES_LOG.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not concept_id or row.get("concept_id") == concept_id:
+            out.append(row)
+    return out
+
+
+def concept_display_names() -> "dict[str, dict]":
+    """concept_id -> {"primary": form or "", "names": [latest kept name
+    rows, superseded ones resolved away]}. Display only — nothing here is
+    identity."""
+    latest = {}
+    for row in load_concept_names():
+        latest[(row["concept_id"], _norm_title(row.get("form", "")))] = row
+    out = {}
+    for row in latest.values():
+        if row.get("ruling") != "kept":
+            continue
+        slot = out.setdefault(row["concept_id"], {"primary": "", "names": []})
+        slot["names"].append(row)
+        if row.get("primary"):
+            slot["primary"] = row.get("form", "")
+    for slot in out.values():
+        slot["names"].sort(key=lambda r: r.get("at", ""))
+    return out
 
 
 def record_input(job_id: str, mode: str, text: str, parent: str = "") -> None:
@@ -4188,15 +4305,22 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
                 continue
             decision = {"a": "accepted", "r": "rejected", "v": "revised"}.get(raw_decision, "unresolved")
             note = input("One-line reason (your own judgment — recorded as personal_authority, not Bone): ").strip()
+            # Event id, minted unique — never derived from the title. The
+            # old sha(title+trace) recipe gave two distinct same-titled
+            # concepts in one run the SAME judgment id in an append-only
+            # log (found twice in the real corpus). Identity law:
+            # docs/adr-concept-first.md.
             judgment = Judgment(
-                id=f"jdg_cli_candidate_{hashlib.sha256((title + trace_id).encode()).hexdigest()[:10]}",
+                id="jdg_evt_" + uuid.uuid4().hex[:16],
                 decision=decision, candidate_text=title, originating_operation=trace_id,
                 decision_source="owner", confidence=1.0, review_status="unreviewed",
                 reason=note or None, scope="local_to_concept",
+                concept_id=(r["bff"].get("concept_id") or None),
             )
             persist_judgment(judgment)
             if decision == "accepted":
-                persist_accepted_concept(title, r["bff"]["flesh"].get("definition") or "", trace_id)
+                persist_accepted_concept(title, r["bff"]["flesh"].get("definition") or "", trace_id,
+                                          concept_id=r["bff"].get("concept_id") or "")
             decisions.append({"title": title, "decision": decision})
             print(f"Recorded: {decision}")
         if decisions:
@@ -7877,13 +8001,34 @@ BENCH_CORRECTIONS = LOCAL_STATE / "bench_corrections.jsonl"
 BENCH_DIR = LOCAL_STATE / "bench"
 
 
-def _bench_path(title: str) -> "Path":
-    return BENCH_DIR / f"{_norm_title(title) or 'untitled'}.json"
+def _bench_path(title: str, concept_id: str = "") -> "Path":
+    """Concept-aware: a session keyed by concept_id can never collide
+    with a same-titled different concept (the identity law,
+    docs/adr-concept-first.md). Resolution order: the concept's own
+    file; else a legacy title file that does not belong to a DIFFERENT
+    concept (continuity for pre-pivot benches — adopted in place on the
+    next save); else a fresh concept-keyed file. Bare-title callers keep
+    the legacy path untouched."""
+    concept_id = (concept_id or "").strip()
+    legacy = BENCH_DIR / f"{_norm_title(title) or 'untitled'}.json"
+    if not concept_id:
+        return legacy
+    keyed = BENCH_DIR / f"c_{concept_id}.json"
+    if keyed.exists():
+        return keyed
+    if legacy.exists():
+        try:
+            owner = (json.loads(legacy.read_text()).get("concept_id") or "")
+        except (json.JSONDecodeError, OSError):
+            owner = ""
+        if owner in ("", concept_id):
+            return legacy
+    return keyed
 
 
-def load_bench_session(title: str) -> dict:
+def load_bench_session(title: str, concept_id: str = "") -> dict:
     """The stored file for one word, or {} if it has never been benched."""
-    p = _bench_path(title)
+    p = _bench_path(title, concept_id)
     if not p.exists():
         return {}
     try:
@@ -7903,7 +8048,8 @@ CONTRACT_OWNER = "owner_confirmed"
 CONTRACT_MODEL = "model_proposed"
 
 
-def save_bench_open(title: str, definition: str, result: dict) -> dict:
+def save_bench_open(title: str, definition: str, result: dict,
+                    concept_id: str = "") -> dict:
     """Record one opening. The model's proposal is appended to `opens` and
     kept forever, even after the owner rewrites it — the difference between
     what the model said and what the owner corrected it to IS the pilot's
@@ -7911,12 +8057,17 @@ def save_bench_open(title: str, definition: str, result: dict) -> dict:
 
     Does NOT touch a stored confirmed contract. Opening a word again is not
     the owner un-confirming anything."""
-    d = load_bench_session(title) or {
-        "bench_id": "bench_" + (_norm_title(title) or "untitled"),
+    d = load_bench_session(title, concept_id) or {
+        # Concept-aware sessions carry a unique bench id; legacy sessions
+        # keep the old title-derived one so nothing historical shifts.
+        "bench_id": (("bench_c_" + concept_id.strip()) if (concept_id or "").strip()
+                     else "bench_" + (_norm_title(title) or "untitled")),
         "title": title, "created_at": _now(),
         "opens": [], "builds": [],
         "contract": [], "contract_source": "", "contract_confirmed_at": "",
     }
+    if (concept_id or "").strip():
+        d["concept_id"] = concept_id.strip()  # adopt-in-place for legacy files
     d["title"] = title
     d["definition"] = definition or d.get("definition", "")
     d["updated_at"] = _now()
@@ -7944,17 +8095,22 @@ def save_bench_open(title: str, definition: str, result: dict) -> dict:
     return d
 
 
-def save_bench_contract(title: str, contract: list, confirmed: bool) -> dict:
+def save_bench_contract(title: str, contract: list, confirmed: bool,
+                        concept_id: str = "") -> dict:
     """Store the contract the owner is working with.
 
     `confirmed` is the owner's act, arriving from the confirm button and
     from nowhere else. There is deliberately no way to pass CONTRACT_OWNER
     in directly: the label is derived here, so no caller — and no model
     output threaded through a caller — can mint an owner confirmation."""
-    d = load_bench_session(title)
+    d = load_bench_session(title, concept_id)
     if not d:
-        d = {"bench_id": "bench_" + (_norm_title(title) or "untitled"),
+        d = {"bench_id": (("bench_c_" + concept_id.strip())
+                          if (concept_id or "").strip()
+                          else "bench_" + (_norm_title(title) or "untitled")),
              "title": title, "created_at": _now(), "opens": [], "builds": []}
+    if (concept_id or "").strip():
+        d["concept_id"] = concept_id.strip()
     d["contract"] = contract or []
     d["contract_source"] = CONTRACT_OWNER if confirmed else CONTRACT_MODEL
     d["contract_confirmed_at"] = _now() if confirmed else ""
@@ -7963,14 +8119,18 @@ def save_bench_contract(title: str, contract: list, confirmed: bool) -> dict:
     return d
 
 
-def save_bench_build(title: str, result: dict) -> dict:
+def save_bench_build(title: str, result: dict, concept_id: str = "") -> dict:
     """Append one build round. Never replaces an earlier one — a word the
     owner tried and abandoned is part of what happened."""
-    d = load_bench_session(title)
+    d = load_bench_session(title, concept_id)
     if not d:
-        d = {"bench_id": "bench_" + (_norm_title(title) or "untitled"),
+        d = {"bench_id": (("bench_c_" + concept_id.strip())
+                          if (concept_id or "").strip()
+                          else "bench_" + (_norm_title(title) or "untitled")),
              "title": title, "created_at": _now(), "opens": [], "builds": [],
              "contract": [], "contract_source": ""}
+    if (concept_id or "").strip():
+        d["concept_id"] = concept_id.strip()
     d.setdefault("builds", []).append({
         "at": _now(), "method": result.get("method", ""),
         "materials": result.get("materials") or [],
@@ -7991,7 +8151,8 @@ def save_bench_build(title: str, result: dict) -> dict:
 def _write_bench(d: dict) -> None:
     try:
         BENCH_DIR.mkdir(parents=True, exist_ok=True)
-        _bench_path(d.get("title", "")).write_text(json.dumps(d, indent=1))
+        _bench_path(d.get("title", ""), d.get("concept_id", "")
+                    ).write_text(json.dumps(d, indent=1))
     except OSError:
         pass          # the Bench works without its library; it just forgets
 
@@ -8424,13 +8585,17 @@ def run_concept_build(title: str, definition: str, ingredients: list,
             "raw_response": raw, **structure}
 
 
-def save_bench_concept(title: str, result: dict) -> dict:
+def save_bench_concept(title: str, result: dict, concept_id: str = "") -> dict:
     """Append one concept round; like builds, never replaces an earlier one."""
-    d = load_bench_session(title)
+    d = load_bench_session(title, concept_id)
     if not d:
-        d = {"bench_id": "bench_" + (_norm_title(title) or "untitled"),
+        d = {"bench_id": (("bench_c_" + concept_id.strip())
+                          if (concept_id or "").strip()
+                          else "bench_" + (_norm_title(title) or "untitled")),
              "title": title, "created_at": _now(), "opens": [], "builds": [],
              "contract": [], "contract_source": ""}
+    if (concept_id or "").strip():
+        d["concept_id"] = concept_id.strip()
     d.setdefault("concepts", []).append({
         "at": _now(), "statement": result.get("statement", ""),
         "model": result.get("model", ""),
@@ -8446,7 +8611,7 @@ def save_bench_concept(title: str, result: dict) -> dict:
         # can show. No prompt surgery before seeing the raw result.
         "raw_response": result.get("raw_response", "")})
     BENCH_DIR.mkdir(parents=True, exist_ok=True)
-    _bench_path(title).write_text(json.dumps(d, indent=2))
+    _bench_path(title, d.get("concept_id", "")).write_text(json.dumps(d, indent=2))
     return d
 
 
@@ -8605,6 +8770,19 @@ def check_road_candidates(parsed: dict, label_to_key: dict, kind: str) -> dict:
                             + " and ".join(f"“{m}”" for m in missing)
                             + ", which is not on the map. A road to a place "
                               "that does not exist is fiction.")
+            continue
+        ambiguous = [l for l, hit in ((a_l, a), (b_l, b))
+                     if isinstance(hit, dict) and hit.get("ambiguous")]
+        if ambiguous:
+            # Two concepts carry this title; a road names a title, not a
+            # concept, and the system never silently chooses the first —
+            # the owner declares such a road from the concept's own page.
+            findings.append("Dropped in code: "
+                            + " and ".join(f"“{m}”" for m in ambiguous)
+                            + " names more than one concept on this map. "
+                              "A road must land on ONE concept — declare "
+                              "it from that concept's page, where the id "
+                              "is unambiguous.")
             continue
         if not verb:
             findings.append(f"Dropped in code: the road {a_l} → {b_l} "

@@ -38,6 +38,7 @@ _REDIRECTED = {
     "WARPS_LOG": _SCRATCH / "warps.jsonl",
     "WARP_NOTES_LOG": _SCRATCH / "warp_notes.jsonl",
     "BENCH_CORRECTIONS": _SCRATCH / "bench_corrections.jsonl",
+    "CONCEPT_NAMES_LOG": _SCRATCH / "concept_names.jsonl",
     "BENCH_DIR": _SCRATCH / "bench",
     "INPUTS_LOG": _SCRATCH / "inputs.jsonl",
     "WAYFINDER_LOG": _SCRATCH / "wayfinder.jsonl",
@@ -10390,8 +10391,11 @@ console.log(out.join('\\n'));
                                     "owner_says": "weakened",
                                     "note": "shame answers culpability"},
         "edges.jsonl": {"edge_id": "edge_93", "rel": "produced",
-                        "source": {"label": "a run"},
-                        "target": {"label": "a word"},
+                        "source": {"kind": "run", "key": "run:edge93src",
+                                   "label": "a run"},
+                        "target": {"kind": "word", "key": "word:edge93tgt",
+                                   "label": "a word"},
+                        "run_trace_id": "trace_edge93",
                         "verdict": "keep",
                         "created_at": "2026-09-01T00:00:04+00:00"},
         "warps.jsonl": {"warp_id": "warp_93", "from_label": "Paragon",
@@ -10943,6 +10947,295 @@ console.log(out.join('\\n'));
         p.read_text() for p in _kp.capsules_dir().glob("*.json"))
     if "job_dark93" in _all_capsules33:
         _f93("a dark-period row reached a packet or prompt")
+
+    # ================= block 94: concept-first identity ================
+    # docs/adr-concept-first.md. The identity law: no persistent identity
+    # derived solely from a mutable human-readable title. Two concepts
+    # named alike both survive; names are satellites; ambiguity asks;
+    # recovery replays rulings and invents nothing.
+    import json as _j94
+    import importlib as _il94
+    import recover_suppressed as _rec94
+    _il94.reload(_rec94)  # binds to the redirected scratch paths
+
+    def _f94(msg):
+        failures.append(f"94: {msg}")
+
+    def _lex94():
+        return (_j94.loads(cli.ACCEPTED_CONCEPTS_PATH.read_text())
+                if cli.ACCEPTED_CONCEPTS_PATH.exists() else [])
+
+    # 1. THE regression the pivot exists for: two concepts titled
+    # "Common Ground", different concept_ids — both survive, each with
+    # its own concept-derived id.
+    _cidA, _cidB = "concept_cg_aaa001", "concept_cg_bbb002"
+    if not cli.persist_accepted_concept(
+            "Common Ground", "shared premises two sides can build on",
+            "t94_a", concept_id=_cidA):
+        _f94("first Common Ground refused")
+    if not cli.persist_accepted_concept(
+            "Common Ground", "the physical earth both armies bleed into",
+            "t94_b", concept_id=_cidB):
+        _f94("second Common Ground refused — same title = same idea is "
+             "back")
+    _cg94 = [e for e in _lex94()
+             if e.get("name") == "Common Ground"]
+    if len(_cg94) != 2:
+        _f94(f"lexicon holds {len(_cg94)} Common Ground entries, not 2")
+    if any(not e.get("id", "").startswith("acc2_") for e in _cg94):
+        _f94("a concept-aware entry minted a legacy title-hash id")
+    if len({e.get("id") for e in _cg94}) != 2 \
+            or len({e.get("concept_id") for e in _cg94}) != 2:
+        _f94("the two same-titled concepts share an id")
+
+    # 2. idempotence keys on the CONCEPT now
+    if cli.persist_accepted_concept("Common Ground", "changed words",
+                                    "t94_c", concept_id=_cidA) is not False:
+        _f94("re-accepting the same concept duplicated it")
+    if len([e for e in _lex94() if e.get("concept_id") == _cidA]) != 1:
+        _f94("concept idempotence failed to hold the shelf")
+
+    # 3. the legacy word-first path is byte-stable: title-idempotent,
+    # old id recipe — records made under the old contract stay honest
+    cli.persist_accepted_concept("zzlegacy94", "legacy def", "t94_l")
+    if cli.persist_accepted_concept("zzlegacy94", "other def",
+                                    "t94_l2") is not False:
+        _f94("legacy title idempotence broke")
+    _leg94 = [e for e in _lex94() if e.get("name") == "zzlegacy94"][0]
+    if not _leg94.get("id", "").startswith("acc_") \
+            or _leg94.get("concept_id"):
+        _f94("the legacy path changed its identity recipe")
+
+    # 4. retraction is concept-aware, and ambiguity REFUSES rather than
+    # coin-flips
+    if cli.retract_accepted_concept("Common Ground") is not False:
+        _f94("bare-title retraction fired on an ambiguous title")
+    if len([e for e in _lex94() if e.get("name") == "Common Ground"]) != 2:
+        _f94("the refused ambiguous retraction still removed something")
+    if not cli.retract_accepted_concept("Common Ground", concept_id=_cidB):
+        _f94("concept-keyed retraction failed")
+    _left94 = [e for e in _lex94() if e.get("name") == "Common Ground"]
+    if len(_left94) != 1 or _left94[0].get("concept_id") != _cidA:
+        _f94("retraction removed the WRONG same-titled concept")
+    cli.persist_accepted_concept(
+        "Common Ground", "the physical earth both armies bleed into",
+        "t94_b", concept_id=_cidB)  # restore for later checks
+
+    # 5+6+7. names are satellites with minted ids; renaming changes the
+    # display, never the identity
+    _n1 = cli.record_concept_name(_cidA, "Groundhold", "coinage",
+                                  origin="owner", ruling="kept")
+    _n2 = cli.record_concept_name(_cidA, "Where Both Can Stand",
+                                  "owner_title", ruling="kept",
+                                  primary=True)
+    if _n1["name_uid"] == _n2["name_uid"] \
+            or not _n1["name_uid"].startswith("name_"):
+        _f94("name records lack minted unique ids")
+    _n1b = cli.record_concept_name(_cidA, "Groundhold", "coinage",
+                                   ruling="kept")
+    if _n1b.get("supersedes") != _n1["name_uid"]:
+        _f94("a re-recorded form did not supersede by link")
+    _dm94 = cli.concept_display_names()
+    if _dm94.get(_cidA, {}).get("primary") != "Where Both Can Stand":
+        _f94("the primary display name did not take")
+    _entryA = [e for e in _lex94() if e.get("concept_id") == _cidA][0]
+    if _entryA.get("name") != "Common Ground" \
+            or not _entryA.get("id", "").startswith("acc2_"):
+        _f94("renaming reached into the concept's own record")
+    cli.record_concept_name(_cidB, "Groundhold", "coinage",
+                            ruling="rejected")
+    if any(n.get("form") == "Groundhold"
+           for n in _dm94.get(_cidB, {}).get("names", [])):
+        _f94("a rejected name rode the display map")
+
+    # 8. the Bench no longer collides same-titled concepts
+    _bA = cli.save_bench_open("Common Ground", "shared premises",
+                              {"contract": [{"key": "k1"}],
+                               "raw_response": "rawA"},
+                              concept_id=_cidA)
+    _bB = cli.save_bench_open("Common Ground", "the bleeding earth",
+                              {"contract": [{"key": "k2"}],
+                               "raw_response": "rawB"},
+                              concept_id=_cidB)
+    if _bA.get("bench_id") == _bB.get("bench_id"):
+        _f94("two same-titled concepts share one bench session")
+    _bA2 = cli.load_bench_session("Common Ground", _cidA)
+    _bB2 = cli.load_bench_session("Common Ground", _cidB)
+    if _bA2.get("raw_response", "") == _bB2.get("raw_response", "") and \
+            _bA2.get("opens", [{}])[-1].get("raw_response") == \
+            _bB2.get("opens", [{}])[-1].get("raw_response"):
+        _f94("bench sessions bled into each other")
+    cli.save_bench_build("Common Ground", {"method": "m", "builds": []},
+                         concept_id=_cidA)
+    if cli.load_bench_session("Common Ground", _cidB).get("builds"):
+        _f94("a build on one concept landed on its same-titled twin")
+
+    # 9. judgment EVENTS mint unique ids and cite the concept
+    with server.app.test_client() as _c94:
+        _paired(_c94)
+        for _cid94 in ("concept_twin94x", "concept_twin94y"):
+            _r94 = _c94.post("/api/judge", json={
+                "trace_id": "t94_j", "candidate_title": "ZZTwin94",
+                "decision": "v", "note": "same title, two ideas",
+                "concept_id": _cid94})
+            if _r94.status_code != 200:
+                _f94(f"/api/judge refused: {_r94.status_code}")
+        _jrows94 = [_j94.loads(l) for l in
+                    cli.JUDGMENTS_LOG.read_text().splitlines()
+                    if '"t94_j"' in l]
+        if len(_jrows94) != 2:
+            _f94(f"expected 2 judgment events, found {len(_jrows94)}")
+        else:
+            if _jrows94[0]["id"] == _jrows94[1]["id"]:
+                _f94("two same-titled judgments still share one id")
+            if not all(r["id"].startswith("jdg_evt_") for r in _jrows94):
+                _f94("judgment events kept the title-derived recipe")
+            if {r.get("concept_id") for r in _jrows94} != \
+                    {"concept_twin94x", "concept_twin94y"}:
+                _f94("judgment events lost their concept citations")
+
+    # 10+11. ambiguity is a fact that ASKS: two map nodes sharing a
+    # title are marked, roads to them are dropped with the finding, and
+    # the suggest endpoint asks instead of resolving
+    (cli.LOCAL_STATE / "results").mkdir(exist_ok=True)
+    (cli.LOCAL_STATE / "results" / "trace_cli_amb94.json").write_text(
+        _j94.dumps({"trace_id": "trace_cli_amb94", "mode": "forge",
+                    "created_at": "2026-09-01T02:00:00+00:00",
+                    "input_text": "zz",
+                    "candidates": [{"bff": {
+                        "title": "ZZShared94",
+                        "concept_id": "concept_amb94",
+                        "flesh": {"definition": "d"}}}]}))
+    (cli.LOCAL_STATE / "results" / "trace_cli_amb94b.json").write_text(
+        _j94.dumps({"trace_id": "trace_cli_amb94b", "mode": "sprout",
+                    "created_at": "2026-09-01T02:01:00+00:00",
+                    "input_text": "zz", "source": {"title": "zzseed94"},
+                    "threads": [{"anchor_name": "ZZShared94",
+                                  "culture_or_work": "somewhere",
+                                  "review_verdict": "holds",
+                                  "parallel": "p"}]}))
+    _l2k94, _keys94 = server._map_nodes()
+    _hit94 = _l2k94.get(cli._norm_title("ZZShared94"))
+    if not (_hit94 and _hit94.get("ambiguous")
+            and len(_hit94.get("candidates", [])) >= 2):
+        _f94("two nodes sharing a title were not marked ambiguous")
+    _chk94 = cli.check_road_candidates(
+        {"roads": [{"a": "ZZShared94", "b": "ZZShared94",
+                    "verb": "loops", "basis": "test"}]},
+        _l2k94, "resonance")
+    if not any("more than one concept" in f
+               for f in _chk94.get("findings", [])):
+        _f94("a road to an ambiguous title was not dropped with the "
+             "declare-from-the-page finding")
+    with server.app.test_client() as _c94b:
+        _paired(_c94b)
+        _real_sg94 = server.server_gateway
+        _calls94 = []
+        server.server_gateway = lambda: (_ for _ in ()).throw(
+            AssertionError(_calls94.append("called") or "no model call "
+                           "may resolve an ambiguity"))
+        try:
+            _r94b = _c94b.post("/api/map/roads/suggest", json={
+                "from": "ZZShared94", "to": "ZZShared94",
+                "kind": "resonance"})
+        finally:
+            server.server_gateway = _real_sg94
+        _d94b = _r94b.get_json() or {}
+        if not _d94b.get("ambiguous") or _d94b.get("roads"):
+            _f94("the suggest endpoint resolved an ambiguous title "
+                 "instead of asking")
+        if _calls94:
+            _f94("the ambiguity path spent a model call")
+
+    # 12. a Bench coin becomes a NAME attached to the concept, never a
+    # second concept entry
+    cli.save_bench_build("Common Ground",
+                         {"method": "m",
+                          "builds": [{"word": "Groundstead"}]},
+                         concept_id=_cidA)
+    _nlex94 = len(_lex94())
+    with server.app.test_client() as _c94c:
+        _paired(_c94c)
+        _r94c = _c94c.post("/api/bench/keep", json={
+            "parent_title": "Common Ground", "concept_id": _cidA,
+            "word": "Groundstead",
+            "definition": "a place held in common on purpose"})
+        _d94c = _r94c.get_json() or {}
+        if _r94c.status_code != 200 or \
+                _d94c.get("attached_to_concept") != _cidA:
+            _f94(f"bench keep did not attach the coin as a name "
+                 f"({_r94c.status_code}: {str(_d94c)[:120]})")
+    if len(_lex94()) != _nlex94:
+        _f94("a kept coin became a second concept entry")
+    if not any(n.get("form") == "Groundstead" and n.get("kind") == "coinage"
+               for n in cli.load_concept_names(_cidA)):
+        _f94("the kept coin is missing from the concept's names")
+
+    # 13. recovery replays rulings and can invent nothing
+    _supp_cid94 = "concept_suppressed94"
+    (cli.LOCAL_STATE / "results").mkdir(exist_ok=True)
+    (cli.LOCAL_STATE / "results" / "trace_cli_rec94.json").write_text(
+        _j94.dumps({"trace_id": "trace_cli_rec94",
+                    "created_at": "2026-08-30T01:02:03+00:00",
+                    "candidates": [{"bff": {
+                        "title": "Common Ground",
+                        "concept_id": _supp_cid94,
+                        "flesh": {"definition": "the argument both sides "
+                                                "quietly need to lose"}}}]}))
+    with cli.JUDGMENTS_LOG.open("a") as _fh94:
+        _fh94.write(_j94.dumps({
+            "id": "jdg_evt_rec94", "object_type": "judgment",
+            "decision": "accepted", "candidate_text": "Common Ground",
+            "originating_operation": "trace_cli_rec94",
+            "decision_source": "owner", "confidence": 1.0,
+            "review_status": "unreviewed", "scope": "local_to_concept",
+            "concept_id": _supp_cid94}) + "\n")
+    _audit94 = _rec94.audit()
+    if _supp_cid94 not in _audit94["suppressed"]:
+        _f94("the audit missed a seeded suppressed acceptance")
+    _legacy_bytes94 = [_j94.dumps(e, sort_keys=True) for e in _lex94()]
+    if _rec94.recover([_supp_cid94]) != 0:
+        _f94("authorized recovery failed")
+    _lex_after94 = _lex94()
+    if [_j94.dumps(e, sort_keys=True)
+            for e in _lex_after94][:len(_legacy_bytes94)] != _legacy_bytes94:
+        _f94("recovery modified a pre-existing row")
+    _recd94 = [e for e in _lex_after94
+               if e.get("concept_id") == _supp_cid94]
+    if not _recd94:
+        _f94("the recovered concept never landed")
+    else:
+        _rv94 = _recd94[0]
+        if _rv94.get("accepted_at") != "2026-08-30T01:02:03+00:00":
+            _f94("recovery lost the original run time")
+        if _rv94.get("recovery", {}).get("recovery_reason") \
+                != "legacy_title_collision":
+            _f94("recovery lost its reason")
+        if _rv94.get("recovery", {}).get("original_judgment_id") \
+                != "jdg_evt_rec94":
+            _f94("recovery lost the ruling it replays")
+    if _rec94.recover(["concept_never_ruled"]) == 0:
+        _f94("recovery accepted a concept with no ruling — it INVENTED")
+    if not (cli.LOCAL_STATE / "recovery_events.jsonl").exists():
+        _f94("recovery left no event trail")
+
+    # 14. a receipt without a ruling reaches only the review queue
+    with cli.JUDGMENTS_LOG.open("a") as _fh94:
+        _fh94.write(_j94.dumps({
+            "id": "jdg_evt_absent94", "object_type": "judgment",
+            "decision": "accepted", "candidate_text": "zzabsent94",
+            "originating_operation": "trace_cli_absent94",
+            "decision_source": "owner", "confidence": 1.0,
+            "review_status": "unreviewed",
+            "scope": "local_to_concept"}) + "\n")
+    _nlex94b = len(_lex94())
+    _rec94.queue_review()
+    if len(_lex94()) != _nlex94b:
+        _f94("queueing a review changed the lexicon")
+    _q94 = (cli.LOCAL_STATE / "recovery_review_queue.jsonl")
+    if not (_q94.exists() and "zzabsent94" in _q94.read_text()
+            and "needs_owner_ruling" in _q94.read_text()):
+        _f94("the receipt-only case is missing from the review queue")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

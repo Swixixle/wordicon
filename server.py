@@ -30,6 +30,7 @@ import sys
 import threading
 import time
 import traceback
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -744,9 +745,23 @@ def _map_nodes():
     for r in ow["runs"]:
         for it in r["items"]:
             keys.add(it["key"])
-            label_to_key.setdefault(
-                cli._norm_title(it["label"]),
-                {"key": it["key"], "label": it["label"], "kind": it["kind"]})
+            norm = cli._norm_title(it["label"])
+            hit = label_to_key.get(norm)
+            if hit is None:
+                label_to_key[norm] = {"key": it["key"], "label": it["label"],
+                                       "kind": it["kind"]}
+            elif hit.get("key") != it["key"]:
+                # Two different nodes share this title. The old setdefault
+                # silently kept the first — the exact coin-flip the
+                # identity law forbids. The ambiguity is recorded as a
+                # fact; consumers must ask, never choose.
+                hit["ambiguous"] = True
+                hit.setdefault("candidates", [
+                    {"key": hit["key"], "label": hit["label"],
+                     "kind": hit["kind"]}])
+                hit["candidates"].append(
+                    {"key": it["key"], "label": it["label"],
+                     "kind": it["kind"]})
     return label_to_key, keys
 
 
@@ -766,6 +781,20 @@ def api_map_suggest_roads():
     if not from_l or not to_l:
         return jsonify({"error": "both ends of the journey are required"}), 400
     label_to_key, _ = _map_nodes()
+    _amb = []
+    for _l in (from_l, to_l):
+        _hit = label_to_key.get(cli._norm_title(_l))
+        if isinstance(_hit, dict) and _hit.get("ambiguous"):
+            _amb.append({"label": _l,
+                         "candidates": _hit.get("candidates") or []})
+    if _amb:
+        # The identity law: a typed title resolving to multiple concepts
+        # is a QUESTION, never a coin flip. The UI shows the candidates
+        # and the owner says which one he means.
+        return jsonify({"ambiguous": _amb, "roads": [],
+                        "findings": ["That title names more than one "
+                                      "concept on this map — say which "
+                                      "one you mean."]})
     defs = {}
     for c in cli.load_accepted_concepts():
         defs[cli._norm_title(c.get("name") or c.get("title") or "")] = \
@@ -1841,7 +1870,8 @@ def api_bench_open():
 
     # Store the opening BEFORE anything is substituted, so `opens` always
     # holds what the model actually proposed this time.
-    stored = cli.save_bench_open(title, definition, result)
+    stored = cli.save_bench_open(title, definition, result,
+                                  concept_id=str(data.get("concept_id") or "").strip()[:64])
 
     # HIS CONTRACT WINS, AND THE MODEL'S IS STILL SHOWN. Reopening a word
     # he has already corrected must not make him correct it again — that is
@@ -1919,7 +1949,8 @@ def api_bench_contract():
         contract.append({"key": str(pt["key"])[:40], "name": str(pt.get("name") or "")[:60],
                          "gist": str(pt.get("gist") or "")[:240],
                          "locked": bool(pt.get("locked", True))})
-    out = cli.save_bench_contract(title, contract, bool(d.get("confirmed")))
+    out = cli.save_bench_contract(title, contract, bool(d.get("confirmed")),
+                                   concept_id=str(d.get("concept_id") or "").strip()[:64])
     return jsonify({"ok": True, "contract_source": out.get("contract_source"),
                     "contract_confirmed_at": out.get("contract_confirmed_at", "")})
 
@@ -1963,7 +1994,9 @@ def api_bench_keep():
                                  "report above says which parts this build dropped — writing that "
                                  "meaning onto it would assert something the Bench just denied."}), 400
 
-    stored = cli.load_bench_session(parent) if parent else {}
+    stored = cli.load_bench_session(
+        parent, str(d.get("concept_id") or "").strip()[:64]
+    ) if parent else {}
     if definition.strip().lower() == (stored.get("definition") or "").strip().lower():
         return jsonify({"error": "That is the parent word's definition verbatim. This build did not "
                                  "carry all of it — say what THIS coin means."}), 400
@@ -1973,6 +2006,16 @@ def api_bench_keep():
     if word not in coined:
         return jsonify({"error": "That coin was not built on this word's Bench."}), 400
 
+    _kcid = (stored.get("concept_id") or "").strip()
+    if _kcid:
+        # Concept-first: the coin is a NAME attached to the concept — a
+        # handle, not a second concept entry (docs/adr-concept-first.md).
+        row = cli.record_concept_name(_kcid, word, "coinage",
+                                       origin="owner", ruling="kept")
+        return jsonify({"kept": True, "word": word,
+                        "attached_to_concept": _kcid,
+                        "name_uid": row["name_uid"],
+                        "construction_recorded": False, "construction": ""})
     before = {c.get("name", "").strip().lower() for c in cli.load_accepted_concepts()}
     if word.strip().lower() in before:
         return jsonify({"error": f"“{word}” is already in your Lexicon."}), 400
@@ -2130,8 +2173,9 @@ def api_bench_build():
     # The contract reaching here has been confirmed (checked above), so the
     # store learns that too — otherwise a build could be recorded against a
     # contract the file still calls the model's.
-    cli.save_bench_contract(title, contract, True)
-    cli.save_bench_build(title, result)
+    _bcid = str(data.get("concept_id") or "").strip()[:64]
+    cli.save_bench_contract(title, contract, True, concept_id=_bcid)
+    cli.save_bench_build(title, result, concept_id=_bcid)
     return jsonify(result)
 
 
@@ -2242,8 +2286,11 @@ def api_judge():
         return jsonify({"error": "trace_id, candidate_title, and decision (a/r/v) are required"}), 400
 
     decision = {"a": "accepted", "r": "rejected", "v": "revised"}[decision_key]
+    # Event id, minted unique — never derived from the title. The old
+    # sha(title+trace) recipe gave two distinct same-titled concepts the
+    # SAME id in an append-only log (docs/adr-concept-first.md).
     judgment = Judgment(
-        id=f"jdg_cli_candidate_{hashlib.sha256((candidate_title + trace_id).encode()).hexdigest()[:10]}",
+        id="jdg_evt_" + uuid.uuid4().hex[:16],
         decision=decision, candidate_text=candidate_title, originating_operation=trace_id,
         decision_source="owner", confidence=1.0, review_status="unreviewed",
         reason=note or None, scope="local_to_concept", concept_id=concept_id,
@@ -2257,7 +2304,8 @@ def api_judge():
         # an accepted word wrote the new ruling and left the old word in the
         # lexicon. Coming back with fresh eyes has to be able to undo, or
         # the first ruling is permanent and the log is decoration.
-        removed = cli.retract_accepted_concept(candidate_title)
+        removed = cli.retract_accepted_concept(candidate_title,
+                                                concept_id=concept_id or "")
     if decision == "accepted":
         # Accepted concepts join the already-named check on every later
         # run — this is the corpus actually growing from your judgments.
@@ -2269,7 +2317,8 @@ def api_judge():
             status="adopted" if data.get("adopted") else "accepted",
             alias_of=str(data.get("alias_of") or "").strip()[:200],
             declined_alias=_dec if isinstance(_dec, dict) else None,
-            decline_reason=note)
+            decline_reason=note,
+            concept_id=concept_id or "")
     # What the judgment DID to the corpus, not merely that it was filed.
     # These two facts came apart six times already — six accepted words
     # sitting in judgments.jsonl with no lexicon entry behind them — and
