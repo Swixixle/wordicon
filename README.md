@@ -1,15 +1,25 @@
 # Wordicon
 
 A private, evidence-bearing workshop. Bring it a feeling with no name and it forges you
-candidates worth arguing with. Bring it a book and the book stays a book — byte-intact,
-mechanically read, every sentence an anchor you can hold a claim against. Bring it a
-recording and the transcript scrolls under the sound, one click from any sentence to its
-exact second. Coin a word at the Bench, cross a passage into evidence, walk the Map of
-everywhere your thinking has been, enter a work the way you'd enter a room — and every
-step leaves a record you can reopen, dispute, and re-rule, because in here **the record
-is the product**.
+concept readings worth arguing with — the idea's anatomy under a plain working title.
+Bring it a book and the book stays a book — byte-intact, mechanically read, every
+sentence an anchor you can hold a claim against. Bring it a recording and the
+transcript scrolls under the sound, one click from any sentence to its exact second.
+Coin a word at the Bench when you want one, cross a passage into evidence, walk the Map
+of everywhere your thinking has been, enter a work the way you'd enter a room — and
+every step leaves a record you can reopen, dispute, and re-rule, because in here **the
+record is the product**.
 
-It began as a word-coiner. The words turned out to be the smallest part.
+It began as a word-coiner. Use revealed that naming was only one small part of the
+work: the definitions, tensions, mechanisms, and boundaries were what kept getting
+reached for, while the invented word in the headline was the field used least. So
+Wordicon is now **concept-first and coinage-optional** (docs/adr-concept-first.md): an
+idea is allowed to exist without a coined name, a name is a handle for a concept and
+never the concept itself, and no identity anywhere derives from a mutable title. Two
+ideas that happen to share a title are two entries, two boxes on the Map, two
+workbenches — and anywhere a typed title could mean either one, Wordicon asks instead
+of choosing. Coinage stays, at the Bench, summoned — and "the descriptive phrase is
+sufficient; no coined word improves it" is a success verdict there, not a failure.
 
 Three laws hold everywhere in it: **the critic advises and never decides**; **anything
 the tool isn't sure of says so** instead of quietly rounding up; and **nothing changes
