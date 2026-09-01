@@ -93,10 +93,22 @@ def audit() -> dict:
         entries = by_title.get(_norm(title), [])
         if cid and cid in recovered_cids:
             continue  # already present concept-first
-        if entries and any(e.get("accepted_from") == trace for e in entries):
+        # RETAINED means THIS acceptance is on the shelf — which requires
+        # the definition to match, not merely the trace: all three real
+        # suppressions happened INSIDE one trace (a run accepted
+        # same-titled siblings and the shelf kept the first), so a
+        # trace-level check calls the suppressed sibling "retained" and
+        # the recovery refuses its own purpose. Found live when the
+        # first recovery run refused all three authorized concepts.
+        if entries and any(
+                e.get("accepted_from") == trace
+                and (not cand or not _norm(cand["definition"])
+                     or _norm(e.get("definition")) == _norm(cand["definition"]))
+                for e in entries):
             continue  # this acceptance is the one the shelf kept
         if cand and entries and _norm(cand["definition"]) \
-                and _norm(entries[0].get("definition")) != _norm(cand["definition"]):
+                and all(_norm(e.get("definition")) != _norm(cand["definition"])
+                        for e in entries):
             suppressed[cid] = {"concept_id": cid, "title": title,
                                "trace": trace, "run_at": cand["run_at"],
                                "definition": cand["definition"],

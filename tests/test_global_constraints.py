@@ -11190,9 +11190,44 @@ console.log(out.join('\\n'));
             "decision_source": "owner", "confidence": 1.0,
             "review_status": "unreviewed", "scope": "local_to_concept",
             "concept_id": _supp_cid94}) + "\n")
+    # The REAL corpus's shape: one run accepts same-titled siblings and
+    # the shelf keeps the first — the suppressed sibling shares the KEPT
+    # entry's trace. A trace-level retained-check calls it retained; the
+    # first live recovery run refused all three authorized concepts over
+    # exactly this. Test was insufficient, code was wrong; fixed together.
+    _sib_cid94 = "concept_sibling94"
+    (cli.LOCAL_STATE / "results" / "trace_cli_sib94.json").write_text(
+        _j94.dumps({"trace_id": "trace_cli_sib94",
+                    "created_at": "2026-08-30T02:00:00+00:00",
+                    "candidates": [
+                        {"bff": {"title": "ZZSibling94",
+                                 "concept_id": "concept_sibkept94",
+                                 "flesh": {"definition": "the kept sense"}}},
+                        {"bff": {"title": "ZZSibling94",
+                                 "concept_id": _sib_cid94,
+                                 "flesh": {"definition": "the second sense "
+                                                          "the shelf refused"}}}]}))
+    cli.persist_accepted_concept("ZZSibling94", "the kept sense",
+                                 "trace_cli_sib94")  # legacy path, kept
+    for _scid94 in ("concept_sibkept94", _sib_cid94):
+        with cli.JUDGMENTS_LOG.open("a") as _fh94:
+            _fh94.write(_j94.dumps({
+                "id": "jdg_evt_sib_" + _scid94[-6:], "object_type": "judgment",
+                "decision": "accepted", "candidate_text": "ZZSibling94",
+                "originating_operation": "trace_cli_sib94",
+                "decision_source": "owner", "confidence": 1.0,
+                "review_status": "unreviewed", "scope": "local_to_concept",
+                "concept_id": _scid94}) + "\n")
     _audit94 = _rec94.audit()
     if _supp_cid94 not in _audit94["suppressed"]:
         _f94("the audit missed a seeded suppressed acceptance")
+    if _sib_cid94 not in _audit94["suppressed"]:
+        _f94("the audit missed a SAME-TRACE suppressed sibling — the "
+             "real corpus's shape")
+    if "concept_sibkept94" in _audit94["suppressed"]:
+        _f94("the audit classified the KEPT sibling as suppressed")
+    if _rec94.recover([_sib_cid94]) != 0:
+        _f94("recovering the same-trace sibling failed")
     _legacy_bytes94 = [_j94.dumps(e, sort_keys=True) for e in _lex94()]
     if _rec94.recover([_supp_cid94]) != 0:
         _f94("authorized recovery failed")
