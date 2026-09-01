@@ -297,12 +297,66 @@ def init_vault(identity=None, dest: str = "") -> dict:
     return {"identity": str(ident), "config": cfg}
 
 
+def _read_secret_visible(prompt: str) -> str:
+    """Read a re-entry with each character echoed as an asterisk, and
+    with any queued keystrokes flushed first so an earlier stray Enter
+    or a paste's trailing newline cannot satisfy this prompt without the
+    owner typing. Falls back to getpass on any environment without a real
+    tty (tests, pipes). Owner ruling 2026-09: three real-keyboard failures
+    at wholly-blind prompts read as the ceremony being crueler than
+    strict — asterisks per keystroke show TYPING WITHOUT SHOWING THE
+    KEY, and the flush is the fix for the actual bug the failures
+    exposed."""
+    import sys
+    import termios
+    import tty
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        import getpass
+        return getpass.getpass(prompt).strip()
+    fd = sys.stdin.fileno()
+    old_attrs = termios.tcgetattr(fd)
+    # Drop anything already sitting in the input queue so a prior Enter
+    # or a paste that ended in \n cannot be read as this prompt's answer.
+    termios.tcflush(fd, termios.TCIFLUSH)
+    sys.stdout.write(prompt)
+    sys.stdout.flush()
+    buf = []
+    try:
+        tty.setraw(fd)
+        while True:
+            ch = sys.stdin.read(1)
+            if ch in ("\r", "\n"):
+                sys.stdout.write("\r\n")
+                sys.stdout.flush()
+                return "".join(buf).strip()
+            if ch in ("\x7f", "\b"):  # backspace / delete
+                if buf:
+                    buf.pop()
+                    sys.stdout.write("\b \b")
+                    sys.stdout.flush()
+                continue
+            if ch == "\x03":  # Ctrl-C
+                raise KeyboardInterrupt
+            if ch == "\x04" and not buf:  # Ctrl-D on empty line
+                sys.stdout.write("\r\n")
+                sys.stdout.flush()
+                return ""
+            if ch.isprintable():
+                buf.append(ch)
+                sys.stdout.write("*")
+                sys.stdout.flush()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_attrs)
+
+
 def interactive_init() -> int:
     """The owner's one-time ritual, at a real terminal. The identity is
     shown once; custody is PROVEN twice by full re-entry — once from the
     password manager, once from the handwritten paper copy — before the
-    first backup is permitted. Nothing here echoes to shell history."""
-    import getpass
+    first backup is permitted. Each re-entry echoes an asterisk per
+    keystroke (so the owner is not typing blind) but never a byte of the
+    key; the input queue is flushed before each prompt so an earlier
+    stray Enter cannot answer for the owner."""
     if load_config():
         print("A vault config already exists. Refusing to overwrite it — "
               "rotation is a separate, deliberate act.")
@@ -317,8 +371,11 @@ def interactive_init() -> int:
     print("     is not this Mac and not your Apple account.")
     print("Losing both copies makes every vault permanently unreadable.")
     print("There is no reset and no recovery.\n")
-    one = getpass.getpass("Re-enter it from your PASSWORD MANAGER: ").strip()
-    two = getpass.getpass("Re-enter it from your PAPER copy: ").strip()
+    print("(Each re-entry below shows one * per character you type — so "
+          "you can see progress and count characters — but never the key "
+          "itself.)\n")
+    one = _read_secret_visible("Re-enter it from your PASSWORD MANAGER: ")
+    two = _read_secret_visible("Re-enter it from your PAPER copy: ")
     if one != ident or two != ident:
         config_path().unlink()
         # Say WHICH leg failed, and the length — never a byte of the key.

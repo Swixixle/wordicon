@@ -72,6 +72,7 @@ import library as library  # noqa: E402  (the Library wing — zero model calls)
 import gate  # noqa: E402
 import vault  # noqa: E402  (encrypted backup — the corpus-writers lock lives there)
 import notify  # noqa: E402
+import keeper  # noqa: E402  (the Book's narrator — summoned only, never scheduled)
 from wordicon_corpus.objects import Judgment  # noqa: E402
 
 WEBAPP_DIR = REPO_ROOT / "webapp"
@@ -234,6 +235,141 @@ def api_vault_status():
     owner must see — the page's strip renders this, red when it matters."""
     return jsonify(vault.status())
 
+
+# ---- the Keeper -------------------------------------------------------
+#
+# Summoned only. No scheduler, hook, or boot path references a close;
+# with the Keeper inactive, an ordinary run performs zero keeper reads,
+# writes, or model calls, and this server never creates local_state/keeper
+# on its own — activation does. All routes sit behind the gate like
+# everything else. A close narrates in a background thread (a model call
+# should never ride a phone's HTTP request), holding the corpus-writers
+# lock exactly as jobs do so a vault staging copy never catches a
+# half-written keeper file.
+
+_KEEPER_BUSY = threading.Lock()
+_KEEPER_LAST_ERROR = {"error": ""}
+
+
+def _keeper_narrate(fn, *args):
+    def body():
+        try:
+            with vault.corpus_write():
+                try:
+                    _KEEPER_LAST_ERROR["error"] = ""
+                    fn(*args)
+                finally:
+                    vault.mark_dirty()
+        except Exception as e:
+            traceback.print_exc()
+            _KEEPER_LAST_ERROR["error"] = str(e)
+        finally:
+            _KEEPER_BUSY.release()
+    threading.Thread(target=body, daemon=True).start()
+
+
+@app.route("/api/keeper/status")
+def api_keeper_status():
+    st = keeper.status()
+    st["narrating"] = _KEEPER_BUSY.locked()
+    st["last_error"] = _KEEPER_LAST_ERROR["error"]
+    return jsonify(st)
+
+
+@app.route("/api/keeper/activate", methods=["POST"])
+def api_keeper_activate():
+    data = request.get_json(force=True) or {}
+    try:
+        return jsonify(keeper.activate(str(data.get("name") or ""),
+                                       str(data.get("title") or ""),
+                                       str(data.get("naming_receipt") or "")))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/keeper/deactivate", methods=["POST"])
+def api_keeper_deactivate():
+    try:
+        return jsonify(keeper.deactivate())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/keeper/close", methods=["POST"])
+def api_keeper_close():
+    if not keeper.active():
+        return jsonify({"error": "the Keeper is not active — the Book has "
+                                  "no one to close it"}), 400
+    if not _KEEPER_BUSY.acquire(blocking=False):
+        return jsonify({"error": "the Book is already being closed"}), 409
+    _keeper_narrate(keeper.close, server_gateway())
+    return jsonify({"narrating": True})
+
+
+@app.route("/api/keeper/retry", methods=["POST"])
+def api_keeper_retry():
+    data = request.get_json(force=True) or {}
+    close_id = str(data.get("close_id") or "")
+    if not _KEEPER_BUSY.acquire(blocking=False):
+        return jsonify({"error": "the Book is already being closed"}), 409
+    _keeper_narrate(keeper.retry, close_id, server_gateway())
+    return jsonify({"narrating": True})
+
+
+@app.route("/api/keeper/renarrate", methods=["POST"])
+def api_keeper_renarrate():
+    data = request.get_json(force=True) or {}
+    close_id = str(data.get("close_id") or "")
+    if not _KEEPER_BUSY.acquire(blocking=False):
+        return jsonify({"error": "the Book is already being closed"}), 409
+    _keeper_narrate(keeper.renarrate, close_id, server_gateway())
+    return jsonify({"narrating": True})
+
+
+@app.route("/api/keeper/entries")
+def api_keeper_entries():
+    entries = keeper._rows(keeper.entries_path())
+    rulings = keeper._active_rulings()
+    for e in entries:
+        j = rulings.get(e["entry_id"])
+        e["ruling"] = ({"ruling": j.get("ruling"), "why": j.get("why"),
+                        "revision_text": j.get("revision_text"),
+                        "at": j.get("at")} if j else None)
+    closes = keeper._rows(keeper.closes_path())
+    attempts = keeper._rows(keeper.attempts_path())
+    entry_closes = {e["close_id"] for e in entries}
+    failed = [c["close_id"] for c in closes
+              if c["close_id"] not in entry_closes]
+    return jsonify({"entries": list(reversed(entries))[:8],
+                    "failed_closes": failed[-3:],
+                    "attempts": len(attempts)})
+
+
+@app.route("/api/keeper/rule", methods=["POST"])
+def api_keeper_rule():
+    data = request.get_json(force=True) or {}
+    try:
+        return jsonify(keeper.rule(str(data.get("entry_id") or ""),
+                                   str(data.get("ruling") or ""),
+                                   str(data.get("why") or ""),
+                                   str(data.get("revision_text") or "")))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/keeper/review", methods=["POST"])
+def api_keeper_review():
+    """Records the cold review that lifts an adaptation freeze. The
+    review's substance is the owner's own re-reading and re-ruling of the
+    recent entries; this endpoint records that it happened, over the last
+    DRILL_LOOKBACK entries, and ratifies the watermark. A freeze with no
+    unfreeze would be a trap, not a discipline."""
+    data = request.get_json(force=True) or {}
+    recent = [e["entry_id"] for e in
+              keeper._rows(keeper.entries_path())[-keeper.DRILL_LOOKBACK:]]
+    return jsonify(keeper.record_review(recent,
+                                        str(data.get("notes") or "")))
+
 # ---- jobs -------------------------------------------------------------
 #
 # Every Forge/Crack/Decompose run is a job from the moment it's submitted,
@@ -364,6 +500,10 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
     try:
         gateway = server_gateway()
     except Exception as e:
+        # The full traceback goes to the terminal — a bare str(e) here once
+        # cost an hour of blind theorizing (the brew-python truststore
+        # incident, 2026-09-01). The job still carries the plain sentence.
+        traceback.print_exc()
         _update_job(job_id, status="failed", error=str(e))
         with JOBS_LOCK:
             notify.notify_job_complete(dict(JOBS[job_id]))
@@ -2590,6 +2730,11 @@ if __name__ == "__main__":
                   "fixture that looks exactly like a real run. Set ANTHROPIC_API_KEY "
                   "and WORDICON_MODEL (in .env or the environment) for real output.")
     except Exception as e:
+        # Full traceback, deliberately: on the night brew swapped the
+        # interpreter, this line's bare str(e) said only "invalid literal
+        # for int() with base 10: ''" and the real culprit (truststore's
+        # macOS version parse, three imports deep) stayed invisible.
+        traceback.print_exc()
         print(f"Gateway: MISCONFIGURED — {e}\n  Nothing will run until this is fixed.")
     print(f"Config source: .env {'found' if (REPO_ROOT / '.env').exists() else 'not present'}"
           f" · ANTHROPIC_API_KEY {'set' if os.environ.get('ANTHROPIC_API_KEY') else 'NOT set'}"

@@ -10298,6 +10298,652 @@ console.log(out.join('\\n'));
         if _bad92 in _b92:
             failures.append(f"92: {_why92}")
 
+    # ================= block 93: the Keeper ============================
+    # Custody of the narration, never authority over the record. Off is
+    # idle AND non-adapting; boundaries are lifecycle events; closing and
+    # narrating are separate events pinned by an immutable generation
+    # capsule; three speech classes with mechanical citation validation;
+    # append-only all the way down; the packet bounded from entry one;
+    # the tenth-close drill pauses growth, not personality.
+    import json as _j93
+    import subprocess as _sub93
+    import time as _t93
+    import keeper as _kp
+    import vault as _vt93
+
+    def _f93(msg):
+        failures.append(f"93: {msg}")
+
+    _kdir = _SCRATCH / "keeper"
+
+    # 1. OFF IS IDLE — ninety-two blocks of ordinary use ran before this
+    # line, and none of it may have summoned the Keeper: the directory
+    # must not exist, and asking for status must not create it.
+    if _kdir.exists():
+        _f93("keeper state exists before any activation — something "
+             "ordinary summoned the Keeper")
+    _st93 = _kp.status()
+    if _st93.get("exists") or _st93.get("active"):
+        _f93(f"status on virgin state claims existence: {_st93}")
+    if _kdir.exists():
+        _f93("status() CREATED keeper state — a read grew the world")
+
+    # 2. unpaired requests refused on every endpoint
+    with server.app.test_client() as _c93:
+        for _m, _p in [("GET", "/api/keeper/status"),
+                       ("POST", "/api/keeper/activate"),
+                       ("POST", "/api/keeper/close"),
+                       ("POST", "/api/keeper/rule"),
+                       ("POST", "/api/keeper/review"),
+                       ("GET", "/api/keeper/entries")]:
+            _r = (_c93.get(_p) if _m == "GET" else
+                  _c93.post(_p, json={}))
+            if _r.status_code != 401:
+                _f93(f"unpaired {_m} {_p} answered {_r.status_code}, not 401")
+
+    # 3. SUMMONED ONLY — source-level pins: no scheduler, hook, or boot
+    # path may reference a close. The server's boot section and the vault
+    # scheduler know nothing of the Keeper; the CLI imports nothing of it.
+    _srv93 = Path(server.__file__).read_text()
+    _boot93 = _srv93[_srv93.index('if __name__ == "__main__"') - 8000:]
+    if "keeper.close" in _boot93 or "_keeper_narrate" in _boot93:
+        _f93("the boot path references a Keeper close")
+    if "keeper" in Path(_vt93.__file__).read_text():
+        _f93("the vault module (scheduler included) references the Keeper")
+    if "import keeper" in Path(cli.__file__).read_text():
+        _f93("the CLI imports the Keeper — ordinary runs can reach it")
+    for _need93 in ("summoned only", "never scheduled"):
+        if _need93 not in _srv93:
+            _f93(f"server lost the Keeper's summoned-only declaration "
+                 f"({_need93!r})")
+
+    # 4. activation requires a name; a refused activation leaves nothing
+    try:
+        _kp.activate("", "")
+        _f93("an unnamed Keeper was activated — a placeholder name is an "
+             "anti-sample of itself")
+    except ValueError:
+        pass
+    if _kdir.exists():
+        _f93("a refused activation still created keeper state")
+
+    # 5. activation boundary + manifest completeness. Rows landing BEFORE
+    # activation stay out of the first close; one row of every kind
+    # landing after it appears with id + kind.
+    with open(_SCRATCH / "inputs.jsonl", "a") as _fh:
+        _fh.write(_j93.dumps({"job_id": "job_pre93", "mode": "forge",
+                              "text": "before the Book opened",
+                              "created_at": "2026-09-01T00:00:01+00:00"}) + "\n")
+    _kp.activate("Margin", "Keeper of the Book", "trace_cli_naming93")
+    if not _kp.active():
+        _f93("activation did not activate")
+    _seed93 = {
+        "inputs.jsonl": {"job_id": "job_in93", "mode": "play",
+                         "text": "The Thief is honest while stealing",
+                         "created_at": "2026-09-01T00:00:02+00:00"},
+        "judgments.jsonl": {"id": "jdg_93", "decision": "accepted",
+                            "candidate_text": "Rotwall",
+                            "reason": "the wall still holds"},
+        "bench_corrections.jsonl": {"at": "2026-09-01T00:00:03+00:00",
+                                    "title": "guiltsomnia", "word": "shadaze",
+                                    "model_said": "kept",
+                                    "owner_says": "weakened",
+                                    "note": "shame answers culpability"},
+        "edges.jsonl": {"edge_id": "edge_93", "rel": "produced",
+                        "source": {"label": "a run"},
+                        "target": {"label": "a word"},
+                        "verdict": "keep",
+                        "created_at": "2026-09-01T00:00:04+00:00"},
+        "warps.jsonl": {"warp_id": "warp_93", "from_label": "Paragon",
+                        "to_label": "Bastardigree", "dwell_s": 12.5,
+                        "created_at": "2026-09-01T00:00:05+00:00"},
+    }
+    for _fn93, _row93 in _seed93.items():
+        with open(_SCRATCH / _fn93, "a") as _fh:
+            _fh.write(_j93.dumps(_row93) + "\n")
+    (_SCRATCH / "receipts").mkdir(exist_ok=True)
+    (_SCRATCH / "receipts" / "receipt_trace_keeper93.json").write_text(
+        _j93.dumps({"trace_id": "trace_keeper93", "operation": "forge",
+                    "created_at": cli._now(),
+                    "candidates": [{"title": "Rotwall"}]}))
+    _canary93 = "CANARY-DOCUMENT-BODY-93-NEVER-IN-A-MANIFEST"
+    with open(_SCRATCH / "representations.jsonl", "a") as _fh:
+        _fh.write(_j93.dumps({"rep_id": "rep_93", "text": _canary93}) + "\n")
+
+    # Canonical-store custody snapshot, taken BEFORE the first close so a
+    # keeper that corrupts canonical stores on EVERY close (not just one)
+    # still gets caught at check 26. inputs.jsonl is excluded because the
+    # block itself deliberately seeds it later.
+    def _canon_snapshot93():
+        # auth/ is the GATE's store, not corpus (the vault excludes it
+        # too), and this block's own _paired() clients legitimately mint
+        # sessions into it — so it stays out of the custody comparison.
+        out = {}
+        for p in sorted(_SCRATCH.rglob("*")):
+            if p.is_file() and "keeper" not in p.parts \
+                    and "auth" not in p.parts \
+                    and p.name != "inputs.jsonl":
+                out[str(p)] = p.stat().st_size
+        return out
+
+    _canon_before93 = _canon_snapshot93()
+
+    _e1 = _kp.close(cli.MockGateway())
+    _close1 = _kp._rows(_kp.closes_path())[-1]
+    _man1 = _j93.loads((_kp.manifests_dir()
+                        / f"{_close1['close_id']}.json").read_text())
+    _ids1 = {r["id"] for r in _man1["rows"]}
+    _kinds1 = {r["kind"] for r in _man1["rows"]}
+    if "job_pre93" in _ids1:
+        _f93("a pre-activation row entered the first close — the Book "
+             "silently summarized history it never witnessed")
+    for _want93 in ("job_in93", "jdg_93", "edge_93", "warp_93",
+                    "trace_keeper93"):
+        if _want93 not in _ids1:
+            _f93(f"manifest lost the seeded row {_want93!r}")
+    for _wk93 in ("input", "judgment", "bench_correction", "edge", "warp",
+                  "run"):
+        if _wk93 not in _kinds1:
+            _f93(f"manifest lost the whole kind {_wk93!r}")
+    for _r93 in _man1["rows"]:
+        if not _r93.get("id") or not _r93.get("kind"):
+            _f93(f"a manifest row lacks id or kind: {_r93}")
+
+    # 5b. the allowlist by construction: a document body planted in the
+    # window reaches neither the manifest nor the capsule.
+    _cap1 = _kp._capsules_for(_close1["close_id"])[0]
+    if _canary93 in _j93.dumps(_man1) or _canary93 in _cap1["prompt"]:
+        _f93("a document body leaked into the manifest or capsule — the "
+             "allowlist failed")
+
+    # 6. manifest determinism: the same window rebuilt gives the same sha
+    _man1b = _kp.build_manifest(_man1["cursors_from"],
+                                _man1["window"]["from"],
+                                _man1["cursors_to"], _man1["window"]["to"],
+                                _man1.get("receipts_from"),
+                                _man1.get("receipts_to"))
+    if _kp._sha(_kp._canonical(_man1b).encode()) != _close1["manifest_sha"]:
+        _f93("rebuilding the same window changed the manifest sha — the "
+             "session is not defined by the ledger")
+
+    # 7+8. closing and narrating are separate events: with a failing
+    # provider, the close row, manifest, and capsule all exist BEFORE the
+    # call (the gateway itself checks), and the failure leaves them whole
+    # with the omission report living in the capsule, not on any entry.
+    class _FailGw93:
+        name = "fail93"
+        model = "fail93"
+
+        def complete(self, prompt):
+            _cid = _kp._rows(_kp.closes_path())[-1]["close_id"]
+            assert (_kp.manifests_dir() / f"{_cid}.json").exists(), \
+                "manifest missing at call time"
+            assert list(_kp.capsules_dir().glob(f"{_cid}-c*.json")), \
+                "capsule missing at call time"
+            raise TimeoutError("simulated provider death")
+
+    _n_entries_before = len(_kp._rows(_kp.entries_path()))
+    try:
+        _kp.close(_FailGw93())
+        _f93("a dead provider still produced an entry")
+    except RuntimeError as _e93:
+        if "capsule" not in str(_e93):
+            _f93(f"provider-failure error lost its plain sentence: {_e93}")
+    except AssertionError as _e93:
+        _f93(str(_e93))
+    _close2 = _kp._rows(_kp.closes_path())[-1]
+    if _close2["close_id"] == _close1["close_id"]:
+        _f93("the failed close reused the previous close id")
+    if len(_kp._rows(_kp.entries_path())) != _n_entries_before:
+        _f93("a failed generation wrote an entry")
+    _caps2 = _kp._capsules_for(_close2["close_id"])
+    if not _caps2:
+        _f93("the failed close has no surviving capsule")
+    elif "packet_omission_report" not in _caps2[0]:
+        _f93("the capsule lost the omission report — the evidence died "
+             "with the failure")
+    _att2 = [a for a in _kp._rows(_kp.attempts_path())
+             if a["close_id"] == _close2["close_id"]]
+    if not _att2 or not _att2[-1]["outcome"].startswith("provider_error:"):
+        _f93("the failed attempt was not recorded as a provider error")
+
+    # 9. RETRY IS BYTE-FOR-BYTE: change the sheet, the prompt revision,
+    # and the keeper judgments, then retry — the original capsule's exact
+    # prompt must be sent, and the capsule file must not change.
+    _sheet_raw93 = _kp.sheet_path().read_text()
+    _kp.sheet_path().write_text(_sheet_raw93.replace(
+        "Irreverent by default", "Louder and worse by default"))
+    _old_prompt_rev93 = _kp.PROMPT_REV
+    _kp.PROMPT_REV = 99
+    _cap_bytes_before93 = (_kp.capsules_dir()
+                           / f"{_caps2[0]['capsule_id']}.json").read_bytes()
+
+    class _CaptureGw93:
+        name = "capture93"
+        model = "capture93"
+        seen = None
+
+        def complete(self, prompt):
+            _CaptureGw93.seen = prompt
+            return cli.MockGateway().complete(prompt)
+
+    try:
+        _e_retry = _kp.retry(_close2["close_id"], _CaptureGw93())
+    finally:
+        _kp.PROMPT_REV = _old_prompt_rev93
+        _kp.sheet_path().write_text(_sheet_raw93)
+    if _CaptureGw93.seen != _caps2[0]["prompt"]:
+        _f93("retry rebuilt the prompt instead of re-sending the capsule "
+             "byte-for-byte")
+    if (_kp.capsules_dir()
+            / f"{_caps2[0]['capsule_id']}.json").read_bytes() \
+            != _cap_bytes_before93:
+        _f93("retry mutated the capsule")
+    if _e_retry["prompt_rev"] != _caps2[0]["prompt_rev"]:
+        _f93("the retried entry was stamped with the NEW prompt rev, not "
+             "the capsule's")
+
+    # 10. re-narration is append-only: a new attempt, a NEW capsule on
+    # the same close; the earlier capsule and entries untouched.
+    _kp._observe_sheet()
+    _n_caps_before93 = len(_kp._capsules_for(_close2["close_id"]))
+    _entries_bytes93 = _kp.entries_path().read_bytes()
+    _e_renarr = _kp.renarrate(_close2["close_id"], cli.MockGateway())
+    _caps_after93 = _kp._capsules_for(_close2["close_id"])
+    if len(_caps_after93) != _n_caps_before93 + 1:
+        _f93("re-narration did not create its own capsule")
+    if _caps_after93[0]["prompt"] != _caps2[0]["prompt"]:
+        _f93("re-narration rewrote the ORIGINAL capsule")
+    if _e_renarr["close_id"] != _close2["close_id"]:
+        _f93("re-narration opened a new close instead of linking the old")
+    if not _kp.entries_path().read_bytes().startswith(_entries_bytes93):
+        _f93("re-narration rewrote earlier entries instead of appending")
+
+    # 11. rejection does not reopen the interval: reject the re-narration,
+    # seed one fresh row, close again — the new window starts at close 2,
+    # holds only the fresh row, and re-serves nothing already narrated.
+    _kp.rule(_e_renarr["entry_id"], "rejected", "smuggled nothing, but too "
+             "pleased with itself")
+    with open(_SCRATCH / "inputs.jsonl", "a") as _fh:
+        _fh.write(_j93.dumps({"job_id": "job_fresh93", "mode": "forge",
+                              "text": "after the rejection",
+                              "created_at": cli._now()}) + "\n")
+    _e3 = _kp.close(cli.MockGateway())
+    _close3 = _kp._rows(_kp.closes_path())[-1]
+    _man3 = _j93.loads((_kp.manifests_dir()
+                        / f"{_close3['close_id']}.json").read_text())
+    _ids3 = {r["id"] for r in _man3["rows"]}
+    if _close3["window"]["from"] != _close2["at"]:
+        _f93("the window reopened past the last close marker — a rejected "
+             "narration leaked its events forward")
+    if "job_in93" in _ids3 or "job_fresh93" not in _ids3:
+        _f93(f"the post-rejection window is wrong: {_ids3}")
+
+    # 12+13. a fake id and a real-but-out-of-window id both demote to a
+    # visibly ungrounded claim WITHOUT being re-classed, and the entry
+    # survives — wrongness stays inspectable, not erased.
+    class _LiarGw93:
+        name = "liar93"
+        model = "liar93"
+
+        def complete(self, prompt):
+            return _j93.dumps({"segments": [
+                {"class": "event_claim", "text": "You forged a ghost.",
+                 "record_ids": ["ghost:999"]},
+                {"class": "event_claim", "text": "And an old truth.",
+                 "record_ids": ["job_in93"]},
+                {"class": "sermon", "text": "Let us reflect."},
+                {"class": "flourish", "text": "The end."}]})
+
+    _e_liar = _kp.renarrate(_close3["close_id"], _LiarGw93())
+    _claims93 = [s for s in _e_liar["speech"] if s["class"] == "event_claim"]
+    if len(_claims93) != 2 or any(s.get("grounded") for s in _claims93):
+        _f93("an uncited-in-window claim rendered as grounded")
+    if not any("UNGROUNDED" in f for f in _e_liar["findings"]):
+        _f93("no finding named the ungrounded claims")
+    if not any("unknown speech class" in f for f in _e_liar["findings"]):
+        _f93("an unknown speech class produced no finding")
+    _sermon93 = [s for s in _e_liar["speech"] if s["text"] == "Let us reflect."]
+    if not _sermon93 or _sermon93[0]["class"] != "":
+        _f93("an invalid class was not demoted to unclassed — re-classing "
+             "it (e.g. to flourish) would dress a sermon as comedy")
+
+    # 14+15. unparseable output that is also a provider refusal: the raw
+    # survives byte-exact, both findings land, the refusal is attributed
+    # to the provider, and nothing crashes.
+    _refusal93 = "I cannot continue with this request."
+
+    class _RefuseGw93:
+        name = "refuse93"
+        model = "refuse93"
+
+        def complete(self, prompt):
+            return _refusal93
+
+    _e_ref = _kp.renarrate(_close3["close_id"], _RefuseGw93())
+    if _e_ref["raw_output"] != _refusal93:
+        _f93("the refusal's raw output was not preserved byte-exact")
+    if not any("provider's rule, never the Keeper's judgment" in f
+               for f in _e_ref["findings"]):
+        _f93("the refusal was not attributed to the provider")
+    if not any("unparseable" in f for f in _e_ref["findings"]):
+        _f93("unparseable output produced no finding")
+
+    # 16. stamps on every entry
+    for _fld93 in ("keeper_id", "keeper_rev", "sheet_sha", "prompt_rev",
+                   "model", "capsule_id", "close_id"):
+        if not str(_e3.get(_fld93, "")):
+            _f93(f"entry missing stamp {_fld93!r}")
+
+    # 17. a sheet edit revises forward, never backward: new sha and a new
+    # revisions row at the next close; every prior entry byte-identical.
+    _entries_before17 = _kp.entries_path().read_bytes()
+    _revs_before17 = len(_kp._rows(_kp.revisions_path()))
+    _kp.sheet_path().write_text(
+        _kp.sheet_path().read_text().replace(
+            "precise by conviction", "precise by conviction, fonder by the day"))
+    _e17 = _kp.close(cli.MockGateway())
+    if len(_kp._rows(_kp.revisions_path())) != _revs_before17 + 1:
+        _f93("an edited sheet did not append a revisions row at close")
+    if _e17["sheet_sha"] == _e3["sheet_sha"]:
+        _f93("the new close was stamped with the OLD sheet sha")
+    if not _kp.entries_path().read_bytes().startswith(_entries_before17):
+        _f93("a sheet revision rewrote prior entries")
+
+    # 18. judgments are append-only with a supersession chain
+    _jrow1 = _kp.rule(_e17["entry_id"], "kept", "landed its one image")
+    _jlines18 = _kp.judgments_path().read_bytes()
+    _jrow2 = _kp.rule(_e17["entry_id"], "revised", "kept the image, "
+                      "dropped the bow", "The Book gained words and lost "
+                      "nothing it minded losing.")
+    if _jrow2["supersedes_judgment_id"] != _jrow1["judgment_id"]:
+        _f93("a revision did not link the judgment it supersedes")
+    if not _kp.judgments_path().read_bytes().startswith(_jlines18):
+        _f93("a new ruling rewrote older judgment rows")
+    if _kp._active_rulings()[_e17["entry_id"]]["ruling"] != "revised":
+        _f93("the derived active ruling ignored the supersession chain")
+
+    # 19-22. THE PACKET: rejected rides only as anti-example with its
+    # why; unruled entries ride nowhere; success-only packets are
+    # structurally refused; bounds are enforced with the omissions
+    # reported, never silent.
+    _kp.rule(_e1["entry_id"], "kept", "the first voice held")
+    _sheet93, _sha93 = _kp.load_sheet()
+    _man_now93 = {"rows": []}
+    _jd93 = lambda o: _j93.dumps(o, ensure_ascii=False)  # noqa: E731
+    _pkt93, _rep93 = _kp.build_packet(_sheet93, _man_now93)
+    _pk_all93 = _jd93(_pkt93)
+    _rej_narr93 = _kp._narration_text(_e_renarr)[:80]
+    if _rej_narr93 and _rej_narr93 not in _jd93(_pkt93["anti_examples"]):
+        _f93("the rejected entry is missing from the anti-examples")
+    # The mock narrates identically every time, so text can't distinguish
+    # entries — the WHY can, because it travels with its ruling. The
+    # rejection's why must ride the anti list and nothing else.
+    if "too pleased with itself" not in _jd93(_pkt93["anti_examples"]):
+        _f93("the anti-example lost its why")
+    if "too pleased with itself" in _jd93(_pkt93["kept_examples"]) \
+            or "too pleased with itself" in _jd93(_pkt93["owner_corrections"]):
+        _f93("a REJECTED entry rode as a positive example")
+    _n_kept_active93 = sum(1 for _jj in _kp._active_rulings().values()
+                           if _jj.get("ruling") == "kept")
+    if _rep93["kept_available"] != _n_kept_active93:
+        _f93(f"the packet counted {_rep93['kept_available']} kept but the "
+             f"judgment chain derives {_n_kept_active93}")
+    _unruled_narr93 = _kp._narration_text(_e_liar)[:60]
+    if _unruled_narr93 and _unruled_narr93 in _pk_all93:
+        _f93("an unruled entry leaked into the packet — silence taught")
+    _old_anti93 = _kp.PACKET_MAX_ANTI
+    _kp.PACKET_MAX_ANTI = 0
+    try:
+        _kp.build_packet(_sheet93, _man_now93)
+        _f93("a success-only packet was permitted while anti-examples exist")
+    except RuntimeError:
+        pass
+    finally:
+        _kp.PACKET_MAX_ANTI = _old_anti93
+    _old_kept93 = _kp.PACKET_MAX_KEPT
+    _kp.PACKET_MAX_KEPT = 1
+    try:
+        _pkt_b93, _rep_b93 = _kp.build_packet(_sheet93, _man_now93)
+        _n_in93 = (_rep_b93["kept_included"]
+                   + _rep_b93["corrections_included"])
+        if _n_in93 > 1:
+            _f93("the packet ignored its bound")
+        if (_rep_b93["omitted"]["kept"] + _rep_b93["omitted"]["corrections"]) \
+                != (_rep_b93["kept_available"]
+                    + _rep_b93["corrections_available"] - _n_in93):
+            _f93("the omission report does not account for what was cut")
+    finally:
+        _kp.PACKET_MAX_KEPT = _old_kept93
+
+    # 23. the drill pauses growth, not personality: with review due, a
+    # NEW keep stops influencing packets until the cold review ratifies;
+    # closing still works the whole time.
+    _old_every93 = _kp.DRILL_EVERY
+    _kp.DRILL_EVERY = 2
+    try:
+        if not _kp.review_due():
+            _f93("review not due despite far more closes than the cadence")
+        _kp.rule(_e_ref["entry_id"], "kept", "even the refusal was kept "
+                 "honestly")
+        _pkt_f93, _rep_f93 = _kp.build_packet(_sheet93, _man_now93)
+        if not _rep_f93["adaptation_frozen"]:
+            _f93("the packet report hides that adaptation is frozen")
+        if _kp._narration_text(_e_ref)[:40] and \
+                _kp._narration_text(_e_ref)[:40] in _jd93(_pkt_f93):
+            _f93("a keep made during review-due influenced the packet "
+                 "before ratification")
+        _e_frozen = _kp.close(cli.MockGateway())
+        if not _e_frozen.get("entry_id"):
+            _f93("the Keeper fell silent during review-due — growth "
+                 "pauses, the character does not")
+        _kp.record_review([_e17["entry_id"]], "still the character we "
+                          "authored")
+        if _kp.review_due():
+            _f93("the cold review did not clear review-due")
+        _pkt_g93, _rep_g93 = _kp.build_packet(_sheet93, _man_now93)
+        if _rep_g93["adaptation_frozen"]:
+            _f93("adaptation stayed frozen after ratification")
+    finally:
+        _kp.DRILL_EVERY = _old_every93
+
+    # 24+25. no word filter, and the wire carries it: the profane fixture
+    # narration survives into the entry, the raw, and the gated API
+    # response unsanitized.
+    _prof93 = "magnificent bastard"
+    _kept_texts93 = _j93.dumps([e for e in _kp._rows(_kp.entries_path())])
+    if _prof93 not in _kept_texts93 or "goddamn" not in _kept_texts93:
+        _f93("the profane fixture register was sanitized out of the "
+             "entries")
+    with server.app.test_client() as _c93b:
+        _paired(_c93b)
+        _resp93 = _c93b.get("/api/keeper/entries")
+        if _resp93.status_code != 200:
+            _f93(f"gated entries endpoint failed: {_resp93.status_code}")
+        elif _prof93 not in _resp93.get_data(as_text=True):
+            _f93("the API sanitized the Keeper's mouth")
+
+    # 26. custody: across EVERY close this block has made — the first one
+    # included — no canonical store outside keeper/ changed by a byte
+    # (inputs.jsonl excluded: the block seeds it deliberately).
+    _kp.close(cli.MockGateway())
+    _canon_after93 = _canon_snapshot93()
+    for _fp93, _sz93 in _canon_after93.items():
+        if _fp93 not in _canon_before93:
+            _f93(f"the Keeper created a canonical file: {_fp93}")
+        elif _sz93 != _canon_before93[_fp93]:
+            _f93(f"the Keeper changed a canonical store: {_fp93} "
+                 f"({_canon_before93[_fp93]} -> {_sz93} bytes)")
+
+    # 27. keeper/ rides the vault: the snapshot walk includes keeper
+    # files, and the exclusion list gained no keeper entry.
+    _files27, _excl27, _find27 = _vt93._walk(_SCRATCH)
+    _walked27 = _j93.dumps([str(x) for x in _files27])
+    if "keeper" not in _walked27:
+        _f93("the vault walk does not stage keeper files — the Book's "
+             "narrator would not survive the disaster")
+    if any("keeper" in str(x) for x in _vt93.EXCLUDE_REL):
+        _f93("EXCLUDE_REL gained a keeper entry")
+
+    # 28. the export boundary: keeper paths are refused by the repo
+    # boundary today (gitignored with the rest of local_state). In a
+    # checkout, git itself is the witness; outside one (the container
+    # mirror), the .gitignore text is.
+    _repo93 = Path(cli.__file__).parent.parent
+    _isrepo93 = _sub93.run(["git", "-C", str(_repo93), "rev-parse",
+                            "--git-dir"], capture_output=True).returncode == 0
+    if _isrepo93:
+        _gi28 = _sub93.run(["git", "-C", str(_repo93), "check-ignore",
+                            "local_state/keeper/entries.jsonl"],
+                           capture_output=True)
+        if _gi28.returncode != 0:
+            _f93("local_state/keeper is NOT git-ignored — keeper material "
+                 "could enter the public repo")
+    else:
+        _gilines93 = [ln.strip().rstrip("/") for ln in
+                      (_repo93 / ".gitignore").read_text().splitlines()]
+        if "local_state" not in _gilines93:
+            _f93(".gitignore no longer covers local_state — keeper "
+                 "material could enter the public repo")
+
+    # 29. prompt pins, the constitution the Keeper is told: central law,
+    # clinical-authority prohibition, bounded dissent, language
+    # protections, the sheet verbatim, and the output contract.
+    _cap29 = _kp._capsules_for(_close3["close_id"])[0]["prompt"]
+    _flat29 = " ".join(_cap29.split())
+    for _pin29 in (
+            "custody of the narration, not authority over the record",
+            "Its wrongness remains inspectable",
+            "authority restriction, not a language restriction",
+            "may never diagnose him from the record",
+            "may not obstruct a ruling, relitigate one the owner has "
+            "closed",
+            "Guardrails belong on consequential actions, not on language",
+            "refusal is the provider's, never your judgment",
+            "fondness is not flattery",
+            "A claim you cannot cite does not get made as a claim",
+            "an empty room is narrated honestly or not at all"):
+        if " ".join(_pin29.split()) not in _flat29:
+            _f93(f"the close prompt lost its pin: {_pin29!r}")
+    if '"Margin"' not in _cap29:
+        _f93("the sheet did not ride the prompt verbatim")
+
+    # 30. an empty window closes honestly: no rows, no claims from the
+    # honest mock; a forced claim against emptiness is a finding.
+    _e30 = _kp.close(cli.MockGateway())
+    _close30 = _kp._rows(_kp.closes_path())[-1]
+    _man30 = _j93.loads((_kp.manifests_dir()
+                         / f"{_close30['close_id']}.json").read_text())
+    if _man30["rows"]:
+        _f93("an empty window manifested rows from nowhere")
+    if any(s["class"] == "event_claim" for s in _e30["speech"]):
+        _f93("the honest mock claimed events in an empty room")
+    if "empty room" not in _kp._narration_text(_e30):
+        _f93("the empty room was not narrated honestly")
+    _e30b = _kp.renarrate(_close30["close_id"], _LiarGw93())
+    if not any("UNGROUNDED" in f for f in _e30b["findings"]):
+        _f93("a claim against an empty manifest drew no finding")
+
+    # 31. the surface: pins on the card and its honesty markers
+    _idx93 = (Path(cli.__file__).parent.parent / "webapp"
+              / "index.html").read_text()
+    for _pin31 in ("Ask the Keeper to close the Book",
+                   "custody of the narration",
+                   "UNGROUNDED CLAIM",
+                   "adaptation review due",
+                   "Retry, byte-for-byte",
+                   "a proposal, never a fact about you",
+                   "keeperRule",
+                   "Record the cold review",  # the freeze has an unfreeze
+                   "if (s.grounded)",  # the guard that keeps an ungrounded
+                                        # claim from wearing receipts
+                   "Play lane"):
+        if _pin31 not in _idx93:
+            _f93(f"index.html lost the Keeper pin {_pin31!r}")
+
+    # 32. the gated HTTP surface end to end, hermetic: forced mock
+    # gateway, close over HTTP, poll to completion, rule over HTTP.
+    _real_sgw93 = server.server_gateway
+    server.server_gateway = lambda: cli.MockGateway()
+    try:
+        with server.app.test_client() as _c93c:
+            _paired(_c93c)
+            _r32 = _c93c.post("/api/keeper/close", json={})
+            if _r32.status_code != 200:
+                _f93(f"gated close refused: {_r32.status_code} "
+                     f"{_r32.get_data(as_text=True)[:120]}")
+            else:
+                for _ in range(80):
+                    _st32 = _c93c.get("/api/keeper/status").get_json()
+                    if not _st32.get("narrating"):
+                        break
+                    _t93.sleep(0.05)
+                if _st32.get("narrating"):
+                    _f93("the close thread never finished")
+                if _st32.get("last_error"):
+                    _f93(f"the HTTP close failed: {_st32['last_error']}")
+            _d32 = _c93c.get("/api/keeper/entries").get_json()
+            _unruled32 = [e for e in _d32["entries"] if not e.get("ruling")]
+            if not _unruled32:
+                _f93("no unruled entry came back over HTTP")
+            else:
+                _r32b = _c93c.post("/api/keeper/rule", json={
+                    "entry_id": _unruled32[0]["entry_id"],
+                    "ruling": "rejected", "why": "not tonight"})
+                if _r32b.status_code != 200:
+                    _f93(f"HTTP ruling refused: {_r32b.status_code}")
+            _r32c = _c93c.post("/api/keeper/activate",
+                               json={"name": "Second", "title": "Usurper"})
+            if _r32c.status_code != 400:
+                _f93("activating over an active Keeper was allowed")
+            # the freeze has an unfreeze: the review endpoint records a
+            # ratification over the recent entries and review_due clears
+            _r32d = _c93c.post("/api/keeper/review",
+                               json={"notes": "re-read, still the character"})
+            if _r32d.status_code != 200 or \
+                    not _r32d.get_json().get("review_id"):
+                _f93(f"the cold-review endpoint failed: {_r32d.status_code}")
+    finally:
+        server.server_gateway = _real_sgw93
+
+    # 33. OFF STOPS ADAPTATION: deactivate, let the world move, and the
+    # Keeper neither grows nor remembers — reactivation starts a fresh
+    # boundary and the dark rows never surface.
+    _kp.deactivate()
+    if _kp.active():
+        _f93("deactivation did not deactivate")
+    _ksnap33 = {str(p): p.read_bytes() for p in sorted(_kdir.rglob("*"))
+                if p.is_file()}
+    with open(_SCRATCH / "inputs.jsonl", "a") as _fh:
+        _fh.write(_j93.dumps({"job_id": "job_dark93", "mode": "forge",
+                              "text": "spoken while the Keeper slept",
+                              "created_at": cli._now()}) + "\n")
+    _kp.status()
+    _ksnap33b = {str(p): p.read_bytes() for p in sorted(_kdir.rglob("*"))
+                 if p.is_file()}
+    if _ksnap33 != _ksnap33b:
+        _f93("keeper state changed while inactive — off did not stop "
+             "adaptation")
+    _kp.activate("Margin", "Keeper of the Book")
+    with open(_SCRATCH / "inputs.jsonl", "a") as _fh:
+        _fh.write(_j93.dumps({"job_id": "job_light93", "mode": "forge",
+                              "text": "spoken after the return",
+                              "created_at": cli._now()}) + "\n")
+    _e33 = _kp.close(cli.MockGateway())
+    _close33 = _kp._rows(_kp.closes_path())[-1]
+    _man33 = _j93.loads((_kp.manifests_dir()
+                         / f"{_close33['close_id']}.json").read_text())
+    _ids33 = {r["id"] for r in _man33["rows"]}
+    if "job_dark93" in _ids33:
+        _f93("a dark-period row entered the post-reactivation close — "
+             "the Keeper remembered an interval it did not witness")
+    if "job_light93" not in _ids33:
+        _f93("the post-reactivation window lost its own rows")
+    _all_capsules33 = " ".join(
+        p.read_text() for p in _kp.capsules_dir().glob("*.json"))
+    if "job_dark93" in _all_capsules33:
+        _f93("a dark-period row reached a packet or prompt")
+
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to
     # add to. This notices the day that happens, names the file, and does it

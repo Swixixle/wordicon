@@ -389,6 +389,14 @@
      style="font-size:12px;padding:3px 24px;color:var(--muted);border-bottom:1px solid var(--border);background:var(--panel)"></div>
 
 <main>
+  <!-- The Keeper: the Book's resident narrator. Summoned only — this card
+       is the ONLY thing that ever asks it to speak. Custody of the
+       narration, never authority over the record. -->
+  <details class="card" id="keeper-card" style="padding:12px 16px">
+    <summary style="cursor:pointer;font-size:13px;color:var(--muted);font-weight:600">The Keeper — ask it to close the Book</summary>
+    <div id="keeper-body" style="margin-top:10px;font-size:13px">loading…</div>
+  </details>
+
   <details class="card" style="padding:12px 16px">
     <summary style="cursor:pointer;font-size:13px;color:var(--muted);font-weight:600">What is Wordicon?</summary>
     <div style="margin-top:10px">
@@ -5974,11 +5982,193 @@ async function loadVaultStrip() {
   }
 }
 
+// ---- The Keeper ----------------------------------------------------------
+// Renders only what /api/keeper/* actually said. Every event_claim shows
+// its receipts; an ungrounded claim is VISIBLY ungrounded, never dressed
+// as from-the-record; inference and flourish are visibly themselves. The
+// owner's Keep / Revise / Reject is the only authority here.
+
+function kEsc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;',
+           "'": '&#39;'}[c]));
+}
+
+let keeperPoll = null;
+
+async function keeperApi(path, body) {
+  const opts = body === undefined ? {} : {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)};
+  const r = await fetch(path, opts);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+  return d;
+}
+
+function keeperSegHtml(s) {
+  if (s['class'] === 'event_claim') {
+    const chips = (s.record_ids || []).map(i =>
+      '<span style="font-size:11px;border:1px solid var(--border);border-radius:8px;padding:0 6px;margin-left:4px" title="cited from the record">' + kEsc(i) + '</span>').join('');
+    if (s.grounded) {
+      return '<div style="margin:4px 0">' + kEsc(s.text) + chips + '</div>';
+    }
+    return '<div style="margin:4px 0"><span style="color:var(--bad);font-size:11px;font-weight:700;border:1px solid var(--bad);border-radius:8px;padding:0 6px;margin-right:6px">UNGROUNDED CLAIM</span>' + kEsc(s.text) + chips + '</div>';
+  }
+  if (s['class'] === 'keeper_inference') {
+    return '<div style="margin:4px 0;font-style:italic;color:var(--muted)" title="the Keeper’s revisable reading — a proposal, never a fact about you">reads: ' + kEsc(s.text) + '</div>';
+  }
+  if (s['class'] === 'flourish') {
+    return '<div style="margin:4px 0">' + kEsc(s.text) + '</div>';
+  }
+  return '<div style="margin:4px 0"><span style="font-size:11px;color:var(--bad)">unclassed</span> ' + kEsc(s.text) + '</div>';
+}
+
+function keeperEntryHtml(e) {
+  const segs = (e.speech || []).map(keeperSegHtml).join('');
+  const finds = (e.findings || []).length
+    ? '<div style="font-size:11px;color:var(--muted);margin-top:6px">findings: '
+      + (e.findings || []).map(kEsc).join(' · ') + '</div>' : '';
+  let ruling;
+  if (e.ruling) {
+    ruling = '<div style="font-size:12px;margin-top:6px;color:var(--muted)">your ruling: <strong>'
+      + kEsc(e.ruling.ruling) + '</strong>'
+      + (e.ruling.why ? ' — ' + kEsc(e.ruling.why) : '') + '</div>';
+  } else {
+    ruling = '<div style="margin-top:8px" data-krule="' + kEsc(e.entry_id) + '">'
+      + '<button onclick="keeperRule(this,\'kept\')">Keep</button> '
+      + '<button onclick="keeperRule(this,\'revised\')">Revise</button> '
+      + '<button onclick="keeperRule(this,\'rejected\')">Reject</button>'
+      + '<div style="margin-top:6px"><textarea data-kwhy rows="2" style="width:100%" placeholder="why — unlimited, and the why is what teaches"></textarea>'
+      + '<textarea data-krev rows="2" style="width:100%;display:none" placeholder="your superseding version (required for Revise)"></textarea></div>'
+      + '</div>';
+  }
+  return '<div style="border-left:3px solid var(--border);padding:6px 10px;margin:10px 0">'
+    + '<div style="font-size:11px;color:var(--muted)">' + kEsc(e.at)
+    + ' · sheet rev ' + kEsc(e.keeper_rev) + ' · ' + kEsc(e.model || '')
+    + '</div>' + segs + finds + ruling + '</div>';
+}
+
+async function keeperRule(btn, ruling) {
+  const wrap = btn.closest('[data-krule]');
+  const why = wrap.querySelector('[data-kwhy]').value.trim();
+  const rev = wrap.querySelector('[data-krev]');
+  if (ruling === 'revised' && rev.style.display === 'none') {
+    rev.style.display = '';
+    rev.focus();
+    return;  // first tap reveals the superseding-text box; second records
+  }
+  try {
+    await keeperApi('/api/keeper/rule', {
+      entry_id: wrap.getAttribute('data-krule'), ruling: ruling,
+      why: why, revision_text: rev.value.trim()});
+    loadKeeper();
+  } catch (err) { alert(err.message); }
+}
+
+async function keeperClose() {
+  try { await keeperApi('/api/keeper/close', {}); } catch (err) { alert(err.message); }
+  loadKeeper();
+}
+
+async function keeperRetry(closeId) {
+  try { await keeperApi('/api/keeper/retry', {close_id: closeId}); } catch (err) { alert(err.message); }
+  loadKeeper();
+}
+
+async function keeperReview() {
+  try {
+    await keeperApi('/api/keeper/review', {notes: 'cold review recorded from the card'});
+    loadKeeper();
+  } catch (err) { alert(err.message); }
+}
+
+async function keeperActivate() {
+  const name = document.getElementById('keeper-name').value.trim();
+  const title = document.getElementById('keeper-title').value.trim();
+  const receipt = document.getElementById('keeper-receipt').value.trim();
+  try {
+    await keeperApi('/api/keeper/activate',
+                    {name: name, title: title, naming_receipt: receipt});
+    loadKeeper();
+  } catch (err) {
+    document.getElementById('keeper-activate-err').textContent = err.message;
+  }
+}
+
+async function loadKeeper() {
+  const el = document.getElementById('keeper-body');
+  if (!el) return;
+  let st;
+  try { st = await keeperApi('/api/keeper/status'); }
+  catch (e) { el.textContent = 'Keeper status unreachable (' + e.message + ')'; return; }
+  if (!st.active) {
+    el.innerHTML =
+      '<p class="body">The Book has no Keeper yet. The Keeper is a resident character with '
+      + '<strong>custody of the narration, never authority over the record</strong> — it closes the '
+      + 'Book on a session and tells you what happened, in a voice you and it author together. '
+      + 'Naming comes first: run candidates through the <strong>Play lane</strong>, choose or write '
+      + 'the final name yourself, and paste the run’s trace id below so revision 1 cites its '
+      + 'naming receipt.</p>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'
+      + '<input id="keeper-name" placeholder="name (yours to choose)" style="flex:1;min-width:140px">'
+      + '<input id="keeper-title" placeholder="title (e.g. Keeper of the Book)" style="flex:1;min-width:160px">'
+      + '<input id="keeper-receipt" placeholder="naming receipt / trace id (optional)" style="flex:1;min-width:160px">'
+      + '<button onclick="keeperActivate()">Activate the Keeper</button></div>'
+      + '<div id="keeper-activate-err" style="color:var(--bad);font-size:12px;margin-top:4px"></div>'
+      + (st.exists ? '<div style="font-size:11px;color:var(--muted);margin-top:6px">A prior Keeper record exists — reactivating continues it; the dark period since deactivation is never silently narrated.</div>' : '');
+    return;
+  }
+  let head = '<div style="margin-bottom:6px"><strong>' + kEsc(st.name) + '</strong>'
+    + (st.title ? ' · ' + kEsc(st.title) : '')
+    + ' · ' + st.closes + ' close(s) · ' + st.entries + ' entr(ies)'
+    + (st.unruled ? ' · <strong>' + st.unruled + ' awaiting your ruling</strong>' : '')
+    + '</div>';
+  if (!st.sheet_ok) {
+    el.innerHTML = head + '<div style="color:var(--bad)">' + kEsc(st.sheet_error) + '</div>';
+    return;
+  }
+  if (st.review_due) {
+    head += '<div style="font-size:12px;border:1px solid var(--border);border-radius:8px;padding:4px 8px;margin:6px 0;color:var(--muted)">'
+      + '<strong>adaptation review due</strong> — the Keeper keeps speaking from its last ratified '
+      + 'set; new keeps won’t influence it until you cold-review the recent entries. '
+      + 'Re-read them below against the sheet, change any ruling that no longer holds, then: '
+      + '<button onclick="keeperReview()">Record the cold review</button></div>';
+  }
+  if (st.last_error) {
+    head += '<div style="color:var(--bad);font-size:12px;margin:4px 0">last narration failed: '
+      + kEsc(st.last_error) + '</div>';
+  }
+  head += '<div style="margin:8px 0"><button onclick="keeperClose()" '
+    + (st.narrating ? 'disabled' : '') + '>'
+    + (st.narrating ? 'narrating…' : 'Ask the Keeper to close the Book')
+    + '</button></div>';
+  let entriesHtml = '';
+  try {
+    const d = await keeperApi('/api/keeper/entries');
+    entriesHtml = (d.failed_closes || []).map(c =>
+      '<div style="font-size:12px;color:var(--bad);margin:6px 0">The Book closed (' + kEsc(c)
+      + ') but the narration failed — the close, manifest, and capsule are intact. '
+      + '<button onclick="keeperRetry(\'' + kEsc(c) + '\')">Retry, byte-for-byte</button></div>'
+    ).join('') + (d.entries || []).map(keeperEntryHtml).join('');
+  } catch (e) { entriesHtml = '<div style="color:var(--bad)">' + kEsc(e.message) + '</div>'; }
+  el.innerHTML = head + entriesHtml;
+  if (st.narrating && !keeperPoll) {
+    keeperPoll = setInterval(async () => {
+      const s2 = await keeperApi('/api/keeper/status').catch(() => null);
+      if (s2 && !s2.narrating) {
+        clearInterval(keeperPoll); keeperPoll = null; loadKeeper();
+      }
+    }, 5000);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('input-text').addEventListener('input', updateGestureChooser);
   updateGestureChooser();
   loadVaultStrip();
   setInterval(loadVaultStrip, 60000);
+  loadKeeper();
   loadDocs();
   loadWorksRegistry();
   loadMedia().then(() => {

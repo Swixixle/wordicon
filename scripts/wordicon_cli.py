@@ -1585,6 +1585,32 @@ class MockGateway(Gateway):
         # JSON-shape substrings — those substrings moved around when
         # generation and Bone-attachment split into separate calls, and
         # matching the stage's own declared identity is more robust anyway.
+        if prompt.startswith("You are the Keeper"):
+            # Deterministic Keeper narration: cites the first real manifest
+            # id when one exists, narrates the empty room honestly when
+            # none does, and carries the profane fixture register so the
+            # no-word-filter law is exercised end to end.
+            _ids = [m for m in re.findall(r'"id": "([^"]+)"', prompt) if m]
+            _segs = []
+            if _ids:
+                _segs.append({"class": "event_claim",
+                              "text": "This interval is on the record: the "
+                                      "Book gained what the manifest says "
+                                      "it gained.",
+                              "record_ids": [_ids[0]]})
+            _segs.append({"class": "keeper_inference",
+                          "text": "You keep reaching for the grotesque with "
+                                  "a spine of substance under it — a taste, "
+                                  "not a diagnosis, revisable the moment "
+                                  "you say otherwise."})
+            _segs.append({"class": "flourish",
+                          "text": ("The corpus, that magnificent bastard, "
+                                   "ate another goddamn feast and asked for "
+                                   "seconds." if _ids else
+                                   "An empty room, honestly kept: nothing "
+                                   "happened since the last close, and I "
+                                   "refuse to invent so much as a comma.")})
+            return json.dumps({"segments": _segs})
         if prompt.startswith("You are the dissection stage"):
             return json.dumps({
                 "components": [
