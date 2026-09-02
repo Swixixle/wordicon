@@ -12232,6 +12232,46 @@ console.log(out.join('\\n'));
         if " ".join(_pin96.split()) not in " ".join(_adr96.split()):
             _f96(f"the ADR lost the amendment: {_pin96[:50]!r}")
 
+    # ================= block 97: the constitution keeps up ==============
+    # The What-is-Wordicon panel is ruled "an accurate public constitution".
+    # Block 95 changed the software (PDF/DOCX read; the Clinic exists) and
+    # the panel kept saying PDFs were refused — the first specimen of
+    # item 36's "record drifting" on Wordicon's own front page. These pins
+    # hold the corrected sentences and the laws of the three wings the
+    # panel had never described. A wing that changes must change its pin.
+    _page97 = (Path(cli.__file__).parent.parent / "webapp"
+               / "index.html").read_text()
+    _flat97 = " ".join(_page97.split())
+    for _pin97 in ("Documents reads five formats",
+                   "there is no OCR",
+                   "The Clinic — where authorities stay separate",
+                   "Every source speaks in its own institutional voice, never "
+                   "blended",
+                   "No admitted source of this role is present",
+                   "The room answers questions about documents and never "
+                   "about a patient",
+                   "identifiers, not the word",
+                   "refused with no override",
+                   "held for inspection",
+                   "Nothing about a question is ever kept",
+                   "An institution's name is never treated as patient "
+                   "information",
+                   "never clinical decision support",
+                   "awaiting shadow-mode validation",
+                   "restores a verified past; it regrows and improves "
+                   "nothing",
+                   "losing it makes every vault permanently unreadable",
+                   "custody of the narration, not authority over the record",
+                   "it may form toward you, but it must never form you "
+                   "silently",
+                   "Off stops its adaptation as well as its speech"):
+        if " ".join(_pin97.split()) not in _flat97.replace("&ldquo;", "").replace("&rdquo;", "").replace("<strong>", "").replace("</strong>", "").replace("<em>", "").replace("</em>", ""):
+            failures.append(f"97: the constitution lost {_pin97[:60]!r}")
+    if "Documents reads three formats" in _flat97 or \
+            "PDFs and scanned books are refused" in _flat97:
+        failures.append("97: the constitution still says PDFs are refused — "
+                        "it has read them since block 95")
+
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to
     # add to. This notices the day that happens, names the file, and does it
