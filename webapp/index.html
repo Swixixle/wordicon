@@ -423,7 +423,7 @@
     <a href="/map">Map</a>
     <a href="#write" onclick="openCompose();return false">Write</a>
   </nav>
-  <div class="quiet"><span class="dot" id="quiet-dot"></span><span id="quiet-text">checking…</span> · <a href="#about" onclick="openAbout();return false">About &amp; proof</a></div>
+  <div class="quiet"><span class="dot" id="quiet-dot"></span><span id="quiet-text">checking…</span> · <a href="#about" onclick="openAbout();return false">About &amp; proof</a> · <a href="/anatomy" title="how the parts cooperate, challenge one another, stay constrained, and preserve history — dormant until you set it in motion">Anatomy</a></div>
 </header>
 
 <!-- The vault strip: quiet when backups are healthy, red and specific the
@@ -653,6 +653,7 @@
   <details class="card" id="about-panel" style="padding:12px 16px" ontoggle="if(this.open)loadConfig()">
     <summary style="cursor:pointer;font-size:13px;color:var(--muted);font-weight:600">What is <span data-brand>Nikodemus</span>? — and proof</summary>
     <div style="margin-top:10px">
+      <p class="foot" style="margin:0 0 10px"><a href="/anatomy">See the anatomy</a> — how the parts cooperate, challenge one another, stay constrained, and preserve history; dormant until you set it in motion.</p>
       <p class="body" id="about-explanation">Nikodemus (formerly Wordicon) is a private environment for developing concepts beside your sources and your writing. It keeps your concepts, sources, and judgments separate, connected, and reviewable: nothing you ruled on is overwritten, nothing the model proposed is treated as your conclusion, and material it was forbidden to accept is refused before it is stored. It began as a word-coining tool; the forge is still inside.</p>
       <p class="foot" id="about-name"><strong data-brand>Nikodemus</strong> is the name since September 2, 2026, 4:20 a.m. EDT (<code>2026-09-02T08:20:00Z</code>), ruled by the owner; the history keeps the name it was written under — <span data-history>Wordicon</span> — and nothing was rewritten to make the new name look older than it is. The record of the change is <code>docs/adr-nikodemus.md</code>.</p>
       <div id="about-system" class="foot" style="margin:6px 0 12px">System: <span id="about-provider">not checked yet — opening this panel asks the server</span></div>
@@ -683,7 +684,6 @@
       press <em>Run it</em>. Cards come back; open them, argue with them, rule on them or don't. Or
       skip all of that, press <strong>⤢ full page</strong>, and just write — everything else will
       still be here.</p>
-      <p class="foot" style="margin:-4px 0 10px"><a href="/anatomy" style="color:var(--muted)">See the anatomy</a> — how the parts cooperate, challenge one another, stay constrained, and preserve history; dormant until you set it in motion.</p>
       <p class="body">The whole tool is one loop, and every part below is a station on it:
       <strong>encounter</strong> something (Documents), <strong>examine</strong> it (runs and the
       Bench), <strong>keep</strong> what survives (the Library), <strong>connect</strong> it (the

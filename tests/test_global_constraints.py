@@ -12486,13 +12486,18 @@ console.log(out.join('\\n'));
     if not _re98.match(r"\d{4}-\d{2}-\d{2}$", str(_d98.get("as_of", ""))):
         _f98("no as-of date")
 
-    # 9. placement: one quiet link inside the What-is-Wordicon panel, none in the room
+    # 9. placement: quiet links only — the header's system zone and the
+    #    What-is-<brand> panel — none in the working grid, none in the room
+    #    ledger (block 101, anatomy door): the owner could not find the page
+    #    behind the panel's single link; a second quiet link now sits in the
+    #    header beside About & proof. Still outside the places nav.
     _idx98 = (_root98 / "webapp" / "index.html").read_text(encoding="utf-8")
     _links = [m.start() for m in _re98.finditer(r'href="/anatomy"', _idx98)]
     _panel = _idx98.find('id="about-panel"')   # ledger (block 99): the panel is "What is <brand>?"
     _room = _idx98.find('id="compose-text"')
-    if len(_links) != 1 or _links[0] < _panel:
-        _f98(f"the See the anatomy link is not a single quiet link in the panel ({len(_links)})")
+    _hdr98 = (_idx98.find("<header>"), _idx98.find("</header>"))
+    if len(_links) != 2 or not (_hdr98[0] < _links[0] < _hdr98[1]) or _links[1] < _panel:
+        _f98(f"the anatomy links are not the two quiet ones — header system zone and panel ({len(_links)})")
     if "See the anatomy" not in _idx98:
         _f98("the link lost its name")
     if _room != -1 and any(abs(_l - _room) < 400 for _l in _links):
@@ -12587,9 +12592,14 @@ console.log(out.join('\\n'));
         _f99("Home's bands are not in the ruled order (Continue, rulings, intake, places)")
     if _idx99.index('<textarea id="input-text"') < _idx99.index('id="continue-card"'):
         _f99("the phrase box is above Continue — the hero again")
-    for _place in ('data-place="concepts"', 'data-place="rooms"', 'data-place="library"', 'href="/map"', 'onclick="openCompose();return false">Write'):
+    for _place in ('data-place="concepts"', 'data-place="rooms"', 'data-place="library"', 'href="/map"', 'onclick="openCompose();return false">Write',
+                   'href="/anatomy"'):   # ledger (block 101, anatomy door): the owner could not find /anatomy — it sits in the header's quiet zone now
         if _place not in _hdr:
             _f99(f"a place is missing from navigation: {_place}")
+    if _idx99.count('href="/anatomy"') != 2 or _idx99.index('href="/anatomy"', _idx99.index('id="about-panel"')) > _idx99.index('id="about-explanation"'):
+        _f99("the anatomy is not reachable from the header AND the top of About & proof")
+    if 'href="/anatomy"' in _idx99[_idx99.index('<nav class="places"'):_idx99.index('</nav>')]:
+        _f99("the anatomy entered the working grid — it belongs to the system zone")
     if _brand99["lead"] not in _idx99 or _brand99["lead_sub"] not in _idx99:
         _f99("the lead sentences are not the ruled ones")
 
