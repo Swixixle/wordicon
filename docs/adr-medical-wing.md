@@ -43,6 +43,58 @@ records. This amends the normal raw-input custody law, correctly:
 auditability does not require preserving material the system was
 constitutionally forbidden to accept.
 
+## Amendment 2026-09-02: the gate is two gates (owner's ruling)
+
+The first population attempt exposed that one screen was serving two
+lanes, and confused ordinary clinical language with patient identity:
+it refused "once the patient is on pressure support of 5 cm H2O" and
+"verify patient name and date of birth" while admitting a hyphenated
+case vignette. The owner rejected the builder's first re-cut as well
+— "it still confuses clinical specificity with patient identity" — and
+ruled the split below. The law above is unchanged; this is how it is
+enforced.
+
+**The question gate refuses patient-specific intent.** Ask This Room
+is a policy-and-evidence lane, not clinical decision support, so it
+refuses questions about a particular patient even when no
+traditional identifier appears ("my patient failed an SBT — what
+should I do", "the patient in bed 4 is hypotensive; can I extubate",
+"a 65-year-old man on these settings — what treatment", "can I change
+this patient's ventilator order"). Generic questions pass ("what does
+the policy require before an SBT", "how does the current guideline
+define readiness", "which admitted sources mention hemodynamic
+instability"). This gate protects the lane's scope, not merely
+identifiers.
+
+**The document gate detects identifiers, not clinical prose.**
+Guidelines, studies, policies and manuals necessarily contain
+clinical language, so these MUST pass: "once the patient is on
+pressure support", "when a patient presents with hemodynamic
+instability", "verify patient name and date of birth", "the patient
+will remain in bed 4 during the trial", and published or instructional
+vignettes without explicit identifying information. Hard refusal
+requires higher-signal material: an MRN, patient ID or account number
+followed by a value; an SSN; a date of birth followed by an actual
+date; a patient name paired with another record field; other
+unmistakable chart-style identifiers. Bare words such as "patient
+name", "date of birth", "bed" and "room" are not identifiers by
+themselves. An institution's name is never PHI.
+
+**Three outcomes, not pass/refuse.** *Admit*: no high-signal
+identifier found, an allowed source role declared, and the owner
+confirms it is a guideline, policy, study, label or manual — not a
+patient record. *Held for inspection*: the material resembles a case
+narrative or clinical note but carries no decisive identifier; it
+stays in temporary memory only — nothing persisted, nothing sent to a
+model, nothing in a Keeper packet, nothing in the Vault; the page
+names the triggered rule and its location; the owner may cancel or
+attest that it is a lawful reference document without patient
+records, and the attestation is recorded on the declaration. Refusal
+and review are different outcomes. *Refuse*: explicit identifier–
+value combinations are present; no override in v1 — obtain a clean,
+public, or properly de-identified copy; only the content-free refusal
+event is retained.
+
 ## The correction: what code may and may not conclude
 
 Code may compute: which source roles are present; which expected

@@ -6967,7 +6967,10 @@ console.log(out.join('\\n'));
                 "  if (!nn[1]) bad.push(name + ': the naming note carries no reason');\n"
                 "}\n"
                 "console.log(bad.join('\\n'));\n")
-            _tmp = _pathlib.Path("/tmp/_wordicon_vrows_test.js")
+            # under the suite's own scratch dir, not a fixed /tmp name: a
+            # leftover owned by another uid (the desktop VM cannot delete)
+            # made the device suite un-rerunnable across sessions
+            _tmp = _SCRATCH / "_wordicon_vrows_test.js"
             _tmp.write_text(_harness, encoding="utf-8")
             _r = _sp.run([_node, str(_tmp)], capture_output=True, text=True)
             if _r.returncode != 0:
@@ -11963,6 +11966,271 @@ console.log(out.join('\\n'));
               "block 95's four PDF checks did not run here (they run "
               "in the container, the venv, and CI); nothing about "
               "this is a pass claim for PDF behavior.")
+
+    # ================= block 96: the gate is two gates =================
+    # ADR amendment 2026-09-02 (owner's ruling after the first population
+    # attempt). The QUESTION gate refuses patient-specific intent, with
+    # or without an identifier; the DOCUMENT gate detects identifiers,
+    # never clinical prose, and has three outcomes — admit, held for
+    # inspection (temporary memory only), refuse (no v1 override).
+    # Block 95's PHI checks above are untouched: they still pass under
+    # the split, so no test-was-wrong/code-was-wrong ledger entry is
+    # needed for them.
+    import inspect as _ins96
+    import importlib as _il96
+    _il96.reload(_cl95)
+    _cl95.library = _lib95
+
+    def _f96(msg):
+        failures.append(f"96: {msg}")
+
+    _room96 = _cl95.create_room("block 96 room")
+
+    # 1. the question gate: patient-specific intent refused WITHOUT an MRN
+    for _q96 in ("My patient failed an SBT—what should I do?",
+                 "The patient in bed 4 is hypotensive; can I extubate?",
+                 "A 65-year-old man on these settings—what treatment should "
+                 "I choose?",
+                 "Can I change this patient's ventilator order?",
+                 "Would a 70-year-old woman on her current numbers qualify?"):
+        _a96 = _cl95.ask_room(_room96["room_id"], _q96)
+        if not _a96.get("refused"):
+            _f96(f"patient-specific question answered: {_q96!r}")
+    # ...and generic questions pass the gate (they may find nothing —
+    # an empty room is not a refusal)
+    for _q96 in ("What does the policy require before an SBT?",
+                 "How does the current guideline define readiness?",
+                 "Which admitted sources mention hemodynamic instability?",
+                 "What did the retired guideline say differently?",
+                 "Which requirements come from policy rather than external "
+                 "evidence?",
+                 "Show the passages that might conflict."):
+        _a96 = _cl95.ask_room(_room96["room_id"], _q96)
+        if _a96.get("refused"):
+            _f96(f"the question gate overreached onto a generic question: "
+                 f"{_q96!r} ({_a96.get('rule')})")
+
+    # 2. the document gate, both directions, at the unit
+    _sec96 = lambda t: [{"title": "body", "text": t}]  # noqa: E731
+    for _label96, _t96 in (
+            ("generic guideline language",
+             "Once the patient is on pressure support of 5 cm H2O, observe "
+             "for 30 minutes. When a patient presents with hemodynamic "
+             "instability, defer the SBT."),
+            ("a policy's two-identifier step",
+             "Verify patient name and date of birth before initiating the "
+             "SBT."),
+            ("generic bed/room language",
+             "The patient will remain in bed 4 during the trial; the RT "
+             "documents in the room."),
+            ("a published clinical vignette",
+             "A 65-year-old man intubated for pneumonia developed ICU-"
+             "acquired weakness; this case illustrates readiness criteria."),
+            ("an institution's name",
+             "Community Hospital East, Respiratory Care Policy RC-114, "
+             "Indianapolis, Indiana. Effective date: 2024-03-01."),
+            ("a manual's placement sentence",
+             "After the patient was placed on the ventilator, verify circuit "
+             "integrity.")):
+        _v96 = _cl95.document_screen(_sec96(_t96))
+        if _v96["outcome"] != "admit":
+            _f96(f"{_label96} was not admitted: {_v96['outcome']} "
+                 f"({_v96['rule']})")
+    for _label96, _t96, _rule96 in (
+            ("MRN plus value",
+             "Patient handoff, MRN 4457812, admitted for respiratory failure.",
+             "mrn_value"),
+            ("DOB plus an actual date",
+             "Name: John Smith. DOB: 04/12/1961. Admitted with hypoxic "
+             "respiratory failure.", "dob_value"),
+            ("an SSN", "SSN 123-45-6789 on file.", "ssn_value"),
+            ("a patient name paired with a record field",
+             "Patient: Jane Doe\nAttending: Dr. Roe\nAllergies: none",
+             "name_with_record_field")):
+        _v96 = _cl95.document_screen(_sec96(_t96))
+        if _v96["outcome"] != "refuse" or _v96["rule"] != _rule96:
+            _f96(f"{_label96} was not refused as {_rule96}: {_v96}")
+    for _label96, _t96 in (
+            ("a possessive narrative",
+             "Our patient was intubated on arrival and failed the first SBT."),
+            ("a hospital-day count", "Hospital day 3: remains on PSV 8/5."),
+            ("a chart-field cluster",
+             "Room: 12\nBed: A\nCode status: full\nAllergies: PCN")):
+        _v96 = _cl95.document_screen(_sec96(_t96))
+        if _v96["outcome"] != "hold":
+            _f96(f"{_label96} was not held: {_v96['outcome']} "
+                 f"({_v96['rule']})")
+        elif not _v96["where"].get("excerpt") or \
+                "section_index" not in _v96["where"]:
+            _f96(f"a hold does not name its location: {_v96['where']}")
+
+    # 3. end to end through the route: admit needs attestation; a held
+    # document and a refused document reach no disk (and therefore no
+    # Keeper packet and no Vault, both of which are built from disk);
+    # no model doorway exists on the upload path at all
+    _m96 = "zqgate96marker"
+    _held_m96 = "zqheld96marker"
+    _blobs0_96 = len(list(_lib95.blobs_dir().glob("*"))) \
+        if _lib95.blobs_dir().exists() else 0
+
+    def _leaked96(marker):
+        return [str(p) for p in _SCRATCH.rglob("*")
+                if p.is_file() and marker in
+                p.read_text(encoding="utf-8", errors="ignore")]
+
+    def _form96(**over):
+        base = {"role": "professional_guideline", "title": "x",
+                "published_at": "unknown", "effective_from": "not_applicable",
+                "review_or_expiry": "unknown", "status": "current",
+                "room_id": _room96["room_id"]}
+        base.update(over)
+        return base
+
+    for _src96 in (_ins96.getsource(server.api_clinic_ingest),
+                   _ins96.getsource(server.api_clinic_hold_attest),
+                   _ins96.getsource(server._admit_source),
+                   _ins96.getsource(_cl95.document_screen)):
+        if "gateway" in _src96 or "anthropic" in _src96.lower():
+            _f96("the upload path grew a model doorway")
+    for _mod96 in ("keeper.py", "vault.py"):
+        _p96 = Path(cli.__file__).parent / _mod96
+        if _p96.exists() and "HELD_UPLOADS" in _p96.read_text():
+            _f96(f"{_mod96} reaches into the held-upload memory")
+
+    with server.app.test_client() as _c96:
+        _paired(_c96)
+        # generic guideline prose is ADMITTED end to end — with attestation
+        _good96 = _docx95([f"Once the patient is on pressure support "
+                           f"{_m96}good, observe for 30 minutes.",
+                           "Verify patient name and date of birth."])
+        _r96 = _c96.post("/api/clinic/ingest", data={
+            "file": (_io95.BytesIO(_good96), "guideline.docx"),
+            **_form96()})
+        if _r96.status_code != 400 or "attest" not in \
+                (_r96.get_json() or {}).get("error", ""):
+            _f96(f"admission without the owner's attestation went through "
+                 f"({_r96.status_code})")
+        if len(list(_lib95.blobs_dir().glob("*"))) != _blobs0_96:
+            _f96("an unattested upload reached the blob store")
+        _r96 = _c96.post("/api/clinic/ingest", data={
+            "file": (_io95.BytesIO(_good96), "guideline.docx"),
+            **_form96(attest_reference_document="yes")})
+        _j96 = _r96.get_json() or {}
+        if _r96.status_code != 200 or _j96.get("outcome") != "admit":
+            _f96(f"generic guideline prose was not admitted end to end "
+                 f"({_r96.status_code}: {_j96.get('error') or _j96.get('rule')})")
+        elif _j96["source"].get("admission") != "admit" or \
+                _j96["source"].get("owner_attestation") != \
+                _cl95.OWNER_ATTESTATION:
+            _f96("the declaration does not carry the owner's attestation")
+        _blobs1_96 = len(list(_lib95.blobs_dir().glob("*")))
+        if _blobs1_96 != _blobs0_96 + 1:
+            _f96("the admitted guideline did not land in the blob store")
+
+        # a HELD document: 202, in memory only, nothing on disk
+        _heldoc96 = _docx95([f"Our patient {_held_m96} was intubated on "
+                             "arrival and failed the first SBT."])
+        _r96 = _c96.post("/api/clinic/ingest", data={
+            "file": (_io95.BytesIO(_heldoc96), "note.docx"),
+            **_form96(attest_reference_document="yes")})
+        _j96 = _r96.get_json() or {}
+        if _r96.status_code != 202 or _j96.get("outcome") != "hold" or \
+                not _j96.get("hold_id"):
+            _f96(f"a case-narrative document was not held "
+                 f"({_r96.status_code}: {_j96})")
+        if _j96.get("rule") != "possessive_patient_narrative" or \
+                "section_index" not in (_j96.get("where") or {}):
+            _f96("the hold response does not name the rule and location")
+        if _leaked96(_held_m96):
+            _f96(f"a HELD document reached disk: {_leaked96(_held_m96)}")
+        if len(list(_lib95.blobs_dir().glob("*"))) != _blobs1_96:
+            _f96("a held document reached the blob store")
+        if _j96.get("hold_id") not in server.HELD_UPLOADS:
+            _f96("the hold is not in process memory (where else is it?)")
+        # cancel: dropped, nothing written — not even an event
+        _refp96 = _SCRATCH / "clinic" / "phi_refusals.jsonl"
+        _events0_96 = len(_refp96.read_text().splitlines()) \
+            if _refp96.exists() else 0
+        _r96c = _c96.post(f"/api/clinic/hold/{_j96.get('hold_id')}/cancel")
+        if not (_r96c.get_json() or {}).get("cancelled"):
+            _f96("cancelling a hold did not report the drop")
+        if _j96.get("hold_id") in server.HELD_UPLOADS:
+            _f96("a cancelled hold is still in memory")
+        if _leaked96(_held_m96):
+            _f96("a cancelled hold left something on disk")
+        _events1_96 = len(_refp96.read_text().splitlines()) \
+            if _refp96.exists() else 0
+        if _events1_96 != _events0_96:
+            _f96("a hold wrote a refusal event — holds are not refusals")
+        # attest: held again, then admitted with the attestation on record
+        _r96 = _c96.post("/api/clinic/ingest", data={
+            "file": (_io95.BytesIO(_heldoc96), "note.docx"),
+            **_form96(attest_reference_document="yes")})
+        _hid96 = (_r96.get_json() or {}).get("hold_id")
+        _r96a = _c96.post(f"/api/clinic/hold/{_hid96}/attest")
+        _ja96 = _r96a.get_json() or {}
+        if _r96a.status_code != 200 or \
+                _ja96.get("source", {}).get("admission") != \
+                "attested_after_hold" or \
+                _ja96["source"].get("hold_rule") != \
+                "possessive_patient_narrative":
+            _f96(f"attesting a hold did not admit it with the attestation "
+                 f"and overruled rule on the declaration ({_ja96})")
+        if _hid96 in server.HELD_UPLOADS:
+            _f96("an attested hold is still in memory")
+        _r96a2 = _c96.post(f"/api/clinic/hold/{_hid96}/attest")
+        if _r96a2.status_code != 404:
+            _f96("a hold could be attested twice")
+
+        # a REFUSED document: 400, content-free event, nothing on disk
+        _blobs2_96 = len(list(_lib95.blobs_dir().glob("*")))
+        _bad96 = _docx95([f"Name: John {_m96}bad. DOB: 04/12/1961. Admitted "
+                          "with hypoxic respiratory failure."])
+        _r96 = _c96.post("/api/clinic/ingest", data={
+            "file": (_io95.BytesIO(_bad96), "chart.docx"),
+            **_form96(attest_reference_document="yes")})
+        _j96 = _r96.get_json() or {}
+        if _r96.status_code != 400 or _j96.get("outcome") != "refuse" or \
+                _j96.get("rule") != "dob_value":
+            _f96(f"a DOB+date document was not refused as dob_value "
+                 f"({_r96.status_code}: {_j96})")
+        if "excerpt" in (_j96.get("where") or {}):
+            _f96("a refusal response carried an excerpt — refusals are "
+                 "content-free")
+        if _leaked96(_m96 + "bad"):
+            _f96(f"a REFUSED document reached disk: {_leaked96(_m96 + 'bad')}")
+        if len(list(_lib95.blobs_dir().glob("*"))) != _blobs2_96:
+            _f96("a refused document reached the blob store")
+        _rows96 = [_json.loads(l) for l in _refp96.read_text().splitlines()
+                   if l.strip()] if _refp96.exists() else []
+        if not _rows96 or set(_rows96[-1]) != {"at", "lane", "rule"} or \
+                _rows96[-1]["rule"] != "dob_value":
+            _f96(f"the refusal event is missing or not content-free: "
+                 f"{_rows96[-1] if _rows96 else None}")
+        # attestation is not an override: the same refused bytes cannot
+        # be attested in (there is no hold to attest)
+        for _hid in list(server.HELD_UPLOADS):
+            if server.HELD_UPLOADS[_hid]["filename"] == "chart.docx":
+                _f96("a refused document was held instead of refused")
+
+    # 4. the page names the outcome and the rule
+    _page96 = (Path(cli.__file__).parent.parent / "webapp"
+               / "clinic.html").read_text()
+    for _pin96 in ("Held for inspection", "REFUSED — rule", "f-attest",
+                   "/attest", "/cancel", "not a patient record"):
+        if _pin96 not in _page96:
+            _f96(f"clinic.html lost {_pin96!r}")
+    # 5. the ADR carries the amendment
+    _adr96 = (Path(cli.__file__).parent.parent / "docs"
+              / "adr-medical-wing.md").read_text()
+    for _pin96 in ("The question gate refuses patient-specific intent",
+                   "The document gate detects identifiers, not clinical "
+                   "prose",
+                   "Three outcomes, not pass/refuse",
+                   "An institution's name is never PHI",
+                   "no override in v1"):
+        if " ".join(_pin96.split()) not in " ".join(_adr96.split()):
+            _f96(f"the ADR lost the amendment: {_pin96[:50]!r}")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

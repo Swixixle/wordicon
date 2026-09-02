@@ -138,7 +138,8 @@ def declare_source(document_id: str, representation_id: str, blob_id: str,
                     review_or_expiry: str = "", status: str = UNKNOWN,
                     jurisdiction_or_facility: str = "",
                     population_scope: str = "",
-                    acquired_from: str = "", supersedes_uid: str = "") -> dict:
+                    acquired_from: str = "", supersedes_uid: str = "",
+                    admission: str = "admit", hold_rule: str = "") -> dict:
     if role not in MEDICAL_ROLES:
         raise ValueError(f"role must be one of {MEDICAL_ROLES}")
     if status not in SOURCE_STATUSES:
@@ -166,9 +167,20 @@ def declare_source(document_id: str, representation_id: str, blob_id: str,
         "acquired_from": (acquired_from or "").strip() or UNKNOWN,
         "declared_by": "owner",
         "supersedes_declaration": supersedes_uid or "",
+        # how the document gate admitted it: "admit" (no hold), or
+        # "attested_after_hold" with the rule the owner overruled by
+        # attesting this is a reference document, not a patient record
+        "admission": admission if admission in ADMISSIONS else "admit",
+        "hold_rule": hold_rule if admission == "attested_after_hold" else "",
+        "owner_attestation": OWNER_ATTESTATION,
         "declared_at": cli._now(),
     }
     return _append("sources.jsonl", row)
+
+
+ADMISSIONS = ("admit", "attested_after_hold")
+OWNER_ATTESTATION = ("a guideline, policy, study, label, or manual — "
+                     "not a patient record")
 
 
 def load_sources() -> "list[dict]":
@@ -334,25 +346,137 @@ def room_state(room_id: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# the PHI boundary and the lane guard
+# the PHI boundary — TWO gates, ruled 2026-09-02 (ADR amendment)
+#
+# One screen was serving two lanes and confusing clinical language with
+# patient identity. Now:
+#   - the QUESTION gate refuses patient-specific INTENT (a particular
+#     patient, with or without an identifier) — it protects the lane's
+#     scope, not merely HIPAA identifiers;
+#   - the DOCUMENT gate detects IDENTIFIERS (identifier + value), never
+#     clinical prose, and has three outcomes: admit / hold / refuse.
+# Both remain heuristic backstops and say so; the lane shape is the
+# primary control.
 
-PHI_RULES = (
-    ("mrn_pattern", re.compile(r"\b(?:mrn|medical record(?: number)?)\b"
-                                r"[\s:#]*\d", re.I)),
-    ("ssn_pattern", re.compile(r"\b\d{3}-\d{2}-\d{4}\b")),
-    ("dob_pattern", re.compile(r"\b(?:dob|date of birth)\b[\s:]*\S", re.I)),
-    ("bed_identifier", re.compile(r"\b(?:bed|room)\s*#?\s*\d+[A-Za-z]?\b"
-                                   r".{0,80}\b(?:patient|pt)\b|"
-                                   r"\b(?:patient|pt)\b.{0,80}"
-                                   r"\b(?:bed|room)\s*#?\s*\d+", re.I | re.S)),
-    ("patient_narrative", re.compile(
-        r"\b(?:my|the|this|a)\s+(?:patient|pt)\b.{0,120}?"
-        r"\b(?:admitted|presents?|presented|is on|was placed|intubated|"
-        r"year[- ]old|y/?o)\b", re.I | re.S)),
-    ("age_case_pattern", re.compile(r"\b\d{1,3}\s*(?:year[- ]old|y/?o)\b"
-                                     r".{0,120}\b(?:male|female|man|woman|"
-                                     r"patient|pt)\b", re.I | re.S)),
+_AGE = r"\b\d{1,3}\s*-?\s*(?:year[- ]old|y/?o|yo)\b"
+
+QUESTION_PATIENT_RULES = (
+    # a particular patient, named by possession, demonstration, or location
+    ("particular_patient", re.compile(
+        r"\b(?:my|our|this|that)\s+(?:patient|pt)s?\b|"
+        r"\b(?:patient|pt)'s\b|"
+        r"\b(?:the|a)\s+(?:patient|pt)\s+(?:in|on|at)\s+(?:bed|room|icu)\b|"
+        r"\b(?:bed|room)\s*#?\s*\d+[A-Za-z]?\b", re.I)),
+    # a vignette posed as a question: an individual described by age
+    # and sex/role. Hyphen-tolerant — "65-year-old" is the common form.
+    ("vignette_question", re.compile(
+        _AGE + r".{0,160}?\b(?:male|female|man|woman|patient|pt|boy|girl)\b|"
+        r"\b(?:male|female|man|woman)\b.{0,40}?\b(?:aged?)\s+\d{1,3}\b",
+        re.I | re.S)),
+    # the patient's own numbers, not the document's
+    ("particular_settings", re.compile(
+        r"\b(?:these|his|her|their)\s+(?:vent(?:ilator)?\s+)?"
+        r"(?:settings|numbers|labs|vitals|gases|abg|parameters)\b", re.I)),
 )
+
+# identifier + VALUE: hard refusal, no v1 override
+DOCUMENT_IDENTIFIER_RULES = (
+    ("mrn_value", re.compile(
+        r"\b(?:mrn|medical record(?: number| no\.?| #)?|patient (?:id|"
+        r"identifier|number|no\.?|#)|account (?:number|no\.?|#)|acct\.?"
+        r"\s*#?|encounter (?:id|number|#)|fin)\s*[:#]?\s*[A-Z]{0,3}\d{5,}\b",
+        re.I)),
+    ("ssn_value", re.compile(r"\b\d{3}-\d{2}-\d{4}\b")),
+    ("dob_value", re.compile(
+        r"\b(?:dob|date of birth|birth\s?date|born)\b\s*[:#]?\s*(?:on\s+)?"
+        r"(?:\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}|\d{4}-\d{2}-\d{2}|"
+        r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?"
+        r"\s+\d{1,2},?\s+\d{4})", re.I)),
+)
+# a chart-style field label carrying a value — used both for the
+# name-paired-with-record-field refusal and the cluster hold
+_CHART_FIELD = re.compile(
+    r"\b(?:mrn|dob|date of birth|admit(?:ted|ting)?\s+date|admission\s+date|"
+    r"discharge\s+date|attending|admitting\s+physician|account|acct|"
+    r"room|bed|age/sex|sex|hospital\s+day|code\s+status|allergies|"
+    r"chief\s+complaint|hpi|history\s+of\s+present\s+illness|"
+    r"assessment|plan|encounter)\s*[:#]\s*\S", re.I)
+_PATIENT_NAME_VALUE = re.compile(
+    r"\b(?i:patient\s+name|pt\s+name|name\s+of\s+patient|patient|name)"
+    r"\s*:\s*([A-Z][a-z]+(?:[, ]+[A-Z][a-z]+){1,3})\b")
+
+# resembles a case narrative or clinical note, no decisive identifier:
+# HELD for inspection, owner cancels or attests
+DOCUMENT_HOLD_RULES = (
+    ("possessive_patient_narrative", re.compile(
+        r"\b(?:my|our)\s+(?:patient|pt)\b.{0,120}?"
+        r"\b(?:admitted|intubated|extubated|presents?|presented|was placed|"
+        r"failed|passed|developed|remains?)\b", re.I | re.S)),
+    ("hospital_day_count", re.compile(
+        r"\b(?:hospital\s+day|post-?op(?:erative)?\s+day|icu\s+day|hd|pod)"
+        r"\s*#?\s*\d{1,3}\b", re.I)),
+    ("handoff_or_note_shape", re.compile(
+        r"\b(?:handoff|hand-off|sign-?out|progress\s+note|h&p|"
+        r"nursing\s+note|rt\s+note|shift\s+report)\b", re.I)),
+)
+CHART_FIELD_CLUSTER = 3   # this many labeled chart fields → hold
+
+
+def question_screen(question: str) -> "tuple[bool, str]":
+    """The question gate: (True, '') passes; (False, rule) names why a
+    question reads as being about a particular patient."""
+    q = question or ""
+    for rule, rx in QUESTION_PATIENT_RULES:
+        if rx.search(q):
+            return False, rule
+    return True, ""
+
+
+def _locate(sections: "list[dict]", rx, group: int = 0) -> dict:
+    """Which section, and where in it — never the text itself unless
+    the caller is building a HOLD (which is never persisted)."""
+    for i, sec in enumerate(sections):
+        m = rx.search(sec.get("text", "") or "")
+        if m:
+            return {"section_index": i,
+                    "section_title": (sec.get("title") or "")[:120],
+                    "offset": m.start(group)}
+    return {}
+
+
+def document_screen(sections: "list[dict]") -> dict:
+    """The document gate. Returns {"outcome": admit|hold|refuse, "rule",
+    "where"}; for a hold, "where" also carries a short excerpt for the
+    owner's eyes — the caller must keep it in memory only."""
+    secs = [{"title": s.get("title", ""), "text": s.get("text", "") or ""}
+            for s in (sections or [])]
+    text = " ".join(s["text"] for s in secs)
+    for rule, rx in DOCUMENT_IDENTIFIER_RULES:
+        if rx.search(text):
+            return {"outcome": "refuse", "rule": rule,
+                    "where": _locate(secs, rx)}
+    # a patient name paired with another record field nearby
+    for m in _PATIENT_NAME_VALUE.finditer(text):
+        window = text[max(0, m.start() - 300): m.end() + 300]
+        if _CHART_FIELD.search(window):
+            return {"outcome": "refuse", "rule": "name_with_record_field",
+                    "where": _locate(secs, _PATIENT_NAME_VALUE)}
+    for rule, rx in DOCUMENT_HOLD_RULES:
+        m = rx.search(text)
+        if m:
+            where = _locate(secs, rx)
+            where["excerpt"] = text[max(0, m.start() - 40): m.end() + 60]
+            return {"outcome": "hold", "rule": rule, "where": where}
+    fields = list(_CHART_FIELD.finditer(text))
+    if len(fields) >= CHART_FIELD_CLUSTER:
+        m = fields[0]
+        where = _locate(secs, _CHART_FIELD)
+        where["excerpt"] = text[max(0, m.start() - 40): m.end() + 60]
+        where["field_count"] = len(fields)
+        return {"outcome": "hold", "rule": "chart_field_cluster",
+                "where": where}
+    return {"outcome": "admit", "rule": "", "where": {}}
+
 
 ORDER_LANE_RULES = (
     ("treatment_order", re.compile(
@@ -366,16 +490,6 @@ ORDER_LANE_RULES = (
         r"\bcan i override\b|\boverride (?:the|an?) (?:order|policy)\b",
         re.I)),
 )
-
-
-def phi_screen(text: str) -> "tuple[bool, str]":
-    """Heuristic backstop, and it says so. (True, '') means nothing
-    matched — NOT a guarantee; the lane shape is the primary control."""
-    t = text or ""
-    for rule, rx in PHI_RULES:
-        if rx.search(t):
-            return False, rule
-    return True, ""
 
 
 def order_lane_screen(question: str) -> "tuple[bool, str]":
@@ -398,12 +512,27 @@ ORDER_REFUSAL_SENTENCE = (
     "or policy — that judgment belongs to the clinician and the "
     "institution, on purpose.")
 
-PHI_REFUSAL_SENTENCE = (
-    "That looks like it may contain patient-identifying information, so "
-    "it was refused before any model saw it and before anything was "
-    "stored. Nothing about the question was kept beyond the fact of "
+PATIENT_QUESTION_REFUSAL_SENTENCE = (
+    "That reads as a question about a particular patient, so it was "
+    "refused before any model saw it and before anything was stored — "
+    "this room is a policy-and-evidence lane, not clinical decision "
+    "support. Nothing about the question was kept beyond the fact of "
     "this refusal. Ask about the documents — policies, guidelines, "
     "labels — not about a patient.")
+
+DOCUMENT_REFUSAL_SENTENCE = (
+    "This document carries an explicit patient identifier with a value, "
+    "so it was refused before anything was stored. There is no override: "
+    "obtain a clean policy, a public document, or a properly "
+    "de-identified copy. Only the fact of this refusal was kept.")
+
+DOCUMENT_HOLD_SENTENCE = (
+    "Held for inspection — not refused, not admitted. This material "
+    "resembles a case narrative or clinical note but carries no decisive "
+    "identifier. It is in temporary memory only: nothing was written, no "
+    "model saw it, and it cannot reach a Keeper packet or the Vault. "
+    "Look at the flagged place, then cancel, or attest that it is a "
+    "lawful reference document without patient records.")
 
 
 # ---------------------------------------------------------------------------
@@ -414,10 +543,10 @@ def ask_room(room_id: str, question: str) -> dict:
     q = (question or "").strip()
     if not q:
         raise ValueError("ask something")
-    ok, rule = phi_screen(q)
+    ok, rule = question_screen(q)
     if not ok:
         record_refusal("clinic_question", rule)
-        return {"refused": True, "why": PHI_REFUSAL_SENTENCE,
+        return {"refused": True, "why": PATIENT_QUESTION_REFUSAL_SENTENCE,
                 "rule": rule}
     ok, rule = order_lane_screen(q)
     if not ok:

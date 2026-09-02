@@ -60,8 +60,11 @@
   <p class="body muted" style="font-size:13px">This room answers questions about its
   <strong>admitted documents</strong> — policies, guidelines, labels, manuals, studies —
   each speaking in its own institutional voice, never blended, with exact passages.
-  It does not advise on patients, and anything that looks patient-identifying is refused
-  before it is stored or sent anywhere. Whether two sources <em>disagree</em> is a judgment:
+  It does not advise on patients: questions about a particular patient are refused at the
+  door, and a document carrying a patient identifier is refused before it is stored or sent
+  anywhere — while ordinary clinical language in a guideline or policy is admitted, and
+  a document that merely resembles a case note is <em>held for inspection</em> so you can
+  look and rule. Whether two sources <em>disagree</em> is a judgment:
   the model may propose it, you rule on it — the page never claims it on its own.</p>
 </div>
 
@@ -81,7 +84,8 @@
   <div class="section-label">Admit a source — declared by you, invented by no one</div>
   <p class="foot">Dates must be a value, <em>unknown</em>, or <em>not_applicable</em> —
   the form is never completed by guessing. Charts, handoff sheets, EHR screenshots and
-  patient records are refused by law.</p>
+  patient records are refused by law; guideline prose is not — the gate looks for
+  identifiers, not for the word "patient".</p>
   <div class="grid">
     <div><label>file (PDF, DOCX, HTML, TXT, EPUB)</label><input type="file" id="f-file"></div>
     <div><label>role</label><select id="f-role"></select></div>
@@ -94,9 +98,13 @@
     <div><label>jurisdiction or facility</label><input id="f-jur"></div>
     <div><label>population / clinical scope</label><input id="f-scope"></div>
     <div style="grid-column:1/3"><label>acquired from (URL or place)</label><input id="f-acq" style="width:100%;box-sizing:border-box"></div>
+    <div style="grid-column:1/3"><label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
+      <input type="checkbox" id="f-attest" style="margin-top:3px">
+      <span>I attest this is a guideline, policy, study, label, or manual — not a patient record.</span></label></div>
   </div>
   <button onclick="admitSource()">Admit and declare</button>
   <div id="admit-said" class="foot" style="margin-top:6px"></div>
+  <div id="hold-area"></div>
 </div>
 
 <div class="card" id="disagree-card" style="display:none">
@@ -219,13 +227,56 @@ async function admitSource() {
   fd.append('jurisdiction_or_facility', document.getElementById('f-jur').value);
   fd.append('population_scope', document.getElementById('f-scope').value);
   fd.append('acquired_from', document.getElementById('f-acq').value);
+  fd.append('attest_reference_document', document.getElementById('f-attest').checked ? 'yes' : 'no');
   said.textContent = 'screening and admitting…';
+  document.getElementById('hold-area').innerHTML = '';
   const d = await readJson(await fetch('/api/clinic/ingest', {method:'POST', body: fd}));
+  if (d.outcome === 'refuse') {
+    said.innerHTML = `<span class="error">REFUSED — rule <code>${esc(d.rule)}</code>`
+      + (d.where && d.where.section_title != null ? `, section ${esc(d.where.section_index)} “${esc(d.where.section_title)}”, offset ${esc(d.where.offset)}` : '')
+      + `. ${esc(d.error)}</span>`;
+    return;
+  }
+  if (d.outcome === 'hold') { renderHold(d); said.textContent = ''; return; }
   if (d.error) { said.innerHTML = `<span class="error">${esc(d.error)}</span>`; return; }
-  said.textContent = 'admitted and declared'
+  afterAdmit(d, said);
+}
+
+function afterAdmit(d, said) {
+  said.textContent = (d.admission === 'attested_after_hold' ? 'admitted on your attestation and declared' : 'admitted and declared')
     + ((d.date_proposals || []).length
        ? ` — dates seen in the text (proposals only): ${d.date_proposals.join(', ')}` : '');
   openRoom(ROOM.room_id);
+}
+
+function renderHold(d) {
+  const w = d.where || {};
+  document.getElementById('hold-area').innerHTML = `
+    <div style="margin-top:10px;padding:10px;border:1px solid #d9b3ff;border-radius:6px">
+      <div class="section-label">Held for inspection — not refused, not admitted</div>
+      <p class="foot">rule <code>${esc(d.rule)}</code>
+        ${w.section_title != null ? `· section ${esc(w.section_index)} “${esc(w.section_title)}” · offset ${esc(w.offset)}` : ''}
+        ${w.field_count ? `· ${esc(w.field_count)} chart-style fields` : ''}</p>
+      ${w.excerpt ? `<p class="body" style="font-size:13px">…${esc(w.excerpt)}…</p>` : ''}
+      <p class="foot">${esc(d.note)} Expires in ${Math.round((d.expires_in_s || 0) / 60)} minutes.</p>
+      <button onclick="holdCancel('${esc(d.hold_id)}')">Cancel — drop it</button>
+      <button onclick="holdAttest('${esc(d.hold_id)}')" style="margin-left:8px">Attest: a lawful reference document without patient records — admit it</button>
+      <div id="hold-said" class="foot" style="margin-top:6px"></div>
+    </div>`;
+}
+
+async function holdCancel(id) {
+  const d = await readJson(await fetch('/api/clinic/hold/' + encodeURIComponent(id) + '/cancel', {method:'POST'}));
+  document.getElementById('hold-area').innerHTML = `<p class="foot">${d.cancelled ? 'dropped — nothing was written' : esc(d.error || 'nothing was held')}</p>`;
+}
+
+async function holdAttest(id) {
+  const said = document.getElementById('hold-said');
+  said.textContent = 'admitting on your attestation…';
+  const d = await readJson(await fetch('/api/clinic/hold/' + encodeURIComponent(id) + '/attest', {method:'POST'}));
+  if (d.error) { said.innerHTML = `<span class="error">${esc(d.error)}</span>`; return; }
+  document.getElementById('hold-area').innerHTML = '';
+  afterAdmit(d, document.getElementById('admit-said'));
 }
 
 async function proposeDisagreement() {

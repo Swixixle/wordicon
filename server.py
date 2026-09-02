@@ -1019,13 +1019,79 @@ def api_clinic_room(room_id):
         return jsonify({"error": str(e)}), 404
 
 
+# ---- held uploads: temporary memory ONLY (ADR amendment 2026-09-02) -----
+# A document the gate HOLDS lives here and nowhere else: not on disk, not
+# in a model call, not in a Keeper packet, not in the Vault. It leaves by
+# the owner's attest (→ ingest) or cancel, or by expiry. Process restart
+# forgets it, on purpose.
+HELD_UPLOADS: "dict[str, dict]" = {}
+HELD_UPLOAD_TTL_S = 30 * 60
+HELD_UPLOAD_MAX = 8
+_held_lock = threading.Lock()
+
+
+def _purge_held(now: float) -> None:
+    for k in [k for k, v in HELD_UPLOADS.items()
+              if now - v["held_at_mono"] > HELD_UPLOAD_TTL_S]:
+        HELD_UPLOADS.pop(k, None)
+
+
+def _declaration_kwargs(form, filename: str) -> dict:
+    return dict(
+        role=str(form.get("role") or ""),
+        issuer=str(form.get("issuer") or "")[:200],
+        title=str(form.get("title") or filename or "")[:200],
+        published_at=str(form.get("published_at") or "")[:40],
+        effective_from=str(form.get("effective_from") or "")[:40],
+        review_or_expiry=str(form.get("review_or_expiry") or "")[:40],
+        status=str(form.get("status") or clinic.UNKNOWN),
+        jurisdiction_or_facility=str(form.get("jurisdiction_or_facility")
+                                      or "")[:200],
+        population_scope=str(form.get("population_scope") or "")[:300],
+        acquired_from=str(form.get("acquired_from") or "")[:500])
+
+
+def _admit_source(data: bytes, filename: str, form: dict,
+                  admission: str = "admit", hold_rule: str = ""):
+    """The only path from bytes to the blob store in this lane. Runs
+    AFTER the gate has said admit, or after the owner attested a hold."""
+    try:
+        result = library.ingest(data, filename=filename,
+                                 source=str(form.get("acquired_from") or "")[:500],
+                                 title=str(form.get("title") or "")[:200])
+        src = clinic.declare_source(
+            result["document_id"], result["representation_id"],
+            result["blob_id"], admission=admission, hold_rule=hold_rule,
+            **_declaration_kwargs(form, filename))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    room_id = str(form.get("room_id") or "").strip()
+    if room_id:
+        try:
+            clinic.add_to_room(room_id, src["source_id"])
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+    rep_full = library.load_representation(result["representation_id"]) or {}
+    proposals = clinic.propose_metadata(rep_full) if rep_full else []
+    return jsonify({"ingested": result, "source": src, "outcome": "admit",
+                    "admission": admission,
+                    "date_proposals": [p["value"] for p in proposals],
+                    "note": "date proposals are code-scanned candidates — "
+                            "they grant nothing until you declare them"})
+
+
+ATTEST_FIELD = "attest_reference_document"
+
+
 @app.route("/api/clinic/ingest", methods=["POST"])
 def api_clinic_ingest():
-    """Admit one medical source: screen BEFORE any persistent write,
-    then ingest, then record the owner's declaration. V1 accepts
-    policies, guidelines, labels, manuals, and studies — not charts,
-    handoff sheets, EHR screenshots, or patient records; the screen
-    refuses documents that look patient-specific."""
+    """Admit one medical source through the DOCUMENT gate (identifiers,
+    never clinical prose) BEFORE any persistent write. Three outcomes:
+    admit (→ ingest + declaration, with the owner's attestation that
+    this is a reference document, not a patient record), held for
+    inspection (temporary memory only; owner cancels or attests), or
+    refuse (identifier + value present; no override; content-free
+    event only)."""
     f = request.files.get("file")
     if f is None:
         return jsonify({"error": "no file was sent"}), 400
@@ -1046,49 +1112,60 @@ def api_clinic_ingest():
             fallback_title=f.filename or "")
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
-    preview_text = " ".join(sec.get("text", "")
-                             for sec in rep_preview["sections"])
-    ok, rule = clinic.phi_screen(preview_text)
-    if not ok:
-        clinic.record_refusal("clinic_upload", rule)
-        return jsonify({"refused": True, "rule": rule,
-                        "error": "This document looks patient-specific "
-                                 "(charts, handoff sheets, and records are "
-                                 "out of this lane by law). It was refused "
-                                 "before anything was stored."}), 400
-    form = request.form
-    try:
-        result = library.ingest(data, filename=f.filename or "",
-                                 source=str(form.get("acquired_from") or "")[:500],
-                                 title=str(form.get("title") or "")[:200])
-        src = clinic.declare_source(
-            result["document_id"], result["representation_id"],
-            result["blob_id"],
-            role=str(form.get("role") or ""),
-            issuer=str(form.get("issuer") or "")[:200],
-            title=str(form.get("title") or f.filename or "")[:200],
-            published_at=str(form.get("published_at") or "")[:40],
-            effective_from=str(form.get("effective_from") or "")[:40],
-            review_or_expiry=str(form.get("review_or_expiry") or "")[:40],
-            status=str(form.get("status") or clinic.UNKNOWN),
-            jurisdiction_or_facility=str(form.get("jurisdiction_or_facility")
-                                          or "")[:200],
-            population_scope=str(form.get("population_scope") or "")[:300],
-            acquired_from=str(form.get("acquired_from") or "")[:500])
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    room_id = str(form.get("room_id") or "").strip()
-    if room_id:
-        try:
-            clinic.add_to_room(room_id, src["source_id"])
-        except ValueError as e:
-            return jsonify({"error": str(e)}), 400
-    rep_full = library.load_representation(result["representation_id"]) or {}
-    proposals = clinic.propose_metadata(rep_full) if rep_full else []
-    return jsonify({"ingested": result, "source": src,
-                    "date_proposals": [p["value"] for p in proposals],
-                    "note": "date proposals are code-scanned candidates — "
-                            "they grant nothing until you declare them"})
+    verdict = clinic.document_screen(rep_preview["sections"])
+    if verdict["outcome"] == "refuse":
+        clinic.record_refusal("clinic_upload", verdict["rule"])
+        return jsonify({"refused": True, "outcome": "refuse",
+                        "rule": verdict["rule"],
+                        "where": {k: v for k, v in verdict["where"].items()
+                                  if k != "excerpt"},
+                        "error": clinic.DOCUMENT_REFUSAL_SENTENCE}), 400
+    form = {k: request.form.get(k) for k in request.form}
+    if verdict["outcome"] == "hold":
+        with _held_lock:
+            _purge_held(time.monotonic())
+            if len(HELD_UPLOADS) >= HELD_UPLOAD_MAX:
+                return jsonify({"error": "too many documents are held for "
+                                         "inspection — cancel or attest one "
+                                         "first"}), 429
+            hold_id = "hold_" + uuid.uuid4().hex[:12]
+            HELD_UPLOADS[hold_id] = {"data": data, "filename": f.filename or "",
+                                     "form": form, "rule": verdict["rule"],
+                                     "held_at_mono": time.monotonic()}
+        return jsonify({"held": True, "outcome": "hold", "hold_id": hold_id,
+                        "rule": verdict["rule"], "where": verdict["where"],
+                        "expires_in_s": HELD_UPLOAD_TTL_S,
+                        "note": clinic.DOCUMENT_HOLD_SENTENCE}), 202
+    if str(form.get(ATTEST_FIELD) or "") != "yes":
+        return jsonify({"error": "Admission needs your attestation that "
+                                 "this is " + clinic.OWNER_ATTESTATION +
+                                 ". Nothing was stored."}), 400
+    return _admit_source(data, f.filename or "", form)
+
+
+@app.route("/api/clinic/hold/<hold_id>/attest", methods=["POST"])
+def api_clinic_hold_attest(hold_id):
+    """The owner attests a held document is a lawful reference document
+    without patient records. Only then does it take the admit path; the
+    declaration records the attestation and the rule it overruled."""
+    with _held_lock:
+        _purge_held(time.monotonic())
+        held = HELD_UPLOADS.pop(hold_id, None)
+    if held is None:
+        return jsonify({"error": "nothing is held under that id (expired, "
+                                 "cancelled, or never held) — upload again"}), 404
+    return _admit_source(held["data"], held["filename"], held["form"],
+                         admission="attested_after_hold",
+                         hold_rule=held["rule"])
+
+
+@app.route("/api/clinic/hold/<hold_id>/cancel", methods=["POST"])
+def api_clinic_hold_cancel(hold_id):
+    """Cancel a hold: the bytes are dropped; nothing was ever written,
+    and nothing is written now — not even an event."""
+    with _held_lock:
+        existed = HELD_UPLOADS.pop(hold_id, None) is not None
+    return jsonify({"cancelled": existed, "hold_id": hold_id})
 
 
 @app.route("/api/clinic/ask", methods=["POST"])
