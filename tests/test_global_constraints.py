@@ -12329,12 +12329,23 @@ console.log(out.join('\\n'));
 
     # 3. the central structure and the sole authority
     _mem = _nodes98.get("memory", {}); _own = _nodes98.get("owner", {})
-    _cw = (_d98.get("canvas") or {}).get("w", 0)
-    if _mem.get("kind") != "center" or abs(_mem.get("x", 0) - _cw / 2) > 20:
-        _f98("Memory / Judgment Record is not the central structure")
-    if _own.get("kind") != "owner" or _own.get("y") != _mem.get("y") or \
-            _own.get("x", 0) <= _mem.get("x", 0):
-        _f98("the Owner does not sit beside Memory")
+    _lay = _d98.get("layouts") or {}
+    if set(_lay) != {"wide", "tall"}:
+        _f98(f"the anatomy must carry the two ruled layouts, not {sorted(_lay)}")
+    for _L, _lc in _lay.items():
+        _mb = _lc.get("membrane") or {}
+        _cx = _mb["x"] + _mb["w"] / 2 if _mb.get("kind") == "rect" else _lc["canvas"]["w"] / 2
+        _mp = (_mem.get("pos") or {}).get(_L) or [0, 0, 0, 0]
+        _op = (_own.get("pos") or {}).get(_L) or [0, 0, 0, 0]
+        if _mem.get("kind") != "center" or abs(_mp[0] - _cx) > 75:
+            _f98(f"Memory / Judgment Record is not the central structure ({_L})")
+        if _own.get("kind") != "owner" or _op[1] != _mp[1] or _op[0] <= _mp[0]:
+            _f98(f"the Owner does not sit beside Memory ({_L})")
+        for _n in _nodes98.values():
+            if not ((_n.get("pos") or {}).get(_L)):
+                _f98(f"{_n.get('id')} has no {_L} position")
+    if (_lay.get("wide") or {}).get("min_width", 0) < 900:
+        _f98("the landscape overview would be chosen at a width where its labels are not legible")
     if "only final authority" not in _own.get("status", ""):
         _f98("the Owner is not labeled the only final authority")
     for _k in ("Sources and original material", "Concepts", "Model proposals", "Owner rulings",
@@ -12370,8 +12381,16 @@ console.log(out.join('\\n'));
     if not _re98.search(r"\.organ\.unbuilt \.organ-shape \{[^}]*stroke-dasharray", _page98):
         _f98("unbuilt tissue is not drawn dashed")
     _w = _nodes98.get("witness", {})
-    if _w.get("kind") != "witness" or "outside" not in _w.get("status", "").lower():
-        _f98("the External Witness is not placed outside")
+    if _w.get("kind") != "witness" or "testimony" not in _w.get("status", "").lower():
+        _f98("the External Witness is not placed outside as testimony")
+    _wo = _nodes98.get("world", {})
+    if _wo.get("kind") != "world" or _wo.get("name") != "OUTSIDE WORLD" or not _wo.get("fails"):
+        _f98("the Outside World is not a real node with its own card")
+    if not _re98.search(r"\.organ\.is-dim \.organ-shape[^{]*\{[^}]*opacity", _page98) or \
+            _re98.search(r"\.organ\.is-dim\s*\{", _page98):
+        _f98("focusing an organ must dim its silhouette, never its text")
+    if "paint-order: stroke fill" not in _page98:
+        _f98("SVG text lost its halo")
     for _n in _nodes98.values():
         for _field in ("does", "contributes", "constrained_by", "fails", "witness"):
             if not _n.get(_field):
@@ -12389,7 +12408,7 @@ console.log(out.join('\\n'));
             _f98(f"edge {_e.get('from')}→{_e.get('to')} has a fifth class {_e.get('class')!r}")
         if _e.get("to") == "memory" and _e.get("from") == "witness":
             _f98("the External Witness has a direct arrow into Memory")
-        if _e.get("to") not in _nodes98 or (_e.get("from") not in _nodes98 and _e.get("from") != "world"):
+        if _e.get("to") not in _nodes98 or _e.get("from") not in _nodes98:
             _f98(f"edge references an unknown organ: {_e}")
     _wt = {_e.get("to") for _e in _edges98 if _e.get("from") == "witness"}
     if _wt != {"owner"}:
@@ -12406,6 +12425,9 @@ console.log(out.join('\\n'));
     if _seq != ["sensory", "boundary", "library", "rooms", "cortex", "boundary", "owner",
                 "memory", "map", "voice", "vault"]:
         _f98(f"Follow one source lost its ruled order: {_seq}")
+    _last = (_src.get("steps") or [{}])[-1]
+    if "seals" not in _last.get("changed", "") or "not a destination for thinking" not in _last.get("changed", ""):
+        _f98("the Vault step must read as sealing the record, not where thinking culminates")
     for _s in _src.get("steps", []):
         if not (_s.get("changed") and _s.get("forbidden")):
             _f98("a story step lacks its sentence pair")
