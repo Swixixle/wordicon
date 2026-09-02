@@ -2883,7 +2883,7 @@ def main() -> int:
         (_r3 / "accepted_concepts.json").write_text(
             _json.dumps([{"name": "clockrot", "definition": "d"}]), encoding="utf-8")
         (_r3 / "judgments.jsonl").write_text(
-            _json.dumps({"decision": "accepted", "candidate_text": "Armory Stasis",
+            _json.dumps({"decision": "accepted", "candidate_text": "Halyard Stasis",
                          "originating_operation": "trace_only_in_log",
                          "id": "jdg_1"}) + "\n"
             + _json.dumps({"decision": "rejected", "candidate_text": "Never Kept",
@@ -2893,7 +2893,7 @@ def main() -> int:
         _ex.LOCAL_STATE = _r3
         try:
             _names3 = [(a.get("name") or "") for a in _ex.load_accepted()]
-            if "Armory Stasis" not in _names3:
+            if "Halyard Stasis" not in _names3:
                 failures.append("57: an acceptance recorded only in judgments.jsonl "
                                 "was dropped from the export — a silent subtraction")
             if "Never Kept" in _names3:
@@ -11631,7 +11631,8 @@ console.log(out.join('\\n'));
         except (_j94.JSONDecodeError, OSError):
             _base94 = set()
         import hashlib as _hl94
-        _scan94 = [Path(__file__)] + sorted((_repo94 / "docs").glob("*.md"))
+        _scan94 = [Path(__file__)] + sorted((_repo94 / "docs").glob("*.md")) \
+            + sorted((_repo94 / "tests" / "journeys").glob("*.py")) + sorted((_repo94 / "tests" / "journeys").glob("*.js"))   # ledger (block 103): the journeys' fixtures are held to the same rule
         for _sf94 in _scan94:
             _txt94 = _sf94.read_text(encoding="utf-8").lower()
             for _t94 in _priv94:
@@ -12675,7 +12676,7 @@ console.log(out.join('\\n'));
             _f99(f"seed crossing failed: {_r.get_data(as_text=True)[:120]}")
         _room = _cl95.create_room("Room 99")
         (cli.LOCAL_STATE / "recovery_review_queue.jsonl").write_text(
-            _json.dumps({"title": "Armory Stasis", "trace": "t", "status": "needs_owner_ruling", "queued_at": "2026-09-01T00:00:00Z"}) + "\n")
+            _json.dumps({"title": "Halyard Stasis", "trace": "t", "status": "needs_owner_ruling", "queued_at": "2026-09-01T00:00:00Z"}) + "\n")
         _h = _c99.get("/api/home").get_json() or {}
         _cont = _h.get("continue") or []
         _kinds = [(c.get("kind"), c.get("id")) for c in _cont]
@@ -12796,7 +12797,7 @@ console.log(out.join('\\n'));
     # the claim is due, nothing is saved
     _q100 = cli.LOCAL_STATE / "recovery_review_queue.jsonl"
     _q100.write_text(
-        _json100.dumps({"title": "Armory Stasis", "trace": "t100", "judgment_id": "jdg_q100", "status": "needs_owner_ruling", "queued_at": "2026-09-01T00:00:00Z"}) + "\n"
+        _json100.dumps({"title": "Halyard Stasis", "trace": "t100", "judgment_id": "jdg_q100", "status": "needs_owner_ruling", "queued_at": "2026-09-01T00:00:00Z"}) + "\n"
         + _json100.dumps({"title": "Kept Already", "trace": "t100b", "judgment_id": "jdg_q100b", "status": "ruled", "queued_at": "2026-08-30T00:00:00Z"}) + "\n")
     _before100 = _q100.read_bytes()
     with server.app.test_client() as _c100:
@@ -13237,7 +13238,7 @@ console.log(out.join('\\n'));
     # a receipt with the run's titles, no snapshot, no shelf entry
     _q103 = cli.LOCAL_STATE / "recovery_review_queue.jsonl"
     cli.RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
-    _cases = (("Armory Stasis 103", "trace_cli_r103a", "jdg_cli_candidate_r103a"),
+    _cases = (("Halyard Stasis 103", "trace_cli_r103a", "jdg_cli_candidate_r103a"),
               ("Quiet Tariff 103", "trace_cli_r103b", "jdg_cli_candidate_r103b"),
               ("Salt Ledger 103", "trace_cli_r103c", "jdg_cli_candidate_r103c"),
               ("Thin Receipt 103", "trace_cli_r103u", "jdg_cli_candidate_r103u"))
@@ -13275,7 +13276,7 @@ console.log(out.join('\\n'));
         _ca = _open.get("jdg_cli_candidate_r103a") or {}
         if not (_ca.get("acceptance") or {}).get("found") or (_ca.get("acceptance") or {}).get("has_clock") is not False:
             _f103("a case does not show its acceptance, or claims a clock the row never had")
-        if not (_ca.get("receipt") or {}).get("found") or (_ca.get("receipt") or {}).get("candidate_titles") != ["Armory Stasis 103", "Sibling One", "Sibling Two"] \
+        if not (_ca.get("receipt") or {}).get("found") or (_ca.get("receipt") or {}).get("candidate_titles") != ["Halyard Stasis 103", "Sibling One", "Sibling Two"] \
                 or (_ca.get("receipt") or {}).get("n_sources") != 1 or (_ca.get("receipt") or {}).get("gateways") != ["anthropic (external)"]:
             _f103(f"a case does not show its receipt as the record holds it: {_ca.get('receipt')}")
         if "model call(s)" in _rec_page or "[object Object]" in _rec_page or "r.gateways" not in _rec_page:
@@ -13302,7 +13303,7 @@ console.log(out.join('\\n'));
         if not _cid.startswith("concept_") or len(_cid) != len("concept_") + 12 or not _rul.get("shelf_entry_added") or _rul.get("epoch") != "development_and_calibration":
             _f103(f"Accept did not mint an identity, persist the entry, or carry the epoch: {_rul}")
         _rows = [_json103.loads(l) for l in cli.JUDGMENTS_LOG.read_text().splitlines() if l.strip()]
-        _new = [j for j in _rows if j.get("origin") == "recovery_review" and j.get("candidate_text") == "Armory Stasis 103"]
+        _new = [j for j in _rows if j.get("origin") == "recovery_review" and j.get("candidate_text") == "Halyard Stasis 103"]
         if len(_new) != 1 or _new[0].get("decision") != "accepted" or _new[0].get("concept_id") != _cid \
                 or not _new[0].get("ruled_at") or _new[0].get("epoch") != "development_and_calibration" \
                 or (_new[0].get("cites") or {}).get("judgment_id") != "jdg_cli_candidate_r103a" \

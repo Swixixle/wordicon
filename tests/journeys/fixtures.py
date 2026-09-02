@@ -85,7 +85,7 @@ def seed_entrance():
         # the recovery review queue, in the real store's shape (block 103): an
         # accepted title-only judgment, a receipt with the run's titles, no
         # snapshot, no shelf entry; the queue row names the judgment
-        for i, t in enumerate(("Contraband Pedagogy", "Appellate Loop")):
+        for i, t in enumerate(("Quorum Pedagogy", "Gutter Loop")):
             tr, jid = f"trace_cli_oldfix{i}", f"jdg_cli_candidate_oldfix{i}"
             with open(cli.JUDGMENTS_LOG, "a") as f:
                 f.write(json.dumps({"id": jid, "object_type": "judgment", "decision": "accepted", "candidate_text": t,

@@ -58,7 +58,7 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
       text: document.getElementById('cases').textContent.replace(/\s+/g, ' '), epoch: document.getElementById('epoch-line').textContent,
       defs: Array.from(document.querySelectorAll('#cases textarea')).map(t => t.value), suggested: /suggestion|proposed|suggested value/i.test(document.getElementById('cases').textContent) }));
     ok(rv.url === '/recovery' && /Recovery Review/.test(rv.title) && rv.cases === 2, 'the door opens the Recovery Review with the two queued cases: ' + JSON.stringify([rv.url, rv.cases]));
-    ok(/No definition survives\./.test(rv.text) && /receipt: found/.test(rv.text) && /Sibling A · Sibling B|Contraband Pedagogy · Sibling A/.test(rv.text) && /no clock/.test(rv.text), 'a case shows what survived and says what did not: ' + rv.text.slice(0, 200));
+    ok(/No definition survives\./.test(rv.text) && /receipt: found/.test(rv.text) && /Sibling A · Sibling B|Quorum Pedagogy · Sibling A/.test(rv.text) && /no clock/.test(rv.text), 'a case shows what survived and says what did not: ' + rv.text.slice(0, 200));
     ok(rv.defs.every(v => v === '') && !rv.suggested, 'no definition is suggested or prefilled — the field is the owner\'s');
     const fourth = await page.$$eval('#cases .card[data-queue-id] .actions button', bs => bs.slice(0, 4).map(b => b.textContent.trim()));
     ok(fourth.join('|') === 'Accept|Revise|Reject|Not enough survives — leave unresolved', 'the four rulings are offered, unresolved among them: ' + fourth.join(' | '));
@@ -74,7 +74,7 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
     ok(after.open === 1 && after.ruled === 1 && /accept — kept, from the journey · concept concept_[0-9a-f]{12} · 1 judgment event\(s\) · on the shelf/.test(after.ruledText) && /development_and_calibration/.test(after.ruledText), 'the ruling is recorded with its identity, its clock and its epoch, and the case leaves the open list: ' + after.ruledText.slice(0, 200));
     const apiAfter = await (await page.request.get(BASE + '/api/home')).json();
     const recRow = (apiAfter.pending.items || []).find(i => i.source === 'recovery_review');
-    const recovered = (apiAfter.continue || []).find(c => c.kind === 'concept' && c.title === 'Contraband Pedagogy');
+    const recovered = (apiAfter.continue || []).find(c => c.kind === 'concept' && c.title === 'Quorum Pedagogy');
     ok(recRow && /^1 accepted-but-absent concept, receipt-only/.test(recRow.label) && recovered && recovered.shelf && recovered.shelf.via === 'concept_id' && /^2026-09/.test(recovered.when || ''), 'Home counts one case left and the recovered concept is a Continue card by its minted id, dated by the ruling: ' + JSON.stringify([recRow && recRow.label, recovered && recovered.shelf, recovered && recovered.when]).slice(0, 200));
     await page.goto(BASE + '/'); await page.waitForTimeout(1200);
     const rulingColors = await page.$$eval('#ruling-area .rule-row', rows => rows.map(r => getComputedStyle(r).borderLeftColor + '|' + getComputedStyle(r).color));
