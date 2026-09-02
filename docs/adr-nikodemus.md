@@ -78,3 +78,39 @@ across Write / split / swap / full page / Bench and back, Back, widths,
 reduced motion). Sabotage: provider construction returning to Home,
 title-keyed continuation, writing-room reconstruction, historical-name
 rewriting, ambiguous-legacy admission, the phrase box as hero again.
+
+## Amendment 2026-09-02: saved, not due (the reviewer's correction, owner-ruled)
+
+Block 99 as first rendered listed the recovery review queue under
+**Needs your ruling** with the action "review not built yet — the queue
+is the record": a ruling due with nowhere to make it. That is the
+guilt-inbox failure the entrance was built to avoid. The correction,
+ruled in the same session and carried by block 100 (`v1.3.1`):
+
+**Needs your ruling** admits an item only if Home has a door for it — a
+document, a recording, a room, the Keeper. The set of doors is
+declared in the server (`HOME_RULING_DOORS`) and enforced structurally:
+an item without one is an error, not a row. The band's sources are the
+four actionable ones (unruled document claims, unruled recording
+claims, Clinic disagreement proposals, Keeper entries without a
+ruling); the paragraph above that counts five stands as the record of
+what block 99 decided before the correction.
+
+The recovery review queue — accepted-but-absent, receipt-only concepts
+whose review is a ruled step with no surface yet — is reported apart,
+beneath the band and outside it, as a quiet **Saved for later** line:
+counted, named on hover, never a link, never in the ruling count,
+hidden when empty. The queue file is read where the audit writes it
+and is never rewritten by painting Home; the record is unchanged, only
+its classification on Home is. No review surface was built; the suite
+pins that absence so the day it is ruled is a ledger entry, not a
+drift.
+
+Proofs: block 100 of the suite (the doors, the split, the byte identity
+of the queue across a paint, the line's placement and its every line
+pinned); the browser journey (one ruling due, the saved line visible
+and quiet at laptop, phone and split widths, gone when empty).
+Sabotage: the queue back under the band; the doors grown to admit it;
+the saved entries painted as rows inside the band; the line dropped;
+the hide rule lost; the queue rewritten on paint; the saved entry
+grown a door and a link.

@@ -400,7 +400,10 @@
   .rule-row .act a { color: var(--accent); text-decoration: none; cursor: pointer; }
   .doors { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-top: 10px; }
   .doors a { display: block; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 8px 11px; font-size: 13px; color: var(--accent); text-decoration: none; cursor: pointer; }
-  .quiet-line { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; margin: 4px 0 18px; }
+  .quiet-line { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; margin: -6px 0 16px; padding: 0 16px; }
+  .quiet-line[hidden] { display: none; }
+  .quiet-line .k { text-transform: uppercase; letter-spacing: .08em; font-size: 10.5px; white-space: nowrap; }
+  .quiet-line > span:not(.k) { flex: 1 1 22em; min-width: 0; }
   .foot { font-size: 12.5px; color: var(--muted); }
   @media (max-width: 640px) { .rule-row .k { min-width: 0; } .rule-row .act { margin-left: 0; width: 100%; } header .quiet { width: 100%; margin-left: 0; } }
   @media (prefers-reduced-motion: reduce) { .collapse-head .caret { transition: none; } }
@@ -445,12 +448,15 @@
     <div id="continue-excluded" class="foot" style="margin-top:8px"></div>
   </div>
 
-  <!-- NEEDS YOUR RULING: bounded, mechanical, never an alarm. -->
+  <!-- NEEDS YOUR RULING: bounded, mechanical, never an alarm. Only what
+       has a page to rule on enters. What the record keeps for you without a
+       page yet is the quiet line beneath the card — saved, not due. -->
   <div class="card" id="ruling-card">
     <div class="band-head"><div class="section-label">Needs your ruling</div><span class="more" id="ruling-more">only what the record can count</span></div>
     <div id="ruling-area"><div class="empty">Looking at the record…</div></div>
     <div id="ruling-fold" class="foot" style="margin-top:6px"></div>
   </div>
+  <div id="ruling-saved" class="quiet-line" hidden></div>
 
   <!-- BRING SOMETHING IN: the same intake as before, one band down. The
        phrase box below is the ORIGINAL element — same id, same wiring, the
@@ -6454,13 +6460,12 @@ function renderContinue() {
     : '';
 }
 function ruleRow(it) {
-  const k = {claim: 'Claim · support', media_claim: 'Recording claim', clinic_disagreement: 'Room · disagreement', keeper: 'The Keeper', recovery_review: 'Recovery Review'}[it.source] || it.source;
+  const k = {claim: 'Claim · support', media_claim: 'Recording claim', clinic_disagreement: 'Room · disagreement', keeper: 'The Keeper'}[it.source] || it.source;
   let act = '';
   if (it.source === 'claim') act = `<a onclick="openPlace('library');openDoc('${escapeJs(it.open.representation_id)}',0)">Rule on it</a>`;
   else if (it.source === 'media_claim') act = `<a onclick="openPlace('library');openMedia('${escapeJs(it.open.id)}','${escapeJs(it.open.transcript_id || '')}')">Rule on it</a>`;
   else if (it.source === 'clinic_disagreement') act = `<a href="${escapeHtml(it.open.href)}">They disagree · they don’t · can’t tell</a>`;
   else if (it.source === 'keeper') act = `<a onclick="openPlace('system');document.getElementById('keeper-card').open=true">Read the entries</a>`;
-  else if (it.source === 'recovery_review') act = `<span class="muted" title="the review is a ruled step that has no page yet; the queue is the record of it">review not built yet — the queue is the record</span>`;
   return `<div class="rule-row"><span class="k">${escapeHtml(k)}</span><span>${escapeHtml(it.label)}</span><span class="act">${act}</span></div>`;
 }
 let rulingsExpanded = false;
@@ -6469,6 +6474,7 @@ function renderRulings() {
   if (!area || !HOME) return;
   const p = HOME.pending || {items: [], total: 0};
   const items = p.items || [];
+  renderSaved(p.saved || []);
   if (!items.length) {
     area.innerHTML = '<div class="empty" style="padding:8px 0">Nothing awaits your ruling. ' + escapeHtml(p.note || '') + '</div>';
     if (more) more.textContent = ''; if (fold) fold.textContent = ''; return;
@@ -6478,6 +6484,16 @@ function renderRulings() {
   if (more) more.textContent = p.total + ' · only what the record can count';
   if (fold) fold.innerHTML = (items.length > 3 ? `${shown.length} shown · <a href="#" onclick="rulingsExpanded=!rulingsExpanded;renderRulings();return false">${rulingsExpanded ? 'fewer' : (items.length - 3) + ' more'}</a> · ` : '')
     + escapeHtml(p.note || '');
+}
+// Saved for later: what the record holds for you that has no page to act
+// on yet. Counted, named on hover, never a link, never in the ruling count.
+function renderSaved(saved) {
+  const line = document.getElementById('ruling-saved');
+  if (!line) return;
+  if (!saved.length) { line.hidden = true; line.textContent = ''; return; }
+  line.hidden = false;
+  line.innerHTML = '<span class="k">Saved for later</span> ' + saved.map(s =>
+    `<span title="${escapeHtml((s.titles || []).join(' · '))}">${escapeHtml(s.label)} — ${escapeHtml(s.why || '')}</span>`).join(' ');
 }
 function renderRooms() {
   const area = document.getElementById('rooms-area');

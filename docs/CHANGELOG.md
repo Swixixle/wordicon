@@ -1,5 +1,19 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.3.1 — Needs your ruling holds only what has a door; the recovery queue is saved, not due
+
+The reviewer's one correction to v1.3.0, owner-ruled (amendment in
+`docs/adr-nikodemus.md`). "Needs your ruling" now admits an item only
+when Home has a page to rule on it — a document, a recording, a room,
+the Keeper; the rule is declared in the server and enforced
+structurally, not by taste. The recovery review queue — the
+accepted-but-absent, receipt-only concepts of v1.2.3, whose review is a
+ruled step with no surface yet — is carried beneath the band as a quiet
+"Saved for later" line: counted, named on hover, never a link, never in
+the ruling count, hidden when empty. The queue file is read as before
+and never rewritten; only its classification on Home changed. No review
+surface was built; the suite pins its absence until the day it is ruled.
+
 ## v1.3.0 — the entrance: Nikodemus (formerly Wordicon), continuation-first Home
 
 Effective 2026-09-02T08:20:00Z, by owner ruling (`docs/adr-nikodemus.md`).

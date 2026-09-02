@@ -12677,11 +12677,13 @@ console.log(out.join('\\n'));
             _f99("the document with an unruled claim is not a Continue card")
         _p = _h.get("pending") or {}
         _srcs = {it.get("source") for it in _p.get("items", [])}
-        if _p.get("total", 0) < 2 or not {"claim", "recovery_review"} <= _srcs or \
-                not _srcs <= {"claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"}:
-            _f99(f"Needs your ruling is not derived from the record's sources: total={_p.get('total')} {_srcs}")
-        if set(_p.get("sources") or []) != {"claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"}:
-            _f99("the rulings band's sources are not the five structured ones")
+        # ledger (block 100): the recovery queue left the ruling count — saved
+        # for later, not due. Four actionable sources remain; the claim stays.
+        if _p.get("total", 0) < 1 or "claim" not in _srcs or \
+                not _srcs <= {"claim", "media_claim", "clinic_disagreement", "keeper"}:
+            _f99(f"Needs your ruling is not derived from the record's actionable sources: total={_p.get('total')} {_srcs}")
+        if set(_p.get("sources") or []) != {"claim", "media_claim", "clinic_disagreement", "keeper"}:   # ledger (block 100)
+            _f99("the rulings band's sources are not the four actionable ones")
         if "backlog" not in (_p.get("note") or "").lower():
             _f99("the rulings band does not say backlog decisions are absent")
         # the Clinic deep link resolves by room id
@@ -12733,6 +12735,119 @@ console.log(out.join('\\n'));
     # 20. the provider survives where it belongs: About, on demand
     if "id=\"about-provider\"" not in _idx99 or "ontoggle=\"if(this.open)loadConfig()\"" not in _idx99:
         _f99("the provider has no home in About & proof")
+
+    # ================= block 100: saved, not due =========================
+    # The reviewer's one correction to block 99 (backlog item 41): "Needs
+    # your ruling" may hold only what has a page to rule on. The recovery
+    # review queue — accepted-but-absent concepts, receipt-only, whose
+    # review is a ruled step with no surface yet — is carried beneath the
+    # band as "Saved for later": counted, never a link, never in the
+    # ruling count, its file never rewritten. The record is unchanged; only
+    # its classification on Home changed.
+    import json as _json100
+    import os as _os100
+    _root100 = Path(cli.__file__).parent.parent
+    _idx100 = (_root100 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _srv100 = (_root100 / "server.py").read_text(encoding="utf-8")
+
+    def _f100(msg):
+        failures.append(f"100: {msg}")
+
+    # the rule is structural: a door, or it is not a ruling due
+    if not hasattr(server, "HOME_RULING_DOORS") or set(server.HOME_RULING_DOORS) != {"document", "recording", "room", "keeper"}:
+        _f100("the set of doors a ruling may open through is not declared (or grew silently)")
+    _pend_src = _srv100[_srv100.index("def _home_pending("):_srv100.index("@app.route(\"/api/home\")")]
+    if 'in HOME_RULING_DOORS' not in _pend_src or "assert" not in _pend_src.split("in HOME_RULING_DOORS")[0][-120:]:
+        _f100("nothing enforces that every ruling due has a door")
+    if '"recovery_review"' in _pend_src.split("saved = []")[0]:
+        _f100("the recovery queue is still built into the ruling list")
+    if 'recovery_review_queue.jsonl' not in _pend_src:
+        _f100("Home stopped reading the queue where the audit writes it")
+    if any("recovery" in r.rule for r in server.app.url_map.iter_rules()):
+        _f100("a recovery review surface appeared — the ruling was not to build it now")
+
+    # the API: on a seeded scratch record, the queue is saved, the claim is due
+    _q100 = cli.LOCAL_STATE / "recovery_review_queue.jsonl"
+    _q100.write_text(
+        _json100.dumps({"title": "Armory Stasis", "trace": "t100", "status": "needs_owner_ruling", "queued_at": "2026-09-01T00:00:00Z"}) + "\n"
+        + _json100.dumps({"title": "Kept Already", "trace": "t100b", "status": "ruled", "queued_at": "2026-08-30T00:00:00Z"}) + "\n")
+    _before100 = _q100.read_bytes()
+    with server.app.test_client() as _c100:
+        _paired(_c100)
+        _ing100 = _lib95.ingest(b"Readiness screening precedes every liberation attempt. A trial follows.",
+                                "notes100.txt", source="unit", title="Notes 100")
+        _r = _c100.post("/api/library/crossing", json={"kind": "claim", "representation_id": _ing100["representation_id"],
+                                                       "start_path": "0.0.0", "start_offset": 0, "end_path": "0.0.0",
+                                                       "end_offset": 9, "owner_text": "screening first, again"})
+        if _r.status_code != 200:
+            _f100(f"seed crossing failed: {_r.get_data(as_text=True)[:120]}")
+        _h100 = _c100.get("/api/home")
+        if _h100.status_code != 200:
+            _f100(f"/api/home did not paint ({_h100.status_code})")
+        _p100 = (_h100.get_json() or {}).get("pending") or {}
+        _items100 = _p100.get("items") or []
+        if any(it.get("source") == "recovery_review" for it in _items100) or "recovery_review" in (_p100.get("counts") or {}):
+            _f100("the recovery queue is still counted as a ruling due")
+        if not any(it.get("source") == "claim" for it in _items100):
+            _f100("the actionable claim did not stay under Needs your ruling")
+        if _p100.get("total") != len(_items100) or any((it.get("open") or {}).get("type") not in server.HOME_RULING_DOORS for it in _items100):
+            _f100(f"a ruling due has no door, or the count is not the list: total={_p100.get('total')} n={len(_items100)}")
+        if _p100.get("sources") != ["claim", "media_claim", "clinic_disagreement", "keeper"] or _p100.get("saved_sources") != ["recovery_review"]:
+            _f100(f"the band's declared sources are not the ruled split: {_p100.get('sources')} / {_p100.get('saved_sources')}")
+        _saved100 = _p100.get("saved") or []
+        if len(_saved100) != 1 or _saved100[0].get("source") != "recovery_review" or _saved100[0].get("count") != 1 \
+                or "receipt-only" not in _saved100[0].get("label", "") or "Armory Stasis" not in (_saved100[0].get("titles") or []) \
+                or "Kept Already" in (_saved100[0].get("titles") or []) or not _saved100[0].get("why"):
+            _f100(f"Saved for later does not carry the queue as the record holds it: {_saved100}")
+        if _saved100 and any(k in _saved100[0] for k in ("open", "href")):
+            _f100("Saved for later carries a door it does not have")
+        if _q100.read_bytes() != _before100:
+            _f100("painting Home rewrote the recovery review queue — the record must be preserved")
+        # no queue at all: nothing saved, nothing invented
+        _aside100 = _q100.with_suffix(".aside")
+        _os100.replace(_q100, _aside100)
+        try:
+            _p100b = ((_c100.get("/api/home").get_json() or {}).get("pending") or {})
+            if _p100b.get("saved") != [] or not any(it.get("source") == "claim" for it in _p100b.get("items") or []):
+                _f100(f"with no queue file, Saved for later is not empty or the claim went missing: {_p100b.get('saved')}")
+        finally:
+            _os100.replace(_aside100, _q100)
+
+    # the page: a quiet line beneath the band, outside it, hidden when empty
+    _band100 = _idx100[_idx100.index('id="ruling-card"'):_idx100.index('id="intake-card"')]
+    if _band100.count('</div>\n  <div id="ruling-saved" class="quiet-line" hidden></div>') != 1:
+        _f100("the Saved for later line is not a hidden quiet line placed after the ruling card")
+    if _band100.index('id="ruling-saved"') < _band100.index('id="ruling-fold"'):
+        _f100("the Saved for later line sits inside the band it must not be counted in")
+    if ".quiet-line[hidden] { display: none; }" not in _idx100:
+        _f100("a flex quiet line cannot hide: [hidden] loses to display:flex without this rule")
+    _rows100 = _idx100[_idx100.index("function ruleRow("):_idx100.index("let rulingsExpanded")]
+    if "recovery_review" in _rows100 or "review not built yet" in _idx100:
+        _f100("the queue still renders as a ruling row")
+    _rend100 = _idx100[_idx100.index("function renderRulings("):_idx100.index("function renderRooms(")]
+    if "renderSaved(p.saved || [])" not in _rend100 or "function renderSaved(saved)" not in _rend100:
+        _f100("Needs your ruling does not hand the saved entries to their own line")
+    _sv100 = _rend100[_rend100.index("function renderSaved("):]
+    for _bad in ("<a", "onclick", "href", "rule-row", "ruling-area", "--bad", "createElement"):
+        if _bad in _sv100:
+            _f100(f"Saved for later is not quiet: it renders {_bad!r}")
+    if "line.hidden = true" not in _sv100 or "line.hidden = false" not in _sv100 or "Saved for later" not in _sv100:
+        _f100("Saved for later does not show when there is something and hide when there is not")
+    # the whole of it, pinned: an early return or a rerouted paint is a
+    # change to these lines, and a change to these lines is a ledger entry
+    if _sv100.strip() != '''function renderSaved(saved) {
+  const line = document.getElementById('ruling-saved');
+  if (!line) return;
+  if (!saved.length) { line.hidden = true; line.textContent = ''; return; }
+  line.hidden = false;
+  line.innerHTML = '<span class="k">Saved for later</span> ' + saved.map(s =>
+    `<span title="${escapeHtml((s.titles || []).join(' · '))}">${escapeHtml(s.label)} — ${escapeHtml(s.why || '')}</span>`).join(' ');
+}''':
+        _f100("renderSaved is not the ruled function, line for line")
+    if "p.total + ' · only what the record can count'" not in _rend100:
+        _f100("the ruling count is no longer the server's actionable total")
+    # ledger: the block-99 proof that the band draws on the record was
+    # narrowed to the four actionable sources above, in the same change.
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

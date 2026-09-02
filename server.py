@@ -2880,10 +2880,20 @@ def _home_recordings() -> list:
     return list(per.values())
 
 
+# What "Needs your ruling" may hold: an item enters only if Home has a door
+# for it — a page where the ruling can be made now. What the record keeps
+# for the owner without such a page yet (the recovery review queue) is
+# reported apart, as saved for later, and is never counted as a ruling due.
+# A ruled step with no surface is a fact about the build, not a task.
+HOME_RULING_DOORS = ("document", "recording", "room", "keeper")
+
+
 def _home_pending() -> dict:
-    """Only what the record represents as awaiting the owner. Five sources,
-    each a structured local file; project-backlog decisions have no source
-    here and are never implied."""
+    """Only what the record represents as awaiting the owner AND has a
+    surface to act on. Four actionable sources, each a structured local
+    file with a page that opens; the recovery review queue is carried
+    beside them as saved-for-later, its file untouched. Project-backlog
+    decisions have no source here and are never implied."""
     items = []
     for c in library.load_crossings():
         if c.get("kind") == "claim" and c.get("support") == "unruled" and not c.get("retracted"):
@@ -2921,18 +2931,27 @@ def _home_pending() -> dict:
     if ks.get("active") and ks.get("unruled"):
         items.append({"source": "keeper", "id": "keeper", "label": f"{ks['unruled']} Keeper entr{'y' if ks['unruled'] == 1 else 'ies'} awaiting your ruling",
                       "when": "", "open": {"type": "keeper"}})
-    queue = [r for r in _read_jsonl(cli.LOCAL_STATE / "recovery_review_queue.jsonl")
-             if r.get("status") == "needs_owner_ruling"]
-    if queue:
-        items.append({"source": "recovery_review", "id": "recovery_review",
-                      "label": f"{len(queue)} accepted-but-absent concept{'s' if len(queue) != 1 else ''}, receipt-only — Accept, Reject, or Revise each",
-                      "when": max(r.get("queued_at", "") for r in queue), "open": {"type": "recovery_review"}})
     items.sort(key=lambda x: x.get("when", ""), reverse=True)
+    for it in items:
+        # structural, not stylistic: nothing without a door is a ruling due
+        assert it.get("open", {}).get("type") in HOME_RULING_DOORS, f"a ruling with no surface: {it.get('source')}"
     counts = {}
     for it in items:
         counts[it["source"]] = counts.get(it["source"], 0) + 1
+    # Saved for later: read, counted, never rewritten, never a task. The
+    # queue stays the record until the review surface exists.
+    saved = []
+    queue = [r for r in _read_jsonl(cli.LOCAL_STATE / "recovery_review_queue.jsonl")
+             if r.get("status") == "needs_owner_ruling"]
+    if queue:
+        saved.append({"source": "recovery_review", "count": len(queue),
+                      "label": f"{len(queue)} accepted-but-absent concept{'s' if len(queue) != 1 else ''}, receipt-only",
+                      "titles": [str(r.get("title", ""))[:60] for r in queue[:8]],
+                      "when": max(r.get("queued_at", "") for r in queue),
+                      "why": "the queue keeps them; their review is a ruled step with no page yet"})
     return {"total": len(items), "counts": counts, "items": items[:12],
-            "sources": ["claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"],
+            "sources": ["claim", "media_claim", "clinic_disagreement", "keeper"],
+            "saved": saved, "saved_sources": ["recovery_review"],
             "note": "Only what the record can count. Decisions that live in the backlog are not here."}
 
 
