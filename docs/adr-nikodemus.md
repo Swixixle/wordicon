@@ -195,7 +195,7 @@ file's text), a row of destinations appears under it. The server reads
 the words' shape mechanically — a question, a name beside a date and a
 place, a single word, a short phrase, a passage, a statement — with no
 model and no write, and returns the destinations that shape offers with
-exactly one highlighted: Research this question, Search my record,
+exactly one highlighted: Research outside Nikodemus, Search my record,
 Develop the idea, Start a Room, Write from this, Save as an open
 question; for a name with a date, Study the name, Create a private
 portrait, Save owner-declared facts, and the rest. The highlight is a
@@ -214,6 +214,17 @@ words, and a new small object — an **open question**, kept verbatim
 with how it arrived, in the Library under its own card, counted on
 Home in a quiet line that is not a ruling due; withdrawing one appends
 a status and rewrites nothing.
+
+**Two boundaries the reviewer asked to see pinned (block 105b).**
+Typing words and displaying destinations makes no model call and
+writes nothing to the record — proven for the cats sentence and for an
+identity-shaped input alike, with the gateway poisoned and the store
+hashed before and after, in the suite and in the quiet browser journey
+(the draft persists only in the browser's own storage). And the local
+search is labeled as what it is — *Search my record*, exact text, never
+the web — while the outward door is labeled *Research outside
+Nikodemus* and marked not built, so the cats question can never mistake
+a corpus search for internet research.
 
 **Provenance.** `spoken` joins the input vocabulary before any
 microphone exists, so the chooser is held from the first day to the

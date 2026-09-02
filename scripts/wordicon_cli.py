@@ -1804,9 +1804,13 @@ INPUT_PROVENANCE = ("typed", "attached", "spoken", "door", "connector", "unstate
 # No model reads the words here, and nothing below writes.
 
 DESTINATIONS = (
-    {"id": "research", "label": "Research this question", "built": False,
-     "sub": "sources found and read, each claim placed and cited",
-     "why_unbuilt": "the research record is not built yet — save the question and it waits, findable, in the Library"},
+    # "Research outside Nikodemus" (the reviewer's wording, block 105b): a
+    # question sent OUT — to sources beyond the record — is a different act
+    # from searching the record, and the label must never let a local,
+    # exact-text search pass for internet research.
+    {"id": "research", "label": "Research outside Nikodemus", "built": False,
+     "sub": "sources beyond your record — found, read, each claim placed and cited",
+     "why_unbuilt": "not built yet — save the question and it waits, findable, in the Library. Search my record is the local exact-text search, not this"},
     {"id": "search", "label": "Search my record", "built": True,
      "sub": "exact text, in the shelf and the library — never the web"},
     {"id": "develop", "label": "Develop the idea", "built": True,

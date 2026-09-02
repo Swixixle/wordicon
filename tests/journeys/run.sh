@@ -67,7 +67,7 @@ done
 grep -q "^ok   anatomy: no request left the scratch origin" "$JOURNEY_OUT/anatomy.log" || { echo "== anatomy: the off-origin guard did not run"; status=1; }
 grep -q "^ok   dormant after" "$JOURNEY_OUT/anatomy.log" || { echo "== anatomy: the stillness check did not run"; status=1; }
 # block 104: the switch and the unresolved case must have been exercised
-for need in "browsing with recording off posted nothing" "About says recording is off by default"; do
+for need in "browsing with recording off posted nothing" "About says recording is off by default" "an identity-shaped input is read and shown with the studies unbuilt"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/quiet.log" || { echo "== quiet: missing check: $need"; status=1; }
 done
 for need in "nothing was posted to /api/jobs by typing" "Research is highlighted and unbuilt" "the question is kept verbatim with its arrival" "choosing Develop reveals Run it" "a lone word highlights Develop without choosing it"; do

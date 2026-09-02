@@ -14059,8 +14059,16 @@ console.log(out.join('\\n'));
                 _f105("the route gives typed and spoken different destinations")
             if _c105.post("/api/destinations", json={"text": "   "}).status_code != 400:
                 _f105("empty words were read")
+            # the identity-shaped input, especially: read with the gateway poisoned, nothing written
+            _ri = _c105.post("/api/destinations", json={"text": _ident, "provenance": "typed"})
+            if _ri.status_code != 200 or (_ri.get_json() or {}).get("shape") != "identity":
+                _f105("the identity-shaped input was not read (or reached the gateway)")
             if _digest105(cli.LOCAL_STATE) != _dg0:
                 _f105("reading the words' shape wrote to the store")
+            _lab = {d["id"]: d for d in cli.DESTINATIONS}
+            if _lab["research"]["label"] != "Research outside Nikodemus" or _lab["search"]["label"] != "Search my record" \
+                    or "never the web" not in _lab["search"]["sub"] or "Search my record is the local exact-text search, not this" not in _lab["research"]["why_unbuilt"]:
+                _f105("the local search and the outward research are not labeled apart")
             _un = server.app.test_client().post("/api/destinations", json={"text": _cats})
             if _un.status_code == 200 and "destinations" in (_un.get_json() or {}):
                 _f105("/api/destinations answers an unpaired visitor")
@@ -14155,6 +14163,7 @@ console.log(out.join('\\n'));
                   'id="ruling-questions" class="quiet-line" hidden', "function renderOpenQuestions(q)", "renderOpenQuestions(p.open_questions || null)",
                   'id="questions-head"', 'id="questions-list"', "async function loadOpenQuestions()", "async function withdrawQuestion(id)",
                   "if (focusId === 'questions')", "Words go where you send them.", "it never chooses. Nothing runs until you choose",
+                  "Reading the shape asks no model and writes nothing", "Search my record is exact text in your own record, never\n      the web",
                   "changes nothing about where they may go", "scheduleDestinations();   // block 105: an attached file's text"):
         if _need not in _idx105:
             _f105(f"the page lost {_need[:48]!r}")
@@ -14164,7 +14173,8 @@ console.log(out.join('\\n'));
     if "v1.3.5" not in (_root105 / "docs" / "CHANGELOG.md").read_text(encoding="utf-8"):
         _f105("the changelog has no v1.3.5")
     _adr105 = (_root105 / "docs" / "adr-nikodemus.md").read_text(encoding="utf-8")
-    for _need in ("Amendment (block 105)", "destination chooser", "nothing runs until the owner chooses", "unbuilt", "open question", "spoken"):
+    for _need in ("Amendment (block 105)", "destination chooser", "nothing runs until the owner chooses", "unbuilt", "open question", "spoken",
+                  "Research outside\nNikodemus", "makes no model call and\nwrites nothing to the record"):
         if _need not in _adr105:
             _f105(f"the ADR amendment does not say {_need!r}")
 

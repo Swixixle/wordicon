@@ -5,7 +5,7 @@
 Block 105 (`docs/adr-nikodemus.md`, amendment). Words brought into Home
 now go where the owner sends them: a mechanical, zero-model reading of
 their shape highlights one destination and the owner's click summons a
-lane — Research this question, Search my record, Develop the idea,
+lane — Research outside Nikodemus, Search my record, Develop the idea,
 Start a Room, Write from this, Save as an open question, and for a name
 with a date, Study the name / Create a private portrait / Save
 owner-declared facts. Nothing runs until the owner chooses; Run it /

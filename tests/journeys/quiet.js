@@ -35,7 +35,16 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
   await page.goBack(); await page.waitForTimeout(400);
   await page.click('#continue-area .cont[data-id="concept_fix00000001"] .resume a'); await page.waitForTimeout(900);
   await page.goBack(); await page.waitForTimeout(400);
-  ok(posts.length === 0, 'browsing with recording off posted nothing: ' + JSON.stringify(posts));
+  // block 105b: words typed and destinations displayed — an identity-shaped input especially — write nothing (run.sh hashes the store around this whole journey)
+  await page.fill('#input-text', 'Rowan Ashby Pell, born 1985-04-11 at 3 p.m. in Duluth, Minnesota'); await page.dispatchEvent('#input-text', 'input'); await page.waitForTimeout(900);
+  const ident = await page.evaluate(() => ({ row: document.getElementById('destination-row').hidden, reading: document.getElementById('destination-reading').textContent.replace(/\s+/g, ' '), chips: Array.from(document.querySelectorAll('#destination-chips .dest')).map(b => b.dataset.dest + (b.disabled ? '!' : '')) }));
+  ok(!ident.row && /Reads as a name with a date and a place/.test(ident.reading) && ident.chips.join(',') === 'name_study!,portrait!,owner_facts!,write,search,develop', 'an identity-shaped input is read and shown with the studies unbuilt: ' + ident.chips.join(','));
+  await page.fill('#input-text', 'I would like to know about the historical superstitions involving cats.'); await page.dispatchEvent('#input-text', 'input'); await page.waitForTimeout(900);
+  const catsRow = await page.evaluate(() => Array.from(document.querySelectorAll('#destination-chips .dest')).map(b => b.dataset.dest + (b.classList.contains('suggested') ? '*' : '') + (b.disabled ? '!' : '')).join(','));
+  ok(catsRow === 'research*!,search,develop,room,write,question', 'the cats sentence is read with Research outside Nikodemus highlighted and unbuilt: ' + catsRow);
+  await page.fill('#input-text', ''); await page.dispatchEvent('#input-text', 'input'); await page.waitForTimeout(500);
+  const readsOnly = posts.filter(p => p !== 'POST /api/destinations');
+  ok(readsOnly.length === 0, 'browsing with recording off posted nothing: ' + JSON.stringify(readsOnly) + ' (reads of the words\' shape: ' + posts.length + ')');
   // the other pages
   await page.goto(BASE + '/anatomy'); await page.waitForTimeout(800);
   await page.goto(BASE + '/recovery'); await page.waitForTimeout(1000);
@@ -43,7 +52,7 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
   ok(rec.cases === 2 && rec.unresolved === '', 'the review lists the two open cases and no unresolved section');
   const enc = await (await page.request.get(BASE + '/api/encounters')).json();
   ok(enc.total === 0 && enc.switch && enc.switch.on === false && enc.switch.flips === 0, 'the raw log is empty and the switch has never flipped');
-  ok(posts.length === 0, 'nothing was posted by the whole quiet journey: ' + JSON.stringify(posts));
+  ok(posts.filter(p => p !== 'POST /api/destinations').length === 0, 'nothing but shape readings was posted by the whole quiet journey: ' + JSON.stringify(posts.filter(p => p !== 'POST /api/destinations')));
   await ctx.close();
   await browser.close();
   finish('quiet');
