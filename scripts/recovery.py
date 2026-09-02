@@ -122,7 +122,10 @@ def case_evidence(row: dict) -> dict:
             "n_rejections": len(receipt.get("rejections") or []),
             "engine_version": receipt.get("engine_version", ""),
             "kernel_version": receipt.get("kernel_version", ""),
-            "model_calls": receipt.get("model_calls", ""),
+            # model_calls is the receipt's list of gateway descriptors, not a
+            # count: shown as recorded — which gateway, external or not
+            "gateways": [f"{m.get('gateway', '?')}{' (external)' if m.get('is_external') else ''}"
+                         for m in (receipt.get("model_calls") or []) if isinstance(m, dict)],
             "input_hash": receipt.get("input_hash", ""),
         },
         "survives": {

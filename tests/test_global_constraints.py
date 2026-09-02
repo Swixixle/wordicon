@@ -13248,7 +13248,8 @@ console.log(out.join('\\n'));
             (cli.RECEIPTS_DIR / f"receipt_{_tr}.json").write_text(_json103.dumps({
                 "trace_id": _tr, "receipt_id": "rcpt_" + _tr, "operation": "forge", "created_at": "2026-08-24T10:00:00+00:00",
                 "candidates": [{"title": _t}, {"title": "Sibling One"}, {"title": "Sibling Two"}], "sources": [{"id": "s1"}],
-                "rejections": [], "engine_version": "cli-0.2.0", "kernel_version": 1, "model_calls": 4, "input_hash": "h"}))
+                "rejections": [], "engine_version": "cli-0.2.0", "kernel_version": 1,
+                "model_calls": [{"gateway": "anthropic", "is_external": True}], "input_hash": "h"}))
     _q103.write_text("".join(_json103.dumps({"title": _t, "trace": _tr, "judgment_id": _jid, "status": "needs_owner_ruling",
                                              "note": "accepted; no lexicon entry; no results snapshot survives — needs owner ruling",
                                              "queued_at": "2026-09-01T00:00:00Z"}) + "\n" for _t, _tr, _jid in _cases))
@@ -13274,8 +13275,10 @@ console.log(out.join('\\n'));
         if not (_ca.get("acceptance") or {}).get("found") or (_ca.get("acceptance") or {}).get("has_clock") is not False:
             _f103("a case does not show its acceptance, or claims a clock the row never had")
         if not (_ca.get("receipt") or {}).get("found") or (_ca.get("receipt") or {}).get("candidate_titles") != ["Armory Stasis 103", "Sibling One", "Sibling Two"] \
-                or (_ca.get("receipt") or {}).get("n_sources") != 1:
+                or (_ca.get("receipt") or {}).get("n_sources") != 1 or (_ca.get("receipt") or {}).get("gateways") != ["anthropic (external)"]:
             _f103(f"a case does not show its receipt as the record holds it: {_ca.get('receipt')}")
+        if "model call(s)" in _rec_page or "[object Object]" in _rec_page or "r.gateways" not in _rec_page:
+            _f103("the review page counts the receipt's gateway list as a number")
         if (_ca.get("survives") or {}).get("definition") is not False or (_ca.get("survives") or {}).get("result_snapshot") is not False \
                 or "definition" not in " ".join(_ca.get("unknowable") or []) or "definition" not in " ".join(_ca.get("owner_must_supply") or []):
             _f103("a case does not say plainly that no definition survives and that the owner must supply one")
@@ -13437,7 +13440,7 @@ console.log(out.join('\\n'));
                       "a definition from you is required", "The queue is never rewritten", "__BRAND_NAME__"):
             if _need not in _rec_page:
                 _f103(f"the review page lost {_need[:40]!r}")
-        for _bad in ("/api/config", "gateway", "regenerate", "propose"):
+        for _bad in ("/api/config", "/api/jobs", "regenerate", "propose"):
             if _bad in _rec_page.lower():
                 _f103(f"the review page reaches for {_bad!r}")
         if _rec_page.lower().count("suggest") != _rec_page.lower().count("nothing is suggested") + _rec_page.lower().count("none is suggested"):
@@ -13447,7 +13450,7 @@ console.log(out.join('\\n'));
         if "queue_path().open(" in _rsrc or "queue_path().write" in _rsrc or "def rule(" not in _rsrc or "_mint_concept_id" not in _rsrc \
                 or "uuid.uuid4().hex[:12]" not in _rsrc or "persist_accepted_concept(" not in _rsrc:
             _f103("recovery.py writes the queue, or does not mint identities the ruled way")
-        for _bad in ("gateway", ".complete(", "generate("):
+        for _bad in ("server_gateway", "Gateway(", ".complete(", "generate(", "build_generation_prompt"):
             if _bad in _rsrc:
                 _f103(f"recovery.py reaches for {_bad!r}")
         # the schema carries the new optional fields; nothing loosened; the clock is not required of legacy rows

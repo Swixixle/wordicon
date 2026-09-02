@@ -94,7 +94,8 @@ def seed_entrance():
             (cli.RECEIPTS_DIR / f"receipt_{tr}.json").write_text(json.dumps({
                 "trace_id": tr, "receipt_id": "rcpt_" + tr, "operation": "forge", "created_at": stamp(9),
                 "candidates": [{"title": t}, {"title": "Sibling A"}, {"title": "Sibling B"}], "sources": [{"id": "s1"}, {"id": "s2"}],
-                "rejections": [], "engine_version": "cli-0.2.0", "kernel_version": 1, "model_calls": 4, "input_hash": "fixture"}))
+                "rejections": [], "engine_version": "cli-0.2.0", "kernel_version": 1,
+                "model_calls": [{"gateway": "anthropic", "is_external": True}], "input_hash": "fixture"}))
             with open(cli.LOCAL_STATE / "recovery_review_queue.jsonl", "a") as f:
                 f.write(json.dumps({"title": t, "trace": tr, "judgment_id": jid, "status": "needs_owner_ruling",
                                     "note": "accepted; no lexicon entry; no results snapshot survives — needs owner ruling",

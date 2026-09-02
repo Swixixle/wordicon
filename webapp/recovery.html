@@ -85,7 +85,7 @@ function caseHtml(c, i) {
     <div class="four">
       <div><div class="k">Preserved</div><ul>
         <li>the acceptance: <span class="${a.found ? 'present' : 'absent'}">${a.found ? esc(a.decision || 'accepted') : 'judgment row not found'}</span>${a.owner_note ? ' — your note: “' + esc(a.owner_note) + '”' : ''}${a.found && !a.has_clock ? ' <span class="muted">(no clock — rows of that time carried none)</span>' : ''}</li>
-        <li>the receipt: <span class="${r.found ? 'present' : 'absent'}">${r.found ? 'found' : 'not found'}</span>${r.found ? ` — ${esc(r.operation || 'run')} · ${esc(when(r.created_at))} · ${r.n_sources} admitted source(s) · ${esc(String(r.model_calls === '' ? '?' : r.model_calls))} model call(s) · engine ${esc(r.engine_version || '?')}` : ''}</li>
+        <li>the receipt: <span class="${r.found ? 'present' : 'absent'}">${r.found ? 'found' : 'not found'}</span>${r.found ? ` — ${esc(r.operation || 'run')} · ${esc(when(r.created_at))} · ${r.n_sources} admitted source(s) · via ${(r.gateways || []).length ? r.gateways.map(esc).join(', ') : 'a gateway the receipt does not name'} · engine ${esc(r.engine_version || '?')}` : ''}</li>
         ${r.found && r.candidate_titles && r.candidate_titles.length ? `<li>the run's candidate titles: ${r.candidate_titles.map(esc).join(' · ')}</li>` : ''}
         <li>trace <code>${esc(c.trace)}</code>${r.receipt_id ? ` · receipt <code>${esc(r.receipt_id)}</code>` : ''}</li>
       </ul></div>
