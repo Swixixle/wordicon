@@ -66,12 +66,14 @@
   takes a corrected title and/or definition the same way. <strong>Reject</strong> is a rejection.
   <strong>Leave unresolved</strong> records that not enough survives to accept or reject — the old
   acceptance stands in history, nothing enters the shelf, and the case leaves this queue; you never
-  invent a definition merely to clear it. Every ruling is a new judgment event citing the old acceptance and its receipt, with its own clock
+  invent a definition merely to clear it. An unresolved case stays findable below and can be reopened
+  by a later ruling that cites it. Every ruling is a new judgment event citing the old acceptance and its receipt, with its own clock
   and epoch. The queue is never rewritten; when all six are ruled, this page and Home's band empty
   through the record.</p>
 </div>
 
 <div id="cases"><div class="card"><p class="body muted">Reading the record…</p></div></div>
+<div id="unresolved"></div>
 <div id="ruled"></div>
 
 <script>
@@ -79,11 +81,12 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'
 async function readJson(r) { const d = await r.json(); if (!r.ok && !d.error) d.error = 'request failed (' + r.status + ')'; return d; }
 function when(t) { if (!t) return ''; try { return new Date(t).toLocaleString(); } catch (e) { return t; } }
 
-function caseHtml(c, i) {
+function caseHtml(c, i, reopen) {
   const r = c.receipt || {}, a = c.acceptance || {}, s = c.survives || {};
-  const id = 'case_' + i;
-  return `<div class="card" id="${id}" data-queue-id="${esc(c.queue_judgment_id)}">
-    <div class="section-label">Case ${i + 1} · queued ${esc(when(c.queued_at))}</div>
+  const id = (reopen ? 'unres_' : 'case_') + i;
+  const ur = c.unresolved_ruling || {};
+  return `<div class="card${reopen ? ' ruled unresolved' : ''}" id="${id}" data-queue-id="${esc(c.queue_judgment_id)}">
+    <div class="section-label">${reopen ? 'Unresolved' : 'Case ' + (i + 1)} · queued ${esc(when(c.queued_at))}${reopen ? ' · ruled unresolved ' + esc(when(ur.ruled_at)) + (ur.note ? ' — “' + esc(ur.note) + '”' : '') : ''}</div>
     <div class="title">${esc(c.title)}</div>
     <p class="foot">${esc(c.queue_note || '')}</p>
     <div class="four">
@@ -108,7 +111,7 @@ function caseHtml(c, i) {
       <button onclick="rule('${id}','accept')">Accept</button>
       <button onclick="rule('${id}','revise')">Revise</button>
       <button class="reject" onclick="rule('${id}','reject')">Reject</button>
-      <button class="unresolved" onclick="rule('${id}','unresolved')" title="not enough survives to accept or reject — the old acceptance stands in history; nothing enters the shelf">Not enough survives — leave unresolved</button>
+      ${reopen ? `<span class="foot">reopening appends a ruling that cites the unresolved one; nothing is rewritten</span>` : `<button class="unresolved" onclick="rule('${id}','unresolved')" title="not enough survives to accept or reject — the old acceptance stands in history; nothing enters the shelf">Not enough survives — leave unresolved</button>`}
       <span class="error" id="${id}_err"></span>
     </div>
   </div>`;
@@ -118,7 +121,7 @@ function ruledHtml(r) {
   return `<div class="card ruled ${esc(r.decision === 'reject' ? 'rejected' : (r.decision === 'unresolved' ? 'unresolved' : ''))}">
     <div class="section-label">Ruled · ${esc(when(r.ruled_at))} · ${esc(r.epoch || '')}</div>
     <div class="title">${esc(r.title)}${r.kept_title && r.kept_title !== r.title ? ' → ' + esc(r.kept_title) : ''}</div>
-    <p class="body" style="font-size:13px">${esc(r.decision)}${r.note ? ' — ' + esc(r.note) : ''} · concept <code>${esc(r.concept_id)}</code> · ${(r.judgment_ids || []).length} judgment event(s)${r.shelf_entry_added ? ' · on the shelf' : ''}</p>
+    <p class="body" style="font-size:13px">${esc(r.decision)}${r.note ? ' — ' + esc(r.note) : ''} · concept <code>${esc(r.concept_id)}</code> · ${(r.judgment_ids || []).length} judgment event(s)${r.shelf_entry_added ? ' · on the shelf' : ''}${r.reopens ? ' · reopens <code>' + esc(r.reopens) + '</code>' : ''}</p>
   </div>`;
 }
 
@@ -129,8 +132,12 @@ async function load() {
   document.getElementById('epoch-line').textContent = 'epoch: ' + (d.epoch || 'undeclared');
   const open = d.open || [];
   document.getElementById('cases').innerHTML = open.length
-    ? `<div class="section-label" style="margin:14px 0 4px">${open.length} awaiting your ruling · of ${d.queue_total} queued</div>` + open.map(caseHtml).join('')
+    ? `<div class="section-label" style="margin:14px 0 4px">${open.length} awaiting your ruling · of ${d.queue_total} queued</div>` + open.map((c, i) => caseHtml(c, i, false)).join('')
     : `<div class="card"><p class="body">Nothing awaits your ruling here. ${d.ruled_count ? d.ruled_count + ' case(s) ruled — below.' : 'The queue is empty.'}</p></div>`;
+  const unresolved = d.unresolved || [];
+  document.getElementById('unresolved').innerHTML = unresolved.length
+    ? `<div class="section-label" style="margin:18px 0 4px">${unresolved.length} unresolved — reopenable</div><p class="foot">Ruled “not enough survives”. Not due; kept findable here. A later Accept, Revise or Reject appends a ruling citing the unresolved one.</p>` + unresolved.map((c, i) => caseHtml(c, i, true)).join('')
+    : '';
   const ruled = d.ruled || [];
   document.getElementById('ruled').innerHTML = ruled.length ? `<div class="section-label" style="margin:18px 0 4px">Ruled</div>` + ruled.slice().reverse().map(ruledHtml).join('') : '';
 }

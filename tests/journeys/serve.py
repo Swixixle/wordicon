@@ -16,7 +16,8 @@ PORT = int(os.environ.get("JOURNEY_PORT", "8499"))
 
 import wordicon_cli as cli  # noqa: E402
 REDIRECT = ("JUDGMENTS_LOG", "RECEIPTS_DIR", "RESULTS_DIR", "ACCEPTED_CONCEPTS_PATH", "EDGES_LOG", "WARPS_LOG",
-            "WARP_NOTES_LOG", "BENCH_CORRECTIONS", "CONCEPT_NAMES_LOG", "BENCH_DIR", "INPUTS_LOG", "WAYFINDER_LOG")
+            "WARP_NOTES_LOG", "BENCH_CORRECTIONS", "CONCEPT_NAMES_LOG", "BENCH_DIR", "INPUTS_LOG", "WAYFINDER_LOG",
+            "DEFINITION_EVENTS_LOG", "ENCOUNTER_SWITCH_LOG", "ENCOUNTERS_LOG")   # block 104
 STATE.mkdir(parents=True, exist_ok=True)
 for _n in REDIRECT:
     setattr(cli, _n, STATE / str(getattr(cli, _n)).split("/")[-1])

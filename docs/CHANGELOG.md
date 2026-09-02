@@ -1,5 +1,30 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.3.4 — the record primitives (measuring instruments before ordinary use)
+
+Block 104, held for inspection (`docs/adr-record-primitives.md`).
+Every receipt names the prompt templates behind it — stage, template
+hash from the builder's own source, renderer revision, model, settings
+— never the assembled prompt and never a hash of private text; every
+`build_*_prompt` is registered and ledgered. Every new edge on the Map
+carries an origin (`mechanical`, `owner_declared`, `model_proposed`,
+`imported`) and cites the receipt, judgment or declaration that
+produced it; rows written before this read as `legacy_unknown` and are
+not rewritten. Every shelf write is first a definition event
+(`definition_events.jsonl`: exact definition, concept, time, origin,
+judgment, what it supersedes); the shelf is a checked projection, and
+`scripts/shelf_projection.py --baseline` gives older entries one
+labeled baseline, reconstructing the Recovery Review's acceptances
+mechanically from their rulings. Deep and decompose runs write
+schema-validated receipts (`operation` deep / decompose, a `composite`
+block naming the component runs) and a deep run reopens from its
+receipt alone. Encounter recording exists behind an owner switch,
+visibly off by default: nothing is written while off, ids and event
+types only when on, and each flip is itself recorded. An unresolved
+Recovery Review case stays findable and reopenable by a later ruling
+that cites it. `scripts/record_smoke.py` reports all of it, read-only.
+No Observatory, trend, convergence, chooser or Portrait work.
+
 ## v1.3.3 — the Recovery Review, and the record's clocks
 
 The six receipt-only acceptances of v1.2.3 have their surface

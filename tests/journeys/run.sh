@@ -44,13 +44,21 @@ done
 [ -f "$JOURNEY_DIR/token" ] || { echo "FAIL no session was minted"; cat "$JOURNEY_OUT/server.log"; exit 2; }
 
 status=0
-for j in home anatomy; do
+# block 104: the store's bytes before and after the quiet journey — browsing
+# with encounter recording off must leave the store byte-identical
+digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
+for j in quiet home anatomy encounter; do
   echo "== journey: $j"
+  if [ "$j" = quiet ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
   rc=$?
   cat "$JOURNEY_OUT/$j.log"
   if [ $rc -ne 0 ]; then echo "== $j: FAILED (exit $rc)"; status=1; fi
   if ! grep -q "^JOURNEY $j OK" "$JOURNEY_OUT/$j.log"; then echo "== $j: did not reach its final line — not a pass"; status=1; fi
+  if [ "$j" = quiet ]; then
+    after=$(digest)
+    if [ -z "$before" ] || [ "$before" != "$after" ]; then echo "== quiet: the store changed while browsing with recording off ($before -> $after)"; status=1; else echo "ok   quiet: the store is byte-identical after browsing ($before)"; fi
+  fi
 done
 # the writing-room identity checks must have run (a journey that skipped them is not a pass)
 for need in "split: same room element" "swap: same room element" "full page: same room element" "undo history survived" "home: no request left the scratch origin"; do
@@ -58,6 +66,13 @@ for need in "split: same room element" "swap: same room element" "full page: sam
 done
 grep -q "^ok   anatomy: no request left the scratch origin" "$JOURNEY_OUT/anatomy.log" || { echo "== anatomy: the off-origin guard did not run"; status=1; }
 grep -q "^ok   dormant after" "$JOURNEY_OUT/anatomy.log" || { echo "== anatomy: the stillness check did not run"; status=1; }
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log | awk '{s+=$2} END {print s+0}')
+# block 104: the switch and the unresolved case must have been exercised
+for need in "browsing with recording off posted nothing" "About says recording is off by default"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/quiet.log" || { echo "== quiet: missing check: $need"; status=1; }
+done
+for need in "the switch is on and the flip is the first row" "opening the bridged entry recorded one owner_opened row" "turning off is a confirmed action and the second recorded flip" "Home paints the quiet Unresolved line" "the reopened ruling is recorded, on the shelf, citing the unresolved ruling"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/encounter.log" || { echo "== encounter: missing check: $need"; status=1; }
+done
+total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/encounter.log | awk '{s+=$2} END {print s+0}')
 echo "== journeys: $total checks, exit $status"
 exit $status

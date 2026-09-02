@@ -27,7 +27,8 @@
         "judgment_id": { "type": "string" },
         "receipt_id": { "type": "string" },
         "trace_id": { "type": "string" },
-        "queue": { "type": "string" }
+        "queue": { "type": "string" },
+        "prior_ruling_id": { "type": "string", "description": "block 104: the unresolved ruling this ruling reopens" }
       }
     }
   }

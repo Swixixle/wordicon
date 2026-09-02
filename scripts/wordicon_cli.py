@@ -29,7 +29,10 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import difflib
+import functools
 import hashlib
+import inspect
+import threading
 import uuid
 import json
 import os
@@ -94,6 +97,16 @@ INPUTS_LOG = LOCAL_STATE / "inputs.jsonl"
 # true or not), it was always about the CLAIM that Borges parallels this
 # concept, so it lives on the edge, not the node.
 EDGES_LOG = LOCAL_STATE / "edges.jsonl"
+# The record primitives of block 104 (docs/adr-record-primitives.md).
+# Definition events: every definition the shelf ever held, as an
+# append-only event that names the exact definition, the concept, the
+# time, the origin and what it supersedes — so the shelf is a projection
+# that can be rebuilt and checked, not the only copy. Encounters: what the
+# owner met and did with the record, recorded ONLY while the owner's
+# switch is on; the switch's own flips are the first rows written.
+DEFINITION_EVENTS_LOG = LOCAL_STATE / "definition_events.jsonl"
+ENCOUNTER_SWITCH_LOG = LOCAL_STATE / "encounter_switch.jsonl"
+ENCOUNTERS_LOG = LOCAL_STATE / "encounters.jsonl"
 # Every Wayfinder act — find, select, propose, ratify, discard, declare,
 # analyze — appended as it happens. Raw behavioral record, kept because the
 # owner wants the evidence of how he actually travels his corpus, not a
@@ -912,6 +925,114 @@ def _load(path: Path):
     return json.loads(path.read_text())
 
 
+# ---- definition events: the shelf as a projection (block 104) -------------
+#
+# accepted_concepts.json was the only copy of every definition: written in
+# place, rewritten on retraction, no history. From block 104 every change
+# to it is FIRST an appended event naming the exact definition, the
+# concept, the time, the origin and what it supersedes; the file is what
+# readers consult, the events are what it can be rebuilt from, and
+# shelf_projection_check() says whether the two agree. Older entries get
+# one clearly labeled baseline snapshot (scripts/shelf_projection.py
+# --baseline), never a history invented for them.
+
+DEFINITION_EVENT_KINDS = ("defined", "retracted")
+DEFINITION_EVENT_ORIGINS = ("run", "bench", "recovery_review", "retraction",
+                            "baseline_snapshot", "reconstructed_recovery")
+
+
+def load_definition_events() -> "list[dict]":
+    if not DEFINITION_EVENTS_LOG.exists():
+        return []
+    out = []
+    for line in DEFINITION_EVENTS_LOG.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("kind") in DEFINITION_EVENT_KINDS:
+            out.append(row)
+    return out
+
+
+def latest_definition_event(entry_id: str) -> dict:
+    last = {}
+    for ev in load_definition_events():
+        if ev.get("entry_id") == entry_id:
+            last = ev
+    return last
+
+
+def record_definition_event(kind: str, entry: dict, origin: str, judgment_id: str = "",
+                            note: str = "", at: str = "", extra: dict | None = None) -> dict:
+    """Append one event. `entry` is the shelf row exactly as written (or,
+    for a retraction, as it was before removal); the event carries the
+    exact definition at top level so the history reads without opening
+    the entry. `supersedes` is found mechanically: the latest earlier
+    event for the same entry id. Refuses an origin outside the declared
+    set — an event with an invented origin is worse than none."""
+    if kind not in DEFINITION_EVENT_KINDS:
+        raise ValueError("a definition event is 'defined' or 'retracted'")
+    if origin not in DEFINITION_EVENT_ORIGINS:
+        raise ValueError(f"unknown definition-event origin {origin!r}")
+    entry = dict(entry or {})
+    entry_id = (entry.get("id") or "").strip()
+    if not entry_id:
+        raise ValueError("a definition event needs the shelf entry's own id")
+    prior = latest_definition_event(entry_id)
+    row = {"event_id": "defev_" + uuid.uuid4().hex[:12], "kind": kind,
+           "entry_id": entry_id, "concept_id": entry.get("concept_id") or "",
+           "title": entry.get("name") or "",
+           "definition": (entry.get("definition") or "") if kind == "defined" else "",
+           "at": at or _now(), "origin": origin, "judgment_id": judgment_id or "",
+           "supersedes": prior.get("event_id") or "", "epoch": current_epoch(),
+           "note": (note or "")[:300],
+           "entry": entry if kind == "defined" else None}
+    for k, v in (extra or {}).items():
+        row.setdefault(k, v)
+    LOCAL_STATE.mkdir(exist_ok=True)
+    with DEFINITION_EVENTS_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return row
+
+
+def rebuild_shelf_from_events() -> "list[dict]":
+    """The projection: replay the events; a 'defined' puts the entry as
+    written, a 'retracted' removes it. Order is first-defined order."""
+    state: dict[str, dict] = {}
+    for ev in load_definition_events():
+        eid = ev.get("entry_id") or ""
+        if ev.get("kind") == "defined" and isinstance(ev.get("entry"), dict):
+            state[eid] = ev["entry"]
+        elif ev.get("kind") == "retracted":
+            state.pop(eid, None)
+    return list(state.values())
+
+
+def shelf_projection_check() -> dict:
+    """Does the shelf file equal what the events rebuild? Compared by entry
+    id, and per entry by name, definition and concept_id. Reports, never
+    repairs: a disagreement is a finding for the owner."""
+    file_rows = _load(ACCEPTED_CONCEPTS_PATH) if ACCEPTED_CONCEPTS_PATH.exists() else []
+    by_file = {(r.get("id") or ""): r for r in file_rows if r.get("id")}
+    by_ev = {(r.get("id") or ""): r for r in rebuild_shelf_from_events() if r.get("id")}
+    only_file = sorted(set(by_file) - set(by_ev))
+    only_events = sorted(set(by_ev) - set(by_file))
+    differ = []
+    for eid in sorted(set(by_file) & set(by_ev)):
+        a, b = by_file[eid], by_ev[eid]
+        for k in ("name", "definition", "concept_id"):
+            if (a.get(k) or "") != (b.get(k) or ""):
+                differ.append({"entry_id": eid, "field": k})
+    return {"matches": not (only_file or only_events or differ),
+            "file_entries": len(by_file), "projected_entries": len(by_ev),
+            "events": len(load_definition_events()),
+            "only_in_file": only_file, "only_in_events": only_events, "differ": differ}
+
+
 # ---- seed corpus: small and static, per "if retrieval isn't ready, use a
 # short static Personality Kernel + a few Derived Constraints" -----------
 
@@ -954,7 +1075,8 @@ def latest_decisions() -> dict:
     return out
 
 
-def retract_accepted_concept(title: str, concept_id: str = "") -> bool:
+def retract_accepted_concept(title: str, concept_id: str = "",
+                             judgment_id: str = "", note: str = "") -> bool:
     """The inverse of persist_accepted_concept, which had none.
 
     Without this, re-judging an accepted word as rejected wrote the new
@@ -987,6 +1109,17 @@ def retract_accepted_concept(title: str, concept_id: str = "") -> bool:
     if len(kept) == len(existing):
         return False
     ACCEPTED_CONCEPTS_PATH.write_text(json.dumps(kept, indent=2))
+    # block 104: the removal is an event too — what was taken off, when,
+    # citing the judgment that took it. Best-effort like every log write
+    # that rides behind a ruling already recorded.
+    kept_ids = {c.get("id") for c in kept}
+    for c in existing:
+        if c.get("id") not in kept_ids:
+            try:
+                record_definition_event("retracted", c, origin="retraction",
+                                        judgment_id=judgment_id, note=note)
+            except OSError:
+                pass
     return True
 
 
@@ -1391,7 +1524,8 @@ def persist_accepted_concept(title: str, definition: str, trace_id: str,
                                alias_of: str = "",
                                declined_alias: dict | None = None,
                                decline_reason: str = "",
-                               concept_id: str = "") -> bool:
+                               concept_id: str = "",
+                               origin: str = "run", judgment_id: str = "") -> bool:
     """Called when a judgment of 'accepted' is recorded.
 
     CONCEPT-FIRST IDENTITY (docs/adr-concept-first.md): when the caller
@@ -1469,6 +1603,13 @@ def persist_accepted_concept(title: str, definition: str, trace_id: str,
         "related_mechanisms": [], "version": 1,
     })
     ACCEPTED_CONCEPTS_PATH.write_text(json.dumps(existing, indent=2))
+    # block 104: the definition is an event before it is a row — exact
+    # text, concept, time, origin, what it supersedes. Best-effort: the
+    # shelf entry is already written and the ruling already recorded.
+    try:
+        record_definition_event("defined", existing[-1], origin=origin, judgment_id=judgment_id)
+    except OSError:
+        pass
     return True
 
 
@@ -1545,6 +1686,104 @@ def concept_display_names() -> "dict[str, dict]":
             slot["primary"] = row.get("form", "")
     for slot in out.values():
         slot["names"].sort(key=lambda r: r.get("at", ""))
+    return out
+
+
+# ---- encounters, behind the owner's switch (block 104) --------------------
+#
+# An encounter is what the owner met in the record and what he did with
+# it — an entry surfaced, opened, selected, reused, cited; a sprout or
+# refraction taken from it; a link he made or a proposal he took. Ids and
+# explicit event types only: no text is ever written here. Recording is
+# OFF until the owner turns it on, and while it is off nothing is
+# written — not a row, not a file. The switch's own flips are recorded,
+# so the record shows exactly when observation began and ended.
+
+ENCOUNTER_TYPES = ("system_surfaced", "owner_opened", "owner_selected", "owner_reused",
+                   "owner_cited", "sprouted_from", "refracted_from", "revised",
+                   "linked_by_owner", "linked_by_proposal", "exported")
+_ID_RX = re.compile(r"^[A-Za-z0-9_.:/@+-]{1,120}$")
+
+
+def _switch_rows() -> "list[dict]":
+    if not ENCOUNTER_SWITCH_LOG.exists():
+        return []
+    out = []
+    for line in ENCOUNTER_SWITCH_LOG.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("state") in ("on", "off"):
+            out.append(row)
+    return out
+
+
+def encounter_recording() -> dict:
+    """The switch as the record holds it: off by default, on only by the
+    latest owner flip. Reads only."""
+    rows = _switch_rows()
+    last = rows[-1] if rows else {}
+    return {"on": last.get("state") == "on", "since": last.get("at", ""),
+            "by": last.get("by", ""), "flips": len(rows),
+            "records": list(ENCOUNTER_TYPES), "payload": "ids and event types only — no text"}
+
+
+def set_encounter_recording(on: bool, by: str = "owner", note: str = "") -> dict:
+    """Flip the switch, appending the flip itself. A flip to the state
+    already in force changes nothing and writes nothing."""
+    state = encounter_recording()
+    if bool(on) == state["on"]:
+        return {"changed": False, "on": state["on"], "reason": f"recording is already {'on' if on else 'off'}"}
+    LOCAL_STATE.mkdir(exist_ok=True)
+    row = {"object_type": "encounter_switch", "state": "on" if on else "off", "at": _now(),
+           "by": (by or "owner")[:40], "note": (note or "")[:200], "epoch": current_epoch()}
+    with ENCOUNTER_SWITCH_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return {"changed": True, "on": bool(on), "at": row["at"]}
+
+
+def record_encounter(kind: str, subject: str, object_id: str = "", via: str = "",
+                     trace_id: str = "") -> dict:
+    """One encounter, if and only if the switch is on. Every field is an
+    id or a declared type; anything with whitespace or beyond 120 chars is
+    refused as text. Off: returns recorded=False and touches no file."""
+    if not encounter_recording()["on"]:
+        return {"recorded": False, "reason": "encounter recording is off — nothing was written"}
+    if kind not in ENCOUNTER_TYPES:
+        raise ValueError(f"unknown encounter type {kind!r}")
+    fields = {"subject": subject, "object": object_id, "via": via, "trace_id": trace_id}
+    if not (subject or "").strip():
+        raise ValueError("an encounter needs the id of what was encountered")
+    for k, v in fields.items():
+        if v and not _ID_RX.match(str(v)):
+            raise ValueError(f"{k} must be an id — no text is recorded here")
+    row = {"encounter_id": "enc_" + uuid.uuid4().hex[:12], "type": kind,
+           "subject": subject, "object": object_id or "", "via": via or "",
+           "trace_id": trace_id or "", "at": _now(), "epoch": current_epoch()}
+    LOCAL_STATE.mkdir(exist_ok=True)
+    with ENCOUNTERS_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return {"recorded": True, **row}
+
+
+def load_encounters() -> "list[dict]":
+    if not ENCOUNTERS_LOG.exists():
+        return []
+    out = []
+    for line in ENCOUNTERS_LOG.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("type") in ENCOUNTER_TYPES:
+            out.append(row)
     return out
 
 
@@ -2585,6 +2824,140 @@ def make_gateway(name: str, model: str | None) -> Gateway:
     raise SystemExit(f"unknown gateway {name!r}")
 
 
+# ---- prompt identity (block 104) --------------------------------------------
+#
+# What a receipt may say about the prompts behind it: the STAGE, the
+# TEMPLATE (a hash of the builder's own source, helpers included, so an
+# identical template hashes identically and an edited one hashes
+# differently), the RENDERER revision, the MODEL and the SETTINGS the
+# gateway used. Never the assembled prompt, and never a hash of private
+# text: the identity is computed from the code, not from what the code was
+# given, so two runs over different passages carry the same identity. The
+# stages are registered by name below; each registered builder is wrapped
+# at import so that calling it notes the stage on a per-thread ledger, and
+# a run drains the ledger into its receipt when it writes one.
+
+PROMPT_RENDERER_REV = "renderer-1"
+PROMPT_STAGE_BUILDERS = {
+    "attribution": "build_attribution_prompt", "transcription": "build_transcription_prompt",
+    "generation": "build_generation_prompt", "riff": "build_riff_prompt", "play": "build_play_prompt",
+    "revise": "build_revise_prompt", "reconsider": "build_reconsider_prompt",
+    "bone_attachment": "build_bone_attachment_prompt", "adversarial": "build_adversarial_prompt",
+    "decompose": "build_decompose_prompt", "component_check": "build_component_check_prompt",
+    "anchor_support": "build_anchor_support_prompt", "sprout": "build_sprout_prompt",
+    "sprout_review": "build_sprout_review_prompt", "refract": "build_refract_prompt",
+    "refract_review": "build_refract_review_prompt", "archetype": "build_archetype_prompt",
+    "etymon": "build_etymon_prompt", "etymon_review": "build_etymon_review_prompt",
+    "verify": "build_verify_prompt", "bench": "build_bench_prompt", "concept": "build_concept_prompt",
+    "concept_names": "build_concept_names_prompt", "road": "build_road_prompt",
+    "route_analysis": "build_route_analysis_prompt", "support": "build_support_prompt",
+    "bench_build": "build_bench_build_prompt", "dissect": "build_dissect_prompt",
+    "attack": "build_attack_prompt",
+}
+_PROMPT_LEDGER = threading.local()
+
+
+def _template_closure(fn) -> "list[tuple[str, str]]":
+    """The builder's source plus the source of every module-level function
+    it names, transitively, and the repr of every module-level constant it
+    names — the template as written, nothing the template was given."""
+    fn = inspect.unwrap(fn)
+    g = fn.__globals__
+    seen, out, stack = set(), [], [fn]
+    while stack:
+        f = inspect.unwrap(stack.pop())
+        if f.__name__ in seen:
+            continue
+        seen.add(f.__name__)
+        out.append((f.__name__, inspect.getsource(f)))
+        for n in f.__code__.co_names:
+            v = g.get(n)
+            if inspect.isfunction(v) and getattr(v, "__module__", "") == fn.__module__:
+                stack.append(v)
+            elif n.isupper() and isinstance(v, (str, int, float, tuple, list, dict)):
+                out.append((n, json.dumps(v, sort_keys=True, default=str)))
+    return sorted(set(out))
+
+
+def template_sha_of(fn) -> str:
+    h = hashlib.sha256()
+    for name, src in _template_closure(fn):
+        h.update(name.encode()); h.update(b"\0"); h.update(src.encode()); h.update(b"\0")
+    return h.hexdigest()[:16]
+
+
+def prompt_template_identity(stage: str) -> dict:
+    """{stage, template_sha, renderer_rev} for a registered stage. Input-
+    independent by construction. Unknown stage: a ValueError, never a
+    made-up identity."""
+    name = PROMPT_STAGE_BUILDERS.get(stage)
+    fn = globals().get(name) if name else None
+    if not callable(fn):
+        raise ValueError(f"unregistered prompt stage {stage!r}")
+    return {"stage": stage, "template_sha": template_sha_of(fn), "renderer_rev": PROMPT_RENDERER_REV}
+
+
+def gateway_settings(gateway) -> dict:
+    """What the gateway will do with any prompt: the recorded settings, as
+    the code holds them. Sampling is the API's default — said as such."""
+    return {"max_output_tokens": getattr(gateway, "MAX_OUTPUT_TOKENS", None),
+            "timeout_s": getattr(gateway, "CALL_TIMEOUT_S", None),
+            "streaming": bool(getattr(gateway, "is_external", False)),
+            "sampling": "api_default"}
+
+
+def prompt_ledger_mark() -> int:
+    return len(getattr(_PROMPT_LEDGER, "stages", None) or [])
+
+
+def _note_prompt_stage(stage: str) -> None:
+    stages = getattr(_PROMPT_LEDGER, "stages", None)
+    if stages is None:
+        stages = _PROMPT_LEDGER.stages = []
+    stages.append(stage)
+
+
+def prompt_identities_since(mark: int, gateway=None) -> "list[dict]":
+    """Drain the stages noted since `mark` into receipt-ready identities:
+    one per stage, with the calls counted, the model and the settings.
+    The ledger is truncated back to `mark`, so a nested run (a component
+    forge inside a deep run) takes only its own stages and leaves the
+    parent's in place."""
+    stages = getattr(_PROMPT_LEDGER, "stages", None) or []
+    used = stages[mark:]
+    del stages[mark:]
+    counts: dict[str, int] = {}
+    for s in used:
+        counts[s] = counts.get(s, 0) + 1
+    out = []
+    for stage in sorted(counts):
+        ident = prompt_template_identity(stage)
+        ident["calls"] = counts[stage]
+        ident["gateway"] = getattr(gateway, "name", "") if gateway is not None else ""
+        ident["model"] = (getattr(gateway, "model", "") or getattr(gateway, "name", "")) if gateway is not None else ""
+        ident["settings"] = gateway_settings(gateway) if gateway is not None else {}
+        out.append(ident)
+    return out
+
+
+def _install_prompt_ledger() -> None:
+    """Wrap every registered builder so a call notes its stage. Identity is
+    still computed from the ORIGINAL function (inspect.unwrap), so the
+    wrapper never enters the template hash."""
+    for stage, name in PROMPT_STAGE_BUILDERS.items():
+        fn = globals().get(name)
+        if not callable(fn) or getattr(fn, "__wrapped__", None) is not None:
+            continue
+
+        def _wrap(fn=fn, stage=stage):
+            @functools.wraps(fn)
+            def noted(*a, **kw):
+                _note_prompt_stage(stage)
+                return fn(*a, **kw)
+            return noted
+        globals()[name] = _wrap()
+
+
 # ---- prompt construction: only resolved text ever crosses this boundary ---
 
 def _prior_block(avoid_titles: "list[str] | None" = None,
@@ -3577,13 +3950,48 @@ def node_component(source_key: str, label: str) -> dict:
     return _node("component", f"cmp:{source_key}:{_norm_title(label)}", label)
 
 
+# Edge origin (block 104): WHO put a relationship on the map. mechanical —
+# the pipeline linked two things it made (a run to its candidate, a
+# component to the concept forged from it); owner_declared — the owner
+# said so; model_proposed — a model stage proposed the relation and the
+# edge carries its review verdict; imported — brought in from outside;
+# legacy_unknown — a row written before origins were recorded, which the
+# READER labels and nothing rewrites. A new edge is never legacy_unknown,
+# and every new edge cites the event or receipt that produced it.
+EDGE_ORIGINS = ("mechanical", "owner_declared", "model_proposed", "imported", "legacy_unknown")
+EDGE_PRODUCER_KINDS = ("receipt", "judgment", "owner_declaration", "result_snapshot", "import")
+
+
+def edge_producer(kind: str, id_: str, stage: str = "") -> dict:
+    """The citation a new edge carries: the receipt, judgment, declaration
+    or snapshot that produced it — by id, plus the stage when a receipt
+    covers several."""
+    if kind not in EDGE_PRODUCER_KINDS:
+        raise ValueError(f"unknown edge producer kind {kind!r}")
+    if not (id_ or "").strip():
+        raise ValueError("an edge producer needs the id of the thing that produced the edge")
+    p = {"kind": kind, "id": id_.strip()}
+    if stage:
+        p["stage"] = stage
+    return p
+
+
 def record_edge(rel: str, source: dict, target: dict, run_trace_id: str,
-                 verdict: str = "", detail: str = "", extra: dict = None) -> None:
+                 verdict: str = "", detail: str = "", extra: dict = None, *,
+                 origin: str, producer: dict) -> None:
     """Best-effort by design: the edge log is a map layer, never
     load-bearing for the pipeline — a failed write must not kill a run
     that already cost real model calls. `extra` carries provenance fields
     (e.g. a declared road's proposed_by/ratified_by history) — it may add
-    fields, never replace the core ones."""
+    fields, never replace the core ones. `origin` and `producer` are
+    required of every new edge (block 104) and checked BEFORE the
+    best-effort guard: a missing origin is a programming error, not an
+    I/O accident, and must surface."""
+    if origin not in EDGE_ORIGINS or origin == "legacy_unknown":
+        raise ValueError(f"a new edge needs an origin from {EDGE_ORIGINS[:-1]}, got {origin!r}")
+    if not isinstance(producer, dict) or producer.get("kind") not in EDGE_PRODUCER_KINDS \
+            or not (producer.get("id") or "").strip():
+        raise ValueError("every new edge cites the event or receipt that produced it")
     try:
         LOCAL_STATE.mkdir(exist_ok=True)
         row = {
@@ -3592,6 +4000,7 @@ def record_edge(rel: str, source: dict, target: dict, run_trace_id: str,
             "rel": rel, "source": source, "target": target,
             "run_trace_id": run_trace_id, "verdict": verdict or "",
             "detail": (detail or "")[:300], "created_at": _now(),
+            "origin": origin, "producer": dict(producer), "epoch": current_epoch(),
         }
         for k, v in (extra or {}).items():
             row.setdefault(k, v)
@@ -3601,6 +4010,15 @@ def record_edge(rel: str, source: dict, target: dict, run_trace_id: str,
         pass
 
 
+def edge_origin_of(row: dict) -> str:
+    """What the reader may say about a row's origin: the recorded class,
+    or legacy_unknown for a row that recorded none. Never inferred from
+    the relation or the run id — a produced-edge without an origin is
+    still a row nobody stamped."""
+    o = row.get("origin") if isinstance(row, dict) else ""
+    return o if o in EDGE_ORIGINS else "legacy_unknown"
+
+
 def log_wayfinder(event: dict) -> None:
     """Append one Wayfinder act. Best-effort like record_edge — the log is
     evidence, never a gate. Whitelisted keys only, so a caller can't grow
@@ -3608,7 +4026,7 @@ def log_wayfinder(event: dict) -> None:
     allowed = {"type", "from", "to", "from_key", "to_key", "found", "none",
                "route", "kind", "n_candidates", "n_findings", "trace_id",
                "verb", "proposed_by", "strategy", "n_steps", "road_types",
-               "edge_id"}
+               "edge_id", "declaration_id"}
     try:
         LOCAL_STATE.mkdir(exist_ok=True)
         row = {k: v for k, v in (event or {}).items() if k in allowed}
@@ -3654,6 +4072,10 @@ def load_edges() -> "list[dict]":
                 or not isinstance(row.get("source"), dict) \
                 or not isinstance(row.get("target"), dict):
             continue
+        # block 104: the reader labels what the row recorded — a row with
+        # no origin is legacy_unknown here, in memory; the file is not
+        # rewritten and nothing is inferred from the relation.
+        row["origin"] = edge_origin_of(row)
         out.append(row)
     return out
 
@@ -4047,6 +4469,87 @@ def persist_receipt(receipt: dict) -> Path:
     return path
 
 
+def composite_completion(groups: "list[dict]") -> "tuple[str, int]":
+    n_groups = len(groups or [])
+    n_failed = sum(1 for g in (groups or []) if g.get("failed"))
+    completion = "failed" if n_groups and n_failed == n_groups else ("partial" if n_failed else "complete")
+    return completion, n_failed
+
+
+def record_composite_run(kind: str, result: dict, input_text: str, gateway=None,
+                         trace_id: str = "", prompt_identities: "list[dict] | None" = None) -> dict:
+    """A deep or decompose run's own record, in the canonical receipt
+    vocabulary (block 104): a schema-validated receipt under the run's
+    trace id, naming its component runs by their trace and receipt ids,
+    the trial's verdict, the gesture and the completion state — plus the
+    result snapshot the page reopens (dissection, groups, Friction's
+    objection text), which the receipt deliberately does not carry. The
+    component forges keep their own receipts; this one lists no
+    candidates of its own so nothing is counted twice. Never raises into
+    the job: a failed write is reported in the result, not hidden."""
+    if kind not in ("deep", "decompose"):
+        raise ValueError("a composite run is deep or decompose")
+    trace_id = (trace_id or result.get("trace_id") or "").strip() or f"trace_{kind}_" + uuid.uuid4().hex[:12]
+    groups = result.get("groups") or []
+    completion, n_failed = composite_completion(groups)
+    components = []
+    for g in groups:
+        c = {"label": str(g.get("label", ""))[:160], "failed": bool(g.get("failed"))}
+        if g.get("trace_id"):
+            c["trace_id"] = g["trace_id"]
+            c["receipt_id"] = g.get("receipt_id") or f"receipt_{g['trace_id']}"
+        if "anchor_verified" in g:
+            c["anchor_verified"] = bool(g.get("anchor_verified"))
+        components.append(c)
+    composite = {"kind": kind, "completion": completion, "n_components": len(groups),
+                 "n_failed": n_failed, "components": components, "epoch": current_epoch()}
+    if kind == "deep":
+        composite["gesture"] = str(result.get("gesture") or "trial")
+        attack = result.get("attack") or {}
+        composite["attack"] = {"verdict": str(attack.get("verdict") or ""),
+                               "input_kind": str(attack.get("input_kind") or "")}
+    gw_name = getattr(gateway, "name", "") if gateway is not None else str(result.get("gateway") or "")
+    model_call = {"gateway": gw_name}
+    if gateway is not None:
+        model_call["is_external"] = bool(getattr(gateway, "is_external", False))
+    elif "gateway_external" in result:
+        model_call["is_external"] = bool(result.get("gateway_external"))
+    try:
+        kernel_version = load_seed_corpus()["kernel"]["kernel_version"]
+    except Exception:  # noqa: BLE001 — the seed is fixture data; its absence must not lose the record
+        kernel_version = 0
+    receipt = receipts_mod.build_private_receipt(
+        receipt_id=f"receipt_{trace_id}", trace_id=trace_id, operation=kind,
+        input_text=input_text, kernel_version=kernel_version, engine_version="cli-0.2.0",
+        sources=[], derived_constraints_applied=[], claims=[], candidates=[],
+        rejections=[], warnings=[], model_calls=[model_call],
+        prompt_identities=list(prompt_identities if prompt_identities is not None
+                               else (result.get("prompt_identities") or [])),
+        composite=composite)
+    out = {"trace_id": trace_id, "receipt_id": receipt["receipt_id"], "completion": completion}
+    try:
+        validators.validate_receipt_invariants(receipt)
+        schema_loader.validate("receipt.schema.json", receipt)
+        persist_receipt(receipt)
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
+            "trace_id": trace_id, "receipt_id": receipt["receipt_id"], "mode": kind,
+            "input_text": input_text, "created_at": receipt["created_at"],
+            "gesture": composite.get("gesture", ""), "attack": result.get("attack") or {},
+            "components": [{"label": g.get("label", ""), "gist": g.get("gist", ""), "anchor": g.get("anchor", ""),
+                            "anchor_verified": g.get("anchor_verified", False), "trace_id": g.get("trace_id", ""),
+                            "failed": bool(g.get("failed"))} for g in groups],
+            "groups": groups, "completion": completion, "partial": bool(n_failed), "n_failed": n_failed,
+            "gateway": gw_name, "epoch": composite["epoch"],
+            "prompt_identities": receipt.get("prompt_identities", []),
+        }, ensure_ascii=False))
+        out["recorded"] = True
+    except Exception as e:  # noqa: BLE001 — reported in the result, never raised into the job
+        out["recorded"] = False
+        out["record_error"] = str(e)[:200]
+    return out
+
+
 def summary_line(private_receipt: dict, candidate_results: list) -> str:
     """candidate_results is the list of {"bff": {...}, "claims_detail": [...]}
     entries from run(). Friction's disposition is per-candidate now (nothing
@@ -4149,6 +4652,7 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
               f"but this is the kind of hit that should usually end the operation here.\n")
 
     trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
+    _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
 
     # Riff is Forge with a material-first generation prompt and a
     # wordplay-appropriate Friction rubric; everything else — Bone
@@ -4409,6 +4913,7 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
         claims=all_claims_for_receipt,
         candidates=[{"title": r["bff"]["title"]} for r in results],
         rejections=[], warnings=[], model_calls=[{"gateway": gateway.name, "is_external": gateway.is_external}],
+        prompt_identities=prompt_identities_since(_pmark, gateway),
     )
     validators.validate_receipt_invariants(private_receipt)
     schema_loader.validate("receipt.schema.json", private_receipt)
@@ -4427,7 +4932,9 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
                      trace_id, verdict=r["bff"]["friction"].get("verdict") or "",
                      detail=("CONTRADICTS ANCHOR: " +
                              (r["bff"]["friction"].get("source_contradiction") or ""))
-                            if r["bff"]["friction"].get("contradicts_anchor") else "")
+                            if r["bff"]["friction"].get("contradicts_anchor") else "",
+                     origin="mechanical",
+                     producer=edge_producer("receipt", private_receipt["receipt_id"]))
 
     # Full result snapshot, keyed by trace_id — the receipt deliberately
     # stores only claims/titles/provenance, so without this the Flesh and
@@ -4485,7 +4992,8 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
             persist_judgment(judgment)
             if decision == "accepted":
                 persist_accepted_concept(title, r["bff"]["flesh"].get("definition") or "", trace_id,
-                                          concept_id=r["bff"].get("concept_id") or "")
+                                          concept_id=r["bff"].get("concept_id") or "",
+                                          origin="run", judgment_id=judgment.id)
             decisions.append({"title": title, "decision": decision})
             print(f"Recorded: {decision}")
         if decisions:
@@ -5417,6 +5925,10 @@ def run_decompose(text: str, gateway: Gateway, interactive: bool = True,
 
     # The boundary, checked before a single line number is computed.
     assert_source_clean(text)
+    # block 104: the parent run has its own identity from the start, so the
+    # edges its components record can cite the parent's receipt.
+    parent_trace_id = "trace_decompose_" + uuid.uuid4().hex[:12]
+    _pmark = prompt_ledger_mark()
     progress("decomposing", "Identifying distinct concepts in the passage…")
     # The source's claim about ITSELF, checked before anything is built on
     # it. Advisory by construction — it annotates the source card and never
@@ -5581,22 +6093,39 @@ def run_decompose(text: str, gateway: Gateway, interactive: bool = True,
         # the parent structure survives.
         src = node_source(text)
         cmp_node = node_component(src["key"], c["label"])
+        # The split was the decomposition stage's proposal, cited to the
+        # parent run's own receipt (block 104); the forge link is the
+        # pipeline's, cited to the component forge's receipt.
         record_edge("decomposed_into", src, cmp_node, result["trace_id"],
-                     detail=c["gist"][:200])
+                     detail=c["gist"][:200], origin="model_proposed",
+                     producer=edge_producer("receipt", f"receipt_{parent_trace_id}", stage="decompose"))
         for r in result.get("candidates", []):
             record_edge("forged_as", cmp_node,
                          node_concept(r["bff"].get("concept_id", ""), r["bff"]["title"]),
                          result["trace_id"],
-                         verdict=r["bff"]["friction"].get("verdict") or "")
+                         verdict=r["bff"]["friction"].get("verdict") or "",
+                         origin="mechanical",
+                         producer=edge_producer("receipt", f"receipt_{result['trace_id']}"))
 
     n_failed = sum(1 for g in groups if g.get("failed"))
     if n_failed:
         print(f"\n[decompose] PARTIAL: {len(groups) - n_failed} of {len(groups)} "
               f"concept(s) completed; {n_failed} failed and can be retried individually.")
-    return {"source_text": text, "attributions": attributions,
-            "global_constraints": global_constraints,
-            "uncovered": uncovered, "groups": groups,
-            "partial": bool(n_failed), "n_failed": n_failed}
+    out = {"source_text": text, "attributions": attributions,
+           "global_constraints": global_constraints,
+           "uncovered": uncovered, "groups": groups,
+           "partial": bool(n_failed), "n_failed": n_failed,
+           "trace_id": parent_trace_id}
+    # block 104: the parent run's own receipt, in the canonical vocabulary,
+    # with the component runs' trace ids stripped to what a receipt holds.
+    _groups_for_record = [{"label": g.get("label", ""), "gist": g.get("gist", ""),
+                           "anchor": g.get("anchor", ""), "anchor_verified": g.get("anchor_verified", False),
+                           "trace_id": (g.get("result") or {}).get("trace_id", ""),
+                           "failed": bool(g.get("failed"))} for g in groups]
+    out.update(record_composite_run("decompose", {"groups": _groups_for_record, "gateway": gateway.name},
+                                    text, gateway=gateway, trace_id=parent_trace_id,
+                                    prompt_identities=prompt_identities_since(_pmark, gateway)))
+    return out
 
 
 # ---- revise: "right meaning, wrong word" made generative. The Flesh is
@@ -5642,6 +6171,7 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
     else:
         input_text = f"revise of '{original.get('title', '')}': {frozen_flesh['definition']}"
     trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
+    _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
 
     results = []
     if steered:
@@ -5701,7 +6231,8 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
                          node_concept(original.get("concept_id", ""), original.get("title", "")),
                          node_concept(concept_id, title),
                          trace_id, verdict=adversarial.get("verdict") or "",
-                         detail=(owner_note or "")[:200])
+                         detail=(owner_note or "")[:200], origin="mechanical",
+                         producer=edge_producer("receipt", f"receipt_{trace_id}"))
     else:
         # Same concept, new word — carry the original's concept_id forward
         # unchanged for every variant this call produces, since they all
@@ -5769,7 +6300,8 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
             record_edge("compressed_as" if wordify else "renamed_as",
                          node_word(original.get("title", "")), node_word(title),
                          trace_id, verdict=adversarial.get("verdict") or "",
-                         detail=shared_concept_id)
+                         detail=shared_concept_id, origin="mechanical",
+                         producer=edge_producer("receipt", f"receipt_{trace_id}"))
 
     private_receipt = receipts_mod.build_private_receipt(
         receipt_id=f"receipt_{trace_id}", trace_id=trace_id, operation="forge",
@@ -5777,6 +6309,7 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
         engine_version="cli-0.2.0", sources=[], derived_constraints_applied=[],
         claims=[], candidates=[{"title": r["bff"]["title"]} for r in results],
         rejections=[], warnings=[], model_calls=[{"gateway": gateway.name, "is_external": gateway.is_external}],
+        prompt_identities=prompt_identities_since(_pmark, gateway),
     )
     validators.validate_receipt_invariants(private_receipt)
     schema_loader.validate("receipt.schema.json", private_receipt)
@@ -6068,6 +6601,7 @@ def run_sprout(candidate: dict, gateway: Gateway,
     title = candidate.get("title", "")
     input_text = f"sprout of '{title}': {candidate.get('definition', '')[:160]}"
     trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
+    _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
 
     # The trail: rabbitholes are chains, and the chain is the point — the
     # receipts should map the process of going from idea to idea. A child
@@ -6144,11 +6678,13 @@ def run_sprout(candidate: dict, gateway: Gateway,
                          node_concept(candidate.get("concept_id") or "", title),
                          node_external(t["anchor_name"], t.get("culture_or_work", "")),
                          trace_id, verdict=t.get("review_verdict") or "",
-                         detail=(t.get("parallel") or "")[:200])
+                         detail=(t.get("parallel") or "")[:200], origin="model_proposed",
+                         producer=edge_producer("receipt", f"receipt_{trace_id}", stage="sprout"))
     if parent_trace_id:
         record_edge("continued_from", _node("run", parent_trace_id, ""),
                      _node("run", trace_id, title), trace_id,
-                     detail=(via or "")[:200])
+                     detail=(via or "")[:200], origin="mechanical",
+                     producer=edge_producer("receipt", f"receipt_{trace_id}"))
 
     # A receipt so the run appears on the Library shelf like everything
     # else; "crossbreed" is the frozen-enum operation closest to what this
@@ -6159,6 +6695,7 @@ def run_sprout(candidate: dict, gateway: Gateway,
         engine_version="cli-0.2.0", sources=[], derived_constraints_applied=[],
         claims=[], candidates=[{"title": title}], rejections=[], warnings=[],
         model_calls=[{"gateway": gateway.name, "is_external": gateway.is_external}],
+        prompt_identities=prompt_identities_since(_pmark, gateway),
     )
     validators.validate_receipt_invariants(private_receipt)
     schema_loader.validate("receipt.schema.json", private_receipt)
@@ -7234,7 +7771,9 @@ def run_archetype(candidate: dict, gateway: Gateway,
                  node_external(arch["figure"][:60] or "unnamed figure", "archetype"),
                  trace_id,
                  verdict="unfalsifiable" if arch["unfalsifiable"] else "falsifiable",
-                 detail=f"{arch['invented_count']} of {len(arch['facets'])} facets invented")
+                 detail=f"{arch['invented_count']} of {len(arch['facets'])} facets invented",
+                 origin="model_proposed",
+                 producer=edge_producer("result_snapshot", trace_id, stage="archetype"))
 
     summary = (f"{len(arch['facets'])} facet(s) · "
                f"{arch['invented_count']} invented, "
@@ -7285,6 +7824,7 @@ def run_refract(candidate: dict, gateway: Gateway,
     title = candidate.get("title", "")
     input_text = f"refract of '{title}': {candidate.get('definition', '')[:160]}"
     trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
+    _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
 
     print(f"[{gateway.name}] refracting {title!r} through other lexicons...")
     progress("refracting", f"Refracting {title!r} through other languages…")
@@ -7339,14 +7879,18 @@ def run_refract(candidate: dict, gateway: Gateway,
                          node_translation(r.get("language", ""),
                                            r.get("romanization") or r.get("term") or ""),
                          trace_id, verdict=r["review_verdict"],
-                         detail=f"attestation: {r['attestation'] or 'unstated'}")
+                         detail=f"attestation: {r['attestation'] or 'unstated'}",
+                         origin="model_proposed",
+                         producer=edge_producer("receipt", f"receipt_{trace_id}", stage="refract"))
     fossil_verdict = (review_parsed.get("fossil_verdict") or "").strip()
     fossil_note = (review_parsed.get("fossil_note") or "").strip()
     if english_fossil:
         record_edge("english_fossil",
                      node_concept(candidate.get("concept_id") or "", title),
                      node_external(english_fossil[:60], "English etymology"),
-                     trace_id, verdict=fossil_verdict, detail=fossil_check[:200])
+                     trace_id, verdict=fossil_verdict, detail=fossil_check[:200],
+                     origin="model_proposed",
+                     producer=edge_producer("receipt", f"receipt_{trace_id}", stage="refract"))
 
     # Same frozen-enum reuse as sprout: "crossbreed" is the closest
     # operation — crossing one concept with other languages' stock.
@@ -7356,6 +7900,7 @@ def run_refract(candidate: dict, gateway: Gateway,
         engine_version="cli-0.2.0", sources=[], derived_constraints_applied=[],
         claims=[], candidates=[{"title": title}], rejections=[], warnings=[],
         model_calls=[{"gateway": gateway.name, "is_external": gateway.is_external}],
+        prompt_identities=prompt_identities_since(_pmark, gateway),
     )
     validators.validate_receipt_invariants(private_receipt)
     schema_loader.validate("receipt.schema.json", private_receipt)
@@ -9045,12 +9590,19 @@ def declare_road(a: dict, b: dict, verb: str, note: str,
         extra["proposal_trace_id"] = str(o.get("proposal_trace_id") or "")[:60]
         extra["proposal_kind"] = str(o.get("kind") or "")[:20]
         extra["basis"] = str(o.get("basis") or "")[:300]
+    # block 104: the declaration is the producing event, minted its own
+    # id so the edge cites it and the Wayfinder row carries the same id.
+    declaration_id = "road_decl_" + uuid.uuid4().hex[:12]
+    extra["declaration_id"] = declaration_id
     record_edge("declared_road", src, tgt, "owner_declared",
-                detail=(verb + (" — " + note if note else "")), extra=extra)
+                detail=(verb + (" — " + note if note else "")), extra=extra,
+                origin="owner_declared",
+                producer=edge_producer("owner_declaration", declaration_id))
     log_wayfinder({"type": "declare", "from": src["label"], "to": tgt["label"],
                    "from_key": src["key"], "to_key": tgt["key"], "verb": verb,
                    "proposed_by": proposed_by,
-                   "trace_id": extra.get("proposal_trace_id", "")})
+                   "trace_id": extra.get("proposal_trace_id", ""),
+                   "declaration_id": declaration_id})
     return {"rel": "declared_road", "source": src, "target": tgt,
             "verb": verb, "note": note, **extra}
 
@@ -9771,6 +10323,11 @@ def run_deep(text: str, gateway: Gateway, interactive: bool = True,
         if on_progress:
             on_progress(stage, detail)
 
+    # block 104: the deep run's identity is minted before its first model
+    # call, so every edge its components record can cite the deep run's
+    # own receipt, and the stages it uses are drained into that receipt.
+    deep_trace_id = "trace_deep_" + uuid.uuid4().hex[:12]
+    _pmark = prompt_ledger_mark()
     print(f"[{gateway.name}] dissecting the input...")
     progress("dissecting", "Dissecting the input into components…")
     parsed = _extract_json(gateway.complete(build_dissect_prompt(text)))
@@ -9875,18 +10432,29 @@ def run_deep(text: str, gateway: Gateway, interactive: bool = True,
         # living only in the server job's memory.
         src = node_source(text)
         cmp_node = node_component(src["key"], label)
+        # As in decompose (block 104): the split is the dissection stage's
+        # proposal cited to the deep run's own receipt; the forge link is
+        # mechanical, cited to the component forge's receipt.
         record_edge("decomposed_into", src, cmp_node, result["trace_id"],
-                     detail=c.get("gist", "")[:200])
+                     detail=c.get("gist", "")[:200], origin="model_proposed",
+                     producer=edge_producer("receipt", f"receipt_{deep_trace_id}", stage="dissect"))
         for r in result.get("candidates", []):
             record_edge("forged_as", cmp_node,
                          node_concept(r["bff"].get("concept_id", ""), r["bff"]["title"]),
                          result["trace_id"],
-                         verdict=r["bff"]["friction"].get("verdict") or "")
+                         verdict=r["bff"]["friction"].get("verdict") or "",
+                         origin="mechanical",
+                         producer=edge_producer("receipt", f"receipt_{result['trace_id']}"))
 
     n_failed = sum(1 for g in groups if g.get("failed"))
     return {"source_text": text, "attack": attack, "groups": groups,
             "gesture": gesture,
-            "partial": bool(n_failed), "n_failed": n_failed}
+            "partial": bool(n_failed), "n_failed": n_failed,
+            "trace_id": deep_trace_id,
+            "prompt_identities": prompt_identities_since(_pmark, gateway)}
+
+
+_install_prompt_ledger()
 
 
 def main() -> int:

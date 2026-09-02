@@ -23,8 +23,19 @@ def build_private_receipt(
     kernel_version: int, engine_version: str, sources: list[dict],
     derived_constraints_applied: list[dict], claims: list[dict],
     candidates: list[dict], rejections: list[dict], warnings: list[str],
-    model_calls: list[dict],
+    model_calls: list[dict], prompt_identities: list[dict] | None = None,
+    composite: dict | None = None,
 ) -> dict:
+    # block 104: prompt identities (stage, template hash, renderer, model,
+    # settings — never the assembled prompt) and, for a deep or decompose
+    # run, the composite block naming its component runs. Both are
+    # written only when the caller supplies them, so every older receipt
+    # shape is unchanged.
+    tail = {}
+    if prompt_identities is not None:
+        tail["prompt_identities"] = list(prompt_identities)
+    if composite is not None:
+        tail["composite"] = dict(composite)
     return {
         "receipt_id": receipt_id,
         "trace_id": trace_id,
@@ -43,6 +54,7 @@ def build_private_receipt(
         "model_calls": model_calls,
         "revocation_annotations": [],
         "redaction_policy": "public_v1",
+        **tail,
     }
 
 

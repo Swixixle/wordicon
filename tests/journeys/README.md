@@ -15,8 +15,13 @@ a scratch store.
 `run.sh` makes a scratch directory, seeds sanitized fixtures
 (`fixtures.py`), starts `serve.py` — the app with `LOCAL_STATE`
 redirected to the scratch, the model gateway poisoned, the API key
-removed, outbound HTTP pointed at a dead proxy — then runs `home.js` and
-`anatomy.js`. Every check prints one line. A failing check saves a
+removed, outbound HTTP pointed at a dead proxy — then runs `quiet.js`
+(block 104: browsing with encounter recording off; `run.sh` hashes the
+scratch store before and after it and fails if a byte changed),
+`home.js`, `anatomy.js` and `encounter.js` (the switch turned on and off
+from About & proof with each flip recorded, one `owner_opened` row by
+id, and an unresolved Recovery Review case found on Home and reopened).
+Every check prints one line. A failing check saves a
 screenshot into `$JOURNEY_OUT`; CI uploads that directory on failure.
 The run fails if a journey fails, does not reach its final line, or if
 Playwright or the browser is missing — nothing is skipped silently. Any

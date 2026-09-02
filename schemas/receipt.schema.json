@@ -9,7 +9,7 @@
     "receipt_id": { "type": "string", "pattern": "^receipt_[a-zA-Z0-9_]+$" },
     "trace_id": { "type": "string", "pattern": "^trace_[a-zA-Z0-9_]+$" },
     "created_at": { "type": "string", "format": "date-time" },
-    "operation": { "type": "string", "enum": ["crack", "forge", "crossbreed", "audit", "distill"] },
+    "operation": { "type": "string", "enum": ["crack", "forge", "crossbreed", "audit", "distill", "deep", "decompose"] },
     "input_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "kernel_version": { "type": "integer" },
     "engine_version": { "type": "string" },
@@ -61,6 +61,61 @@
         }
       }
     },
-    "redaction_policy": { "type": "string" }
+    "redaction_policy": { "type": "string" },
+    "prompt_identities": {
+      "type": "array",
+      "description": "block 104: which prompt templates the run used — stage, template hash, renderer revision, model, settings. Never the assembled prompt and never a hash of private text.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stage", "template_sha", "renderer_rev", "calls", "gateway", "model", "settings"],
+        "properties": {
+          "stage": { "type": "string" },
+          "template_sha": { "type": "string", "pattern": "^[a-f0-9]{16}$" },
+          "renderer_rev": { "type": "string" },
+          "calls": { "type": "integer", "minimum": 1 },
+          "gateway": { "type": "string" },
+          "model": { "type": "string" },
+          "settings": { "type": "object" }
+        }
+      }
+    },
+    "composite": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "block 104: a deep or decompose run's own receipt names its component runs by trace and receipt id; the components keep their own receipts.",
+      "required": ["kind", "completion", "n_components", "n_failed", "components"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["deep", "decompose"] },
+        "gesture": { "type": "string" },
+        "completion": { "type": "string", "enum": ["complete", "partial", "failed"] },
+        "n_components": { "type": "integer", "minimum": 0 },
+        "n_failed": { "type": "integer", "minimum": 0 },
+        "attack": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "verdict": { "type": "string" },
+            "input_kind": { "type": "string" }
+          }
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "failed"],
+            "properties": {
+              "label": { "type": "string" },
+              "trace_id": { "type": "string" },
+              "receipt_id": { "type": "string" },
+              "failed": { "type": "boolean" },
+              "anchor_verified": { "type": "boolean" }
+            }
+          }
+        },
+        "epoch": { "type": "string" }
+      }
+    }
   }
 }

@@ -13,7 +13,10 @@ not enough survives to accept or reject — the old acceptance stands in
 history, nothing enters the shelf, the case leaves the queue, and the
 owner never invents a definition merely to clear it. Nothing is regenerated,
 reconstructed, or inferred. Rulings append to
-recovery_review_rulings.jsonl; the queue file is read, never written.
+recovery_review_rulings.jsonl; the queue file is read, never written. A
+case ruled unresolved stays findable here and reopenable (block 104): a
+later Accept, Revise or Reject appends a ruling that cites the unresolved
+one, which stays in history.
 The Home band reads queue minus rulings, so it empties through the
 record. Not a backlog manager: only the queue's cases exist here."""
 from __future__ import annotations
@@ -65,11 +68,33 @@ def ruled_ids() -> set:
     return {r.get("queue_judgment_id") for r in load_rulings() if r.get("queue_judgment_id")}
 
 
+def latest_ruling(queue_judgment_id: str) -> dict:
+    """The ruling in force for a case: the last row appended for it."""
+    last = {}
+    for r in load_rulings():
+        if r.get("queue_judgment_id") == queue_judgment_id:
+            last = r
+    return last
+
+
 def open_cases() -> list[dict]:
     """Queue rows the owner has not ruled on. The queue is never rewritten;
     a ruling row is what closes a case."""
     done = ruled_ids()
     return [r for r in load_queue() if r.get("judgment_id") not in done]
+
+
+def unresolved_cases() -> list[dict]:
+    """Queue rows whose ruling in force is "unresolved" (block 104): not
+    due — the owner ruled — but findable and reopenable, because a later
+    ruling may accept, revise or reject once more survives or the owner
+    remembers. Reopening appends; the unresolved ruling stays in history."""
+    out = []
+    for r in load_queue():
+        last = latest_ruling(r.get("judgment_id") or "")
+        if last and last.get("decision") == "unresolved":
+            out.append(r)
+    return out
 
 
 def _receipt_for(trace: str) -> dict:
@@ -155,7 +180,13 @@ def _has_persisted_entry(title: str) -> bool:
 def cases() -> dict:
     open_ = [case_evidence(r) for r in open_cases()]
     rulings = load_rulings()
+    unresolved = []
+    for r in unresolved_cases():
+        ev = case_evidence(r)
+        ev["unresolved_ruling"] = latest_ruling(r.get("judgment_id") or "")
+        unresolved.append(ev)
     return {"open": open_, "open_count": len(open_), "ruled": rulings, "ruled_count": len(rulings),
+            "unresolved": unresolved, "unresolved_count": len(unresolved),
             "queue_total": len(load_queue()), "epoch": cli.current_epoch(),
             "note": "Only what the record holds is shown. No definition is reconstructed; "
                     "Accept needs one from you, and the concept's identity is minted at that ruling."}
@@ -178,8 +209,14 @@ def rule(queue_judgment_id: str, decision: str, definition: str = "", new_title:
     row = next((r for r in load_queue() if r.get("judgment_id") == queue_judgment_id), None)
     if not row:
         raise ValueError("that case is not in the recovery queue")
-    if queue_judgment_id in ruled_ids():
+    # block 104: a case ruled unresolved stays reopenable — a later Accept,
+    # Revise or Reject appends a ruling citing the unresolved one. Any
+    # other ruling in force closes the case: a ruling is not rewritten.
+    prior = latest_ruling(queue_judgment_id)
+    if prior and prior.get("decision") != "unresolved":
         raise ValueError("that case has already been ruled on — a ruling is not rewritten")
+    if prior and decision == "unresolved":
+        raise ValueError("that case is already unresolved — reopen it with Accept, Revise or Reject, or leave it")
     title = row.get("title") or ""
     trace = row.get("trace") or ""
     definition = (definition or "").strip()
@@ -197,6 +234,8 @@ def rule(queue_judgment_id: str, decision: str, definition: str = "", new_title:
         cites["receipt_id"] = receipt["receipt_id"]
     if trace:
         cites["trace_id"] = trace
+    if prior:
+        cites["prior_ruling_id"] = prior.get("ruling_id") or ""
     now = cli._now()
     epoch = cli.current_epoch()
     concept_id = _mint_concept_id()
@@ -215,9 +254,9 @@ def rule(queue_judgment_id: str, decision: str, definition: str = "", new_title:
     added = False
     kept_title = title
     if decision == "accept":
-        _event("accepted", title, note)
+        jid = _event("accepted", title, note)
         added = cli.persist_accepted_concept(title, definition, trace or "trace_recovery_review",
-                                             concept_id=concept_id)
+                                             concept_id=concept_id, origin="recovery_review", judgment_id=jid)
     elif decision == "reject":
         _event("rejected", title, note)
     elif decision == "unresolved":
@@ -228,15 +267,16 @@ def rule(queue_judgment_id: str, decision: str, definition: str = "", new_title:
         kept_title = new_title or title
         if new_title:
             _event("revised", title, note or f"revised to: {new_title}")
-        _event("accepted", kept_title, note)
+        jid = _event("accepted", kept_title, note)
         added = cli.persist_accepted_concept(kept_title, definition, trace or "trace_recovery_review",
-                                             concept_id=concept_id)
+                                             concept_id=concept_id, origin="recovery_review", judgment_id=jid)
     ruling = {"object_type": "recovery_ruling", "ruling_id": "rr_" + uuid.uuid4().hex[:12],
               "queue_judgment_id": queue_judgment_id, "title": title, "trace": trace,
               "decision": decision, "kept_title": kept_title if decision not in ("reject", "unresolved") else "",
               "concept_id": concept_id, "judgment_ids": events, "shelf_entry_added": bool(added),
               "definition_supplied_by": "owner" if definition else "", "note": note,
-              "ruled_at": now, "epoch": epoch}
+              "ruled_at": now, "epoch": epoch,
+              "reopens": (prior.get("ruling_id") or "") if prior else ""}
     cli.LOCAL_STATE.mkdir(exist_ok=True)
     with rulings_path().open("a", encoding="utf-8") as f:
         f.write(json.dumps(ruling, ensure_ascii=False) + "\n")

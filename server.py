@@ -428,31 +428,14 @@ def _update_job(job_id: str, **fields) -> None:
 
 
 def _write_deep_record(result: dict, input_text: str) -> dict:
-    """The deep run's record (block 103). Returns the fields that identify
-    it; writes results/<trace>.json in the same store the component
-    forges wrote theirs. Never raises into the job: a failed write is
-    reported in the result, not hidden."""
-    trace_id = "trace_deep_" + uuid.uuid4().hex[:12]
-    n_groups = len(result.get("groups") or [])
-    n_failed = int(result.get("n_failed") or 0)
-    completion = "failed" if n_groups and n_failed == n_groups else ("partial" if n_failed else "complete")
-    record = {
-        "trace_id": trace_id, "mode": "deep", "input_text": input_text,
-        "created_at": _now_iso(), "gesture": result.get("gesture", "trial"),
-        "attack": result.get("attack") or {},
-        "components": [{"label": g.get("label", ""), "gist": g.get("gist", ""), "anchor": g.get("anchor", ""),
-                        "anchor_verified": g.get("anchor_verified", False), "trace_id": g.get("trace_id", ""),
-                        "failed": bool(g.get("failed"))} for g in (result.get("groups") or [])],
-        "groups": result.get("groups") or [],
-        "completion": completion, "partial": bool(n_failed), "n_failed": n_failed,
-        "gateway": result.get("gateway", ""), "epoch": cli.current_epoch(),
-    }
-    try:
-        cli.RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        (cli.RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps(record, ensure_ascii=False))
-        return {"trace_id": trace_id, "completion": completion, "recorded": True}
-    except OSError as e:
-        return {"trace_id": trace_id, "completion": completion, "recorded": False, "record_error": str(e)[:200]}
+    """The deep run's record (block 103; canonical since block 104). Returns
+    the fields that identify it. The record is a schema-validated receipt
+    under the run's own trace id — operation "deep", the component runs
+    named by trace and receipt id, the trial's verdict, the gesture, the
+    completion state, the prompt identities — plus the result snapshot the
+    page reopens. Never raises into the job: a failed write is reported in
+    the result, not hidden."""
+    return cli.record_composite_run("deep", result, input_text)
 
 
 def _shape_candidates(result: dict) -> list[dict]:
@@ -607,7 +590,13 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
                        "gesture": cli_result.get("gesture", "trial"),
                        "partial": cli_result.get("partial", False),
                        "n_failed": cli_result.get("n_failed", 0),
-                       "groups": groups, "gateway": gateway.name}
+                       "groups": groups, "gateway": gateway.name,
+                       # block 104: the identity the run minted before its first
+                       # model call (its edges already cite it), the stages it used,
+                       # and whether the gateway was external — for its receipt
+                       "trace_id": cli_result.get("trace_id", ""),
+                       "prompt_identities": cli_result.get("prompt_identities") or [],
+                       "gateway_external": bool(gateway.is_external)}
             # block 103: a deep run's own record — dissection, gesture, the
             # trial's outcome and the completion state — written to the
             # results store under its own trace id so it can be reopened
@@ -1130,6 +1119,48 @@ def api_recovery_rule():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"ruled": True, "ruling": ruling, "open_count": len(recovery.open_cases())})
+
+
+# ---------------------------------------------------------------------------
+# Encounters, behind the owner's switch (block 104). Off by default; while
+# off, these routes write nothing — a refused encounter is a 409 with the
+# reason, not a row. The switch's own flips are recorded. Ids and event
+# types only: the CLI refuses anything shaped like text.
+
+@app.route("/api/encounter/switch", methods=["GET"])
+def api_encounter_switch():
+    return jsonify(cli.encounter_recording())
+
+
+@app.route("/api/encounter/switch", methods=["POST"])
+def api_encounter_switch_set():
+    data = request.get_json(force=True) or {}
+    if not isinstance(data.get("on"), bool):
+        return jsonify({"error": "on must be true or false — nothing is inferred"}), 400
+    out = cli.set_encounter_recording(data["on"], by="owner", note=str(data.get("note") or "")[:200])
+    out["state"] = cli.encounter_recording()
+    return jsonify(out)
+
+
+@app.route("/api/encounter", methods=["POST"])
+def api_encounter():
+    data = request.get_json(force=True) or {}
+    if not cli.encounter_recording()["on"]:
+        return jsonify({"recorded": False, "error": "encounter recording is off — nothing was written"}), 409
+    try:
+        out = cli.record_encounter(str(data.get("type") or ""), str(data.get("subject") or ""),
+                                   object_id=str(data.get("object") or ""), via=str(data.get("via") or ""),
+                                   trace_id=str(data.get("trace_id") or ""))
+    except ValueError as e:
+        return jsonify({"recorded": False, "error": str(e)}), 400
+    return jsonify(out)
+
+
+@app.route("/api/encounters", methods=["GET"])
+def api_encounters():
+    rows = cli.load_encounters()
+    return jsonify({"switch": cli.encounter_recording(), "encounters": rows[-200:], "total": len(rows),
+                    "note": "the raw log — ids and event types as recorded; nothing counted, nothing concluded"})
 
 
 @app.route("/api/epoch", methods=["GET"])
@@ -2447,7 +2478,7 @@ def api_bench_keep():
     before = {c.get("name", "").strip().lower() for c in cli.load_accepted_concepts()}
     if word.strip().lower() in before:
         return jsonify({"error": f"“{word}” is already in your Lexicon."}), 400
-    cli.persist_accepted_concept(word, definition, "", status="accepted")
+    cli.persist_accepted_concept(word, definition, "", status="accepted", origin="bench")
     rec = cli.recorded_construction(word)
     return jsonify({"kept": True, "word": word,
                     "construction_recorded": bool(rec.get("note")),
@@ -2738,7 +2769,8 @@ def api_judge():
         # lexicon. Coming back with fresh eyes has to be able to undo, or
         # the first ruling is permanent and the log is decoration.
         removed = cli.retract_accepted_concept(candidate_title,
-                                                concept_id=concept_id or "")
+                                                concept_id=concept_id or "",
+                                                judgment_id=judgment.id)
     if decision == "accepted":
         # Accepted concepts join the already-named check on every later
         # run — this is the corpus actually growing from your judgments.
@@ -2751,7 +2783,8 @@ def api_judge():
             alias_of=str(data.get("alias_of") or "").strip()[:200],
             declined_alias=_dec if isinstance(_dec, dict) else None,
             decline_reason=note,
-            concept_id=concept_id or "")
+            concept_id=concept_id or "",
+            origin="run", judgment_id=judgment.id)
     # What the judgment DID to the corpus, not merely that it was filed.
     # These two facts came apart six times already — six accepted words
     # sitting in judgments.jsonl with no lexicon entry behind them — and
@@ -2778,7 +2811,7 @@ def api_result(trace_id):
                 receipt = json.loads(rpath.read_text())
             except (json.JSONDecodeError, OSError):
                 receipt = {}
-            return jsonify({
+            out = {
                 "receipt_only": True, "trace_id": trace_id,
                 "operation": receipt.get("operation", ""),
                 "created_at": receipt.get("created_at", ""),
@@ -2788,7 +2821,27 @@ def api_result(trace_id):
                 "unavailable": "Only the receipt survives: the titles, the "
                                "operation, and the date. The reasoning was "
                                "never stored — this run predates result "
-                               "snapshots, and nothing can recover it."})
+                               "snapshots, and nothing can recover it."}
+            # block 104: a deep or decompose run reopens from its canonical
+            # receipt — the composite block names the component runs, the
+            # trial's verdict, the gesture and the completion; the prompt
+            # identities say which templates were used. The snapshot's
+            # text is what is missing, and the message says so.
+            if isinstance(receipt.get("composite"), dict):
+                comp = receipt["composite"]
+                out.update({"mode": comp.get("kind", ""), "composite": comp,
+                            "gesture": comp.get("gesture", ""), "completion": comp.get("completion", ""),
+                            "attack": comp.get("attack") or {}, "components": comp.get("components") or [],
+                            "epoch": comp.get("epoch", ""),
+                            "prompt_identities": receipt.get("prompt_identities") or [],
+                            "unavailable": "Only the receipt survives: the component runs by id, "
+                                           "the trial's verdict, the gesture, the completion and the "
+                                           "prompt identities. The dissection text and Friction's "
+                                           "objection were in the snapshot, which is gone; the "
+                                           "component runs keep their own records."})
+            elif receipt.get("prompt_identities"):
+                out["prompt_identities"] = receipt.get("prompt_identities") or []
+            return jsonify(out)
         return jsonify({"error": "destination could not be resolved — no "
                                   "snapshot and no receipt exist for this "
                                   "run."}), 404
@@ -3133,9 +3186,15 @@ def _home_pending() -> dict:
     # for the owner with no page yet. Since block 103 nothing is in it —
     # the recovery queue has its page and is counted above.
     saved = []
+    # Unresolved (block 104): cases the owner ruled "not enough survives".
+    # Not due — he ruled — but never lost: counted here, named on hover,
+    # with the review's door, and never in the ruling count.
+    unresolved_rows = recovery.unresolved_cases()
+    unresolved = {"count": len(unresolved_rows), "href": "/recovery",
+                  "titles": [r.get("title", "") for r in unresolved_rows][:12]}
     return {"total": len(items), "counts": counts, "items": items[:12],
             "sources": ["claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"],
-            "saved": saved, "saved_sources": [],
+            "saved": saved, "saved_sources": [], "unresolved": unresolved,
             "note": "Only what the record can count. Decisions that live in the backlog are not here."}
 
 
@@ -3160,7 +3219,10 @@ def api_home():
         assert c.get("id") and c.get("open", {}).get("type"), "a card without identity"
     return jsonify({"brand": BRAND, "continue": cards[:8], "continue_total": len(cards),
                     "excluded": excluded, "pending": _home_pending(),
-                    "keeper_active": bool(ks.get("active"))})
+                    "keeper_active": bool(ks.get("active")),
+                    # block 104: the encounter switch as the record holds it —
+                    # the page posts an encounter only while this is true
+                    "encounter_recording": bool(cli.encounter_recording().get("on"))})
 
 
 @app.route("/api/history")

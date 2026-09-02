@@ -17,7 +17,8 @@ DIR = pathlib.Path(os.environ.get("JOURNEY_DIR", "/tmp/anat"))
 STATE = pathlib.Path(os.environ.get("JOURNEY_STATE", str(DIR / "state")))
 STATE.mkdir(parents=True, exist_ok=True)
 for _n in ("JUDGMENTS_LOG", "RECEIPTS_DIR", "RESULTS_DIR", "ACCEPTED_CONCEPTS_PATH", "EDGES_LOG", "WARPS_LOG", "WARP_NOTES_LOG",
-           "BENCH_CORRECTIONS", "CONCEPT_NAMES_LOG", "BENCH_DIR", "INPUTS_LOG", "WAYFINDER_LOG"):
+           "BENCH_CORRECTIONS", "CONCEPT_NAMES_LOG", "BENCH_DIR", "INPUTS_LOG", "WAYFINDER_LOG",
+           "DEFINITION_EVENTS_LOG", "ENCOUNTER_SWITCH_LOG", "ENCOUNTERS_LOG"):   # block 104
     setattr(cli, _n, STATE / str(getattr(cli, _n)).split("/")[-1])
 cli.LOCAL_STATE = STATE
 (STATE / "receipts").mkdir(exist_ok=True)

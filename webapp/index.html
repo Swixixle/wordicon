@@ -457,6 +457,7 @@
     <div id="ruling-fold" class="foot" style="margin-top:6px"></div>
   </div>
   <div id="ruling-saved" class="quiet-line" hidden></div>
+  <div id="ruling-unresolved" class="quiet-line" hidden></div>
 
   <!-- BRING SOMETHING IN: the same intake as before, one band down. The
        phrase box below is the ORIGINAL element — same id, same wiring, the
@@ -660,6 +661,10 @@
       <div id="about-epoch" class="foot" style="margin:-6px 0 12px">Epoch: <span id="about-epoch-name">not read yet</span> <span id="about-epoch-when" class="muted"></span>
         <button id="epoch-begin" hidden style="margin-left:8px;font-size:11.5px;padding:2px 9px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;cursor:pointer" onclick="beginOrdinaryUse()">Begin ordinary use</button>
         <span class="muted" id="epoch-note"></span></div>
+      <div id="about-encounter" class="foot" style="margin:-6px 0 12px">Encounter recording: <strong id="encounter-state">not read yet</strong>
+        <button id="encounter-toggle" hidden style="margin-left:8px;font-size:11.5px;padding:2px 9px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;cursor:pointer" onclick="toggleEncounterRecording()">Turn on</button>
+        <span class="muted" id="encounter-note"></span>
+        <div class="muted" id="encounter-explain" style="margin-top:4px">Off by default, and while off nothing is written — not a row, not a file. When on, the record keeps <em>ids and event types only</em> — which entry was surfaced, opened, selected, reused, cited, sprouted or refracted from, revised, linked, exported — never any text. Turning it on or off is itself recorded, so the record shows exactly when observation began and ended. Raw log: <a href="/api/encounters">/api/encounters</a>.</div></div>
       <p class="body">Bring <span data-brand>Nikodemus</span> a feeling with no name and it forges you concept readings
       worth arguing with — the idea's anatomy under a plain working title. Bring it a book and the
       book stays a book — byte-intact, mechanically read, every sentence an anchor you can hold a
@@ -688,6 +693,15 @@
       attached, or through a door. Older rows carry none of this and are never rewritten: their missing clocks
       are a finding, not a gap to paper over. Acceptances the identity migration found receipt-only wait in the
       <a href="/recovery">Recovery Review</a>, where a definition comes from the owner or not at all.</p>
+      <p class="body"><strong>The record measures itself before it is used.</strong>
+      Every definition is an event — the exact words, the concept, the time, the origin, what it supersedes — and the
+      shelf is what those events rebuild, checked against them; older entries carry one labeled baseline, never an
+      invented history. Every receipt names the prompt templates behind it by stage and hash, never the prompt itself.
+      Now every new relation on the Map says who put it there — the pipeline, the owner, a model's proposal — and cites
+      the receipt or ruling that produced it; older relations are labeled unknown and left alone. A deep run keeps a
+      receipt like any other run. Encounter recording is off until you turn it on in this panel; while off nothing is
+      written, and the flip itself is recorded. A recovery case ruled “not enough survives” stays findable and can be
+      reopened by a later ruling that cites it.</p>
       <p class="body"><strong>The first minute:</strong> type into the box below — a feeling you don't
       have a word for, a word you're curious about, a handful of loose words, or a whole passage — and
       press <em>Run it</em>. Cards come back; open them, argue with them, rule on them or don't. Or
@@ -1305,8 +1319,44 @@ async function beginOrdinaryUse() {
   } catch (e) { if (note) note.textContent = 'could not reach the server.'; }
   loadEpoch();
 }
+// The encounter switch (block 104): shown as the record holds it, off
+// by default; flipped only by this visible action; the flip is recorded.
+let ENCOUNTER_ON = false;
+async function loadEncounterSwitch() {
+  const st = document.getElementById('encounter-state'), btn = document.getElementById('encounter-toggle');
+  if (!st) return;
+  try {
+    const r = await fetch('/api/encounter/switch');
+    const d = await r.json();
+    ENCOUNTER_ON = !!d.on;
+    st.textContent = d.on ? 'on' : 'off' + (d.flips ? '' : ' (default — never turned on)');
+    st.textContent += d.since ? ' — since ' + new Date(d.since).toLocaleString() : '';
+    if (btn) { btn.hidden = false; btn.textContent = d.on ? 'Turn off' : 'Turn on'; }
+  } catch (e) { st.textContent = 'could not be read'; }
+}
+async function toggleEncounterRecording() {
+  const note = document.getElementById('encounter-note');
+  const turningOn = !ENCOUNTER_ON;
+  if (!confirm(turningOn
+      ? 'Turn encounter recording ON? From now on, ids and event types of what you open, select, reuse, cite, sprout, refract, revise, link or export are appended to the record. No text. This flip itself is recorded.'
+      : 'Turn encounter recording OFF? Nothing more is written after this; the flip itself is recorded.')) return;
+  try {
+    const r = await fetch('/api/encounter/switch', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({on: turningOn, note: 'from About & proof'})});
+    const d = await r.json();
+    if (note) note.textContent = d.error ? d.error : (d.changed ? 'recorded.' : (d.reason || ''));
+  } catch (e) { if (note) note.textContent = 'could not reach the server.'; }
+  loadEncounterSwitch();
+}
+// One encounter, posted only while the switch is on — the server refuses
+// and writes nothing otherwise, and this never asks it to.
+function noteEncounter(type, subject, object, via) {
+  if (!ENCOUNTER_ON || !subject) return;
+  fetch('/api/encounter', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({type, subject, object: object || '', via: via || ''})}).catch(() => {});
+}
 async function loadConfig() {
   loadEpoch();
+  loadEncounterSwitch();
   const el = document.getElementById('about-provider');
   if (!el) return;
   try {
@@ -6438,6 +6488,7 @@ async function loadHome() {
   try {
     const r = await fetch('/api/home');
     HOME = await r.json();
+    ENCOUNTER_ON = !!(HOME && HOME.encounter_recording);   // block 104: the switch as the record holds it
   } catch (e) {
     if (area) area.innerHTML = '<div class="empty">Could not read the record (' + escapeHtml(String(e)) + ').</div>';
     return;
@@ -6537,6 +6588,7 @@ function renderRulings() {
   const p = HOME.pending || {items: [], total: 0};
   const items = p.items || [];
   renderSaved(p.saved || []);
+  renderUnresolved(p.unresolved || null);
   if (!items.length) {
     area.innerHTML = '<div class="empty" style="padding:8px 0">Nothing awaits your ruling. ' + escapeHtml(p.note || '') + '</div>';
     if (more) more.textContent = ''; if (fold) fold.textContent = ''; return;
@@ -6565,6 +6617,17 @@ function renderRooms() {
   area.innerHTML = (rooms.concat(works).join('') || '<div class="empty" style="padding:8px 0">No rooms yet.</div>')
     + `<div class="rule-row"><span class="k">The Clinic</span><span>Institutional sources by seat — policy, guidance, label, study, manufacturer — never blended.</span><span class="act"><a href="/clinic">Open the Clinic</a></span></div>`;
 }
+// Unresolved (block 104): cases the owner ruled "not enough survives".
+// Not due — he ruled — and never lost: counted, named on hover, with the
+// review's door; never in the ruling count.
+function renderUnresolved(u) {
+  const line = document.getElementById('ruling-unresolved');
+  if (!line) return;
+  if (!u || !u.count) { line.hidden = true; line.textContent = ''; return; }
+  line.hidden = false;
+  line.innerHTML = '<span class="k">Unresolved</span> ' +
+    `<span title="${escapeHtml((u.titles || []).join(' · '))}">${u.count} case${u.count === 1 ? '' : 's'} ruled “not enough survives” — reopenable on the <a href="${escapeHtml(u.href || '/recovery')}">Recovery Review</a></span>`;
+}
 async function toggleLibraryOpen() {
   const area = document.getElementById('library-area');
   const body = document.getElementById('library-body');
@@ -6576,6 +6639,7 @@ async function openConceptById(id) {
   const c = (lib && lib.lexicon || []).find(x => x.concept_id === id);
   if (!c) { pageNote('that concept id is not on the shelf — nothing was opened in its place.'); return; }
   await showShelfEntry(c);
+  noteEncounter('owner_opened', id, '', 'home_concept_card');
 }
 // The legacy bridge's door: an older shelf entry, found by ITS persisted
 // id (acc_…), never by the title on the card. The entry's own name is
@@ -6585,6 +6649,7 @@ async function openShelfEntry(entryId) {
   const c = (lib && lib.lexicon || []).find(x => x.id === entryId);
   if (!c) { pageNote('that shelf entry (' + entryId + ') is not in the library payload — nothing was opened in its place.'); return; }
   await showShelfEntry(c);
+  noteEncounter('owner_opened', entryId, '', 'home_legacy_bridge');
   pageNote('opened from an older title-keyed record (' + entryId + '); this card is the concept, the entry is the record — nothing was merged.');
 }
 // A shared title, shown as the shelf holds it: every entry under it, for

@@ -42,6 +42,11 @@ _REDIRECTED = {
     "BENCH_DIR": _SCRATCH / "bench",
     "INPUTS_LOG": _SCRATCH / "inputs.jsonl",
     "WAYFINDER_LOG": _SCRATCH / "wayfinder.jsonl",
+    # block 104: the record primitives' own logs — the real-store guard at
+    # the end of the suite caught the first run that forgot these
+    "DEFINITION_EVENTS_LOG": _SCRATCH / "definition_events.jsonl",
+    "ENCOUNTER_SWITCH_LOG": _SCRATCH / "encounter_switch.jsonl",
+    "ENCOUNTERS_LOG": _SCRATCH / "encounters.jsonl",
 }
 for _name, _path in _REDIRECTED.items():
     setattr(cli, _name, _path)
@@ -1202,9 +1207,11 @@ def main() -> int:
 
         # dispute detection: two synthetic edges, same target, conflicting verdicts
         cli.record_edge("parallels", cli.node_word("Seed A"),
-                         cli.node_external("Dispute Probe Work"), "trace_syn_1", verdict="holds")
+                         cli.node_external("Dispute Probe Work"), "trace_syn_1", verdict="holds",
+                         origin="model_proposed", producer=cli.edge_producer("receipt", "receipt_trace_syn_1"))   # ledger (block 104): every new edge carries its origin and producer
         cli.record_edge("parallels", cli.node_word("Seed B"),
-                         cli.node_external("Dispute Probe Work"), "trace_syn_2", verdict="strained")
+                         cli.node_external("Dispute Probe Work"), "trace_syn_2", verdict="strained",
+                         origin="model_proposed", producer=cli.edge_producer("receipt", "receipt_trace_syn_2"))
         ow2 = cli.build_overworld()
         probe = [d for d in ow2["disputes"]
                  if d["target_key"] == cli.node_external("Dispute Probe Work")["key"]]
@@ -11432,7 +11439,8 @@ console.log(out.join('\\n'));
                      "label": "ZZRename94"},
                     {"kind": "external", "key": "ext:zztarget94",
                      "label": "ZZTarget94"},
-                    "owner_declared", verdict="", detail="legacy road")
+                    "owner_declared", verdict="", detail="legacy road",
+                    origin="owner_declared", producer=cli.edge_producer("owner_declaration", "road_decl_94"))   # ledger (block 104)
     _ow94 = cli.build_overworld()
 
     def _find_item94(ow, cid):
@@ -13480,6 +13488,496 @@ console.log(out.join('\\n'));
         _ov = server.app.test_client().get("/api/recovery")   # unpaired
         if _ov.status_code == 200 and "open" in (_ov.get_json() or {}):
             _f103("/api/recovery answers an unpaired visitor")
+
+    # ================= block 104: the record primitives ==================
+    # The measuring instruments the owner asked for before ordinary use:
+    # prompt identity (stage, template hash, renderer, model, settings —
+    # never the assembled prompt, never a hash of private text); an origin
+    # and a producer on every new edge, with the reader labeling old rows
+    # legacy_unknown and rewriting nothing; definition events, so the shelf
+    # is a projection that can be rebuilt and checked, older entries
+    # getting one labeled baseline and the recoveries reconstructed
+    # mechanically; deep and decompose runs settled into the canonical
+    # receipt vocabulary; an encounter switch, visibly off by default, that
+    # writes nothing while off and records its own flips; unresolved
+    # recovery cases findable and reopenable. Nothing here proposes,
+    # trends, or chooses.
+    import ast as _ast104
+    import json as _json104
+    import hashlib as _hl104
+    import inspect as _insp104
+    import re as _re104
+    _root104 = Path(cli.__file__).parent.parent
+    _cli104 = (_root104 / "scripts" / "wordicon_cli.py").read_text(encoding="utf-8")
+    _srv104 = (_root104 / "server.py").read_text(encoding="utf-8")
+    _idx104 = (_root104 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _rec104 = (_root104 / "webapp" / "recovery.html").read_text(encoding="utf-8")
+    _rsrc104 = (_root104 / "scripts" / "recovery.py").read_text(encoding="utf-8")
+
+    def _f104(msg):
+        failures.append(f"104: {msg}")
+
+    def _digest104(root):
+        h = _hl104.sha256()
+        for p in sorted(Path(root).rglob("*")):
+            if p.is_file():
+                h.update(str(p.relative_to(root)).encode()); h.update(b"\0"); h.update(p.read_bytes()); h.update(b"\0")
+        return h.hexdigest()
+
+    # ---- (1) prompt identity -------------------------------------------
+    _pi = cli.prompt_template_identity("generation")
+    if _pi != cli.prompt_template_identity("generation") or set(_pi) != {"stage", "template_sha", "renderer_rev"} \
+            or not _re104.fullmatch(r"[a-f0-9]{16}", _pi["template_sha"]) or _pi["renderer_rev"] != cli.PROMPT_RENDERER_REV:
+        _f104(f"a template identity is not stable, or carries more than stage/template/renderer: {_pi}")
+    _builders = set(_re104.findall(r"^def (build_\w*prompt)\(", _cli104, _re104.M))
+    if _builders != set(cli.PROMPT_STAGE_BUILDERS.values()):
+        _f104(f"prompt builders outside the registry: {sorted(_builders ^ set(cli.PROMPT_STAGE_BUILDERS.values()))}")
+    for _stage in cli.PROMPT_STAGE_BUILDERS:
+        try:
+            cli.prompt_template_identity(_stage)
+        except Exception as e:  # noqa: BLE001
+            _f104(f"stage {_stage} has no identity: {e}")
+    try:
+        cli.prompt_template_identity("horoscope")
+        _f104("an unregistered stage was given an identity")
+    except ValueError:
+        pass
+
+    def _t104a():
+        return "You are the probe stage. Say A."
+
+    def _t104b():
+        return "You are the probe stage. Say B."
+
+    if cli.template_sha_of(_t104a) != cli.template_sha_of(_t104a) or cli.template_sha_of(_t104a) == cli.template_sha_of(_t104b):
+        _f104("editing a template does not change its identity, or an unedited one is unstable")
+    if cli.template_sha_of(_t104a) != _hl104.sha256(b"_t104a\0" + _insp104.getsource(_t104a).encode() + b"\0").hexdigest()[:16]:
+        _f104("the template identity is not the hash of the builder's own source")
+    _gw104 = cli.MockGateway()
+    _m = cli.prompt_ledger_mark()
+    cli.build_attack_prompt("zz")
+    cli.build_attack_prompt("yy")
+    _ids = cli.prompt_identities_since(_m, _gw104)
+    if len(_ids) != 1 or _ids[0].get("stage") != "attack" or _ids[0].get("calls") != 2 or _ids[0].get("gateway") != "mock" \
+            or _ids[0].get("model") != "mock" or (_ids[0].get("settings") or {}).get("sampling") != "api_default" \
+            or cli.prompt_identities_since(_m, _gw104):
+        _f104(f"the ledger does not note a stage's calls once and drain: {_ids}")
+    if _insp104.unwrap(cli.build_generation_prompt) is cli.build_generation_prompt:
+        _f104("the builders are not wrapped by the ledger")
+    _r104a = cli.run("forge", "ZZ identity probe one 104", _gw104, interactive=False)
+    _r104b = cli.run("forge", "ZZ identity probe two 104 — a different passage entirely", _gw104, interactive=False)
+    _pia, _pib = _r104a["private_receipt"].get("prompt_identities"), _r104b["private_receipt"].get("prompt_identities")
+    if not _pia or {i["stage"] for i in _pia} < {"generation", "adversarial"}:
+        _f104(f"a forge receipt does not carry its prompt identities: {_pia}")
+    if [{k: v for k, v in i.items() if k != "calls"} for i in (_pia or [])] != [{k: v for k, v in i.items() if k != "calls"} for i in (_pib or [])]:
+        _f104("two runs over different passages carry different template identities — the identity depends on the input")
+    _pij = _json104.dumps(_pia)
+    for _bad in ("ZZ identity probe", "You are the", "prompt_text", "assembled"):
+        if _bad in _pij:
+            _f104(f"a prompt identity carries {_bad!r} — the assembled prompt or the input")
+    for _i in (_pia or []):
+        if set(_i) != {"stage", "template_sha", "renderer_rev", "calls", "gateway", "model", "settings"}:
+            _f104(f"a prompt identity carries other fields: {sorted(_i)}")
+    _rsch = _json104.loads((_root104 / "schemas" / "receipt.schema.json").read_text(encoding="utf-8"))
+    if _rsch.get("additionalProperties") is not False or "prompt_identities" not in _rsch["properties"] or "composite" not in _rsch["properties"] \
+            or set(_rsch["properties"]["operation"]["enum"]) != {"crack", "forge", "crossbreed", "audit", "distill", "deep", "decompose"} \
+            or _rsch["properties"]["prompt_identities"]["items"].get("additionalProperties") is not False:
+        _f104("the receipt schema does not carry prompt identities and composite runs strictly")
+    if "prompt_identities: list[dict] | None = None" not in (_root104 / "src" / "wordicon_corpus" / "receipts.py").read_text(encoding="utf-8"):
+        _f104("build_private_receipt does not take prompt identities as an optional field")
+
+    # ---- (2) edge origin and producer ----------------------------------
+    try:
+        cli.record_edge("parallels", cli.node_word("ZZ104"), cli.node_external("ZZ ext 104"), "trace_zz104")
+        _f104("an edge without an origin was recorded")
+    except TypeError:
+        pass
+    for _o, _p in (("legacy_unknown", cli.edge_producer("receipt", "receipt_x")), ("vibes", cli.edge_producer("receipt", "receipt_x")),
+                   ("mechanical", {"kind": "receipt"}), ("mechanical", {"kind": "rumor", "id": "x"})):
+        try:
+            cli.record_edge("parallels", cli.node_word("ZZ104"), cli.node_external("ZZ ext 104"), "trace_zz104", origin=_o, producer=_p)
+            _f104(f"an edge with origin {_o!r} and producer {_p!r} was recorded")
+        except ValueError:
+            pass
+    _calls = [n for n in _ast104.walk(_ast104.parse(_cli104)) if isinstance(n, _ast104.Call)
+              and isinstance(n.func, _ast104.Name) and n.func.id == "record_edge"]
+    _expected_origin = {"produced": "mechanical", "decomposed_into": "model_proposed", "forged_as": "mechanical",
+                        "reworked_into": "mechanical", "parallels": "model_proposed", "continued_from": "mechanical",
+                        "archetype_of": "model_proposed", "translated_as": "model_proposed", "english_fossil": "model_proposed",
+                        "declared_road": "owner_declared"}
+    _seen_rels = set()
+    for _c in _calls:
+        _kw = {k.arg: k.value for k in _c.keywords}
+        if "origin" not in _kw or "producer" not in _kw:
+            _f104(f"a record_edge call at line {_c.lineno} carries no origin or no producer")
+            continue
+        _rel = _c.args[0].value if isinstance(_c.args[0], _ast104.Constant) else "compressed_as/renamed_as"
+        _seen_rels.add(_rel)
+        _origin = _kw["origin"].value if isinstance(_kw["origin"], _ast104.Constant) else "?"
+        if _rel in _expected_origin and _origin != _expected_origin[_rel]:
+            _f104(f"{_rel} at line {_c.lineno} is recorded as {_origin!r}, not {_expected_origin[_rel]!r}")
+        if _rel == "compressed_as/renamed_as" and _origin != "mechanical":
+            _f104(f"a rename edge at line {_c.lineno} is not mechanical")
+        if not (isinstance(_kw["producer"], _ast104.Call) and getattr(_kw["producer"].func, "id", "") == "edge_producer"):
+            _f104(f"the producer at line {_c.lineno} is not minted by edge_producer")
+    if len(_calls) < 13 or set(_expected_origin) - _seen_rels:
+        _f104(f"record_edge call sites changed shape: {len(_calls)} calls, missing {sorted(set(_expected_origin) - _seen_rels)}")
+    _prod = [e for e in cli.load_edges() if e.get("run_trace_id") == _r104a["trace_id"] and e.get("rel") == "produced"]
+    if not _prod or any(e.get("origin") != "mechanical" or (e.get("producer") or {}) != {"kind": "receipt", "id": _r104a["private_receipt"]["receipt_id"]}
+                        or e.get("epoch") != "ordinary_use" for e in _prod):
+        _f104(f"a produced edge does not carry origin mechanical, its receipt as producer, and the epoch: {_prod[:1]}")
+    _edges_bytes = cli.EDGES_LOG.read_bytes()
+    with open(cli.EDGES_LOG, "a") as _ef:
+        _ef.write(_json104.dumps({"edge_id": "edge_legacy104", "rel": "parallels", "source": cli.node_word("ZZ legacy 104"),
+                                  "target": cli.node_external("ZZ legacy ext 104"), "run_trace_id": "trace_old104",
+                                  "verdict": "holds", "detail": "", "created_at": "2026-08-20T00:00:00+00:00"}) + "\n")
+    _legacy_bytes = cli.EDGES_LOG.read_bytes()
+    _lrow = next((e for e in cli.load_edges() if e.get("edge_id") == "edge_legacy104"), None)
+    if not _lrow or _lrow.get("origin") != "legacy_unknown" or "producer" in _lrow:
+        _f104(f"a row with no origin is not reported as legacy_unknown, or was given a producer: {_lrow}")
+    cli.build_overworld()
+    if cli.EDGES_LOG.read_bytes() != _legacy_bytes:
+        _f104("reading the edges rewrote the log")
+    if 'row["origin"] = edge_origin_of(row)' not in _cli104 or "def edge_origin_of" not in _cli104 \
+            or 'return o if o in EDGE_ORIGINS else "legacy_unknown"' not in _cli104:
+        _f104("the reader does not label absent origins as legacy_unknown")
+    _ra = cli.node_word("ZZ road a 104"); _rb = cli.node_word("ZZ road b 104")
+    _decl = cli.declare_road(_ra, _rb, "leans on", "suite", {_ra["key"], _rb["key"]})
+    _droad = next((e for e in cli.load_edges() if e.get("rel") == "declared_road" and e.get("source", {}).get("key") == _ra["key"]), None)
+    if not _droad or _droad.get("origin") != "owner_declared" or (_droad.get("producer") or {}).get("kind") != "owner_declaration" \
+            or not str((_droad.get("producer") or {}).get("id", "")).startswith("road_decl_") \
+            or _droad.get("declaration_id") != (_droad.get("producer") or {}).get("id"):
+        _f104(f"a declared road does not cite its own declaration: {_droad}")
+    _wf = [w for w in cli.load_wayfinder_log() if w.get("type") == "declare" and w.get("declaration_id") == _droad.get("declaration_id")]
+    if not _wf:
+        _f104("the Wayfinder row of a declaration does not carry the declaration id the edge cites")
+
+    # ---- (3) definition events: the shelf as a projection --------------
+    import importlib as _il104
+    _proj = _il104.import_module("shelf_projection")
+    _chk0 = cli.shelf_projection_check()
+    if _chk0["matches"] and _chk0["file_entries"] and not _chk0["events"]:
+        _f104("the projection claims to match a shelf with no events")
+    # every shelf write since this block is an event: the Recovery Review's
+    # acceptances of block 103 wrote theirs with their origin
+    if not any(e.get("origin") == "recovery_review" and e.get("judgment_id") for e in cli.load_definition_events()):
+        _f104("the Recovery Review's acceptances did not write definition events citing their judgments")
+    # earlier blocks wrote the shelf FILE by hand (fixtures), which is the
+    # older store's shape: entries with no events. Stand in for it exactly:
+    # start from no events at all and let the baseline find every entry —
+    # the recoveries reconstructed from their rulings, the rest baselined.
+    cli.DEFINITION_EVENTS_LOG.unlink()
+    _rulings104 = [r for r in _il104.import_module("recovery").load_rulings() if r.get("shelf_entry_added")]
+    _rr = _rulings104[0] if _rulings104 else {}
+    _entries104 = _json104.loads(cli.ACCEPTED_CONCEPTS_PATH.read_text(encoding="utf-8"))
+    _rentry = next((e for e in _entries104 if e.get("concept_id") == _rr.get("concept_id")), None)
+    if not _rentry:
+        _f104("no recovered concept is on the scratch shelf to reconstruct")
+    _dry = _proj.baseline(dry_run=True)
+    if _proj.baseline(dry_run=True) != _dry or cli.DEFINITION_EVENTS_LOG.exists():
+        _f104("a dry run of the baseline wrote")
+    if len(_dry["reconstructed"]) != len(_rulings104) or len(_dry["baselined"]) + len(_dry["reconstructed"]) != len([e for e in _entries104 if e.get("id")]):
+        _f104(f"the baseline does not cover every entry once: {_dry}")
+    _now_b = cli._now()
+    _base = _proj.baseline()
+    if _rentry and not any(x.get("entry_id") == _rentry["id"] for x in _base["reconstructed"]):
+        _f104(f"a recovered concept was baselined instead of reconstructed from its ruling: {_base}")
+    if not _base["baselined"] and not _base["reconstructed"]:
+        _f104("the baseline found nothing to do on a shelf with event-less entries")
+    _base2 = _proj.baseline()
+    if _base2["baselined"] or _base2["reconstructed"]:
+        _f104("running the baseline twice appended events twice")
+    _chk1 = cli.shelf_projection_check()
+    if not _chk1["matches"]:
+        _f104(f"after the baseline the shelf does not equal its projection: {_chk1}")
+    _evs = cli.load_definition_events()
+    _recon = [e for e in _evs if e.get("origin") == "reconstructed_recovery"]
+    _mine_r = next((e for e in _recon if e.get("reconstructed_from") == _rr.get("ruling_id")), None)
+    if _rentry and (not _mine_r or _mine_r.get("at") != _rr.get("ruled_at") or _mine_r.get("entry_id") != _rentry.get("id")
+                    or _mine_r.get("definition") != _rentry.get("definition") or _mine_r.get("judgment_id") not in (_rr.get("judgment_ids") or [])
+                    or _mine_r.get("reconstructed") is not True or len(_recon) != len(_rulings104)):
+        _f104(f"the reconstructed event does not carry the ruling's clock, id, judgment and exact definition: {_mine_r}")
+    _bl = [e for e in _evs if e.get("origin") == "baseline_snapshot"]
+    if len(_bl) != len([e for e in _entries104 if e.get("id")]) - len(_rulings104) or len(_evs) != len(_bl) + len(_recon):
+        _f104(f"the baseline did not label every non-recovered entry as a baseline snapshot: {len(_bl)} of {len(_entries104)} entries, {len(_evs)} events")
+    if not all(e.get("baseline") is True and "no event history survives" in (e.get("note") or "") and e.get("at", "") >= _now_b
+               and e.get("judgment_id") == "" and e.get("entry_accepted_at") == (e.get("entry") or {}).get("accepted_at") for e in _bl):
+        _f104("a baseline event is not labeled as a baseline, dated when it was taken, with the entry's own clock kept as an observed fact")
+    if any(e.get("origin") not in cli.DEFINITION_EVENT_ORIGINS for e in _evs) or any(e.get("origin") in ("run", "bench") for e in _evs):
+        _f104("a definition event carries an origin outside the declared set, or the baseline invented a run's history")
+    # a new acceptance is an event first; a retraction supersedes it; the file equals the replay throughout
+    _ev_pre = cli.DEFINITION_EVENTS_LOG.read_bytes()
+    cli.persist_accepted_concept("ZZ Event Probe 104", "an exact definition, kept exactly", "trace_zz104",
+                                 concept_id="concept_zz104", origin="run", judgment_id="jdg_evt_zz104")
+    _d = [e for e in cli.load_definition_events() if e.get("concept_id") == "concept_zz104"]
+    if len(_d) != 1 or _d[0].get("kind") != "defined" or _d[0].get("definition") != "an exact definition, kept exactly" \
+            or _d[0].get("judgment_id") != "jdg_evt_zz104" or _d[0].get("origin") != "run" or _d[0].get("supersedes") != "" \
+            or _d[0].get("epoch") != "ordinary_use" or not _d[0].get("at") or (_d[0].get("entry") or {}).get("id") != "acc2_" + _hl104.sha256(b"concept_zz104").hexdigest()[:12]:
+        _f104(f"an acceptance did not become an exact definition event: {_d}")
+    if not cli.shelf_projection_check()["matches"]:
+        _f104("after an acceptance the shelf does not equal its projection")
+    cli.retract_accepted_concept("ZZ Event Probe 104", concept_id="concept_zz104", judgment_id="jdg_evt_zz104r")
+    _d = [e for e in cli.load_definition_events() if e.get("concept_id") == "concept_zz104"]
+    if len(_d) != 2 or _d[1].get("kind") != "retracted" or _d[1].get("supersedes") != _d[0].get("event_id") \
+            or _d[1].get("origin") != "retraction" or _d[1].get("judgment_id") != "jdg_evt_zz104r" or _d[1].get("definition"):
+        _f104(f"a retraction did not become an event superseding the definition: {_d}")
+    if not cli.shelf_projection_check()["matches"] or any(e.get("concept_id") == "concept_zz104" for e in cli.rebuild_shelf_from_events()):
+        _f104("after a retraction the projection still holds the concept, or differs from the file")
+    if not cli.DEFINITION_EVENTS_LOG.read_bytes().startswith(_ev_pre):
+        _f104("the definition events log was rewritten")
+    for _o in ("guess", "model"):
+        try:
+            cli.record_definition_event("defined", {"id": "acc_x104", "name": "x"}, origin=_o)
+            _f104(f"a definition event with origin {_o!r} was recorded")
+        except ValueError:
+            pass
+    if "def record_definition_event" not in _cli104 or "def rebuild_shelf_from_events" not in _cli104 \
+            or _cli104.count("record_definition_event(") < 3 or 'origin="bench"' not in _srv104 \
+            or "judgment_id=judgment.id" not in _srv104 or 'origin="recovery_review", judgment_id=jid' not in _rsrc104:
+        _f104("not every shelf write cites its judgment as a definition event")
+
+    # ---- (4) deep and decompose runs in the canonical vocabulary -------
+    _dp = cli.RECEIPTS_DIR / f"receipt_{_meta['trace_id']}.json"
+    if not _dp.exists():
+        _f104("the deep record of block 103 has no receipt")
+    else:
+        _drc = _json104.loads(_dp.read_text(encoding="utf-8"))
+        try:
+            cli.schema_loader.validate("receipt.schema.json", _drc)
+        except Exception as e:  # noqa: BLE001
+            _f104(f"the deep receipt does not validate: {e}")
+        _cmp = _drc.get("composite") or {}
+        if _drc.get("operation") != "deep" or _cmp.get("kind") != "deep" or _cmp.get("completion") != "partial" or _cmp.get("n_components") != 2 \
+                or _cmp.get("n_failed") != 1 or [c.get("label") for c in _cmp.get("components") or []] != ["one", "two"] \
+                or (_cmp.get("attack") or {}).get("verdict") != "reject" or _cmp.get("gesture") != "trial" or _drc.get("candidates"):
+            _f104(f"the deep receipt does not hold the composite as ruled: {_cmp}")
+        (cli.RESULTS_DIR / f"{_meta['trace_id']}.json").unlink()
+        with server.app.test_client() as _c104:
+            _paired(_c104)
+            _ro = _c104.get("/api/result/" + _meta["trace_id"]).get_json() or {}
+        if not _ro.get("receipt_only") or _ro.get("mode") != "deep" or _ro.get("completion") != "partial" or len(_ro.get("components") or []) != 2 \
+                or (_ro.get("attack") or {}).get("verdict") != "reject" or _ro.get("gesture") != "trial" or "component runs keep their own records" not in (_ro.get("unavailable") or ""):
+            _f104(f"a deep run does not reopen from its receipt alone: {sorted(_ro)}")
+    _deep104 = cli.run_deep("ZZ deep probe 104: a passage about pretending while poor, and guilt at arriving.", _gw104, interactive=False)
+    if not str(_deep104.get("trace_id", "")).startswith("trace_deep_") or {i["stage"] for i in _deep104.get("prompt_identities") or []} != {"dissect", "attack"}:
+        _f104(f"run_deep does not mint its identity before its first call and keep only its own stages: {_deep104.get('trace_id')} {[i.get('stage') for i in _deep104.get('prompt_identities') or []]}")
+    _dedges = [e for e in cli.load_edges() if e.get("rel") == "decomposed_into" and (e.get("producer") or {}).get("id") == f"receipt_{_deep104['trace_id']}"]
+    if not _dedges or any(e.get("origin") != "model_proposed" or (e.get("producer") or {}).get("stage") != "dissect" for e in _dedges):
+        _f104(f"a deep run's decomposed_into edges do not cite the deep receipt as a model proposal: {_dedges[:1]}")
+    _fedges = [e for e in cli.load_edges() if e.get("rel") == "forged_as" and e.get("run_trace_id") in {g.get("result", {}).get("trace_id") for g in _deep104["groups"] if g.get("result")}]
+    if not _fedges or any(e.get("origin") != "mechanical" or not (cli.RECEIPTS_DIR / ((e.get("producer") or {}).get("id", "") + ".json")).exists() for e in _fedges):
+        _f104("a forged_as edge is not mechanical, or cites a receipt that does not exist")
+    _srv_groups = [{"label": g["label"], "gist": g.get("gist", ""), "anchor": g.get("anchor", ""), "anchor_verified": g.get("anchor_verified", False),
+                    "trace_id": g["result"]["trace_id"], "receipt_id": g["result"]["private_receipt"]["receipt_id"], "failed": False}
+                   for g in _deep104["groups"] if g.get("result")]
+    _wrote = server._write_deep_record({"mode": "deep", "groups": _srv_groups, "attack": _deep104["attack"], "gesture": "trial",
+                                        "trace_id": _deep104["trace_id"], "prompt_identities": _deep104["prompt_identities"],
+                                        "gateway": "mock", "gateway_external": False}, "ZZ deep probe 104")
+    if not _wrote.get("recorded") or _wrote.get("trace_id") != _deep104["trace_id"] or not (cli.RECEIPTS_DIR / f"receipt_{_deep104['trace_id']}.json").exists():
+        _f104(f"the deep receipt was not written under the identity the edges cite: {_wrote}")
+    _drc2 = _json104.loads((cli.RECEIPTS_DIR / f"receipt_{_deep104['trace_id']}.json").read_text(encoding="utf-8")) \
+        if (cli.RECEIPTS_DIR / f"receipt_{_deep104['trace_id']}.json").exists() else {}
+    if [i["stage"] for i in _drc2.get("prompt_identities") or []] != ["attack", "dissect"] or (_drc2.get("model_calls") or [{}])[0] != {"gateway": "mock", "is_external": False} \
+            or any(not c.get("receipt_id") for c in (_drc2.get("composite") or {}).get("components") or []):
+        _f104(f"the deep receipt does not carry its stages, gateway and component receipts: {_drc2.get('prompt_identities')} {_drc2.get('model_calls')}")
+    _dc104 = cli.run_decompose("ZZ decompose probe 104: a passage about pretending while poor, and guilt at arriving.", _gw104, interactive=False)
+    if not str(_dc104.get("trace_id", "")).startswith("trace_decompose_") or not _dc104.get("recorded") \
+            or not (cli.RECEIPTS_DIR / f"receipt_{_dc104['trace_id']}.json").exists():
+        _f104(f"run_decompose has no parent receipt: {_dc104.get('trace_id')} {_dc104.get('record_error')}")
+    else:
+        _dcr = _json104.loads((cli.RECEIPTS_DIR / f"receipt_{_dc104['trace_id']}.json").read_text(encoding="utf-8"))
+        if _dcr.get("operation") != "decompose" or (_dcr.get("composite") or {}).get("kind") != "decompose" or not _dcr.get("prompt_identities") \
+                or {i["stage"] for i in _dcr["prompt_identities"]} & {"generation", "adversarial"}:
+            _f104(f"the decompose parent receipt is not in the canonical vocabulary, or took its components' stages: {sorted(_dcr)} {[i.get('stage') for i in _dcr.get('prompt_identities') or []]}")
+        _dce = [e for e in cli.load_edges() if e.get("rel") == "decomposed_into" and (e.get("producer") or {}).get("id") == _dcr.get("receipt_id")]
+        if not _dce or any(e.get("origin") != "model_proposed" or (e.get("producer") or {}).get("stage") != "decompose" for e in _dce):
+            _f104("a decompose run's decomposed_into edges do not cite the parent receipt")
+    if "return cli.record_composite_run(\"deep\", result, input_text)" not in _srv104 or "def record_composite_run" not in _cli104 \
+            or 'candidates=[]' not in _cli104[_cli104.index("def record_composite_run"):_cli104.index("def summary_line")]:
+        _f104("the deep record is not the canonical composite receipt, or lists candidates of its own")
+
+    # ---- (5) the encounter switch --------------------------------------
+    for _p in (cli.ENCOUNTER_SWITCH_LOG, cli.ENCOUNTERS_LOG):
+        if _p.exists():
+            _p.unlink()
+    _sw = cli.encounter_recording()
+    if _sw.get("on") is not False or _sw.get("flips") != 0 or set(_sw.get("records") or []) != set(cli.ENCOUNTER_TYPES) or "no text" not in (_sw.get("payload") or ""):
+        _f104(f"the switch is not visibly off by default: {_sw}")
+    _rec = cli.record_encounter("owner_opened", "acc_x104")
+    if _rec.get("recorded") is not False or cli.ENCOUNTERS_LOG.exists() or cli.ENCOUNTER_SWITCH_LOG.exists():
+        _f104("an encounter was written while recording was off")
+    def _swrows104():
+        if not cli.ENCOUNTER_SWITCH_LOG.exists():
+            return []
+        return [_json104.loads(l) for l in cli.ENCOUNTER_SWITCH_LOG.read_text(encoding="utf-8").splitlines() if l.strip()]
+    with server.app.test_client() as _c104:
+        _paired(_c104)   # the pairing mints a session row; the digest is taken after it, so only browsing is measured
+        _dg0 = _digest104(cli.LOCAL_STATE)
+        for _path in ("/", "/api/home", "/api/library", "/anatomy", "/recovery", "/api/recovery", "/api/encounter/switch",
+                      "/api/encounters", "/api/epoch", "/api/history"):
+            _r = _c104.get(_path)
+            if _r.status_code != 200:
+                _f104(f"{_path} answered {_r.status_code} while browsing with recording off")
+        _r = _c104.post("/api/encounter", json={"type": "owner_opened", "subject": "acc_x104"})
+        if _r.status_code != 409 or (_r.get_json() or {}).get("recorded") is not False:
+            _f104(f"an encounter posted while off was not refused as such: {_r.status_code}")
+        _h = _c104.get("/api/home").get_json() or {}
+        if _h.get("encounter_recording") is not False:
+            _f104("Home does not carry the switch state")
+        if _digest104(cli.LOCAL_STATE) != _dg0:
+            _f104("browsing with recording off changed the store")
+        _r = _c104.post("/api/encounter/switch", json={"on": "yes"})
+        if _r.status_code != 400 or _digest104(cli.LOCAL_STATE) != _dg0:
+            _f104("a non-boolean flip was accepted, or wrote")
+        _r = _c104.post("/api/encounter/switch", json={"on": True, "note": "suite"}).get_json() or {}
+        _sw_rows = _swrows104()
+        if not _r.get("changed") or len(_sw_rows) != 1 or _sw_rows[0].get("state") != "on" or _sw_rows[0].get("by") != "owner" \
+                or not _sw_rows[0].get("at") or _sw_rows[0].get("epoch") != "ordinary_use" or not cli.encounter_recording()["on"]:
+            _f104(f"turning the switch on was not itself recorded: {_sw_rows}")
+        if (_c104.get("/api/home").get_json() or {}).get("encounter_recording") is not True:
+            _f104("Home does not carry the switch state once on")
+        _r = _c104.post("/api/encounter/switch", json={"on": True}).get_json() or {}
+        if _r.get("changed") is not False or len(_swrows104()) != 1:
+            _f104("a flip to the state already in force wrote a row")
+        _r = _c104.post("/api/encounter", json={"type": "owner_opened", "subject": "acc_x104", "via": "home_legacy_bridge"}).get_json() or {}
+        if not _r.get("recorded") or not str(_r.get("encounter_id", "")).startswith("enc_") or _r.get("epoch") != "ordinary_use":
+            _f104(f"an encounter was not recorded while on: {_r}")
+        for _bad in ({"type": "owner_opened", "subject": "hello world, a sentence"}, {"type": "opened_by_vibes", "subject": "acc_x"},
+                     {"type": "owner_cited", "subject": "acc_x", "object": "some free text here"}, {"type": "owner_opened", "subject": ""}):
+            _r = _c104.post("/api/encounter", json=_bad)
+            if _r.status_code != 400:
+                _f104(f"an encounter with text or an unknown type was recorded: {_bad}")
+        _encs = cli.load_encounters()
+        if len(_encs) != 1 or _encs[0].get("type") != "owner_opened" or _encs[0].get("subject") != "acc_x104" or _encs[0].get("via") != "home_legacy_bridge" \
+                or set(_encs[0]) != {"encounter_id", "type", "subject", "object", "via", "trace_id", "at", "epoch"}:
+            _f104(f"the encounter row is not ids and types only: {_encs}")
+        _r = _c104.post("/api/encounter/switch", json={"on": False, "note": "suite"}).get_json() or {}
+        _sw_rows = _swrows104()
+        if not _r.get("changed") or len(_sw_rows) != 2 or _sw_rows[1].get("state") != "off" or cli.encounter_recording()["on"]:
+            _f104("turning the switch off was not itself recorded")
+        _dg1 = _digest104(cli.LOCAL_STATE)
+        _r = _c104.post("/api/encounter", json={"type": "owner_opened", "subject": "acc_x104"})
+        if _r.status_code != 409 or _digest104(cli.LOCAL_STATE) != _dg1:
+            _f104("an encounter posted after turning off was recorded")
+        _all = _c104.get("/api/encounters").get_json() or {}
+        if _all.get("total") != 1 or (_all.get("switch") or {}).get("flips") != 2 or (_all.get("switch") or {}).get("on") is not False:
+            _f104(f"the raw log does not show one encounter and two flips: {_all.get('total')} {_all.get('switch')}")
+        _un = server.app.test_client().get("/api/encounters")
+        if _un.status_code == 200 and "encounters" in (_un.get_json() or {}):
+            _f104("/api/encounters answers an unpaired visitor")
+    for _need in ('id="about-encounter"', 'id="encounter-toggle" hidden', "async function toggleEncounterRecording()",
+                  "if (!ENCOUNTER_ON || !subject) return;", "noteEncounter('owner_opened'", "ENCOUNTER_ON = !!(HOME && HOME.encounter_recording)",
+                  "ids and event types only", "Turning it on or off is itself recorded", "Off by default, and while off nothing is written",
+                  "btn.textContent = d.on ? 'Turn off' : 'Turn on'"):
+        if _need not in _idx104:
+            _f104(f"the page lost {_need[:48]!r}")
+    if _idx104.count("noteEncounter(") != 3:
+        _f104(f"the page posts encounters from {_idx104.count('noteEncounter(') - 1} places, not the two ruled doors")
+    if "encounter recording is off — nothing was written" not in _srv104 or "), 409" not in _srv104[_srv104.index("def api_encounter():"):_srv104.index("def api_encounters():")]:
+        _f104("the server does not refuse an encounter while off with a 409 and the reason")
+
+    # ---- (6) unresolved: findable and reopenable -----------------------
+    _q104 = cli.LOCAL_STATE / "recovery_review_queue.jsonl"
+    _q_bytes = _q104.read_bytes()
+    _rl104 = cli.LOCAL_STATE / "recovery_review_rulings.jsonl"
+    _rl_bytes = _rl104.read_bytes()
+    _rl_before = len([l for l in _rl_bytes.decode("utf-8").splitlines() if l.strip()])
+    with server.app.test_client() as _c104:
+        _paired(_c104)
+        _d = _c104.get("/api/recovery").get_json() or {}
+        _unres = _d.get("unresolved") or []
+        if _d.get("unresolved_count") != 1 or len(_unres) != 1 or _unres[0].get("queue_judgment_id") != "jdg_cli_candidate_r103u" \
+                or (_unres[0].get("unresolved_ruling") or {}).get("decision") != "unresolved" or _d.get("open_count") != 0:
+            _f104(f"the unresolved case is not findable on the review: count={_d.get('unresolved_count')} open={_d.get('open_count')}")
+        _h = _c104.get("/api/home").get_json() or {}
+        _pu = (_h.get("pending") or {}).get("unresolved") or {}
+        if _pu.get("count") != 1 or _pu.get("titles") != ["Thin Receipt 103"] or _pu.get("href") != "/recovery" \
+                or any(it.get("source") == "recovery_review" for it in (_h.get("pending") or {}).get("items") or []) \
+                or (_h.get("pending") or {}).get("saved") != []:
+            _f104(f"Home does not carry the unresolved case as a quiet, undue line: {_pu}")
+        _r = _c104.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cli_candidate_r103u", "decision": "unresolved"})
+        if _r.status_code != 400 or "already unresolved" not in (_r.get_json() or {}).get("error", ""):
+            _f104("ruling an unresolved case unresolved again was accepted")
+        _r = _c104.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cli_candidate_r103u", "decision": "accept"})
+        if _r.status_code != 400:
+            _f104("reopening with Accept and no definition was accepted")
+        _r = _c104.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cli_candidate_r103u", "decision": "accept",
+                                                    "definition": "the owner's definition, supplied on reopening", "note": "more survived"})
+        _ruling = (_r.get_json() or {}).get("ruling") or {}
+        if _r.status_code != 200 or not _ruling.get("reopens") or _ruling.get("decision") != "accept" or not _ruling.get("shelf_entry_added"):
+            _f104(f"reopening an unresolved case with a definition failed: {_r.status_code} {_ruling}")
+        _rows = [_json104.loads(l) for l in cli.JUDGMENTS_LOG.read_text().splitlines() if l.strip()]
+        _acc = [j for j in _rows if j.get("id") in (_ruling.get("judgment_ids") or [])]
+        if len(_acc) != 1 or _acc[0].get("decision") != "accepted" or (_acc[0].get("cites") or {}).get("prior_ruling_id") != _ruling.get("reopens") \
+                or (_acc[0].get("cites") or {}).get("judgment_id") != "jdg_cli_candidate_r103u":
+            _f104(f"the reopening ruling's judgment does not cite the unresolved ruling: {_acc}")
+        try:
+            cli.schema_loader.validate("judgment.schema.json", _acc[0])
+        except Exception as e:  # noqa: BLE001
+            _f104(f"the reopening judgment does not validate: {e}")
+        _ev = [e for e in cli.load_definition_events() if e.get("concept_id") == _ruling.get("concept_id")]
+        if len(_ev) != 1 or _ev[0].get("origin") != "recovery_review" or _ev[0].get("judgment_id") != _acc[0].get("id") \
+                or _ev[0].get("definition") != "the owner's definition, supplied on reopening":
+            _f104(f"the reopened acceptance is not a definition event citing its judgment: {_ev}")
+        _rl_rows = [_json104.loads(l) for l in _rl104.read_text(encoding="utf-8").splitlines() if l.strip()]
+        _prev = next((r for r in _rl_rows if r.get("ruling_id") == _ruling.get("reopens")), None)
+        if len(_rl_rows) != _rl_before + 1 or not _rl104.read_bytes().startswith(_rl_bytes) or not _prev or _prev.get("decision") != "unresolved":
+            _f104("the rulings log was rewritten, or the reopened ruling does not cite an unresolved one in it")
+        if _q104.read_bytes() != _q_bytes:
+            _f104("reopening rewrote the queue")
+        _r = _c104.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cli_candidate_r103u", "decision": "reject"})
+        if _r.status_code != 400 or "already been ruled" not in (_r.get_json() or {}).get("error", ""):
+            _f104("a case reopened and accepted was ruled a third time")
+        _d = _c104.get("/api/recovery").get_json() or {}
+        _h = _c104.get("/api/home").get_json() or {}
+        if _d.get("unresolved_count") != 0 or ((_h.get("pending") or {}).get("unresolved") or {}).get("count") != 0:
+            _f104("a reopened case is still listed as unresolved")
+    for _need in ('<div id="unresolved"></div>', "unresolved — reopenable", "caseHtml(c, i, true)",
+                  "open.map((c, i) => caseHtml(c, i, false))",   # Array.map's third argument is the array — the browser journey caught the truthy-reopen bug
+                  "reopening appends a ruling that cites the unresolved one", "reopens <code>"):
+        if _need not in _rec104:
+            _f104(f"the review page lost {_need[:40]!r}")
+    for _need in ('id="ruling-unresolved" class="quiet-line" hidden', "function renderUnresolved(u)", "renderUnresolved(p.unresolved || null)",
+                  "reopenable on the <a href=", "ruled “not enough survives”"):
+        if _need not in _idx104:
+            _f104(f"the page lost {_need[:40]!r}")
+    if "def unresolved_cases" not in _rsrc104 or "def latest_ruling" not in _rsrc104 or '"reopens":' not in _rsrc104 \
+            or 'cites["prior_ruling_id"]' not in _rsrc104 or "queue_path().open(" in _rsrc104 or "queue_path().write" in _rsrc104:
+        _f104("recovery.py does not reopen through appended rulings, or writes the queue")
+    if server.HOME_RULING_DOORS != ("document", "recording", "room", "keeper", "recovery"):
+        _f104("the door set changed")
+    _jsch = _json104.loads((_root104 / "schemas" / "judgment.schema.json").read_text(encoding="utf-8"))
+    if "prior_ruling_id" not in (_jsch["properties"]["cites"].get("properties") or {}) or _jsch["properties"]["cites"].get("additionalProperties") is not False:
+        _f104("the judgment schema does not carry the prior ruling strictly")
+
+    # ---- (7) the scripts, the docs, the constitution -------------------
+    _smoke = _il104.import_module("record_smoke")
+    _dgs = _digest104(cli.LOCAL_STATE)
+    _rep = _smoke.report(cli.LOCAL_STATE)
+    if _digest104(cli.LOCAL_STATE) != _dgs:
+        _f104("the record smoke wrote")
+    if (_rep.get("edges") or {}).get("by_origin", {}).get("legacy_unknown") != sum(1 for e in cli.load_edges() if e.get("origin") == "legacy_unknown") \
+            or not (_rep.get("definition_events") or {}).get("projection", {}).get("matches") or (_rep.get("encounters") or {}).get("rows") != 1 \
+            or (_rep.get("receipts") or {}).get("by_operation", {}).get("deep", 0) < 2:
+        _f104(f"the record smoke does not report the store as it is: {_rep.get('edges')} {_rep.get('receipts')}")
+    _adr = _root104 / "docs" / "adr-record-primitives.md"
+    if not _adr.exists():
+        _f104("docs/adr-record-primitives.md is missing")
+    else:
+        _adr_t = _adr.read_text(encoding="utf-8")
+        for _need in ("prompt identity", "legacy_unknown", "definition_events.jsonl", "baseline", "encounter_switch.jsonl", "off by default",
+                      "composite", "unresolved", "never the assembled prompt"):
+            if _need not in _adr_t:
+                _f104(f"the ADR does not say {_need!r}")
+    if "v1.3.4" not in (_root104 / "docs" / "CHANGELOG.md").read_text(encoding="utf-8"):
+        _f104("the changelog has no v1.3.4")
+    for _need in ("Every definition is an event", "Encounter recording is off until you turn it on", "every new relation on the Map says who put it there"):
+        if _need not in _idx104:
+            _f104(f"the constitution does not say {_need[:40]!r}")
+    for _bad in ("Observatory", "convergence", "trend", "destination chooser", "Portrait", "horoscope"):
+        if _bad in _cli104[_cli104.index("# ---- prompt identity (block 104)"):_cli104.index("# ---- prompt construction: only resolved text")] \
+                or _bad in _srv104[_srv104.index("# Encounters, behind the owner's switch"):_srv104.index("def api_epoch():")]:
+            _f104(f"block 104 carries {_bad!r}")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to
