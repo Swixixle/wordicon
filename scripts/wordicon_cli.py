@@ -855,6 +855,55 @@ def _pretty_path(p) -> str:
         return str(p)
 
 
+# ---- epochs (block 103, backlog item 46/47) --------------------------------
+# The owner declares what period the record is in; nothing infers it. One
+# append-only file, the last row is the active epoch. Everything written
+# before a boundary belongs to the earlier epoch by its own timestamp;
+# nothing is rewritten. "undeclared" is what the record says until the
+# owner has said anything.
+
+EPOCH_UNDECLARED = "undeclared"
+
+
+def epochs_path() -> "Path":
+    return LOCAL_STATE / "epochs.jsonl"
+
+
+def load_epochs() -> "list[dict]":
+    p = epochs_path()
+    if not p.exists():
+        return []
+    out = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+    return out
+
+
+def current_epoch() -> str:
+    rows = load_epochs()
+    return (rows[-1].get("epoch") if rows else "") or EPOCH_UNDECLARED
+
+
+def declare_epoch(epoch: str, declared_by: str = "owner", note: str = "",
+                  first_record_at: str = "") -> dict:
+    """Append a declaration. The previous row is not touched: the record
+    shows when each epoch began and who said so."""
+    LOCAL_STATE.mkdir(exist_ok=True)
+    row = {"object_type": "epoch", "epoch": epoch, "declared_at": _now(),
+           "declared_by": declared_by, "note": note}
+    if first_record_at:
+        row["first_record_at"] = first_record_at
+    with epochs_path().open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return row
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -1499,19 +1548,32 @@ def concept_display_names() -> "dict[str, dict]":
     return out
 
 
-def record_input(job_id: str, mode: str, text: str, parent: str = "") -> None:
+INPUT_PROVENANCE = ("typed", "attached", "door", "connector", "unstated")
+
+
+def record_input(job_id: str, mode: str, text: str, parent: str = "",
+                 provenance: str = "unstated") -> None:
     """Append-only, best-effort, and deliberately dumb: no schema to
     validate, no gateway to reach, nothing that can refuse. This runs
     before any model is contacted, so it must not be able to fail the
     submission it is recording. A swallowed exception here costs one log
-    line; a raised one would cost the run."""
+    line; a raised one would cost the run.
+
+    provenance (block 103): how the words arrived — typed by the owner,
+    attached (a file's text used as the input), door (from a stored
+    object: a candidate, a passage, a door), connector (later), or
+    unstated when the caller said nothing. Rows before this field carry
+    none and are not rewritten."""
+    if provenance not in INPUT_PROVENANCE:
+        provenance = "unstated"
     try:
         LOCAL_STATE.mkdir(exist_ok=True)
         with INPUTS_LOG.open("a", encoding="utf-8") as f:
             f.write(json.dumps({
                 "object_type": "input", "job_id": job_id, "mode": mode,
                 "text": text, "chars": len(text or ""),
-                "parent_trace_id": parent, "created_at": _now(),
+                "parent_trace_id": parent, "provenance": provenance,
+                "epoch": current_epoch(), "created_at": _now(),
             }, ensure_ascii=False) + "\n")
     except Exception:
         pass

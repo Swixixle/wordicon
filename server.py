@@ -75,6 +75,7 @@ import gate  # noqa: E402
 import vault  # noqa: E402  (encrypted backup — the corpus-writers lock lives there)
 import notify  # noqa: E402
 import keeper  # noqa: E402  (the Book's narrator — summoned only, never scheduled)
+import recovery  # noqa: E402  (the Recovery Review — block 103; reads the queue, appends rulings)
 from wordicon_corpus.objects import Judgment  # noqa: E402
 
 WEBAPP_DIR = REPO_ROOT / "webapp"
@@ -426,6 +427,34 @@ def _update_job(job_id: str, **fields) -> None:
             JOBS[job_id]["updated_at"] = _now_iso()
 
 
+def _write_deep_record(result: dict, input_text: str) -> dict:
+    """The deep run's record (block 103). Returns the fields that identify
+    it; writes results/<trace>.json in the same store the component
+    forges wrote theirs. Never raises into the job: a failed write is
+    reported in the result, not hidden."""
+    trace_id = "trace_deep_" + uuid.uuid4().hex[:12]
+    n_groups = len(result.get("groups") or [])
+    n_failed = int(result.get("n_failed") or 0)
+    completion = "failed" if n_groups and n_failed == n_groups else ("partial" if n_failed else "complete")
+    record = {
+        "trace_id": trace_id, "mode": "deep", "input_text": input_text,
+        "created_at": _now_iso(), "gesture": result.get("gesture", "trial"),
+        "attack": result.get("attack") or {},
+        "components": [{"label": g.get("label", ""), "gist": g.get("gist", ""), "anchor": g.get("anchor", ""),
+                        "anchor_verified": g.get("anchor_verified", False), "trace_id": g.get("trace_id", ""),
+                        "failed": bool(g.get("failed"))} for g in (result.get("groups") or [])],
+        "groups": result.get("groups") or [],
+        "completion": completion, "partial": bool(n_failed), "n_failed": n_failed,
+        "gateway": result.get("gateway", ""), "epoch": cli.current_epoch(),
+    }
+    try:
+        cli.RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        (cli.RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps(record, ensure_ascii=False))
+        return {"trace_id": trace_id, "completion": completion, "recorded": True}
+    except OSError as e:
+        return {"trace_id": trace_id, "completion": completion, "recorded": False, "record_error": str(e)[:200]}
+
+
 def _shape_candidates(result: dict) -> list[dict]:
     return [
         {
@@ -579,6 +608,12 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
                        "partial": cli_result.get("partial", False),
                        "n_failed": cli_result.get("n_failed", 0),
                        "groups": groups, "gateway": gateway.name}
+            # block 103: a deep run's own record — dissection, gesture, the
+            # trial's outcome and the completion state — written to the
+            # results store under its own trace id so it can be reopened
+            # and so the trial's objection is never again lost with the
+            # process. The component forges keep their own receipts.
+            result.update(_write_deep_record(result, input_text))
         elif mode == "decompose":
             cli_result = cli.run_decompose(input_text, gateway, interactive=False, on_progress=on_progress,
                                              avoid_titles=avoid_titles, prior_attempts=prior_attempts)
@@ -1062,6 +1097,62 @@ def anatomy_page():
     return Response(page.replace("__COMMIT__", _head_commit())
                         .replace("__BRAND_NAME__", BRAND["name"]),
                     mimetype="text/html")
+
+
+@app.route("/recovery")
+def recovery_page():
+    """The Recovery Review (block 103). Static page, zero model calls; the
+    six receipt-only cases as the record holds them; the owner's rulings
+    as new judgment events. Behind the gate like all."""
+    page = (pathlib.Path(WEBAPP_DIR) / "recovery.html").read_text(encoding="utf-8")
+    return Response(page.replace("__BRAND_NAME__", BRAND["name"]), mimetype="text/html")
+
+
+@app.route("/api/recovery")
+def api_recovery():
+    """Only what survived, per case, plus the rulings so far. Reads files;
+    writes nothing; no model anywhere."""
+    return jsonify(recovery.cases())
+
+
+@app.route("/api/recovery/rule", methods=["POST"])
+def api_recovery_rule():
+    """One owner ruling on one queued case. Accept and Revise carry the
+    owner's own definition; the concept's identity is minted here; the
+    new judgment events cite the old acceptance and its receipt and carry
+    their clock and epoch. The queue is never rewritten."""
+    data = request.get_json(force=True) or {}
+    try:
+        ruling = recovery.rule(str(data.get("queue_judgment_id") or ""), str(data.get("decision") or ""),
+                               definition=str(data.get("definition") or "")[:2000],
+                               new_title=str(data.get("new_title") or "")[:160],
+                               note=str(data.get("note") or "")[:1000])
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ruled": True, "ruling": ruling, "open_count": len(recovery.open_cases())})
+
+
+@app.route("/api/epoch", methods=["GET"])
+def api_epoch():
+    """The owner-declared corpus epoch (block 103): the active one and the
+    declarations behind it. Nothing infers an epoch."""
+    rows = cli.load_epochs()
+    return jsonify({"epoch": cli.current_epoch(), "declarations": rows,
+                    "known": ["development_and_calibration", "ordinary_use"]})
+
+
+@app.route("/api/epoch/begin", methods=["POST"])
+def api_epoch_begin():
+    """A visible owner action begins an epoch. Appends a declaration; the
+    earlier one is not touched."""
+    data = request.get_json(force=True) or {}
+    epoch = str(data.get("epoch") or "").strip()
+    if epoch not in ("development_and_calibration", "ordinary_use"):
+        return jsonify({"error": "epoch must be development_and_calibration or ordinary_use"}), 400
+    if epoch == cli.current_epoch():
+        return jsonify({"error": f"the record is already in {epoch}"}), 400
+    row = cli.declare_epoch(epoch, declared_by="owner", note=str(data.get("note") or "")[:400])
+    return jsonify({"declared": row, "epoch": cli.current_epoch()})
 
 
 @app.route("/api/clinic/rooms", methods=["GET", "POST"])
@@ -1964,7 +2055,13 @@ def api_create_job():
     # On disk BEFORE the thread starts. If the gateway refuses, if the
     # process dies, if he closes the tab — the words he typed survive all
     # three, which was not true of any of them a moment ago.
-    cli.record_input(job_id, mode, input_text, parent_trace_id or "")
+    # block 103: how the words arrived. The page says typed or attached; a
+    # job that grew from a stored object (a door, a candidate, a passage)
+    # is a door; anything else is unstated, never guessed.
+    _prov = str(data.get("provenance") or "")
+    if _prov not in ("typed", "attached", "door"):
+        _prov = "door" if (parent_door_id or via or parent_trace_id) else ("attached" if data.get("from_artifact") else "unstated")
+    cli.record_input(job_id, mode, input_text, parent_trace_id or "", provenance=_prov)
     thread = threading.Thread(target=_run_job, args=(job_id, mode, input_text), daemon=True)
     thread.start()
     return jsonify({"job_id": job_id, "status": "queued"})
@@ -2628,6 +2725,9 @@ def api_judge():
         decision_source="owner", confidence=1.0, review_status="unreviewed",
         reason=note or None, scope="local_to_concept", concept_id=concept_id,
         failure_axis=",".join(parts_flagged) or None,
+        # block 103: every new ruling carries its own clock, the epoch it
+        # fell in, and where it was made. Older rows are never rewritten.
+        ruled_at=_now_iso(), epoch=cli.current_epoch(), origin="run",
     )
     cli.persist_judgment(judgment)
     added = removed = False
@@ -2785,9 +2885,10 @@ def _legacy_shelf_bridge(title: str, same_title: list, persisted_ids: set) -> di
 
 
 def _home_concepts(limit: int = 6) -> "tuple[list, dict]":
-    """Concepts the owner ruled on, newest first, dated by the receipt of
-    the run the ruling was filed against (judgment rows carry no clock of
-    their own — the Keeper met the same fact). Identity comes from the
+    """Concepts the owner ruled on, newest first, dated by the ruling's own
+    clock where it has one (block 103) and otherwise by the receipt of the
+    run the ruling was filed against (older judgment rows carry no clock
+    of their own — the Keeper met the same fact). Identity comes from the
     judgment's concept_id when it has one; shelf membership comes from a
     shelf entry carrying that id, or — for entries written before the
     wiring carried ids — from the read-only bridge above, which says so
@@ -2837,7 +2938,10 @@ def _home_concepts(limit: int = 6) -> "tuple[list, dict]":
                 excluded["unmatched"] += 1
             continue
         rec = receipts.get(j.get("originating_operation") or "", {})
-        at = rec.get("created_at") or (by_id.get(cid) or {}).get("accepted_at") or ""
+        # block 103: a ruling that carries its own clock is dated by it;
+        # older rows are dated by the receipt of the run they were filed
+        # against, which is the only clock they ever had.
+        at = j.get("ruled_at") or rec.get("created_at") or (by_id.get(cid) or {}).get("accepted_at") or ""
         prev = latest.get(cid)
         if prev and prev["_at"] > at:
             continue
@@ -2962,7 +3066,7 @@ def _home_recordings() -> list:
 # for the owner without such a page yet (the recovery review queue) is
 # reported apart, as saved for later, and is never counted as a ruling due.
 # A ruled step with no surface is a fact about the build, not a task.
-HOME_RULING_DOORS = ("document", "recording", "room", "keeper")
+HOME_RULING_DOORS = ("document", "recording", "room", "keeper", "recovery")   # recovery: block 103 built its page
 
 
 def _home_pending() -> dict:
@@ -3008,6 +3112,16 @@ def _home_pending() -> dict:
     if ks.get("active") and ks.get("unruled"):
         items.append({"source": "keeper", "id": "keeper", "label": f"{ks['unruled']} Keeper entr{'y' if ks['unruled'] == 1 else 'ies'} awaiting your ruling",
                       "when": "", "open": {"type": "keeper"}})
+    # The Recovery Review (block 103): the queue's cases the owner has not
+    # ruled on — read as queue minus rulings, never by rewriting the queue.
+    # It has a page now, so it is a ruling due, with a door.
+    open_cases = recovery.open_cases()
+    if open_cases:
+        n = len(open_cases)
+        items.append({"source": "recovery_review", "id": "recovery_review",
+                      "label": f"{n} accepted-but-absent concept{'s' if n != 1 else ''}, receipt-only — Accept, Reject, or Revise each",
+                      "when": max(r.get("queued_at", "") for r in open_cases),
+                      "open": {"type": "recovery", "href": "/recovery"}})
     items.sort(key=lambda x: x.get("when", ""), reverse=True)
     for it in items:
         # structural, not stylistic: nothing without a door is a ruling due
@@ -3015,20 +3129,13 @@ def _home_pending() -> dict:
     counts = {}
     for it in items:
         counts[it["source"]] = counts.get(it["source"], 0) + 1
-    # Saved for later: read, counted, never rewritten, never a task. The
-    # queue stays the record until the review surface exists.
+    # Saved for later stays a mechanism (block 100): what the record keeps
+    # for the owner with no page yet. Since block 103 nothing is in it —
+    # the recovery queue has its page and is counted above.
     saved = []
-    queue = [r for r in _read_jsonl(cli.LOCAL_STATE / "recovery_review_queue.jsonl")
-             if r.get("status") == "needs_owner_ruling"]
-    if queue:
-        saved.append({"source": "recovery_review", "count": len(queue),
-                      "label": f"{len(queue)} accepted-but-absent concept{'s' if len(queue) != 1 else ''}, receipt-only",
-                      "titles": [str(r.get("title", ""))[:60] for r in queue[:8]],
-                      "when": max(r.get("queued_at", "") for r in queue),
-                      "why": "the queue keeps them; their review is a ruled step with no page yet"})
     return {"total": len(items), "counts": counts, "items": items[:12],
-            "sources": ["claim", "media_claim", "clinic_disagreement", "keeper"],
-            "saved": saved, "saved_sources": ["recovery_review"],
+            "sources": ["claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"],
+            "saved": saved, "saved_sources": [],
             "note": "Only what the record can count. Decisions that live in the backlog are not here."}
 
 

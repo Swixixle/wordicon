@@ -82,10 +82,26 @@ def seed_entrance():
                                     published_at="2023", effective_from="not_applicable", review_or_expiry="unknown", status="current")
         clinic.add_to_room(room["room_id"], src["source_id"])
         out["room_id"] = room["room_id"]
-        # the recovery review queue, as the audit writes it
-        with open(cli.LOCAL_STATE / "recovery_review_queue.jsonl", "a") as f:
-            for t in ("Contraband Pedagogy", "Appellate Loop"):
-                f.write(json.dumps({"title": t, "trace": "tr_old", "status": "needs_owner_ruling", "queued_at": stamp(3)}) + "\n")
+        # the recovery review queue, in the real store's shape (block 103): an
+        # accepted title-only judgment, a receipt with the run's titles, no
+        # snapshot, no shelf entry; the queue row names the judgment
+        for i, t in enumerate(("Contraband Pedagogy", "Appellate Loop")):
+            tr, jid = f"trace_cli_oldfix{i}", f"jdg_cli_candidate_oldfix{i}"
+            with open(cli.JUDGMENTS_LOG, "a") as f:
+                f.write(json.dumps({"id": jid, "object_type": "judgment", "decision": "accepted", "candidate_text": t,
+                                    "originating_operation": tr, "decision_source": "owner", "confidence": 1.0,
+                                    "review_status": "unreviewed", "scope": "local_to_concept"}) + "\n")
+            (cli.RECEIPTS_DIR / f"receipt_{tr}.json").write_text(json.dumps({
+                "trace_id": tr, "receipt_id": "rcpt_" + tr, "operation": "forge", "created_at": stamp(9),
+                "candidates": [{"title": t}, {"title": "Sibling A"}, {"title": "Sibling B"}], "sources": [{"id": "s1"}, {"id": "s2"}],
+                "rejections": [], "engine_version": "cli-0.2.0", "kernel_version": 1, "model_calls": 4, "input_hash": "fixture"}))
+            with open(cli.LOCAL_STATE / "recovery_review_queue.jsonl", "a") as f:
+                f.write(json.dumps({"title": t, "trace": tr, "judgment_id": jid, "status": "needs_owner_ruling",
+                                    "note": "accepted; no lexicon entry; no results snapshot survives — needs owner ruling",
+                                    "queued_at": stamp(3)}) + "\n")
+        # the epoch, as the owner declared it (block 103)
+        cli.declare_epoch("development_and_calibration", declared_by="owner", note="journey fixture",
+                          first_record_at=stamp(10))
     return out
 
 

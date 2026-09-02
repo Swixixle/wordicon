@@ -116,3 +116,40 @@ of 2026-09-01. Coinage stays because it sometimes produces something
 unmistakably his — the error was never having a word forge; it was
 making every idea audition for a single-word costume before it was
 allowed to exist.
+
+## Amendment 2026-09-02: the Recovery Review, and the record's clocks (block 103, owner-ruled)
+
+The six receipt-only acceptances the audit queued — a judgment row
+that says "accepted", a receipt with the run's candidate titles, no
+result snapshot, no shelf entry — have their surface at `/recovery`.
+Each case shows only what survived (the acceptance and its note, the
+receipt's time, operation, sources and titles, the trace and receipt
+ids) and says explicitly what did not: no definition survives, and the
+original acceptance carried no clock. Nothing is regenerated,
+reconstructed or inferred. **Accept** requires a definition the owner
+supplies and mints the concept's identity at that ruling
+(`concept_<12 hex>`, unique, unrelated to any title); **Revise** takes
+a corrected title and/or definition the same way, as a revised event
+for the old title and an accepted one for the new under one identity;
+**Reject** is a rejection. Every ruling is a new judgment event citing
+the old judgment, the receipt and the trace (`cites`), with its own
+clock (`ruled_at`), the epoch it fell in, and its origin
+(`recovery_review`). Rulings append to `recovery_review_rulings.jsonl`;
+the queue is read and never rewritten; Home lists queue minus rulings
+under "Needs your ruling" — it has a door now — and the band empties
+through the record when the last case is ruled. Not a backlog manager.
+
+Four primitives ride with it, because these rulings and every ruling
+after them must not repeat the loss they are repairing: `ruled_at` on
+every new judgment (and `epoch`, `origin`), through the same route the
+cards use; `epochs.jsonl`, one owner-declared row per epoch — the
+existing corpus is declared `development_and_calibration`, which stays
+active until a visible owner action begins `ordinary_use` (About &
+proof carries that action; nothing infers it); a record for every deep
+run (`results/trace_deep_…json`: source, gesture, dissection, the
+trial's outcome, the component traces, completion state) so Friction's
+objection to an input is never again lost with the process; and an
+explicit provenance type on every input row — typed, attached, door,
+later connector, else unstated. Legacy judgment rows are never given
+clocks they did not have; their missing clocks remain a finding. The
+judgment schema gains four optional properties and nothing else.

@@ -12679,7 +12679,10 @@ console.log(out.join('\\n'));
                 _f99(f"a Continue card without a stable id: {c.get('kind')}")
         if (_h.get("excluded") or {}).get("legacy_title_only", 0) < 2 or "Common Ground" not in ((_h.get("excluded") or {}).get("ambiguous_titles") or []):
             _f99(f"legacy title-only rulings were not excluded and counted: {_h.get('excluded')}")
-        if len([c for c in _cont if c.get("kind") == "concept"]) != 2:
+        # ledger (block 103): cards are dated by the ruling's own clock now, so
+        # other blocks' fresh rulings share the top of the list — the pin is
+        # about "Common Ground": its two concepts and nothing guessed third
+        if sorted(c.get("id") for c in _cont if c.get("title") == "Common Ground") != ["concept_99a", "concept_99b"]:
             _f99("the ambiguous legacy row was guessed into a third concept card")
         if not any(c.get("kind") == "room" and c["id"] == _room["room_id"] for c in _cont):
             _f99("the Room is not a Continue card")
@@ -12690,9 +12693,9 @@ console.log(out.join('\\n'));
         # ledger (block 100): the recovery queue left the ruling count — saved
         # for later, not due. Four actionable sources remain; the claim stays.
         if _p.get("total", 0) < 1 or "claim" not in _srcs or \
-                not _srcs <= {"claim", "media_claim", "clinic_disagreement", "keeper"}:
+                not _srcs <= {"claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"}:   # ledger (block 103): the queue is due again, with its door
             _f99(f"Needs your ruling is not derived from the record's actionable sources: total={_p.get('total')} {_srcs}")
-        if set(_p.get("sources") or []) != {"claim", "media_claim", "clinic_disagreement", "keeper"}:   # ledger (block 100)
+        if set(_p.get("sources") or []) != {"claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"}:   # ledger (blocks 100, 103)
             _f99("the rulings band's sources are not the four actionable ones")
         if "backlog" not in (_p.get("note") or "").lower():
             _f99("the rulings band does not say backlog decisions are absent")
@@ -12764,23 +12767,27 @@ console.log(out.join('\\n'));
         failures.append(f"100: {msg}")
 
     # the rule is structural: a door, or it is not a ruling due
-    if not hasattr(server, "HOME_RULING_DOORS") or set(server.HOME_RULING_DOORS) != {"document", "recording", "room", "keeper"}:
+    # ledger (block 103): the Recovery Review has its page — "recovery" is a door now
+    if not hasattr(server, "HOME_RULING_DOORS") or set(server.HOME_RULING_DOORS) != {"document", "recording", "room", "keeper", "recovery"}:
         _f100("the set of doors a ruling may open through is not declared (or grew silently)")
     _pend_src = _srv100[_srv100.index("def _home_pending("):_srv100.index("@app.route(\"/api/home\")")]
     if 'in HOME_RULING_DOORS' not in _pend_src or "assert" not in _pend_src.split("in HOME_RULING_DOORS")[0][-120:]:
         _f100("nothing enforces that every ruling due has a door")
-    if '"recovery_review"' in _pend_src.split("saved = []")[0]:
-        _f100("the recovery queue is still built into the ruling list")
-    if 'recovery_review_queue.jsonl' not in _pend_src:
-        _f100("Home stopped reading the queue where the audit writes it")
-    if any("recovery" in r.rule for r in server.app.url_map.iter_rules()):
-        _f100("a recovery review surface appeared — the ruling was not to build it now")
+    # ledger (block 103): the queue IS in the ruling list now, through
+    # recovery.open_cases() (queue minus rulings) — with its door; the
+    # route exists because the review was built, as ruled.
+    if 'recovery.open_cases()' not in _pend_src:
+        _f100("Home stopped reading the queue as queue-minus-rulings")
+    if not any(r.rule == "/recovery" for r in server.app.url_map.iter_rules()):
+        _f100("the Recovery Review has no page")
 
-    # the API: on a seeded scratch record, the queue is saved, the claim is due
+    # the API: on a seeded scratch record, the queue is DUE with its door
+    # (ledger, block 103 — it was saved-for-later while it had no page),
+    # the claim is due, nothing is saved
     _q100 = cli.LOCAL_STATE / "recovery_review_queue.jsonl"
     _q100.write_text(
-        _json100.dumps({"title": "Armory Stasis", "trace": "t100", "status": "needs_owner_ruling", "queued_at": "2026-09-01T00:00:00Z"}) + "\n"
-        + _json100.dumps({"title": "Kept Already", "trace": "t100b", "status": "ruled", "queued_at": "2026-08-30T00:00:00Z"}) + "\n")
+        _json100.dumps({"title": "Armory Stasis", "trace": "t100", "judgment_id": "jdg_q100", "status": "needs_owner_ruling", "queued_at": "2026-09-01T00:00:00Z"}) + "\n"
+        + _json100.dumps({"title": "Kept Already", "trace": "t100b", "judgment_id": "jdg_q100b", "status": "ruled", "queued_at": "2026-08-30T00:00:00Z"}) + "\n")
     _before100 = _q100.read_bytes()
     with server.app.test_client() as _c100:
         _paired(_c100)
@@ -12796,21 +12803,19 @@ console.log(out.join('\\n'));
             _f100(f"/api/home did not paint ({_h100.status_code})")
         _p100 = (_h100.get_json() or {}).get("pending") or {}
         _items100 = _p100.get("items") or []
-        if any(it.get("source") == "recovery_review" for it in _items100) or "recovery_review" in (_p100.get("counts") or {}):
-            _f100("the recovery queue is still counted as a ruling due")
+        _rec_items = [it for it in _items100 if it.get("source") == "recovery_review"]   # ledger (block 103)
+        if len(_rec_items) != 1 or (_rec_items[0].get("open") or {}).get("type") != "recovery" or (_rec_items[0].get("open") or {}).get("href") != "/recovery" \
+                or "1 accepted-but-absent" not in _rec_items[0].get("label", ""):
+            _f100(f"the recovery queue is not one ruling due with its door: {_rec_items}")
         if not any(it.get("source") == "claim" for it in _items100):
             _f100("the actionable claim did not stay under Needs your ruling")
         if _p100.get("total") != len(_items100) or any((it.get("open") or {}).get("type") not in server.HOME_RULING_DOORS for it in _items100):
             _f100(f"a ruling due has no door, or the count is not the list: total={_p100.get('total')} n={len(_items100)}")
-        if _p100.get("sources") != ["claim", "media_claim", "clinic_disagreement", "keeper"] or _p100.get("saved_sources") != ["recovery_review"]:
+        if _p100.get("sources") != ["claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"] or _p100.get("saved_sources") != []:   # ledger (block 103)
             _f100(f"the band's declared sources are not the ruled split: {_p100.get('sources')} / {_p100.get('saved_sources')}")
         _saved100 = _p100.get("saved") or []
-        if len(_saved100) != 1 or _saved100[0].get("source") != "recovery_review" or _saved100[0].get("count") != 1 \
-                or "receipt-only" not in _saved100[0].get("label", "") or "Armory Stasis" not in (_saved100[0].get("titles") or []) \
-                or "Kept Already" in (_saved100[0].get("titles") or []) or not _saved100[0].get("why"):
-            _f100(f"Saved for later does not carry the queue as the record holds it: {_saved100}")
-        if _saved100 and any(k in _saved100[0] for k in ("open", "href")):
-            _f100("Saved for later carries a door it does not have")
+        if _saved100:   # ledger (block 103): nothing is saved-for-later once the queue has its page; the mechanism stays
+            _f100(f"Saved for later holds something that has a door: {_saved100}")
         if _q100.read_bytes() != _before100:
             _f100("painting Home rewrote the recovery review queue — the record must be preserved")
         # no queue at all: nothing saved, nothing invented
@@ -12818,8 +12823,9 @@ console.log(out.join('\\n'));
         _os100.replace(_q100, _aside100)
         try:
             _p100b = ((_c100.get("/api/home").get_json() or {}).get("pending") or {})
-            if _p100b.get("saved") != [] or not any(it.get("source") == "claim" for it in _p100b.get("items") or []):
-                _f100(f"with no queue file, Saved for later is not empty or the claim went missing: {_p100b.get('saved')}")
+            if _p100b.get("saved") != [] or not any(it.get("source") == "claim" for it in _p100b.get("items") or []) \
+                    or any(it.get("source") == "recovery_review" for it in _p100b.get("items") or []):
+                _f100(f"with no queue file, something is saved or due that does not exist: {_p100b.get('saved')}")
         finally:
             _os100.replace(_aside100, _q100)
 
@@ -12832,8 +12838,10 @@ console.log(out.join('\\n'));
     if ".quiet-line[hidden] { display: none; }" not in _idx100:
         _f100("a flex quiet line cannot hide: [hidden] loses to display:flex without this rule")
     _rows100 = _idx100[_idx100.index("function ruleRow("):_idx100.index("let rulingsExpanded")]
-    if "recovery_review" in _rows100 or "review not built yet" in _idx100:
-        _f100("the queue still renders as a ruling row")
+    # ledger (block 103): the queue renders as a ruling row again — with a
+    # door this time; the door-less "review not built yet" row must not return
+    if "review not built yet" in _idx100 or ("recovery_review" in _rows100 and "Review them</a>" not in _rows100):
+        _f100("the queue renders as a ruling row without a door")
     _rend100 = _idx100[_idx100.index("function renderRulings("):_idx100.index("function renderRooms(")]
     if "renderSaved(p.saved || [])" not in _rend100 or "function renderSaved(saved)" not in _rend100:
         _f100("Needs your ruling does not hand the saved entries to their own line")
@@ -13174,6 +13182,274 @@ console.log(out.join('\\n'));
                 _f102(f".gitignore lacks {_need}")
         if list(_jd.glob("*.png")) or list(_jd.glob("out/*")):
             _f102("generated screenshots sit in tests/journeys")
+
+    # ================= block 103: the Recovery Review, and the clocks =====
+    # The six receipt-only acceptances of the identity migration get their
+    # surface (backlog items 34, 44, 47): each case shows only what
+    # survived, Accept needs a definition from the owner and mints the
+    # concept's identity at that ruling, Reject and Revise are explicit
+    # acts, every ruling is a new judgment event citing the old one and
+    # its receipt, the queue is never rewritten, and Home reads queue
+    # minus rulings. Four primitives ride with it: ruled_at on every new
+    # judgment; the owner-declared epoch; a record for every deep run
+    # (dissection, gesture, trial outcome, completion); input provenance.
+    # Legacy rows are never given clocks they did not have.
+    import json as _json103
+    import hashlib as _hl103
+    import importlib as _il103
+    _root103 = Path(cli.__file__).parent.parent
+    _srv103 = (_root103 / "server.py").read_text(encoding="utf-8")
+    _idx103 = (_root103 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _rec_page = (_root103 / "webapp" / "recovery.html").read_text(encoding="utf-8")
+    _il103.import_module("recovery")
+
+    def _f103(msg):
+        failures.append(f"103: {msg}")
+
+    # the epoch: undeclared until the owner says; declared by an appended row; never inferred
+    _ep_path = cli.LOCAL_STATE / "epochs.jsonl"
+    if _ep_path.exists():
+        _ep_path.unlink()
+    if cli.current_epoch() != "undeclared":
+        _f103(f"an epoch was inferred from nothing: {cli.current_epoch()}")
+    cli.declare_epoch("development_and_calibration", declared_by="owner", note="suite", first_record_at="2026-08-23T00:00:00+00:00")
+    if cli.current_epoch() != "development_and_calibration" or len(cli.load_epochs()) != 1:
+        _f103("the declaration did not take, or took twice")
+    _ep_bytes = _ep_path.read_bytes()
+    _srv_cli = (_root103 / "scripts" / "wordicon_cli.py").read_text(encoding="utf-8")
+    if "def current_epoch" not in _srv_cli or "def declare_epoch" not in _srv_cli or "EPOCH_UNDECLARED" not in _srv_cli:
+        _f103("the epoch primitives are missing from the CLI")
+    _decl = (_root103 / "scripts" / "declare_epoch.py")
+    if not _decl.exists() or 'choices=KNOWN' not in _decl.read_text(encoding="utf-8") or "earliest_receipt" not in _decl.read_text(encoding="utf-8"):
+        _f103("scripts/declare_epoch.py is missing or does not record the first receipt as an observed fact")
+
+    # the queue, in the real store's shape: an accepted title-only judgment,
+    # a receipt with the run's titles, no snapshot, no shelf entry
+    _q103 = cli.LOCAL_STATE / "recovery_review_queue.jsonl"
+    cli.RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
+    _cases = (("Armory Stasis 103", "trace_cli_r103a", "jdg_cli_candidate_r103a"),
+              ("Quiet Tariff 103", "trace_cli_r103b", "jdg_cli_candidate_r103b"),
+              ("Salt Ledger 103", "trace_cli_r103c", "jdg_cli_candidate_r103c"))
+    with open(cli.JUDGMENTS_LOG, "a") as _jf:
+        for _t, _tr, _jid in _cases:
+            _jf.write(_json103.dumps({"id": _jid, "object_type": "judgment", "decision": "accepted", "candidate_text": _t,
+                                      "originating_operation": _tr, "decision_source": "owner", "confidence": 1.0,
+                                      "review_status": "unreviewed", "scope": "local_to_concept"}) + "\n")
+            (cli.RECEIPTS_DIR / f"receipt_{_tr}.json").write_text(_json103.dumps({
+                "trace_id": _tr, "receipt_id": "rcpt_" + _tr, "operation": "forge", "created_at": "2026-08-24T10:00:00+00:00",
+                "candidates": [{"title": _t}, {"title": "Sibling One"}, {"title": "Sibling Two"}], "sources": [{"id": "s1"}],
+                "rejections": [], "engine_version": "cli-0.2.0", "kernel_version": 1, "model_calls": 4, "input_hash": "h"}))
+    _q103.write_text("".join(_json103.dumps({"title": _t, "trace": _tr, "judgment_id": _jid, "status": "needs_owner_ruling",
+                                             "note": "accepted; no lexicon entry; no results snapshot survives — needs owner ruling",
+                                             "queued_at": "2026-09-01T00:00:00Z"}) + "\n" for _t, _tr, _jid in _cases))
+    _q_before = _hl103.sha256(_q103.read_bytes()).hexdigest()
+    _acc_before = _json103.loads(cli.ACCEPTED_CONCEPTS_PATH.read_text()) if cli.ACCEPTED_CONCEPTS_PATH.exists() else []
+    _jrows_before = len([l for l in cli.JUDGMENTS_LOG.read_text().splitlines() if l.strip()])
+
+    with server.app.test_client() as _c103:
+        _paired(_c103)
+        # the page exists, behind the gate, stamped with the brand
+        _pg = _c103.get("/recovery")
+        if _pg.status_code != 200 or server.BRAND["name"] not in _pg.get_data(as_text=True) or "__BRAND_NAME__" in _pg.get_data(as_text=True):
+            _f103(f"/recovery did not paint with the brand ({_pg.status_code})")
+        _un = server.app.test_client().get("/recovery")
+        if _un.status_code == 200 and "Recovery Review" in _un.get_data(as_text=True):
+            _f103("/recovery is open to an unpaired visitor")
+        # only what survived, said as such
+        _d = _c103.get("/api/recovery").get_json() or {}
+        _open = {c["queue_judgment_id"]: c for c in _d.get("open") or []}
+        if set(_open) != {j for _, _, j in _cases} or _d.get("open_count") != 3 or _d.get("epoch") != "development_and_calibration":
+            _f103(f"the open cases are not the queue's: {sorted(_open)} epoch={_d.get('epoch')}")
+        _ca = _open.get("jdg_cli_candidate_r103a") or {}
+        if not (_ca.get("acceptance") or {}).get("found") or (_ca.get("acceptance") or {}).get("has_clock") is not False:
+            _f103("a case does not show its acceptance, or claims a clock the row never had")
+        if not (_ca.get("receipt") or {}).get("found") or (_ca.get("receipt") or {}).get("candidate_titles") != ["Armory Stasis 103", "Sibling One", "Sibling Two"] \
+                or (_ca.get("receipt") or {}).get("n_sources") != 1:
+            _f103(f"a case does not show its receipt as the record holds it: {_ca.get('receipt')}")
+        if (_ca.get("survives") or {}).get("definition") is not False or (_ca.get("survives") or {}).get("result_snapshot") is not False \
+                or "definition" not in " ".join(_ca.get("unknowable") or []) or "definition" not in " ".join(_ca.get("owner_must_supply") or []):
+            _f103("a case does not say plainly that no definition survives and that the owner must supply one")
+        for _k in ("definition", "suggested", "proposed"):
+            if _ca.get(_k):
+                _f103(f"a case carries a {_k} nobody supplied")
+        # Accept needs a definition from the owner; nothing is invented
+        _r = _c103.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cli_candidate_r103a", "decision": "accept"})
+        if _r.status_code != 400 or "definition" not in (_r.get_json() or {}).get("error", ""):
+            _f103("Accept without an owner definition was not refused")
+        if len([l for l in cli.JUDGMENTS_LOG.read_text().splitlines() if l.strip()]) != _jrows_before:
+            _f103("a refused ruling still wrote a judgment")
+        # Accept: a new judgment with clock, epoch, origin, cites; identity minted; shelf entry with the owner's definition
+        _r = _c103.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cli_candidate_r103a", "decision": "accept",
+                                                    "definition": "a standing army's stillness, read as a policy", "note": "kept, defined by me"})
+        if _r.status_code != 200:
+            _f103(f"Accept failed: {_r.get_data(as_text=True)[:160]}")
+        _rul = (_r.get_json() or {}).get("ruling") or {}
+        _cid = _rul.get("concept_id", "")
+        if not _cid.startswith("concept_") or len(_cid) != len("concept_") + 12 or not _rul.get("shelf_entry_added") or _rul.get("epoch") != "development_and_calibration":
+            _f103(f"Accept did not mint an identity, persist the entry, or carry the epoch: {_rul}")
+        _rows = [_json103.loads(l) for l in cli.JUDGMENTS_LOG.read_text().splitlines() if l.strip()]
+        _new = [j for j in _rows if j.get("origin") == "recovery_review" and j.get("candidate_text") == "Armory Stasis 103"]
+        if len(_new) != 1 or _new[0].get("decision") != "accepted" or _new[0].get("concept_id") != _cid \
+                or not _new[0].get("ruled_at") or _new[0].get("epoch") != "development_and_calibration" \
+                or (_new[0].get("cites") or {}).get("judgment_id") != "jdg_cli_candidate_r103a" \
+                or (_new[0].get("cites") or {}).get("receipt_id") != "rcpt_trace_cli_r103a" or _new[0].get("reason") != "kept, defined by me":
+            _f103(f"the Accept judgment does not carry its clock, epoch, origin, identity and citations: {_new}")
+        _acc_after = _json103.loads(cli.ACCEPTED_CONCEPTS_PATH.read_text())
+        _entry = next((e for e in _acc_after if e.get("concept_id") == _cid), None)
+        if not _entry or _entry.get("definition") != "a standing army's stillness, read as a policy" or not str(_entry.get("id", "")).startswith("acc2_"):
+            _f103(f"the accepted concept's shelf entry is not the owner's: {_entry}")
+        if len(_acc_after) != len(_acc_before) + 1 or any(e != f for e, f in zip(_acc_before, _acc_after)):
+            _f103("Accept changed legacy shelf rows or added more than one entry")
+        # legacy rows: untouched, no clock invented
+        for _t, _tr, _jid in _cases:
+            _old = next((j for j in _rows if j.get("id") == _jid), None)
+            if not _old or "ruled_at" in _old or "epoch" in _old or "origin" in _old:
+                _f103(f"a legacy judgment row was rewritten or given a clock: {_old}")
+        # a second ruling on the same case is refused; the queue file is untouched
+        _r = _c103.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cli_candidate_r103a", "decision": "reject"})
+        if _r.status_code != 400:
+            _f103("a closed case took a second ruling")
+        if _hl103.sha256(_q103.read_bytes()).hexdigest() != _q_before:
+            _f103("the recovery queue was rewritten — it is the record")
+        # Reject: an explicit act, a rejection event, nothing on the shelf, the title leaves the loader's fallback
+        _r = _c103.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cli_candidate_r103b", "decision": "reject", "note": "never mine"})
+        if _r.status_code != 200 or (_r.get_json() or {}).get("ruling", {}).get("shelf_entry_added"):
+            _f103("Reject failed or put something on the shelf")
+        _rows = [_json103.loads(l) for l in cli.JUDGMENTS_LOG.read_text().splitlines() if l.strip()]
+        _rej = [j for j in _rows if j.get("origin") == "recovery_review" and j.get("candidate_text") == "Quiet Tariff 103"]
+        if len(_rej) != 1 or _rej[0].get("decision") != "rejected" or not _rej[0].get("ruled_at"):
+            _f103("Reject did not append one rejection event with its clock")
+        if any((c.get("name") or "") == "Quiet Tariff 103" for c in cli.load_accepted_concepts()):
+            _f103("a rejected receipt-only acceptance is still shown back on the shelf")
+        # Revise: a revised event for the old title, an accepted one for the new, one identity, the owner's definition
+        _r = _c103.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cli_candidate_r103c", "decision": "revise",
+                                                    "new_title": "Salt Ledger", "definition": "the account kept in what was withheld"})
+        if _r.status_code != 200:
+            _f103(f"Revise failed: {_r.get_data(as_text=True)[:160]}")
+        _rul = (_r.get_json() or {}).get("ruling") or {}
+        _rows = [_json103.loads(l) for l in cli.JUDGMENTS_LOG.read_text().splitlines() if l.strip()]
+        _rv = [j for j in _rows if j.get("origin") == "recovery_review" and (j.get("cites") or {}).get("judgment_id") == "jdg_cli_candidate_r103c"]
+        if len(_rv) != 2 or {j.get("decision") for j in _rv} != {"revised", "accepted"} or len({j.get("concept_id") for j in _rv}) != 1 \
+                or not any(j.get("candidate_text") == "Salt Ledger" and j.get("decision") == "accepted" for j in _rv) or _rul.get("kept_title") != "Salt Ledger":
+            _f103(f"Revise did not write a revised event for the old title and an accepted one for the new, under one identity: {_rv}")
+        # a ruling on a closed case is refused
+        _r = _c103.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cli_candidate_r103b", "decision": "revise", "definition": "x", "new_title": "Y"})
+        if _r.status_code != 400:
+            _f103("a ruling on a closed case was accepted")
+        # all ruled: the page and the band empty through the record; the queue bytes unchanged
+        _d = _c103.get("/api/recovery").get_json() or {}
+        if _d.get("open_count") != 0 or _d.get("ruled_count") != 3 or _d.get("queue_total") != 3:
+            _f103(f"after three rulings the review is not empty through the record: {_d.get('open_count')} / {_d.get('ruled_count')}")
+        _h = _c103.get("/api/home").get_json() or {}
+        if any(it.get("source") == "recovery_review" for it in (_h.get("pending") or {}).get("items") or []) or (_h.get("pending") or {}).get("saved"):
+            _f103("Home still lists the recovery queue after every case was ruled")
+        if _hl103.sha256(_q103.read_bytes()).hexdigest() != _q_before:
+            _f103("the recovery queue was rewritten by the rulings")
+        _rl = cli.LOCAL_STATE / "recovery_review_rulings.jsonl"
+        _rl_rows = [_json103.loads(l) for l in _rl.read_text().splitlines() if l.strip()] if _rl.exists() else []
+        if len(_rl_rows) != 3:
+            _f103("the rulings log does not hold exactly the three rulings")
+        # identities: one per ruling, unique, minted from nothing a title could reproduce
+        if len({r.get("concept_id") for r in _rl_rows}) != 3 or len({r.get("ruling_id") for r in _rl_rows}) != 3:
+            _f103(f"rulings share an identity: {[r.get('concept_id') for r in _rl_rows]}")
+        _mint_src = _rsrc_mint = (_root103 / "scripts" / "recovery.py").read_text(encoding="utf-8")
+        _mint_src = _mint_src[_mint_src.index("def _mint_concept_id("):_mint_src.index("def rule(")]
+        if "uuid.uuid4()" not in _mint_src or "hashlib" in _mint_src or "title" in _mint_src.replace("unrelated to any title", ""):
+            _f103("the concept identity is not minted from randomness alone")
+        # the accepted concept is a Continue card by its minted id, dated by the ruling's clock
+        _cards = [c for c in (_h.get("continue") or []) if c.get("kind") == "concept"]
+        _mine = next((c for c in _cards if c.get("id") == _cid), None)
+        if not _mine or (_mine.get("shelf") or {}).get("via") != "concept_id" or not (_mine.get("when") or "").startswith("2026-09"):
+            _f103(f"the recovered concept is not a Continue card by its id, dated by its ruling: {_mine and (_mine.get('shelf'), _mine.get('when'))}")
+        # the epoch endpoint and the visible owner action; the declaration file untouched by reads
+        _e = _c103.get("/api/epoch").get_json() or {}
+        if _e.get("epoch") != "development_and_calibration" or len(_e.get("declarations") or []) != 1:
+            _f103("the epoch endpoint does not report the declaration")
+        _r = _c103.post("/api/epoch/begin", json={"epoch": "development_and_calibration"})
+        if _r.status_code != 400:
+            _f103("re-declaring the active epoch was accepted")
+        if _ep_path.read_bytes() != _ep_bytes:
+            _f103("reading or refusing rewrote the epoch declarations")
+        _r = _c103.post("/api/epoch/begin", json={"epoch": "ordinary_use", "note": "suite"})
+        if _r.status_code != 200 or cli.current_epoch() != "ordinary_use" or len(cli.load_epochs()) != 2 or not _ep_path.read_bytes().startswith(_ep_bytes):
+            _f103("beginning ordinary use did not append a declaration on top of the first")
+        # the clock on an ordinary ruling too (api_judge), with the epoch and the origin
+        (cli.RECEIPTS_DIR / "trace_cli_r103d.json").write_text(_json103.dumps({
+            "trace_id": "trace_cli_r103d", "receipt_id": "rcpt_trace_cli_r103d", "operation": "forge",
+            "created_at": "2026-09-02T00:00:00+00:00", "candidates": [{"title": "Clocked 103"}], "titles": ["Clocked 103"]}))
+        _r = _c103.post("/api/judge", json={"trace_id": "trace_cli_r103d", "candidate_title": "Clocked 103", "decision": "a",
+                                            "concept_id": "concept_clocked103", "definition": "d", "note": ""})
+        if _r.status_code != 200:
+            _f103(f"an ordinary judgment failed: {_r.get_data(as_text=True)[:120]}")
+        _rows = [_json103.loads(l) for l in cli.JUDGMENTS_LOG.read_text().splitlines() if l.strip()]
+        _cl = [j for j in _rows if j.get("candidate_text") == "Clocked 103"]
+        if len(_cl) != 1 or not _cl[0].get("ruled_at") or _cl[0].get("epoch") != "ordinary_use" or _cl[0].get("origin") != "run":
+            _f103(f"an ordinary ruling does not carry its clock, epoch and origin: {_cl}")
+        # input provenance: typed, attached, door — never guessed beyond the record
+        _srv_jobs = _srv103[_srv103.index("def api_create_job("):_srv103.index("def api_get_job(")]
+        if 'provenance=_prov' not in _srv_jobs or '"unstated"' not in _srv_jobs or '("typed", "attached", "door")' not in _srv_jobs:
+            _f103("job creation does not record input provenance honestly")
+        if "provenance: fromArtifact ? 'attached' : 'typed'" not in _idx103:
+            _f103("the page does not say how the words arrived")
+        if 'INPUT_PROVENANCE = ("typed", "attached", "door", "connector", "unstated")' not in _srv_cli or '"provenance": provenance' not in _srv_cli:
+            _f103("record_input does not carry the provenance type")
+        cli.record_input("job_r103", "forge", "words", provenance="attached")
+        cli.record_input("job_r103b", "forge", "words", provenance="nonsense")
+        _ins = [l for l in cli.INPUTS_LOG.read_text().splitlines() if '"job_r103' in l]
+        if len(_ins) != 2 or '"provenance": "attached"' not in _ins[0] or '"provenance": "unstated"' not in _ins[1] or '"epoch": "ordinary_use"' not in _ins[0]:
+            _f103(f"input rows do not carry provenance and epoch as ruled: {_ins}")
+        # the deep run's record: dissection, gesture, trial outcome, completion — reopenable
+        _fake = {"mode": "deep", "source_text": "x", "attack": {"verdict": "reject", "hostile_read": "a request, not a concept", "input_kind": "artifact"},
+                 "gesture": "trial", "partial": True, "n_failed": 1,
+                 "groups": [{"label": "one", "gist": "g1", "anchor": "x", "anchor_verified": True, "trace_id": "trace_cli_r103e", "candidates": []},
+                            {"label": "two", "gist": "g2", "failed": True, "error": "boom"}], "gateway": "mock"}
+        _meta = server._write_deep_record(dict(_fake), "x")
+        if not _meta.get("recorded") or not _meta.get("trace_id", "").startswith("trace_deep_") or _meta.get("completion") != "partial":
+            _f103(f"the deep record was not written with its completion state: {_meta}")
+        _dr = _c103.get("/api/result/" + _meta["trace_id"]).get_json() or {}
+        if _dr.get("mode") != "deep" or (_dr.get("attack") or {}).get("verdict") != "reject" or _dr.get("gesture") != "trial" \
+                or len(_dr.get("components") or []) != 2 or _dr.get("completion") != "partial" or _dr.get("epoch") != "ordinary_use":
+            _f103(f"the deep record does not reopen with its trial outcome, dissection, gesture and completion: {sorted(_dr)}")
+        if "result.update(_write_deep_record(result, input_text))" not in _srv103:
+            _f103("the job runner does not write the deep record")
+        if "if (d.mode === 'deep') {" not in _idx103 or "From the record — a deep run" not in _idx103:
+            _f103("the page cannot reopen a deep run from its record")
+        # the page: the band's door, the About epoch line and the visible action, the constitution's sentence
+        _rows_js = _idx103[_idx103.index("function ruleRow("):_idx103.index("let rulingsExpanded")]
+        if "recovery_review: 'Recovery Review'" not in _rows_js or "Review them</a>" not in _rows_js or "'/recovery'" not in _rows_js:
+            _f103("the ruling band has no door to the Recovery Review")
+        for _need in ('id="about-epoch"', 'id="epoch-begin" hidden', 'onclick="beginOrdinaryUse()"', "async function loadEpoch()",
+                      "btn.hidden = d.epoch !== 'development_and_calibration'", "The record keeps its clocks.",
+                      'href="/recovery">Recovery Review</a>', "their missing clocks"):
+            if _need not in _idx103:
+                _f103(f"the page lost {_need[:50]!r}")
+        for _need in ("No definition survives.", "Reconstructible mechanically", "You must supply", "Unknowable", "nothing is suggested",
+                      "a definition from you is required", "The queue is never rewritten", "__BRAND_NAME__"):
+            if _need not in _rec_page:
+                _f103(f"the review page lost {_need[:40]!r}")
+        for _bad in ("/api/config", "gateway", "regenerate", "propose"):
+            if _bad in _rec_page.lower():
+                _f103(f"the review page reaches for {_bad!r}")
+        if _rec_page.lower().count("suggest") != _rec_page.lower().count("nothing is suggested") + _rec_page.lower().count("none is suggested"):
+            _f103("the review page suggests something")
+        # the module writes nothing but rulings and judgments; the queue is never opened for writing; no model
+        _rsrc = (_root103 / "scripts" / "recovery.py").read_text(encoding="utf-8")
+        if "queue_path().open(" in _rsrc or "queue_path().write" in _rsrc or "def rule(" not in _rsrc or "_mint_concept_id" not in _rsrc \
+                or "uuid.uuid4().hex[:12]" not in _rsrc or "persist_accepted_concept(" not in _rsrc:
+            _f103("recovery.py writes the queue, or does not mint identities the ruled way")
+        for _bad in ("gateway", ".complete(", "generate("):
+            if _bad in _rsrc:
+                _f103(f"recovery.py reaches for {_bad!r}")
+        # the schema carries the new optional fields; nothing loosened; the clock is not required of legacy rows
+        _js = _json103.loads((_root103 / "schemas" / "judgment.schema.json").read_text(encoding="utf-8"))
+        for _k in ("ruled_at", "epoch", "origin", "cites"):
+            if _k not in _js.get("properties", {}):
+                _f103(f"judgment.schema.json lacks {_k}")
+        if _js.get("additionalProperties") is not False or "ruled_at" in _js.get("required", []):
+            _f103("the judgment schema loosened, or made the clock required of legacy rows")
+        _ov = server.app.test_client().get("/api/recovery")   # unpaired
+        if _ov.status_code == 200 and "open" in (_ov.get_json() or {}):
+            _f103("/api/recovery answers an unpaired visitor")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

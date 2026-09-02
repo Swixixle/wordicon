@@ -1,5 +1,26 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.3.3 — the Recovery Review, and the record's clocks
+
+The six receipt-only acceptances of v1.2.3 have their surface
+(`/recovery`, amendment in `docs/adr-concept-first.md`): each case as
+the record holds it — the acceptance, the receipt's titles, sources and
+time, and the explicit fact that no definition survives — and the
+owner's ruling as new judgment events. Accept needs the owner's own
+definition and mints the concept's identity at that ruling; Revise the
+same with a corrected title; Reject is a rejection. Every ruling cites
+the old judgment and receipt, carries its own clock and the epoch, and
+appends to `recovery_review_rulings.jsonl`; the queue is never
+rewritten; Home lists queue minus rulings, with a door. Four primitives
+ride along: `ruled_at`, `epoch` and `origin` on every new judgment; the
+owner-declared epoch (`epochs.jsonl`; the existing corpus is
+`development_and_calibration`, begun otherwise only by a visible owner
+action in About & proof); a record for every deep run with its
+dissection, gesture, trial outcome and completion state; and input
+provenance (typed / attached / door / connector / unstated). Legacy
+rows keep their missing clocks. The Recovery Review and the deep
+record are reopenable from the record; nothing here calls a model.
+
 ## v1.3.2 — the legacy shelf bridge: Home stops calling accepted concepts absent
 
 Found on the first look at the real store: Home's Continue cards called

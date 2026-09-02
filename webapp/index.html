@@ -657,6 +657,9 @@
       <p class="body" id="about-explanation">Nikodemus (formerly Wordicon) is a private environment for developing concepts beside your sources and your writing. It keeps your concepts, sources, and judgments separate, connected, and reviewable: nothing you ruled on is overwritten, nothing the model proposed is treated as your conclusion, and material it was forbidden to accept is refused before it is stored. It began as a word-coining tool; the forge is still inside.</p>
       <p class="foot" id="about-name"><strong data-brand>Nikodemus</strong> is the name since September 2, 2026, 4:20 a.m. EDT (<code>2026-09-02T08:20:00Z</code>), ruled by the owner; the history keeps the name it was written under — <span data-history>Wordicon</span> — and nothing was rewritten to make the new name look older than it is. The record of the change is <code>docs/adr-nikodemus.md</code>.</p>
       <div id="about-system" class="foot" style="margin:6px 0 12px">System: <span id="about-provider">not checked yet — opening this panel asks the server</span></div>
+      <div id="about-epoch" class="foot" style="margin:-6px 0 12px">Epoch: <span id="about-epoch-name">not read yet</span> <span id="about-epoch-when" class="muted"></span>
+        <button id="epoch-begin" hidden style="margin-left:8px;font-size:11.5px;padding:2px 9px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;cursor:pointer" onclick="beginOrdinaryUse()">Begin ordinary use</button>
+        <span class="muted" id="epoch-note"></span></div>
       <p class="body">Bring <span data-brand>Nikodemus</span> a feeling with no name and it forges you concept readings
       worth arguing with — the idea's anatomy under a plain working title. Bring it a book and the
       book stays a book — byte-intact, mechanically read, every sentence an anchor you can hold a
@@ -679,6 +682,12 @@
       changes of mind are kept, never overwritten. Nothing here flatters you and nothing here
       decides for you; what it offers is rarer — <strong>a place where your thinking is taken
       seriously enough to be kept</strong>.</p>
+      <p class="body"><strong>The record keeps its clocks.</strong> Every ruling made since September 2, 2026
+      carries the time it was made and the epoch the owner declared the record to be in; a deep run keeps
+      its own receipt, Friction's objection to the input included; every input says how it arrived — typed,
+      attached, or through a door. Older rows carry none of this and are never rewritten: their missing clocks
+      are a finding, not a gap to paper over. Acceptances the identity migration found receipt-only wait in the
+      <a href="/recovery">Recovery Review</a>, where a definition comes from the owner or not at all.</p>
       <p class="body"><strong>The first minute:</strong> type into the box below — a feeling you don't
       have a word for, a word you're curious about, a handful of loose words, or a whole passage — and
       press <em>Run it</em>. Cards come back; open them, argue with them, rule on them or don't. Or
@@ -1272,7 +1281,32 @@ const OVERRIDE_MODES = {etymon: 'Take the word apart', forge: 'Forge', crack: 'C
 
 // The provider is provenance, not identity: it is asked for only when the
 // About panel is opened, never to paint Home.
+// The owner-declared epoch (block 103): shown here, begun only by a
+// visible owner action — nothing infers it. Zero-model.
+async function loadEpoch() {
+  const name = document.getElementById('about-epoch-name'), when = document.getElementById('about-epoch-when'), btn = document.getElementById('epoch-begin');
+  if (!name) return;
+  try {
+    const r = await fetch('/api/epoch');
+    const d = await r.json();
+    const last = (d.declarations || []).slice(-1)[0];
+    name.textContent = (d.epoch || 'undeclared').replace(/_/g, ' ');
+    when.textContent = last && last.declared_at ? '— declared ' + new Date(last.declared_at).toLocaleString() + (last.declared_by ? ' by the ' + last.declared_by : '') : '';
+    if (btn) btn.hidden = d.epoch !== 'development_and_calibration';
+  } catch (e) { name.textContent = 'could not be read'; }
+}
+async function beginOrdinaryUse() {
+  const note = document.getElementById('epoch-note');
+  if (!confirm('Begin the "ordinary use" epoch now? This appends a declaration to the record; the calibration epoch is not rewritten. Nothing infers this — only this action.')) return;
+  try {
+    const r = await fetch('/api/epoch/begin', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({epoch: 'ordinary_use', note: 'begun from About & proof'})});
+    const d = await r.json();
+    if (note) note.textContent = d.error ? d.error : 'declared.';
+  } catch (e) { if (note) note.textContent = 'could not reach the server.'; }
+  loadEpoch();
+}
 async function loadConfig() {
+  loadEpoch();
   const el = document.getElementById('about-provider');
   if (!el) return;
   try {
@@ -1547,7 +1581,8 @@ async function submitRun(submitMode, text, fromArtifact, gesture) {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({mode: submitMode, input_text: text,
                             gesture: gesture || undefined,
-                            from_artifact: fromArtifact || ''}),
+                            from_artifact: fromArtifact || '',
+                            provenance: fromArtifact ? 'attached' : 'typed'}),
     });
     const d = await r.json();
     reset();
@@ -1752,6 +1787,19 @@ async function loadPastResult(traceId, shelf, label, restoring) {
   if (d.mode === 'etymon') {
     lastSubmission = null;
     area.innerHTML = buildEtymonHtml(d);
+    return;
+  }
+  if (d.mode === 'deep') {
+    // block 103: the deep run's own record — dissection, gesture, the
+    // trial's outcome, completion — kept, so Friction's objection to the
+    // input is never again lost with the process
+    lastSubmission = null;
+    area.innerHTML = `
+      <div class="card" style="border-left:3px solid var(--accent, #888)">
+        <div class="section-label" style="margin-top:0">From the record — a deep run · ${escapeHtml(d.completion || (d.partial ? 'partial' : 'complete'))}</div>
+        <p class="body">${escapeHtml(d.input_text || d.source_text || '')}</p>
+        <p class="body muted" style="font-size:13px">deep · ${escapeHtml(d.gesture || 'trial')} · ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}</p>
+      </div>` + buildDeepHtml(d);
     return;
   }
   if (['forge','crack','decompose','riff','play'].includes(d.mode)) {
@@ -6473,12 +6521,13 @@ function renderContinue() {
     : '';
 }
 function ruleRow(it) {
-  const k = {claim: 'Claim · support', media_claim: 'Recording claim', clinic_disagreement: 'Room · disagreement', keeper: 'The Keeper'}[it.source] || it.source;
+  const k = {claim: 'Claim · support', media_claim: 'Recording claim', clinic_disagreement: 'Room · disagreement', keeper: 'The Keeper', recovery_review: 'Recovery Review'}[it.source] || it.source;
   let act = '';
   if (it.source === 'claim') act = `<a onclick="openPlace('library');openDoc('${escapeJs(it.open.representation_id)}',0)">Rule on it</a>`;
   else if (it.source === 'media_claim') act = `<a onclick="openPlace('library');openMedia('${escapeJs(it.open.id)}','${escapeJs(it.open.transcript_id || '')}')">Rule on it</a>`;
   else if (it.source === 'clinic_disagreement') act = `<a href="${escapeHtml(it.open.href)}">They disagree · they don’t · can’t tell</a>`;
   else if (it.source === 'keeper') act = `<a onclick="openPlace('system');document.getElementById('keeper-card').open=true">Read the entries</a>`;
+  else if (it.source === 'recovery_review') act = `<a href="${escapeHtml(it.open.href || '/recovery')}">Review them</a>`;
   return `<div class="rule-row"><span class="k">${escapeHtml(k)}</span><span>${escapeHtml(it.label)}</span><span class="act">${act}</span></div>`;
 }
 let rulingsExpanded = false;

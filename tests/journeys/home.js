@@ -42,16 +42,39 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
     ok(fp.run && fp.run.top > fp.ih, 'Run it is below the fold — not the strongest first-paint object (top ' + Math.round(fp.run.top) + ')');
     ok(fp.strip === true && fp.dot === 'dot ok' && fp.quiet === 'all quiet', 'a healthy vault is quiet: strip hidden, green dot, "all quiet"');
     ok(/cannot yet be tied safely to a single concept/.test(fp.excluded) && /“Common Ground” names more than one shelf entry/.test(fp.excluded), 'ambiguous legacy rulings are reported as excluded, not guessed: ' + fp.excluded.slice(0, 90));
-    // block 100: only the actionable claim is due; the queue is saved beneath, quietly
-    ok(fp.rulings === 1 && /^1 · only what the record can count/.test(fp.rulingsMore), 'Needs your ruling shows the one actionable item (the claim), counted as 1: ' + fp.rulingsMore);
-    ok(!/receipt-only|Recovery|review not built|Saved for later/.test(fp.rulingText), 'the band itself carries nothing about the recovery queue: ' + fp.rulingText.slice(0, 120));
-    ok(!fp.saved.hidden && fp.saved.display !== 'none' && /^Saved for later 2 accepted-but-absent concepts, receipt-only — the queue keeps them; their review is a ruled step with no page yet$/.test(fp.saved.text), 'the Saved for later line is visible with the count and the reason: ' + fp.saved.text);
-    ok(fp.saved.links === 0 && !fp.saved.insideCard && fp.saved.top >= fp.rulingBottom && fp.saved.top < fp.intakeTop, 'the saved line is quiet: no link, outside the band, between the band and the intake');
-    ok(/Contraband Pedagogy · Appellate Loop|Appellate Loop · Contraband Pedagogy/.test(fp.saved.title), 'the saved line names the cases on hover only: ' + fp.saved.title);
-    // with nothing saved, the line disappears (display:flex must lose to [hidden])
+    // block 100/103: two rulings due — the claim, and the recovery queue now that it has a door; nothing is saved for later
+    ok(fp.rulings === 2 && /^2 · only what the record can count/.test(fp.rulingsMore), 'Needs your ruling shows the claim and the recovery queue, counted as 2: ' + fp.rulingsMore);
+    ok(/2 accepted-but-absent concepts, receipt-only — Accept, Reject, or Revise each/.test(fp.rulingText) && /Review them/.test(fp.rulingText) && !/review not built/.test(fp.rulingText), 'the recovery queue is a ruling due with its door: ' + fp.rulingText.slice(0, 160));
+    ok(fp.saved.hidden && fp.saved.display === 'none' && fp.saved.text === '', 'nothing is saved for later once the queue has its page — the line is hidden and empty');
+    // the mechanism stays: something saved would paint the quiet line; display:flex loses to [hidden] when it empties again
+    const shown = await page.evaluate(() => { HOME.pending.saved = [{source: 'x', count: 1, label: '1 thing kept aside', titles: ['t'], why: 'no page yet'}]; renderRulings(); const el = document.getElementById('ruling-saved'); return { hidden: el.hidden, display: getComputedStyle(el).display, text: el.textContent.replace(/\s+/g, ' ').trim(), links: el.querySelectorAll('a, [onclick]').length }; });
+    ok(!shown.hidden && shown.display !== 'none' && /^Saved for later 1 thing kept aside — no page yet$/.test(shown.text) && shown.links === 0, 'the Saved for later mechanism still paints, quietly, when something has no door: ' + shown.text);
     const gone = await page.evaluate(() => { HOME.pending.saved = []; renderRulings(); const el = document.getElementById('ruling-saved'); if (!el) return { hidden: false, display: 'missing', rulings: -1 }; return { hidden: el.hidden, display: getComputedStyle(el).display, rulings: document.querySelectorAll('#ruling-area .rule-row').length }; });
-    ok(gone.hidden && gone.display === 'none' && gone.rulings === 1, 'with nothing saved the line is gone and the ruling count is unchanged');
+    ok(gone.hidden && gone.display === 'none' && gone.rulings === 2, 'with nothing saved the line is gone and the ruling count is unchanged');
     await page.evaluate(() => { HOME = null; }); await page.evaluate(() => loadHome()); await page.waitForTimeout(600);
+    // block 103: the door opens the Recovery Review; a case shows only what survived; Accept needs the owner's definition; the ruling is a new event with its clock
+    await page.click('#ruling-area .rule-row a[href="/recovery"]'); await page.waitForTimeout(1200);
+    const rv = await page.evaluate(() => ({ url: location.pathname, title: document.title, cases: document.querySelectorAll('#cases .card[data-queue-id]').length,
+      text: document.getElementById('cases').textContent.replace(/\s+/g, ' '), epoch: document.getElementById('epoch-line').textContent,
+      defs: Array.from(document.querySelectorAll('#cases textarea')).map(t => t.value), suggested: /suggestion|proposed|suggested value/i.test(document.getElementById('cases').textContent) }));
+    ok(rv.url === '/recovery' && /Recovery Review/.test(rv.title) && rv.cases === 2, 'the door opens the Recovery Review with the two queued cases: ' + JSON.stringify([rv.url, rv.cases]));
+    ok(/No definition survives\./.test(rv.text) && /receipt: found/.test(rv.text) && /Sibling A · Sibling B|Contraband Pedagogy · Sibling A/.test(rv.text) && /no clock/.test(rv.text), 'a case shows what survived and says what did not: ' + rv.text.slice(0, 200));
+    ok(rv.defs.every(v => v === '') && !rv.suggested, 'no definition is suggested or prefilled — the field is the owner\'s');
+    ok(/epoch: development_and_calibration/.test(rv.epoch), 'the page names the epoch: ' + rv.epoch);
+    await page.click('#cases .card[data-queue-id] .actions button');   // Accept with an empty definition
+    await page.waitForTimeout(300);
+    const refused = await page.evaluate(() => document.querySelector('#cases .card[data-queue-id] .error').textContent);
+    ok(/definition from you is required/.test(refused), 'Accept without a definition is refused on the page: ' + refused);
+    await page.fill('#cases .card[data-queue-id] textarea', 'teaching that survives by being forbidden');
+    await page.fill('#cases .card[data-queue-id] input[id$="_note"]', 'kept, from the journey');
+    await page.click('#cases .card[data-queue-id] .actions button'); await page.waitForTimeout(1200);
+    const after = await page.evaluate(() => ({ open: document.querySelectorAll('#cases .card[data-queue-id]').length, ruled: document.querySelectorAll('#ruled .card.ruled').length, ruledText: document.getElementById('ruled').textContent.replace(/\s+/g, ' ') }));
+    ok(after.open === 1 && after.ruled === 1 && /accept — kept, from the journey · concept concept_[0-9a-f]{12} · 1 judgment event\(s\) · on the shelf/.test(after.ruledText) && /development_and_calibration/.test(after.ruledText), 'the ruling is recorded with its identity, its clock and its epoch, and the case leaves the open list: ' + after.ruledText.slice(0, 200));
+    const apiAfter = await (await page.request.get(BASE + '/api/home')).json();
+    const recRow = (apiAfter.pending.items || []).find(i => i.source === 'recovery_review');
+    const recovered = (apiAfter.continue || []).find(c => c.kind === 'concept' && c.title === 'Contraband Pedagogy');
+    ok(recRow && /^1 accepted-but-absent concept, receipt-only/.test(recRow.label) && recovered && recovered.shelf && recovered.shelf.via === 'concept_id' && /^2026-09/.test(recovered.when || ''), 'Home counts one case left and the recovered concept is a Continue card by its minted id, dated by the ruling: ' + JSON.stringify([recRow && recRow.label, recovered && recovered.shelf, recovered && recovered.when]).slice(0, 200));
+    await page.goto(BASE + '/'); await page.waitForTimeout(1200);
     const rulingColors = await page.$$eval('#ruling-area .rule-row', rows => rows.map(r => getComputedStyle(r).borderLeftColor + '|' + getComputedStyle(r).color));
     ok(rulingColors.every(c => !c.includes('224, 138, 138')), 'the rulings band is not failure-red');
     // the two same-titled concepts are two cards, each addressed by id
@@ -141,7 +164,7 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
     const ctx = await paired(); const page = await ctx.newPage();
     await page.route('**/api/vault/status', r => r.fulfill({ json: healthyVault }));
     const ids = await (await page.request.get(BASE + '/api/home')).json();
-    const concept = ids.continue.find(c => c.kind === 'concept' && c.shelf && c.shelf.via === 'concept_id'); const room = ids.continue.find(c => c.kind === 'room');
+    const concept = ids.continue.find(c => c.kind === 'concept' && c.id === 'concept_fix00000001'); const room = ids.continue.find(c => c.kind === 'room');
     // block 101: a bridged concept has no lexicon concept_id — the door (a general resolver) must say so rather than bridge
     const bridgedId = (ids.continue.find(c => c.kind === 'concept' && c.shelf && c.shelf.via === 'legacy_title') || {}).id;
     if (bridgedId) { await page.goto(BASE + '/?dest=concept:' + bridgedId); await page.waitForTimeout(1200); const d0 = await page.evaluate(() => ({ open: document.getElementById('library-area').style.display !== 'none', note: (document.getElementById('page-note') || {}).textContent || '' })); ok(!d0.open && /could not be resolved/.test(d0.note), 'the concept door does not bridge: a legacy-only concept id is reported unresolved, nothing opened in its place'); }
@@ -174,7 +197,7 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
     await page.route('**/api/vault/status', r => r.fulfill({ json: healthyVault }));
     await page.goto(BASE + '/'); await page.waitForTimeout(1200);
     const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: innerWidth, cards: document.querySelectorAll('#continue-area .cont').length, rulings: document.querySelectorAll('#ruling-area .rule-row').length, savedVisible: (() => { const el = document.getElementById('ruling-saved'); if (!el) return false; const b = el.getBoundingClientRect(); return !el.hidden && b.width > 0 && b.right <= innerWidth; })(), intake: !!document.getElementById('input-text'), nav: document.querySelectorAll('header nav.places a').length, caretTransition: getComputedStyle(document.querySelector('.collapse-head .caret')).transitionDuration }));
-    ok(m.sw <= m.iw && m.cards >= 3 && m.rulings === 1 && m.intake && m.nav === 6 && m.savedVisible, `${name} ${w}px: no overflow (${m.sw}/${m.iw}); Continue, rulings, saved line, intake, navigation present`);
+    ok(m.sw <= m.iw && m.cards >= 3 && m.rulings === 2 && m.intake && m.nav === 6 && !m.savedVisible, `${name} ${w}px: no overflow (${m.sw}/${m.iw}); Continue, two rulings, no saved line, intake, navigation present`);
     ok(m.caretTransition === '0s', `${name}: reduced motion honored (caret transition ${m.caretTransition})`);
     await ctx.close();
   }

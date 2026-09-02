@@ -17,6 +17,18 @@
     "failure_axis": { "type": "string", "enum": ["style", "factuality", "redundancy", "cultural_risk", "conceptual_weakness"] },
     "scope": { "type": "string", "enum": ["local_to_concept", "general_style_prohibition"], "default": "local_to_concept" },
     "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-    "review_status": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/review_status" }
+    "review_status": { "$ref": "https://wordicon.local/schemas/enums.schema.json#/review_status" },
+    "ruled_at": { "type": "string", "description": "ISO 8601 UTC clock of the ruling itself (block 103); absent on rows written before it existed" },
+    "epoch": { "type": "string", "description": "the owner-declared corpus epoch the ruling fell in (epochs.jsonl)" },
+    "origin": { "type": "string", "enum": ["run", "recovery_review"], "description": "where the ruling was made" },
+    "cites": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "judgment_id": { "type": "string" },
+        "receipt_id": { "type": "string" },
+        "trace_id": { "type": "string" },
+        "queue": { "type": "string" }
+      }
+    }
   }
 }

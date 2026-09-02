@@ -214,6 +214,15 @@ class Judgment:
     reason: Optional[str] = None
     failure_axis: Optional[str] = None
     scope: str = "local_to_concept"
+    # Block 103 (backlog item 47): the clock a ruling was made at, the
+    # owner-declared epoch it fell in, where it was made (a run's cards,
+    # the Recovery Review), and what it cites (an older judgment, a
+    # receipt). Rows written before this carry none of these and are
+    # never rewritten to invent them — their missing clocks are a finding.
+    ruled_at: Optional[str] = None
+    epoch: Optional[str] = None
+    origin: Optional[str] = None
+    cites: Optional[dict] = None
 
     def to_schema_dict(self) -> dict:
         d = {
@@ -228,6 +237,14 @@ class Judgment:
             d["reason"] = self.reason
         if self.failure_axis:
             d["failure_axis"] = self.failure_axis
+        if self.ruled_at:
+            d["ruled_at"] = self.ruled_at
+        if self.epoch:
+            d["epoch"] = self.epoch
+        if self.origin:
+            d["origin"] = self.origin
+        if self.cites:
+            d["cites"] = dict(self.cites)
         return d
 
 
