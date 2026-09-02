@@ -92,7 +92,7 @@
     <div><label>title</label><input id="f-title"></div>
     <div><label>issuing institution</label><input id="f-issuer"></div>
     <div><label>published (value / unknown)</label><input id="f-published" value="unknown"></div>
-    <div><label>effective from (value / unknown / not_applicable)</label><input id="f-effective" value="not_applicable"></div>
+    <div><label>effective from (value / unknown / not_applicable — not_applicable is a choice, never a default)</label><input id="f-effective" value="unknown"></div>
     <div><label>review or expiry</label><input id="f-review" value="unknown"></div>
     <div><label>status</label><select id="f-status"></select></div>
     <div><label>jurisdiction or facility</label><input id="f-jur"></div>
@@ -138,8 +138,11 @@ async function loadRooms() {
   catch (e) { area.innerHTML = '<p class="error">Could not reach the server.</p>'; return; }
   if (d.error) { area.innerHTML = `<p class="error">${esc(d.error)}</p>`; return; }
   ROLES = d.roles || []; STATUSES = d.statuses || [];
-  document.getElementById('f-role').innerHTML = ROLES.map(r => `<option>${esc(r)}</option>`).join('');
-  document.getElementById('f-status').innerHTML = STATUSES.map(s => `<option>${esc(s)}</option>`).join('');
+  // No factual defaults before the document is read (owner's ruling,
+  // 2026-09-02): the role is chosen, never preselected; status starts at
+  // "unknown"; "current" is a declaration, not a starting point.
+  document.getElementById('f-role').innerHTML = '<option value="">— choose the role —</option>' + ROLES.map(r => `<option>${esc(r)}</option>`).join('');
+  document.getElementById('f-status').innerHTML = STATUSES.map(s => `<option${s === 'unknown' ? ' selected' : ''}>${esc(s)}</option>`).join('');
   if (!(d.rooms || []).length) {
     area.innerHTML = `<p class="body muted">No rooms yet.</p>
       <button onclick="createRoomOne()">Create Room One — Adult Ventilator Liberation: Readiness, SBTs, and Extubation</button>`;
@@ -217,6 +220,7 @@ async function admitSource() {
   const said = document.getElementById('admit-said');
   const file = document.getElementById('f-file').files[0];
   if (!file || !ROOM) { said.textContent = 'pick a file first'; return; }
+  if (!document.getElementById('f-role').value) { said.textContent = 'choose the role — it is your declaration, not a default'; return; }
   const fd = new FormData();
   fd.append('file', file);
   fd.append('room_id', ROOM.room_id);

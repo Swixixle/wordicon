@@ -12225,6 +12225,16 @@ console.log(out.join('\\n'));
                    "/attest", "/cancel", "not a patient record"):
         if _pin96 not in _page96:
             _f96(f"clinic.html lost {_pin96!r}")
+    # ledger (after block 103, owner's ruling 2026-09-02): no factual
+    # defaults before the document is read — the role is chosen, status
+    # starts unknown, effective-from starts unknown, not_applicable is a
+    # choice. "current" and "hospital_policy" may not be preselected.
+    for _pin96 in ('<option value="">— choose the role —</option>', "s === 'unknown' ? ' selected' : ''",
+                   'id="f-effective" value="unknown"', "choose the role — it is your declaration, not a default"):
+        if _pin96 not in _page96:
+            _f96(f"clinic.html presents a factual default before the document is read: missing {_pin96[:40]!r}")
+    if 'id="f-effective" value="not_applicable"' in _page96 or "value=\"current\"" in _page96:
+        _f96("clinic.html preselects a status or an effective-from value")
     # 5. the ADR carries the amendment
     _adr96 = (Path(cli.__file__).parent.parent / "docs"
               / "adr-medical-wing.md").read_text()
