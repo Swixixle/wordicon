@@ -264,6 +264,90 @@ def _extract_txt(data: bytes) -> "tuple[str, list, list]":
 
 
 # ---------------------------------------------------------------------------
+# The medical wing's two custody adapters (docs/adr-medical-wing.md).
+# Two EXPLICIT extractors, separately versioned — never one imaginary
+# universal revision. docx_text_v1 is stdlib (zipfile + ElementTree).
+# pdf_text_v1 rides pdfminer.six, pinned in requirements.txt; the
+# installed pdfminer version is folded into the extractor identity, so a
+# changed library mints NEW representations instead of silently changing
+# what an old representation id claims to contain.
+
+DOCX_EXTRACTOR = "docx_text_v1"
+_W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def _pdf_extractor_tag() -> str:
+    import pdfminer  # pinned dependency; ImportError is honest, not caught
+    return f"pdf_text_v1+pdfminer.six-{pdfminer.__version__}"
+
+
+def _extract_docx(data: bytes) -> "tuple[str, list, list]":
+    import io
+    import xml.etree.ElementTree as _ET
+    findings = []
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(data))
+        doc_xml = zf.read("word/document.xml")
+    except (zipfile.BadZipFile, KeyError, OSError) as e:
+        raise ValueError("This DOCX cannot be opened as one (encrypted, "
+                         "truncated, or not really a DOCX) — refused "
+                         f"plainly rather than mangled: {e}")
+    try:
+        root = _ET.fromstring(doc_xml)
+    except _ET.ParseError as e:
+        raise ValueError(f"This DOCX's document.xml does not parse — "
+                         f"refused plainly: {e}")
+    blocks = []
+    for p in root.iter(_W_NS + "p"):
+        text = "".join(t.text or "" for t in p.iter(_W_NS + "t"))
+        text = re.sub(r"\s+", " ", text).strip()
+        if text:
+            blocks.append({"tag": "p", "text": text})
+    if not blocks:
+        findings.append("Extraction: the DOCX contains no text.")
+    return "", blocks, findings
+
+
+def _extract_pdf(data: bytes) -> "tuple[str, list, list]":
+    """Per-page sections so every anchor names its page. Scanned PDFs —
+    no extractable text layer — are REFUSED with a visible finding; OCR
+    is a later, separately versioned adapter (the ruling), because
+    silently returning nothing would let a scan pose as an empty
+    document."""
+    import io
+    from pdfminer.high_level import extract_text
+    from pdfminer.pdfpage import PDFPage
+    from pdfminer.pdfparser import PDFSyntaxError
+    findings = []
+    try:
+        n_pages = len(list(PDFPage.get_pages(io.BytesIO(data))))
+    except (PDFSyntaxError, Exception) as e:  # noqa: BLE001 — refuse plainly
+        raise ValueError(f"This file cannot be read as a PDF — refused "
+                         f"plainly rather than mangled: {e}")
+    if not n_pages:
+        raise ValueError("This PDF has no pages — refused plainly.")
+    sections, total_chars = [], 0
+    for i in range(n_pages):
+        try:
+            page_text = extract_text(io.BytesIO(data), page_numbers=[i]) or ""
+        except Exception as e:  # noqa: BLE001 — one bad page is disclosed
+            findings.append(f"Extraction: page {i + 1} failed to extract "
+                            f"({e}) — recorded, not invented.")
+            page_text = ""
+        total_chars += len(page_text.strip())
+        blocks = [{"tag": "p", "text": re.sub(r"\s+", " ", b).strip()}
+                  for b in re.split(r"\n\s*\n", page_text) if b.strip()]
+        sections.append({"heading": f"page {i + 1}", "blocks": blocks,
+                         "src": f"page:{i + 1}"})
+    if total_chars < max(40, 15 * n_pages):
+        raise ValueError(
+            "This PDF carries no usable text layer — most likely a scanned "
+            "document. Refused with this finding rather than mangled; OCR "
+            "is a later, separately versioned adapter.")
+    return "", sections, findings
+
+
+# ---------------------------------------------------------------------------
 # segmentation — the theo-wing's lessons, generalized. Deterministic; a
 # changed rule here MUST bump SEGMENTER_REV or the suite goes red.
 
@@ -286,20 +370,37 @@ def split_sentences(text: str) -> "list[str]":
 def build_representation(blob_id: str, kind: str, data: bytes,
                           fallback_title: str = "") -> dict:
     """One deterministic reading of one blob. The representation_id is a
-    content hash over (blob, extractor rev, segmenter rev) — determinism
-    and revision-isolation by construction, not by promise."""
+    content hash over (blob, extractor identity, segmenter rev) —
+    determinism and revision-isolation by construction, not by promise.
+
+    The medical wing's adapters (docs/adr-medical-wing.md) are two
+    EXPLICIT extractors — pdf_text_v1 and docx_text_v1 — never a shared
+    universal revision: each carries its own versioned name into the
+    representation id, so a future v2 of one mints NEW representations
+    for its own kind and touches nothing else. The pre-existing kinds
+    keep the numeric stdlib revision bit-for-bit."""
     if kind == "epub":
         title, raw_sections, findings = _extract_epub(data)
     elif kind == "html":
         t, blocks, findings = _extract_html(data)
         title, raw_sections = t, [{"heading": t or fallback_title or "article",
                                     "blocks": blocks, "src": ""}]
+    elif kind == "pdf":
+        t, raw_sections, findings = _extract_pdf(data)
+        title = t
+    elif kind == "docx":
+        t, blocks, findings = _extract_docx(data)
+        title, raw_sections = t, [{"heading": t or fallback_title or "document",
+                                    "blocks": blocks, "src": ""}]
     else:
         t, blocks, findings = _extract_txt(data)
         title, raw_sections = t, [{"heading": fallback_title or "text",
                                     "blocks": blocks, "src": ""}]
+    extractor_tag = (_pdf_extractor_tag() if kind == "pdf"
+                     else DOCX_EXTRACTOR if kind == "docx"
+                     else f"{EXTRACTOR_REV}")
     rep_id = "rep_" + hashlib.sha256(
-        f"{blob_id}|{kind}|extractor:{EXTRACTOR_REV}|segmenter:{SEGMENTER_REV}"
+        f"{blob_id}|{kind}|extractor:{extractor_tag}|segmenter:{SEGMENTER_REV}"
         .encode()).hexdigest()[:16]
     sections = []
     n_sents = 0
@@ -340,7 +441,9 @@ def build_representation(blob_id: str, kind: str, data: bytes,
                           "src": sec.get("src", ""),
                           "paragraphs": paragraphs, "text": section_text})
     return {"representation_id": rep_id, "blob_id": blob_id, "kind": kind,
-            "extractor": {"name": "wordicon-library-stdlib", "rev": EXTRACTOR_REV},
+            "extractor": ({"name": extractor_tag} if kind in ("pdf", "docx")
+                          else {"name": "wordicon-library-stdlib",
+                                "rev": EXTRACTOR_REV}),
             "segmenter_rev": SEGMENTER_REV, "created_at": _now(),
             "title": title or fallback_title,
             "n_sections": len(sections), "n_sentences": n_sents,
@@ -352,9 +455,23 @@ def build_representation(blob_id: str, kind: str, data: bytes,
 
 def detect_kind(filename: str, data: bytes) -> str:
     name = (filename or "").lower()
-    if name.endswith(".epub") or data[:2] == b"PK" and b"mimetype" in data[:200] \
+    # Magic bytes BEFORE extensions for the binary kinds (the medical
+    # wing's adapters, docs/adr-medical-wing.md): a PDF named .txt must
+    # reach the PDF extractor, not be mangled into "text" — the
+    # extension is a claim, the bytes are the fact.
+    if data[:5] == b"%PDF-":
+        return "pdf"
+    if data[:2] == b"PK" and b"mimetype" in data[:200] \
             and b"epub" in data[:200]:
         return "epub"
+    if data[:2] == b"PK" and b"word/document.xml" in data[:4000]:
+        return "docx"
+    if name.endswith(".epub"):
+        return "epub"
+    if name.endswith(".pdf"):
+        return "pdf"
+    if name.endswith(".docx"):
+        return "docx"
     if name.endswith((".html", ".htm", ".xhtml")):
         return "html"
     if name.endswith((".txt", ".md")):
@@ -371,9 +488,9 @@ def ingest(data: bytes, filename: str = "", source: str = "",
     the deterministic representation, index it. No model anywhere."""
     kind = detect_kind(filename, data)
     if kind == "unsupported":
-        raise ValueError("The library reads EPUB, HTML, and plain text for now. "
-                         "This file is none of those — refused plainly rather "
-                         "than mangled into text.")
+        raise ValueError("The library reads EPUB, HTML, plain text, PDF, and "
+                         "DOCX. This file is none of those — refused plainly "
+                         "rather than mangled into text.")
     blob_id = hashlib.sha256(data).hexdigest()
     lib_dir().mkdir(parents=True, exist_ok=True)
     blobs_dir().mkdir(exist_ok=True)
@@ -494,6 +611,40 @@ def index_representation(rep: dict, document_id: str) -> int:
     db.commit()
     db.close()
     return n
+
+
+def search_terms(query: str, limit: int = 40) -> "list[dict]":
+    """The QUESTION lane: a question is not a phrase from the document,
+    so this matches any of the question's content words (FTS5 OR over
+    quoted terms). Still purely lexical and local — recall here means
+    'these words appear', never 'this answers you'."""
+    words = re.findall(r"[A-Za-z][A-Za-z0-9'-]{2,}", (query or ""))
+    stop = {"the", "and", "for", "are", "was", "were", "what", "which",
+            "does", "this", "that", "with", "from", "have", "has", "how",
+            "when", "where", "who", "why", "can", "could", "should",
+            "would", "say", "says", "about", "before", "after", "into",
+            "each", "every", "their", "there", "than", "then", "them"}
+    terms = []
+    for w in words:
+        lw = w.lower()
+        if lw not in stop and lw not in terms:
+            terms.append(lw)
+    if not terms:
+        return []
+    match = " OR ".join('"' + t.replace('"', '""') + '"' for t in terms[:12])
+    db = _search_db()
+    try:
+        rows = db.execute(
+            "SELECT anchor_id, document_id, heading, "
+            "snippet(sentences, 3, '«', '»', '…', 18) "
+            "FROM sentences WHERE sentences MATCH ? LIMIT ?",
+            (match, limit)).fetchall()
+    except sqlite3.OperationalError:
+        rows = []
+    finally:
+        db.close()
+    return [{"anchor_id": a, "document_id": d, "heading": h, "snippet": s}
+            for a, d, h, s in rows]
 
 
 def search(query: str, limit: int = 40) -> "list[dict]":
