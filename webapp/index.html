@@ -6420,10 +6420,21 @@ function workRoomCard() {
 function contCard(c) {
   const id = escapeHtml(c.id);
   if (c.kind === 'concept') {
-    const dup = c.same_title_count > 1 ? `<span class="count-pill" title="another concept carries this title; this card opens this one by its id">1 of ${c.same_title_count} with this title</span> ` : '';
-    return `<div class="cont" data-kind="concept" data-id="${id}"><div class="kind"><i style="background:#FFE08A"></i>Concept · ${escapeHtml(c.decision || 'ruled')}${c.when ? ' · ' + contTime(c.when) : ''}</div>
+    const dup = c.same_title_count > 1 ? `<span class="count-pill" title="another shelf entry carries this title; this card is this concept, by its id">1 of ${c.same_title_count} with this title</span> ` : '';
+    const sh = c.shelf || {via: c.on_shelf ? 'concept_id' : 'none'};
+    // How the card reaches the shelf, said as the record has it: by the
+    // concept's id (modern); through an older title-keyed record, opened
+    // by THAT record's own id (the bridge — a description, not a merge);
+    // not at all; or two entries share the title and nothing here picks.
+    let resume;
+    if (sh.via === 'concept_id') resume = `<a onclick="openConceptById('${escapeJs(c.id)}')">Open the concept</a>`;
+    else if (sh.via === 'legacy_title') resume = `<a onclick="openShelfEntry('${escapeJs(sh.entry_id)}')">Open it on the shelf</a><a onclick="loadPastResult('${escapeJs(c.open.run || '')}','','',true)">Open the ruling</a><span class="muted" style="font-size:12px" title="the shelf entry predates concept ids; it is matched by its exact stored title, described here, and opened by its own id — nothing is stamped or merged">On the shelf through an older title-keyed record.</span>`;
+    else if (sh.via === 'ambiguous') resume = `<a onclick="loadPastResult('${escapeJs(c.open.id)}','','',true)">Open the ruling</a><a onclick="openShelfTitle('${escapeJs(c.title)}')">See the title on the shelf</a><span class="muted" style="font-size:12px" title="the shelf shows one row per title; the entries behind it are not told apart there — this is for the owner's review, not resolved by Home">${sh.entries} shelf entries share this title — which is this concept's is not recorded; not resolved here.</span>`;
+    else if (sh.via === 'title_fallback') resume = `<a onclick="loadPastResult('${escapeJs(c.open.id)}','','',true)">Open the ruling</a><a onclick="openShelfTitle('${escapeJs(c.title)}')">See it on the shelf</a><span class="muted" style="font-size:12px" title="the shelf shows this ruling's title back as a row of its own; no entry was ever written for it">On the shelf as a title only — its ruling is the only record.</span>`;
+    else resume = `<a onclick="loadPastResult('${escapeJs(c.open.id)}','','',true)">Open the ruling</a><span class="muted" style="font-size:12px">not on the shelf — the ruling lives in its run</span>`;
+    return `<div class="cont" data-kind="concept" data-id="${id}" data-shelf="${escapeHtml(sh.via)}"><div class="kind"><i style="background:#FFE08A"></i>Concept · ${escapeHtml(c.decision || 'ruled')}${c.when ? ' · ' + contTime(c.when) : ''}</div>
       <div class="obj">${escapeHtml(c.title)}</div><div class="what">${dup}${escapeHtml(c.reason || c.definition || '')}</div>
-      <div class="resume">${c.on_shelf ? `<a onclick="openConceptById('${escapeJs(c.id)}')">Open the concept</a>` : `<a onclick="loadPastResult('${escapeJs(c.open.id)}','','',true)">Open the ruling</a><span class="muted" style="font-size:12px">not on the shelf — the ruling lives in its run</span>`}${(c.instruments || []).map(i => `<a href="${escapeHtml(i.href)}">${escapeHtml(i.label)}</a>`).join('')}</div></div>`;
+      <div class="resume">${resume}${(c.instruments || []).map(i => `<a href="${escapeHtml(i.href)}">${escapeHtml(i.label)}</a>`).join('')}</div></div>`;
   }
   if (c.kind === 'room') {
     return `<div class="cont" data-kind="room" data-id="${id}"><div class="kind"><i style="background:#D9B3FF"></i>Room${c.when ? ' · ' + contTime(c.when) : ''}</div>
@@ -6455,8 +6466,10 @@ function renderContinue() {
     : '<div class="empty">Nothing to continue yet. Rule on a concept, admit a source to a Room, cross a passage into a claim, or leave a draft in the room — it will be here.</div>';
   if (more) more.textContent = cards.length ? 'the objects you were using, as themselves' : '';
   const e = HOME.excluded || {};
+  // Title-only rulings, counted by what they are — never tied to a concept
+  // by a title, never made into cards.
   if (ex) ex.innerHTML = e.legacy_title_only
-    ? `${e.legacy_title_only} older ruling${e.legacy_title_only === 1 ? '' : 's'} could not be tied to a single concept by anything but a title${e.ambiguous_titles && e.ambiguous_titles.length ? ' (' + e.ambiguous_titles.map(t => '“' + escapeHtml(t) + '”').join(', ') + (e.ambiguous_titles.length === 1 ? ' names more than one concept' : ' each name more than one concept') + ')' : ''} — not guessed into a card; they stay on the <a href="#concepts" onclick="openPlace('concepts');return false">Concepts</a> shelf under their titles.`
+    ? `${e.legacy_title_only} older ruling${e.legacy_title_only === 1 ? '' : 's'} cannot yet be tied safely to a single concept${e.with_shelf_entry ? ' — ' + e.with_shelf_entry + (e.with_shelf_entry === 1 ? ' corresponds to a <a href="#concepts" onclick="openPlace(\'concepts\');return false">shelf entry</a>' : ' correspond to <a href="#concepts" onclick="openPlace(\'concepts\');return false">shelf entries</a>') : ''}${e.rejections_or_revisions ? (e.with_shelf_entry ? ', ' : ' — ') + e.rejections_or_revisions + (e.rejections_or_revisions === 1 ? ' is a revision or rejection' : ' are revisions or rejections') : ''}${e.ambiguous_titles && e.ambiguous_titles.length ? ' (' + e.ambiguous_titles.map(t => '“' + escapeHtml(t) + '”').join(', ') + (e.ambiguous_titles.length === 1 ? ' names more than one shelf entry' : ' each name more than one shelf entry') + ')' : ''}. None were guessed into Continue.`
     : '';
 }
 function ruleRow(it) {
@@ -6513,6 +6526,28 @@ async function openConceptById(id) {
   const lib = await ensureLibrary();
   const c = (lib && lib.lexicon || []).find(x => x.concept_id === id);
   if (!c) { pageNote('that concept id is not on the shelf — nothing was opened in its place.'); return; }
+  await showShelfEntry(c);
+}
+// The legacy bridge's door: an older shelf entry, found by ITS persisted
+// id (acc_…), never by the title on the card. The entry's own name is
+// what the shelf displays it under — display, not identity.
+async function openShelfEntry(entryId) {
+  const lib = await ensureLibrary();
+  const c = (lib && lib.lexicon || []).find(x => x.id === entryId);
+  if (!c) { pageNote('that shelf entry (' + entryId + ') is not in the library payload — nothing was opened in its place.'); return; }
+  await showShelfEntry(c);
+  pageNote('opened from an older title-keyed record (' + entryId + '); this card is the concept, the entry is the record — nothing was merged.');
+}
+// A shared title, shown as the shelf holds it: every entry under it, for
+// the owner to review. Nothing here picks one.
+async function openShelfTitle(title) {
+  await ensureLibrary();
+  await toggleLibraryOpen();
+  const search = document.getElementById('library-search');
+  if (search) { search.value = title; renderLibrary(title); }
+  openPlace('concepts');
+}
+async function showShelfEntry(c) {
   await toggleLibraryOpen();
   const search = document.getElementById('library-search');
   if (search) { search.value = c.name; renderLibrary(c.name); }

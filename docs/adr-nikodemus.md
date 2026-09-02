@@ -114,3 +114,66 @@ Sabotage: the queue back under the band; the doors grown to admit it;
 the saved entries painted as rows inside the band; the line dropped;
 the hide rule lost; the queue rewritten on paint; the saved entry
 grown a door and a link.
+
+## Amendment 2026-09-02: the legacy shelf bridge (read-only), owner-ruled
+
+The first look at Home against the real store found a false statement
+block 99 could not have seen from its fixtures: 35 of the 39 accepted
+concepts have a judgment that cites a concept_id and a shelf entry
+written before the persist wiring carried ids — title-keyed, `acc_`.
+Home decided shelf membership by concept_id alone and called them
+absent. The ruling (backlog item 41, option C): compatibility now,
+reconciliation later, with a strict boundary.
+
+**The bridge.** For a ruling with a concept_id that no shelf entry
+carries, Home may locate a shelf entry only when the ruling carries the
+exact stored title of the legacy acceptance, exactly one legacy entry
+has that exact title, no concept-aware entry resolves the concept, and
+no second entry of any kind exists. No lowercasing, trimming, fuzzy,
+semantic or title-based merging. The result is used only to describe
+and open that persisted entry by its own `acc_` id, and the card says
+so — "On the shelf through an older title-keyed record." It writes
+nothing, stamps nothing, adds no concept_id, is not a general identity
+resolver, and may not be reused by the Map, the Bench, exports, or the
+concept door merely because Home uses it; it disappears by itself the
+day a ruled reconciliation gives the entry an explicit identity. Zero
+or many matches: Home does not say the concept is on the shelf; the
+ambiguity is kept and the owner is pointed at review.
+
+**A shape found while proving it.** The shelf loader also shows back,
+as a row of its own, the title of any accepted ruling that never got an
+entry written. Such a row is not a persisted record; the card says "On
+the shelf as a title only — its ruling is the only record," opens the
+ruling, and offers the shelf by title. And block 99 had tied a
+title-only ruling (no concept_id) to a concept when exactly one
+concept-aware entry carried its title — identity from a title. It no
+longer does; those rulings are counted, never carded.
+
+**The excluded line** now distinguishes the older rulings honestly:
+how many correspond to shelf entries, how many are revisions or
+rejections, which titles name more than one entry; none were guessed
+into Continue.
+
+**Reconciliation (option B) is recorded, not built.** It needs an
+evidence ladder — an explicit identity; matching acceptance judgment
+and originating trace; matching stored candidate/run identity;
+matching immutable definition or payload; an explicit owner ruling — a
+snapshot and hash before mutation, classification of every candidate,
+mutation only of proven or owner-ruled cases, siblings untouched, a
+recovery event per stamped entry, every legacy row byte-identical
+except the ruled addition, separate reporting of proven / ambiguous /
+absent / owner-required, and a restore drill before closure. A unique
+title supports the bridge's sentence; it does not rewrite identity.
+
+Proofs: block 101 (the eight shapes the ruling names plus the two found:
+one exact legacy entry; no entry; two concepts with one title; two
+entries sharing a title; a rejected and a revised title-keyed ruling; a
+title-only ruling with and without a modern entry; a modern entry that
+must bypass the bridge; a title-only row; a near-miss title) — the
+record's bytes across a paint, the bridge as Home's single helper with
+no lowercasing or trimming in it, the card's sentences and doors, the
+library carrying entry ids, `scripts/home_smoke.py` read-only by
+construction. The browser journey renders all four shelf states and
+opens the bridged entry by its id. `scripts/home_smoke.py` run against
+the real store is the acceptance: the three accepted concepts stop
+saying they are absent; the sibling stays unresolved.

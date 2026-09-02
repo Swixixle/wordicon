@@ -1,5 +1,24 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.3.2 — the legacy shelf bridge: Home stops calling accepted concepts absent
+
+Found on the first look at the real store: Home's Continue cards called
+accepted concepts "not on the shelf" whenever the shelf entry predated
+concept ids (35 of 39). Block 101 adds a read-only compatibility bridge,
+Home's alone (amendment in `docs/adr-nikodemus.md`): exact stored title,
+exactly one legacy entry, no concept-aware entry, no second entry of any
+kind — used only to describe and open that persisted entry by its own
+`acc_` id, said on the card as "On the shelf through an older
+title-keyed record." Nothing is written, stamped, merged or resolved for
+any other lane. Zero or many matches stay unresolved and say so. A
+title-only row the loader shows back is named as that. A title-only
+ruling is never tied to a concept by its title. The excluded line counts
+the older rulings by what they are. `/api/library` carries each shelf
+entry's own id. `scripts/home_smoke.py` reports Home against a store as
+counts only, read-only by construction, with a before/after snapshot.
+The one-time reconciliation (option B) is recorded with its evidence
+ladder, not built.
+
 ## v1.3.1 — Needs your ruling holds only what has a door; the recovery queue is saved, not due
 
 The reviewer's one correction to v1.3.0, owner-ruled (amendment in

@@ -12849,6 +12849,244 @@ console.log(out.join('\\n'));
     # ledger: the block-99 proof that the band draws on the record was
     # narrowed to the four actionable sources above, in the same change.
 
+    # ================= block 101: the legacy shelf bridge ================
+    # The real store's shape, which block 99's fixtures never held: 35 of
+    # 39 accepted concepts have a judgment that cites a concept_id and a
+    # shelf entry from before the persist wiring carried one (acc_,
+    # title-keyed). Home called them absent. The ruling (backlog item 41,
+    # option C): a READ-ONLY compatibility bridge, Home-only — exact stored
+    # title, exactly one legacy entry, no concept-aware entry resolving the
+    # concept, no second entry of any kind — used only to describe and
+    # open that persisted entry by its own acc_ id. It writes nothing,
+    # stamps nothing, resolves identity for no other lane, and says on
+    # the card that the record is older than the identity. Zero or many
+    # matches: the concept is NOT said to be on the shelf; the ambiguity
+    # is kept and the owner is pointed at review. The excluded paragraph
+    # stops claiming every older ruling sits on the shelf.
+    import json as _json101
+    import hashlib as _hl101
+    _root101 = Path(cli.__file__).parent.parent
+    _srv101 = (_root101 / "server.py").read_text(encoding="utf-8")
+    _idx101 = (_root101 / "webapp" / "index.html").read_text(encoding="utf-8")
+
+    def _f101(msg):
+        failures.append(f"101: {msg}")
+
+    def _rc101(trace, title, days):
+        cli.RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
+        (cli.RECEIPTS_DIR / f"{trace}.json").write_text(_json.dumps({
+            "trace_id": trace, "receipt_id": "rcpt_" + trace, "operation": "forge",
+            "created_at": (_dt99.now(_tz99.utc) - _td99(days=days)).isoformat(),
+            "candidates": [{"title": title}], "titles": [title], "input_preview": "x"}))
+
+    def _legacy_entry(eid, name):
+        return {"id": eid, "object_type": "concept", "name": name, "definition": "an older definition",
+                "status": "accepted", "accepted_from": "tr_pre_wiring", "accepted_at": "2026-08-20T00:00:00+00:00",
+                "supporting_claims": [], "governing_constraints": [], "related_mechanisms": [], "version": 1}
+
+    def _modern_entry(eid, name, cid):
+        e = _legacy_entry(eid, name)
+        e["concept_id"] = cid
+        e["accepted_from"] = "tr101_" + cid
+        return e
+
+    def _row(title, decision, trace, cid=""):
+        r = {"id": "jdg_" + trace + "_" + decision, "decision": decision, "candidate_text": title,
+             "originating_operation": trace, "decision_source": "owner", "confidence": 1.0}
+        if cid:
+            r["concept_id"] = cid
+        return r
+
+    # the eight shapes the ruling names, all at once, in the scratch store
+    _existing101 = _json101.loads(cli.ACCEPTED_CONCEPTS_PATH.read_text()) if cli.ACCEPTED_CONCEPTS_PATH.exists() else []
+    _existing101 += [
+        _legacy_entry("acc_bridge101", "Bridge Case 101"),                              # 1. one exact legacy entry
+        _modern_entry("acc2_twin1", "Twin Case 101", "concept_twin1"),                  # 3. two distinct concepts, one title
+        _modern_entry("acc2_twin2", "Twin Case 101", "concept_twin2"),
+        _legacy_entry("acc_sib101", "Sibling Case 101"),                                # 4. two entries share a title:
+        _modern_entry("acc2_sibother", "Sibling Case 101", "concept_sib_other"),        #    one legacy, one concept-aware
+        _legacy_entry("acc_titleonly101", "Title Only Legacy 101"),                     # 7. a title-only judgment's entry
+        _modern_entry("acc2_modern101", "Modern Case 101", "concept_modern101"),        # 8. modern entry bypasses the bridge
+        _legacy_entry("acc_modernlegacy101", "Modern Case 101"),                        #    even beside a same-titled legacy row
+        _legacy_entry("acc_near101", "Near Miss 101 "),                                  # trailing space: NOT an exact match
+        _modern_entry("acc2_solo101", "Solo Modern 101", "concept_solo101"),            # 7b. a title-only ruling's title
+    ]                                                                                    #     matching ONE modern entry
+    cli.ACCEPTED_CONCEPTS_PATH.write_text(_json101.dumps(_existing101, indent=2))
+    for _t, _title, _d in (("tr101_bridge", "Bridge Case 101", 0.0001), ("tr101_sib", "Sibling Case 101", 0.0002),
+                           ("tr101_fallback", "Fallback Case 101", 0.0003), ("tr101_absent", "Absent Case 101", 0.0004),
+                           ("tr101_twin1", "Twin Case 101", 0.0005), ("tr101_twin2", "Twin Case 101", 0.0006),
+                           ("tr101_modern", "Modern Case 101", 0.0007), ("tr101_near", "Near Miss 101", 0.0008),
+                           ("tr101_rej", "Rejected Legacy 101", 0.0017), ("tr101_rev", "Revised Legacy 101", 0.0018),
+                           ("tr101_to", "Title Only Legacy 101", 0.0019)):
+        _rc101(_t, _title, _d)
+    with open(cli.JUDGMENTS_LOG, "a") as _jf:
+        for _r in (_row("Bridge Case 101", "accepted", "tr101_bridge", "concept_bridge101"),      # 1
+                   _row("Absent Case 101", "revised", "tr101_absent", "concept_absent101"),       # 2. no shelf entry at all
+                   _row("Fallback Case 101", "accepted", "tr101_fallback", "concept_fallback101"),  # 2b. accepted, never
+                                                                                                    #     written: the loader
+                                                                                                    #     shows its title back
+                   _row("Twin Case 101", "accepted", "tr101_twin1", "concept_twin1"),             # 3
+                   _row("Twin Case 101", "accepted", "tr101_twin2", "concept_twin2"),
+                   _row("Sibling Case 101", "accepted", "tr101_sib", "concept_sib101"),           # 4
+                   _row("Modern Case 101", "accepted", "tr101_modern", "concept_modern101"),      # 8
+                   _row("Near Miss 101", "accepted", "tr101_near", "concept_near101"),            # exactness
+                   _row("Rejected Legacy 101", "rejected", "tr101_rej"),                          # 5. title-keyed rejection
+                   _row("Revised Legacy 101", "revised", "tr101_rev"),                            # 6. title-keyed revision
+                   _row("Title Only Legacy 101", "accepted", "tr101_to"),                         # 7. title-only acceptance
+                   _row("Solo Modern 101", "accepted", "tr101_solo")):                           # 7b. title-only, one modern hit
+            _jf.write(_json101.dumps(_r) + "\n")
+    _sha_acc_before = _hl101.sha256(cli.ACCEPTED_CONCEPTS_PATH.read_bytes()).hexdigest()
+    _sha_jdg_before = _hl101.sha256(cli.JUDGMENTS_LOG.read_bytes()).hexdigest()
+
+    _cards101, _ex101 = server._home_concepts(limit=40)
+    _by101 = {c["id"]: c for c in _cards101 if c.get("kind") == "concept"}
+
+    # 1. the bridge: on the shelf through the older record, opened by its acc_ id
+    _b = _by101.get("concept_bridge101")
+    if not _b:
+        _f101("the concept with a legacy shelf entry has no card")
+    else:
+        _sh = _b.get("shelf") or {}
+        if not _b.get("on_shelf") or _sh.get("via") != "legacy_title" or _sh.get("entry_id") != "acc_bridge101":
+            _f101(f"the legacy bridge did not describe the persisted entry: on_shelf={_b.get('on_shelf')} shelf={_sh}")
+        if (_b.get("open") or {}).get("type") != "shelf_entry" or (_b.get("open") or {}).get("id") != "acc_bridge101" \
+                or (_b.get("open") or {}).get("run") != "tr101_bridge":
+            _f101(f"the bridged card does not open the entry by its acc_ id (and keep the run): {_b.get('open')}")
+        if _b.get("instruments"):
+            _f101("the bridge handed the concept to other lanes (instruments on a bridged card)")
+        if "older title-keyed record" not in (_sh.get("say") or ""):
+            _f101("the bridged card does not say the record is older than the identity")
+        if "concept_id" in (_sh.get("entry") or {}) and (_sh.get("entry") or {}).get("concept_id"):
+            _f101("the bridge invented a concept link on the entry")
+    # 2. no entry: not on the shelf, opens the run, says so
+    _a = _by101.get("concept_absent101")
+    if not _a or _a.get("on_shelf") or (_a.get("shelf") or {}).get("via") != "none" or (_a.get("open") or {}).get("type") != "run":
+        _f101(f"a concept with no shelf entry was not reported absent: {_a and (_a.get('on_shelf'), _a.get('shelf'), _a.get('open'))}")
+    # 2b. accepted but never written: the loader synthesizes a title-only
+    #     row, and the card must say that is all there is — not a record
+    _fb = _by101.get("concept_fallback101")
+    if not _fb or (_fb.get("shelf") or {}).get("via") != "title_fallback" or (_fb.get("shelf") or {}).get("entry_id") \
+            or (_fb.get("open") or {}).get("type") != "run" or _fb.get("instruments") \
+            or "title only" not in ((_fb.get("shelf") or {}).get("say") or ""):
+        _f101(f"a synthesized title-only row was passed off as a persisted entry: {_fb and (_fb.get('shelf'), _fb.get('open'))}")
+    # 3. twins: two concepts, one title, each by its own id, neither bridged
+    for _cid in ("concept_twin1", "concept_twin2"):
+        _c = _by101.get(_cid)
+        if not _c or not _c.get("on_shelf") or (_c.get("shelf") or {}).get("via") != "concept_id" or _c.get("same_title_count") != 2:
+            _f101(f"{_cid}: a concept-aware twin did not resolve by id ({_c and (_c.get('on_shelf'), _c.get('shelf'), _c.get('same_title_count'))})")
+    # 4. siblings: a legacy entry and a concept-aware entry share the title —
+    #    the bridge must refuse, keep the ambiguity, and point at review
+    _s = _by101.get("concept_sib101")
+    if not _s or _s.get("on_shelf") or (_s.get("shelf") or {}).get("via") != "ambiguous" or (_s.get("shelf") or {}).get("entries") != 2 \
+            or (_s.get("open") or {}).get("type") != "run" or "review" not in ((_s.get("shelf") or {}).get("say") or "").lower():
+        _f101(f"the sibling case was resolved or mis-described instead of kept ambiguous: {_s and (_s.get('on_shelf'), _s.get('shelf'), _s.get('open'))}")
+    if _s and ((_s.get("shelf") or {}).get("entry_id") or (_s.get("open") or {}).get("id") in ("acc_sib101", "acc2_sibother")):
+        _f101("the sibling case was quietly resolved to one of the two entries")
+    # 8. modern entry: by id, the bridge never consulted, the legacy twin untouched
+    _m = _by101.get("concept_modern101")
+    if not _m or not _m.get("on_shelf") or (_m.get("shelf") or {}).get("via") != "concept_id" or (_m.get("open") or {}).get("id") != "concept_modern101":
+        _f101(f"a modern entry did not bypass compatibility: {_m and (_m.get('on_shelf'), _m.get('shelf'), _m.get('open'))}")
+    if _m and _m.get("same_title_count") != 2:
+        _f101("the modern card does not count the legacy row that shares its title")
+    # exactness: a trailing space is a different title
+    _n = _by101.get("concept_near101")
+    if not _n or _n.get("on_shelf") or (_n.get("shelf") or {}).get("via") != "none":
+        _f101(f"the bridge matched a title that is not exact: {_n and _n.get('shelf')}")
+    # 5/6/7. title-keyed rulings never become cards; they are counted honestly
+    for _t in ("Rejected Legacy 101", "Revised Legacy 101", "Title Only Legacy 101", "Solo Modern 101"):
+        if any(c.get("title") == _t for c in _cards101):
+            _f101(f"a title-only ruling became a card: {_t}")
+    # 7b. ledger (block 101): block 99 tied a title-only ruling to a concept
+    #     when exactly one concept-aware entry carried its title — identity
+    #     from a title, which the law forbids. It no longer does; the ruling
+    #     is counted as corresponding to a shelf entry and stays off Continue.
+    if "concept_solo101" in _by101:
+        _f101("a title-only ruling was tied to a concept by its title alone")
+    for _k in ("legacy_title_only", "with_shelf_entry", "rejections_or_revisions", "ambiguous_titles", "unmatched"):
+        if _k not in _ex101:
+            _f101(f"the exclusion report lacks {_k}")
+    if _ex101.get("with_shelf_entry", 0) < 1 or _ex101.get("rejections_or_revisions", 0) < 2 or _ex101.get("legacy_title_only", 0) < 3:
+        _f101(f"title-only rulings are not counted by what they are: {_ex101}")
+    # the record is untouched by the whole of it
+    if _hl101.sha256(cli.ACCEPTED_CONCEPTS_PATH.read_bytes()).hexdigest() != _sha_acc_before \
+            or _hl101.sha256(cli.JUDGMENTS_LOG.read_bytes()).hexdigest() != _sha_jdg_before:
+        _f101("painting Home changed the shelf or the judgments — the bridge must write nothing")
+    if any(e.get("concept_id") for e in _json101.loads(cli.ACCEPTED_CONCEPTS_PATH.read_text()) if e.get("id") == "acc_bridge101"):
+        _f101("the bridge stamped a concept_id onto the legacy entry")
+    # the same shapes through the endpoint, and the library carries entry ids
+    with server.app.test_client() as _c101:
+        _paired(_c101)
+        _h101 = _c101.get("/api/home").get_json() or {}
+        _hc = {c["id"]: c for c in (_h101.get("continue") or []) if c.get("kind") == "concept"}
+        if "concept_bridge101" in _hc and (_hc["concept_bridge101"].get("shelf") or {}).get("via") != "legacy_title":
+            _f101("/api/home does not carry the bridge the resolver computed")
+        _ex_api = _h101.get("excluded") or {}
+        if "with_shelf_entry" not in _ex_api or "rejections_or_revisions" not in _ex_api:
+            _f101("/api/home does not report the honest exclusion categories")
+        _lib101 = _c101.get("/api/library").get_json() or {}
+        _ids101 = {e.get("id") for e in (_lib101.get("lexicon") or [])}
+        if "acc_bridge101" not in _ids101 or "acc2_modern101" not in _ids101:
+            _f101("the library payload does not carry the shelf entries' own ids — nothing can open one by it")
+    # the bridge is Home's alone: one helper, referenced from _home_concepts only
+    if _srv101.count("_legacy_shelf_bridge(") != 2 or "def _legacy_shelf_bridge(" not in _srv101:
+        _f101("the legacy bridge is not a single helper used once, by Home")
+    _hc_src = _srv101[_srv101.index("def _home_concepts("):_srv101.index("def _home_rooms(")]
+    if "_legacy_shelf_bridge(" not in _hc_src:
+        _f101("the bridge is not inside _home_concepts")
+    for _mod in ("scripts/wordicon_cli.py", "scripts/library.py", "scripts/clinic.py", "scripts/keeper.py"):
+        _p = _root101 / _mod
+        if _p.exists() and "_legacy_shelf_bridge" in _p.read_text(encoding="utf-8"):
+            _f101(f"the bridge leaked into {_mod}")
+    if "def _legacy_shelf_bridge(" in _srv101:
+        _bridge_src = _srv101[_srv101.index("def _legacy_shelf_bridge("):_srv101.index("def _home_concepts(")]
+        for _bad in (".lower()", ".strip()", ".casefold()", "difflib", "fuzz", "normalize", "write_text", "open(", "persist_"):
+            if _bad in _bridge_src:
+                _f101(f"the bridge does something it must not: {_bad}")
+    # the page: the plain sentence, the entry opened by id, no instruments for a bridge
+    _card_js = _idx101[_idx101.index("function contCard("):_idx101.index("function renderContinue(")]
+    if "older title-keyed record" not in _card_js or "openShelfEntry(" not in _card_js:
+        _f101("the card does not say the record is older than the identity, or does not open the entry by its id")
+    if "function openShelfEntry(" not in _idx101 or "x.id === entryId" not in _idx101:
+        _f101("the page cannot open a shelf entry by its persisted id")
+    if "share this title" not in _card_js:
+        _f101("the ambiguous card does not say two entries share the title")
+    if "title_fallback" not in _card_js or "title only" not in _card_js:
+        _f101("the card has no words for a title-only row")
+    for _via in ("legacy_title", "ambiguous", "title_fallback"):
+        _branch = _card_js[_card_js.index(f"sh.via === '{_via}'"):]
+        _branch = _branch[:_branch.index("\n")]
+        if "/bench" in _branch or "openConceptById" in _branch:
+            _f101(f"the {_via} card hands the concept to another lane")
+    # the excluded paragraph: honest categories, no false shelf claim
+    _ren_js = _idx101[_idx101.index("function renderContinue("):_idx101.index("function ruleRow(")]
+    if "stay on the" in _ren_js and "shelf under their titles" in _ren_js:
+        _f101("the excluded paragraph still says every older ruling sits on the shelf")
+    for _need in ("cannot yet be tied safely to a single concept", "None were guessed into Continue", "revisions or rejections"):
+        if _need not in _ren_js:
+            _f101(f"the excluded paragraph lost {_need!r}")
+    # the read-only smoke: exists, writes nothing by construction, reports counts only
+    _smoke = _root101 / "scripts" / "home_smoke.py"
+    if not _smoke.exists():
+        _f101("scripts/home_smoke.py is missing — the real-store proof is not repeatable")
+    else:
+        _sm = _smoke.read_text(encoding="utf-8")
+        for _bad in ('"w"', "'w'", '"a"', "'a'", "write_text", "write_bytes", "persist_", "candidate_text",
+                     '"title"', '"name"', "'title'", "'name'", "titles", "definition"):
+            if _bad in _sm:
+                _f101(f"home_smoke.py can write or can print content: {_bad}")
+        import subprocess as _sp101
+        import sys as _sys101
+        _run = _sp101.run([_sys101.executable, str(_smoke), "--state", str(_SCRATCH)],
+                          capture_output=True, text=True, timeout=120, cwd=str(_root101))
+        try:
+            _out = _json101.loads(_run.stdout.strip().splitlines()[-1])
+        except Exception:
+            _out = {}
+            _f101(f"home_smoke.py did not print a JSON line: {_run.stdout[-200:]} {_run.stderr[-300:]}")
+        if _out and (_out.get("store_changed_by_this_read") != [] or "shelf" not in _out or
+                     _out["shelf"].get("legacy_bridge", 0) < 1 or _out["shelf"].get("ambiguous", 0) < 1):
+            _f101(f"home_smoke.py does not report the shelf classes or changed the store: {_out}")
+
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to
     # add to. This notices the day that happens, names the file, and does it

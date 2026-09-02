@@ -2744,17 +2744,67 @@ def _read_jsonl(path: pathlib.Path) -> "list[dict]":
     return out
 
 
+def _legacy_shelf_bridge(title: str, same_title: list, persisted_ids: set) -> dict:
+    """The read-only compatibility bridge (backlog item 41, option C; the
+    ADR's amendment). Home's alone. For a ruling that carries a concept_id
+    which no shelf entry carries, this finds the ONE shelf entry written
+    before the persist wiring carried ids — by the exact stored title:
+    no lowercasing, no trimming, no similarity — and returns what a card
+    may say about it. It describes and opens that persisted entry by its
+    own id; it does not add a concept_id, does not merge, is not evidence
+    that two identities are the same, and resolves nothing for the Map,
+    the Bench, exports or any other lane. Zero or many entries: no bridge
+    — the ambiguity is kept and the owner is pointed at review.
+
+    `same_title` is every shelf entry whose stored name equals `title`
+    exactly (concept-aware ones included: a second entry of ANY kind is
+    ambiguity). `persisted_ids` are the ids actually written in the shelf
+    file: the loader also synthesizes a title-only row for an accepted
+    ruling that never got an entry, and such a row is the ruling's own
+    title shown back, not a record to open by id — said as that.
+    Returns {"via": ..., "entries": n, "say": sentence} plus
+    entry_id/entry for a bridge."""
+    n = len(same_title)
+    legacy = [e for e in same_title if not e.get("concept_id")]
+    if n == 1 and len(legacy) == 1:
+        e = legacy[0]
+        if (e.get("id") or "") in persisted_ids:
+            return {"via": "legacy_title", "entries": 1, "entry_id": e.get("id") or "",
+                    "entry": {"id": e.get("id") or "", "name": e.get("name") or "",
+                              "definition": (e.get("definition") or "")[:200],
+                              "accepted_at": e.get("accepted_at") or ""},
+                    "say": "On the shelf through an older title-keyed record."}
+        return {"via": "title_fallback", "entries": 1,
+                "say": "On the shelf as a title only — its ruling is the only record; no entry was ever written."}
+    if n == 0:
+        return {"via": "none", "entries": 0,
+                "say": "Not on the shelf — the ruling lives in its run."}
+    return {"via": "ambiguous", "entries": n,
+            "say": f"{n} shelf entries share this title; which is this concept's is not recorded — "
+                   "not resolved here; its review is the owner's. Open the ruling, or see the title on the shelf."}
+
+
 def _home_concepts(limit: int = 6) -> "tuple[list, dict]":
     """Concepts the owner ruled on, newest first, dated by the receipt of
     the run the ruling was filed against (judgment rows carry no clock of
     their own — the Keeper met the same fact). Identity comes from the
-    judgment's concept_id when it has one; a legacy row without one
-    resolves only when exactly ONE lexicon concept carries its title."""
+    judgment's concept_id when it has one; shelf membership comes from a
+    shelf entry carrying that id, or — for entries written before the
+    wiring carried ids — from the read-only bridge above, which says so
+    on the card. A legacy row without a concept_id never becomes a card:
+    it resolves to nothing but a title, and a title is not an identity.
+    Those rows are counted by what they are."""
     lexicon = cli.load_accepted_concepts()
     by_id = {c.get("concept_id"): c for c in lexicon if c.get("concept_id")}
-    by_title = {}
+    by_title = {}          # EXACT stored title — the only kind of match Home makes
     for c in lexicon:
-        by_title.setdefault((c.get("name") or "").strip().lower(), []).append(c)
+        by_title.setdefault(c.get("name") or "", []).append(c)
+    persisted_ids = set()  # entries actually written in the shelf file (read-only)
+    if cli.ACCEPTED_CONCEPTS_PATH.exists():
+        try:
+            persisted_ids = {str(e.get("id") or "") for e in json.loads(cli.ACCEPTED_CONCEPTS_PATH.read_text())}
+        except (ValueError, OSError):
+            persisted_ids = set()
     receipts = {}
     if cli.RECEIPTS_DIR.exists():
         for path in cli.RECEIPTS_DIR.glob("*.json"):
@@ -2765,21 +2815,27 @@ def _home_concepts(limit: int = 6) -> "tuple[list, dict]":
             if r.get("trace_id"):
                 receipts[r["trace_id"]] = r
     latest = {}          # concept_id -> card
-    excluded = {"legacy_title_only": 0, "ambiguous_titles": [], "unmatched": 0}
+    # Title-only rulings (no concept_id), counted by what they are: some
+    # correspond to a shelf entry by exact title, some were revisions or
+    # rejections that never had one, some name two entries. None become
+    # cards — a title is all the identity they ever recorded.
+    excluded = {"legacy_title_only": 0, "with_shelf_entry": 0, "rejections_or_revisions": 0,
+                "ambiguous_titles": [], "unmatched": 0}
     for j in _read_jsonl(cli.JUDGMENTS_LOG):
-        title = (j.get("candidate_text") or "").strip()
+        title = j.get("candidate_text") or ""
         cid = j.get("concept_id") or ""
         if not cid:
-            hits = by_title.get(title.lower(), [])
-            if len(hits) == 1 and hits[0].get("concept_id"):
-                cid = hits[0]["concept_id"]
-            else:
-                excluded["legacy_title_only"] += 1
-                if len(hits) > 1 and title not in excluded["ambiguous_titles"]:
-                    excluded["ambiguous_titles"].append(title)
-                if not hits:
-                    excluded["unmatched"] += 1
-                continue
+            hits = by_title.get(title, [])
+            excluded["legacy_title_only"] += 1
+            if j.get("decision") in ("rejected", "revised"):
+                excluded["rejections_or_revisions"] += 1
+            elif len(hits) == 1:
+                excluded["with_shelf_entry"] += 1
+            if len(hits) > 1 and title not in excluded["ambiguous_titles"]:
+                excluded["ambiguous_titles"].append(title)
+            if not hits:
+                excluded["unmatched"] += 1
+            continue
         rec = receipts.get(j.get("originating_operation") or "", {})
         at = rec.get("created_at") or (by_id.get(cid) or {}).get("accepted_at") or ""
         prev = latest.get(cid)
@@ -2787,22 +2843,43 @@ def _home_concepts(limit: int = 6) -> "tuple[list, dict]":
             continue
         acc = by_id.get(cid) or {}
         trace = j.get("originating_operation") or ""
-        # On the shelf (accepted): the card opens the concept by its id.
-        # Ruled but not on the shelf (revised, rejected): the ruling lives
-        # in the run it was filed against, which has a stable trace id —
-        # the card opens THAT, and says so; it never resolves by title.
-        on_shelf = bool(acc)
+        # Shelf membership, in order: an entry carrying this concept_id
+        # (modern — the bridge is never consulted); else the read-only
+        # bridge to a pre-wiring entry, which says so; else absent or
+        # ambiguous, said plainly. Ruled but not on the shelf (revised,
+        # rejected, or an older record that cannot be tied): the ruling
+        # lives in the run it was filed against, which has a stable trace
+        # id — the card opens THAT. Nothing resolves by title alone.
+        if acc:
+            shelf = {"via": "concept_id", "entries": len(by_title.get(acc.get("name") or "", [])),
+                     "say": "On the shelf."}
+        else:
+            shelf = _legacy_shelf_bridge(title, by_title.get(title, []), persisted_ids)
+        # on_shelf: the Concepts shelf displays it (by id, through the older
+        # record, or as a title-only row); the card says which
+        on_shelf = shelf["via"] in ("concept_id", "legacy_title", "title_fallback")
+        entry = acc or (shelf.get("entry") or {})
+        if shelf["via"] == "concept_id":
+            open_ = {"type": "concept", "id": cid}
+            instruments = [{"label": "Bench", "href": "/bench?concept_id=" + cid}, {"label": "Map", "href": "/map"}]
+        elif shelf["via"] == "legacy_title":
+            # the bridge opens the persisted entry by ITS id and keeps the
+            # run; it hands the concept to no other lane
+            open_ = {"type": "shelf_entry", "id": shelf["entry_id"], "run": trace, "concept_id": cid}
+            instruments = []
+        else:
+            # absent, ambiguous, or a title-only row: the ruling's run is
+            # the door; the shelf is reachable by title for review only
+            open_ = {"type": "run", "id": trace, "concept_id": cid}
+            instruments = []
         latest[cid] = {"_at": at, "kind": "concept", "id": cid,
-                       "title": acc.get("name") or title,
+                       "title": entry.get("name") or title,
                        "when": at, "decision": j.get("decision", ""),
                        "reason": (j.get("reason") or "")[:160],
-                       "definition": (acc.get("definition") or "")[:200],
-                       "on_shelf": on_shelf,
-                       "same_title_count": len(by_title.get((acc.get("name") or title).lower(), [])),
-                       "open": ({"type": "concept", "id": cid} if on_shelf
-                                else {"type": "run", "id": trace, "concept_id": cid}),
-                       "instruments": ([{"label": "Bench", "href": "/bench?concept_id=" + cid},
-                                        {"label": "Map", "href": "/map"}] if on_shelf else [])}
+                       "definition": (entry.get("definition") or "")[:200],
+                       "on_shelf": on_shelf, "shelf": shelf,
+                       "same_title_count": len(by_title.get(entry.get("name") or title, [])),
+                       "open": open_, "instruments": instruments}
         if not on_shelf and not trace:
             latest.pop(cid, None)   # nothing to open: no card
     cards = sorted(latest.values(), key=lambda c: c["_at"], reverse=True)[:limit]
@@ -3293,7 +3370,10 @@ def api_library():
         "name": c.get("name", ""),
         # Identity travels with the row: without it the Bench (and anything
         # else the Library feeds) can only address concepts by title, which
-        # is the collision the ADR exists to end.
+        # is the collision the ADR exists to end. The entry's own persisted
+        # id rides along too (acc_ for pre-wiring rows, acc2_ after): it is
+        # what Home's legacy bridge opens an old entry BY — never the title.
+        "id": c.get("id", ""),
         "concept_id": c.get("concept_id", ""),
         "definition": c.get("definition", ""),
         "accepted_from": c.get("accepted_from", ""),
