@@ -18,3 +18,7 @@ __pycache__/
 # Archives and folder-copy era artifacts
 *.tgz
 *.zip
+
+# Journeys: dependencies and diagnostics are rebuilt, never committed
+tests/journeys/node_modules/
+tests/journeys/out/

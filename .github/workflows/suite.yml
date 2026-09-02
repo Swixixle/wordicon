@@ -23,3 +23,38 @@ jobs:
         run: python3 scripts/scan_secrets.py --tracked
       - name: Full constraint suite (offline — no keys, no corpus)
         run: python3 tests/test_global_constraints.py
+
+  # The behavioral half (block 102): real headless Chromium against a
+  # scratch store — the writing room's object identity, stable-id
+  # continuation, the ruling band, Saved for later, phone and split
+  # widths, the anatomy's stillness. Gateway poisoned, no key, outbound
+  # HTTP dead-ended, nothing skipped silently; diagnostics uploaded on
+  # failure. Its own job so a failure has an obvious owner.
+  journeys:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Install Playwright (pinned) and its Chromium
+        working-directory: tests/journeys
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Browser journeys (scratch store, gateway poisoned, no key, no network)
+        env:
+          JOURNEY_OUT: ${{ runner.temp }}/journeys-out
+        run: bash tests/journeys/run.sh
+      - name: Diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journeys-diagnostics
+          path: ${{ runner.temp }}/journeys-out
+          if-no-files-found: ignore

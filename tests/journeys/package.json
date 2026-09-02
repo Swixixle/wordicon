@@ -1,0 +1,11 @@
+{
+  "name": "nikodemus-journeys",
+  "private": true,
+  "description": "Browser journeys for the constraint suite's behavioral half — run by run.sh, never against the real store.",
+  "scripts": {
+    "test": "bash ./run.sh"
+  },
+  "devDependencies": {
+    "playwright": "1.56.0"
+  }
+}

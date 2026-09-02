@@ -13097,6 +13097,84 @@ console.log(out.join('\\n'));
                      _out["shelf"].get("legacy_bridge", 0) < 1 or _out["shelf"].get("ambiguous", 0) < 1):
             _f101(f"home_smoke.py does not report the shelf classes or changed the store: {_out}")
 
+    # ================= block 102: the journeys live in the repository =====
+    # The behavioral proofs — the room's object identity, stable-id
+    # continuation, the ruling band, Saved for later, widths, the anatomy's
+    # stillness — had lived in /tmp for one session at a time. Ruled: they
+    # are committed under tests/journeys and run in CI as their own job,
+    # pinned, against a scratch store with the gateway poisoned, no key,
+    # the network dead-ended, nothing skipped silently, diagnostics kept
+    # on failure. This block pins the shape of that; it does not run a
+    # browser (the journeys job does).
+    import json as _json102
+    import re as _re102
+    _root102 = Path(cli.__file__).parent.parent
+    _jd = _root102 / "tests" / "journeys"
+
+    def _f102(msg):
+        failures.append(f"102: {msg}")
+
+    for _need in ("run.sh", "serve.py", "fixtures.py", "lib.js", "home.js", "anatomy.js", "package.json", "package-lock.json", "README.md"):
+        if not (_jd / _need).exists():
+            _f102(f"tests/journeys/{_need} is missing")
+    if all((_jd / n).exists() for n in ("run.sh", "serve.py", "fixtures.py", "lib.js", "home.js", "anatomy.js", "package.json", "package-lock.json")):
+        _pkg = _json102.loads((_jd / "package.json").read_text(encoding="utf-8"))
+        _pw = (_pkg.get("devDependencies") or {}).get("playwright", "")
+        if not _re102.fullmatch(r"\d+\.\d+\.\d+", _pw):
+            _f102(f"playwright is not pinned to an exact version: {_pw!r}")
+        _lock = _json102.loads((_jd / "package-lock.json").read_text(encoding="utf-8"))
+        if ((_lock.get("packages") or {}).get("node_modules/playwright") or {}).get("version") != _pw:
+            _f102("the lockfile does not carry the pinned playwright")
+        _serve = (_jd / "serve.py").read_text(encoding="utf-8")
+        for _need in ('os.environ.pop("ANTHROPIC_API_KEY", None)', "server.server_gateway = _poisoned", "JOURNEY_STATE", "cli.LOCAL_STATE = STATE"):
+            if _need not in _serve:
+                _f102(f"serve.py lost {_need!r}")
+        if "local_state" in _serve.replace("LOCAL_STATE", ""):
+            _f102("serve.py names the real store")
+        _fx = (_jd / "fixtures.py").read_text(encoding="utf-8")
+        if "cli.LOCAL_STATE = STATE" not in _fx or "JOURNEY_STATE" not in _fx:
+            _f102("fixtures.py does not redirect to the scratch store")
+        _run = (_jd / "run.sh").read_text(encoding="utf-8")
+        for _need in ("unset ANTHROPIC_API_KEY", "HTTP_PROXY=http://127.0.0.1:9", "HTTPS_PROXY=http://127.0.0.1:9",
+                      "FAIL playwright is not installed", "FAIL the browser could not launch", "did not reach its final line",
+                      'grep -q "^JOURNEY $j OK"', "split: same room element", "swap: same room element", "full page: same room element",
+                      "undo history survived", "no request left the scratch origin", "dormant after", "mktemp -d",
+                      "refusing to run against it", "exec env"):
+            if _need not in _run:
+                _f102(f"run.sh lost {_need!r}")
+        _lib = (_jd / "lib.js").read_text(encoding="utf-8")
+        for _need in ("offOrigin", "no request left the scratch origin", "screenshot(", "process.exit(fails.length ? 1 : 0)", "JOURNEY_DIR", "JOURNEY_OUT"):
+            if _need not in _lib:
+                _f102(f"lib.js lost {_need!r}")
+        for _j, _needs in (("home.js", ("same room element", "undo", "acc_bridgefix", "older title-keyed record", "ruling-saved", "dataset.shelf", "phone", "split", "finish('home')")),
+                           ("anatomy.js", ("dormant", "finish('anatomy')"))):
+            _src = (_jd / _j).read_text(encoding="utf-8")
+            for _need in _needs:
+                if _need not in _src:
+                    _f102(f"{_j} lost {_need!r}")
+            if "/tmp/anat" in _src or "executablePath: '/opt" in _src:
+                _f102(f"{_j} still points at the session's scratch")
+        # the workflow: a separate job, pinned install, run.sh, diagnostics on failure
+        _wf = (_root102 / ".github" / "workflows" / "suite.yml").read_text(encoding="utf-8")
+        _jobs = _re102.findall(r"^  (\w+):\n", _wf, flags=_re102.M)
+        if "suite" not in _jobs or "journeys" not in _jobs:
+            _f102(f"the workflow does not carry both jobs: {_jobs}")
+        _jjob = _wf[_wf.index("  journeys:"):]
+        for _need in ("npm ci", "npx playwright install --with-deps chromium", "bash tests/journeys/run.sh",
+                      "if: failure()", "actions/upload-artifact@v4", "JOURNEY_OUT", "setup-node"):
+            if _need not in _jjob:
+                _f102(f"the journeys job lost {_need!r}")
+        if "python3 tests/test_global_constraints.py" not in _wf[:_wf.index("  journeys:")]:
+            _f102("the unit suite is no longer its own job")
+        if "continue-on-error" in _jjob or "|| true" in _jjob:
+            _f102("the journeys job can pass while failing")
+        _gi = (_root102 / ".gitignore").read_text(encoding="utf-8")
+        for _need in ("tests/journeys/node_modules/", "tests/journeys/out/"):
+            if _need not in _gi:
+                _f102(f".gitignore lacks {_need}")
+        if list(_jd.glob("*.png")) or list(_jd.glob("out/*")):
+            _f102("generated screenshots sit in tests/journeys")
+
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to
     # add to. This notices the day that happens, names the file, and does it
