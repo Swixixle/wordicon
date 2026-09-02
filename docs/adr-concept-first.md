@@ -6,6 +6,18 @@ Accepted by the owner, from observed use, 2026-09-01. The off-device
 Vault drill — the standing gate — passed the same day, and the build
 proceeded on the owner's execution order.
 
+Closed the same day: the migration is built and proven, not underway.
+The suite runs 94 blocks green in three environments (container, the
+owner's machine against the real corpus, CI); a twelve-target sabotage
+battery and a ten-step real-browser journey passed; the three
+suppressed acceptances were recovered onto the shelf by mechanical
+replay with the refusal evidence preserved; and the closing acceptance
+ran backward — the post-migration system restored and served the
+sealed pre-migration vault, hash-verified byte-identical, with counts,
+anchors, search, and the pairing gate intact under the new identity
+code. Six receipt-only acceptances remain queued for the owner's
+Recovery Review, by design.
+
 ## The identity law
 
 No persistent identity may be derived solely from a mutable

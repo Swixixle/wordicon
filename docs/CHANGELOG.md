@@ -1,5 +1,35 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.2.3 — concept-first identity migration (landed in the application; blueprint text now trails it)
+
+The application is now concept-first and coinage-optional
+(`docs/adr-concept-first.md`): an idea may exist without a coined name; a
+name is a handle attached to a concept, never the concept itself; and no
+persistent identity derives solely from a mutable human-readable title.
+Concepts carry minted ids; names live as satellite records with their own
+rulings and supersession history; the growth lanes, the Map, the Bench,
+exports, and the Library all address concepts by id, with legacy
+word-keyed records served through a read-only compatibility layer —
+nothing historical rewritten. A read-only audit found the old title-keyed
+schema had silently suppressed three distinct accepted concepts; they
+were recovered by mechanical replay of the owner rulings on record, with
+the original refusal evidence preserved; six receipt-only acceptances
+wait in a Recovery Review queue for the owner rather than being inferred.
+
+Closed and proven 2026-09-01: the 94-block suite green in the container,
+on the owner's machine against the real corpus, and in CI; a
+twelve-target sabotage battery (12/12 caught, byte-exact restores) and a
+ten-step real-browser journey (10/10); and the closing acceptance ran
+BACKWARD — the post-migration system restored and served the sealed
+pre-migration vault, hash-verified byte-identical, with counts, anchors,
+search, and the pairing gate intact under the new identity code.
+
+Known drift, recorded rather than hidden (the v1.2.1 standard): the
+blueprint text below still describes word-first identity in places.
+Revising it is an owner-scheduled editorial pass; until then,
+`docs/adr-concept-first.md` plus this entry are the accurate description
+of identity in the running system.
+
 ## v1.2.2 — a real (non-mocked) usable loop
 
 Not a blueprint change — no new object types, ADRs, or permission profiles, per explicit instruction. Adds `scripts/wordicon_cli.py`: a standalone CLI running Forge/Crack against a small static seed corpus (kernel_v1 + dc_000091 + the five public fixtures), with a real Already-Named heuristic (word-overlap, not full retrieval — a deliberate, disclosed simplification), a pluggable gateway (`mock` for offline testing, `anthropic` for a real Messages API call given your own `ANTHROPIC_API_KEY`), mechanical Bone-claim filtering (a claim survives only if it cites an admitted fragment id — checked in code against `validators.validate_bone_claim`, not trusted from the prompt), and judgment + receipt persistence across runs in `local_state/` so the anti-corpus and kernel signals actually accumulate.
