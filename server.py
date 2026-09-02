@@ -995,6 +995,40 @@ def clinic_page():
     return send_from_directory(WEBAPP_DIR, "clinic.html")
 
 
+def _head_commit() -> str:
+    """The commit the running tree was checked out at — read from .git by
+    plain file reads (no subprocess), or 'unknown' when there is no repo
+    (an installed copy without history)."""
+    try:
+        git = pathlib.Path(__file__).parent / ".git"
+        head = (git / "HEAD").read_text().strip()
+        if head.startswith("ref:"):
+            ref = head.split(" ", 1)[1].strip()
+            p = git / ref
+            if p.exists():
+                return p.read_text().strip()[:12]
+            packed = git / "packed-refs"
+            if packed.exists():
+                for line in packed.read_text().splitlines():
+                    if line.endswith(" " + ref):
+                        return line.split(" ", 1)[0][:12]
+            return "unknown"
+        return head[:12]
+    except OSError:
+        return "unknown"
+
+
+@app.route("/anatomy")
+def anatomy_page():
+    """The Functional Anatomy — documentation expressed as architecture.
+    Static page, one data structure, zero model calls, zero network
+    requests; the only server-side touch is stamping the commit SHA so
+    the page says which tree it describes. Behind the gate like all."""
+    page = (pathlib.Path(WEBAPP_DIR) / "anatomy.html").read_text(encoding="utf-8")
+    return Response(page.replace("__COMMIT__", _head_commit()),
+                    mimetype="text/html")
+
+
 @app.route("/api/clinic/rooms", methods=["GET", "POST"])
 def api_clinic_rooms():
     if request.method == "POST":

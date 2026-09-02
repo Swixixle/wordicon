@@ -12272,6 +12272,222 @@ console.log(out.join('\\n'));
         failures.append("97: the constitution still says PDFs are refused — "
                         "it has read them since block 95")
 
+    # ================= block 98: the functional anatomy ==================
+    # /anatomy — documentation expressed as architecture (backlog item 38,
+    # owner's build order). One data structure; Memory / Judgment Record
+    # central with the Owner beside it; Boundary & Critique "advises,
+    # never decides"; Vault / Restoration, never regeneration; unbuilt
+    # tissue dashed and labeled; the External Witness reaching nothing but
+    # the Owner; no motion before a click; no network; behind the gate.
+    # The browser journey (Playwright, /tmp harness; pattern in the
+    # backlog build report) runs the animation itself; this block pins
+    # the data and the code so a regression cannot pass silently.
+    import json as _json98
+    import re as _re98
+    _root98 = Path(cli.__file__).parent.parent
+    _page98 = (_root98 / "webapp" / "anatomy.html").read_text(encoding="utf-8")
+
+    def _f98(msg):
+        failures.append(f"98: {msg}")
+
+    _m98 = _re98.search(r'<script id="anatomy-data" type="application/json">\s*(.*?)\s*</script>',
+                        _page98, _re98.S)
+    if not _m98:
+        _f98("anatomy.html has no single anatomy-data structure")
+        _d98 = {}
+    else:
+        try:
+            _d98 = _json98.loads(_m98.group(1))
+        except ValueError as e:
+            _f98(f"anatomy-data is not valid JSON: {e}")
+            _d98 = {}
+    _nodes98 = {n.get("id"): n for n in _d98.get("nodes", [])}
+    _edges98 = _d98.get("edges", [])
+    _js98 = _page98[_page98.rfind("<script>"):]
+
+    # 1. one data structure: the rendering code carries no organ names
+    for _name in ("BOUNDARY", "SENSORY", "VAULT", "MEMORY / JUDGMENT", "UNBUILT"):
+        if _name in _js98:
+            _f98(f"an organ label leaked into rendering code: {_name!r}")
+
+    # 2. the governing title and the forbidden words
+    if _d98.get("title") != "The Functional Anatomy of Wordicon":
+        _f98("the governing title changed")
+    if _d98.get("subtitle") != ("Owner-actuated and inactive until summoned · specialized by "
+                                "function · unified by owner judgment"):
+        _f98("the governing subtitle changed")
+    _alltext98 = _json98.dumps(_d98, ensure_ascii=False).lower()
+    for _bad in ("autonomous", "self-governing", "alive", "checks and balances"):
+        _hits = [m.start() for m in _re98.finditer(_re98.escape(_bad), _alltext98)]
+        # "checks and balances" may appear only inside a negation
+        if _bad == "checks and balances":
+            for _h in _hits:
+                if "not mutual checks and balances" not in _alltext98[max(0, _h - 40):_h + 40]:
+                    _f98("the anatomy describes itself as checks and balances")
+        elif _hits:
+            _f98(f"the anatomy calls the system {_bad!r}")
+
+    # 3. the central structure and the sole authority
+    _mem = _nodes98.get("memory", {}); _own = _nodes98.get("owner", {})
+    _cw = (_d98.get("canvas") or {}).get("w", 0)
+    if _mem.get("kind") != "center" or abs(_mem.get("x", 0) - _cw / 2) > 20:
+        _f98("Memory / Judgment Record is not the central structure")
+    if _own.get("kind") != "owner" or _own.get("y") != _mem.get("y") or \
+            _own.get("x", 0) <= _mem.get("x", 0):
+        _f98("the Owner does not sit beside Memory")
+    if "only final authority" not in _own.get("status", ""):
+        _f98("the Owner is not labeled the only final authority")
+    for _k in ("Sources and original material", "Concepts", "Model proposals", "Owner rulings",
+               "Rejections and revision reasons", "Source-support judgments",
+               "Roads and relationships", "Keeper entries", "Historical supersession",
+               "Provenance and timestamps"):
+        if _k.lower() not in _mem.get("does", "").lower():
+            _f98(f"Memory's contents lost {_k!r}")
+
+    # 4. the organs and their printed laws
+    _b = _nodes98.get("boundary", {})
+    if _b.get("name") != "BOUNDARY & CRITIQUE" or _b.get("on_organ") != (
+            "Enforces owner-ruled boundaries and advises on quality; never invents a "
+            "boundary and never decides meaning.") or \
+            _b.get("on_organ_short") != "advises, never decides":
+        _f98("Boundary & Critique lost its printed law")
+    if "immune" in _alltext98:
+        _f98("the Immune System name is back")
+    _v = _nodes98.get("vault", {})
+    if _v.get("name") != "VAULT / RESTORATION" or \
+            "does not regrow or improve anything" not in _v.get("on_organ", ""):
+        _f98("the Vault is not Restoration with its law")
+    if _re98.search(r"regenerat", _alltext98.replace("never regeneration", "")):
+        _f98("regeneration language survives outside the negation")
+    if "awaiting shadow-mode validation" not in _nodes98.get("rooms", {}).get("status", ""):
+        _f98("the Clinic does not say shadow-mode validation is pending")
+    for _id in ("archive", "publication"):
+        _u = _nodes98.get(_id, {})
+        if _u.get("kind") != "unbuilt" or _u.get("status") != "UNBUILT TISSUE":
+            _f98(f"{_id} is not rendered as UNBUILT TISSUE")
+        if (_u.get("witness") or {}).get("routes"):
+            _f98(f"unbuilt {_id} claims a route")
+    if not _re98.search(r"\.organ\.unbuilt \.organ-shape \{[^}]*stroke-dasharray", _page98):
+        _f98("unbuilt tissue is not drawn dashed")
+    _w = _nodes98.get("witness", {})
+    if _w.get("kind") != "witness" or "outside" not in _w.get("status", "").lower():
+        _f98("the External Witness is not placed outside")
+    for _n in _nodes98.values():
+        for _field in ("does", "contributes", "constrained_by", "fails", "witness"):
+            if not _n.get(_field):
+                _f98(f"{_n.get('id')} lacks {_field}")
+        if _n.get("kind") in ("organ", "center", "owner") and not (_n.get("witness") or {}).get("tests"):
+            _f98(f"{_n.get('id')} has no implementation witness")
+
+    # 5. exactly four relationship classes; the witness reaches only the owner
+    _cls = [c.get("label") for c in _d98.get("relationship_classes", [])]
+    if _cls != ["Feeds", "Challenges material from", "Is constrained by", "Preserves"]:
+        _f98(f"relationship classes are not the ruled four: {_cls}")
+    _ids = {c.get("id") for c in _d98.get("relationship_classes", [])}
+    for _e in _edges98:
+        if _e.get("class") not in _ids:
+            _f98(f"edge {_e.get('from')}→{_e.get('to')} has a fifth class {_e.get('class')!r}")
+        if _e.get("to") == "memory" and _e.get("from") == "witness":
+            _f98("the External Witness has a direct arrow into Memory")
+        if _e.get("to") not in _nodes98 or (_e.get("from") not in _nodes98 and _e.get("from") != "world"):
+            _f98(f"edge references an unknown organ: {_e}")
+    _wt = {_e.get("to") for _e in _edges98 if _e.get("from") == "witness"}
+    if _wt != {"owner"}:
+        _f98(f"the witness reaches {_wt}, not only the owner")
+    if not any(_e.get("from") == "witness" and _e.get("future") for _e in _edges98):
+        _f98("the witness→owner testimony pathway is not marked future")
+    for _e in _edges98:
+        if ({_e.get("from"), _e.get("to")} & {"archive", "publication"}) and not _e.get("future"):
+            _f98(f"a pathway touching unbuilt tissue is drawn as present: {_e.get('from')}→{_e.get('to')}")
+
+    # 6. the story: eleven steps, each with what changed and what could not
+    _src = next((s for s in _d98.get("stories", []) if s.get("id") == "source"), {})
+    _seq = [s.get("at") for s in _src.get("steps", [])]
+    if _seq != ["sensory", "boundary", "library", "rooms", "cortex", "boundary", "owner",
+                "memory", "map", "voice", "vault"]:
+        _f98(f"Follow one source lost its ruled order: {_seq}")
+    for _s in _src.get("steps", []):
+        if not (_s.get("changed") and _s.get("forbidden")):
+            _f98("a story step lacks its sentence pair")
+    _pub = next((s for s in _d98.get("stories", []) if s.get("id") == "publication"), {})
+    if _pub.get("available") is not False or "unbuilt" not in _pub.get("why", ""):
+        _f98("the publication cycle is not visibly unavailable as unbuilt")
+    if any(s.get("available") for s in _d98.get("stories", []) if s.get("id") != "source"):
+        _f98("a later story is offered as available before it is built")
+
+    # 7. nothing moves by itself; motion only from the button; reduced motion honored
+    _boot = _js98[_js98.find("// ---- boot"):]
+    for _tok in ("setInMotion(", "advance(", "setTimeout(advance", "setInterval",
+                 "requestAnimationFrame", "stepOnce("):
+        if _tok in _boot:
+            _f98(f"the page starts motion on load ({_tok})")
+    if _re98.search(r"setTimeout\((?!advance|fitView)", _js98):
+        _f98("a timer other than the step timer and the resize debounce appeared")
+    for _tok in ("setInterval(", "requestAnimationFrame(", "autoplay"):
+        if _tok in _js98:
+            _f98(f"a looping primitive appeared: {_tok}")
+    if _js98.count("setTimeout(") != 2:   # the step timer and the resize debounce
+        _f98(f"unexpected timers in the anatomy page: {_js98.count('setTimeout(')}")
+    if 'onclick="setInMotion()"' not in _page98 or 'onclick="pauseMotion()"' not in _page98 or \
+            'onclick="resetMotion()"' not in _page98:
+        _f98("Set it in motion / Pause / Reset are not buttons")
+    if "prefers-reduced-motion: reduce" not in _page98 or "no-travel" not in _page98:
+        _f98("reduced motion is not honored")
+    if "history.back()" not in _js98:
+        _f98("back does not return through history")
+
+    # 8. no network, no model, behind the gate, stamped
+    for _tok in ("fetch(", "XMLHttpRequest", "WebSocket", 'src="http', "gateway", "anthropic",
+                 "import("):
+        if _tok in _page98:
+            _f98(f"the anatomy page reaches out: {_tok!r}")
+    if "/anatomy" in server._GATE_PUBLIC:
+        _f98("/anatomy was made public")
+    if "gateway" in _ins96.getsource(server.anatomy_page):
+        _f98("the anatomy route touches the model gateway")
+    with server.app.test_client() as _c98:
+        _r = _c98.get("/anatomy")
+        if _r.status_code != 302 or not _r.headers.get("Location", "").endswith("/pair"):
+            _f98(f"unpaired /anatomy did not redirect to /pair ({_r.status_code})")
+        _paired(_c98)
+        _r = _c98.get("/anatomy")
+        _body = _r.get_data(as_text=True)
+        if _r.status_code != 200 or "__COMMIT__" in _body or "commit " not in _body:
+            _f98("paired /anatomy is not served with its commit stamp")
+        if "commit __COMMIT__" in _body:
+            _f98("the commit placeholder survived")
+    if not _re98.match(r"\d{4}-\d{2}-\d{2}$", str(_d98.get("as_of", ""))):
+        _f98("no as-of date")
+
+    # 9. placement: one quiet link inside the What-is-Wordicon panel, none in the room
+    _idx98 = (_root98 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _links = [m.start() for m in _re98.finditer(r'href="/anatomy"', _idx98)]
+    _panel = _idx98.find("What is Wordicon?")
+    _room = _idx98.find('id="compose-text"')
+    if len(_links) != 1 or _links[0] < _panel:
+        _f98(f"the See the anatomy link is not a single quiet link in the panel ({len(_links)})")
+    if "See the anatomy" not in _idx98:
+        _f98("the link lost its name")
+    if _room != -1 and any(abs(_l - _room) < 400 for _l in _links):
+        _f98("an anatomy control was added to the writing room")
+
+    # 10. no corpus content, names, hospital material, or personal examples
+    _acc98 = cli.ACCEPTED_CONCEPTS_PATH
+    _real_acc = _REAL_STATE / "accepted_concepts.json"
+    if _real_acc.exists():
+        try:
+            _raw = _json98.loads(_real_acc.read_text())
+            _items = _raw.get("concepts", list(_raw.values())) if isinstance(_raw, dict) else _raw
+            _titles = [str(x.get("title", "")) for x in _items if isinstance(x, dict)]
+        except Exception:
+            _titles = []
+        for _t in _titles:
+            if len(_t) > 5 and _t.lower() in _alltext98 and _t.lower() not in ("common ground",):
+                _f98(f"a corpus title appears in the anatomy: {_t!r}")
+    for _bad in ("alex", "maksimovich", "community hospital", "aarc", "indianapolis"):
+        if _bad in _alltext98:
+            _f98(f"personal or institutional material in the anatomy: {_bad!r}")
+
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to
     # add to. This notices the day that happens, names the file, and does it

@@ -1,0 +1,1356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Functional Anatomy of Wordicon</title>
+<link rel="icon" href="data:,">
+<!--
+  /anatomy — documentation expressed as architecture (backlog item 38).
+  Visual starting point: the reviewer's interactive diagram (organic
+  organs inside a private membrane, relationship pathways, click-to-read
+  detail); corrected to the written blueprint where they differ —
+  Memory / Judgment Record at the center with the Owner beside it,
+  Boundary & Critique in place of "Immune System", Vault / Restoration in
+  place of "Regeneration", four named relationship classes, and no motion
+  of any kind before a visible click.
+
+  Everything drawn here comes from ONE data structure: the JSON in
+  <script id="anatomy-data"> below — organs, laws, edges, story steps,
+  and the geometry. The rendering code carries no labels of its own.
+  No model call. No network request. Behind the pairing gate like every
+  other page. The commit stamp is filled in by the route.
+-->
+<style>
+  :root {
+    --bg: #11161d; --panel: #181f29; --panel-2: #1f2833; --border: #2a3441;
+    --text: #e7ecf3; --muted: #8b98a9; --accent: #78aaff;
+    --feeds: #8CC8FF; --challenges: #9EE6B8; --constrained: #FFB07A; --preserves: #D9B3FF;
+    --memory: #FFE08A; --owner: #ff9aa2; --unbuilt: #7b8797; --witness: #9EE6B8;
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 14px 14px 40px; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
+  button.link { color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; font-size: 13px; }
+  h1 { font-size: 19px; margin: 6px 0 2px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 4px; }
+  .custody { color: var(--muted); font-size: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin: 10px 0; }
+  .section-label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .muted { color: var(--muted); }
+  .foot { font-size: 12px; color: var(--muted); }
+  button { background: var(--panel-2); color: var(--accent); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 11px; font-size: 13px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button[disabled] { color: var(--muted); cursor: not-allowed; opacity: .7; }
+  button.primary { border-color: var(--accent); font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+  select { max-width: 100%; min-width: 0; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 13px; }
+  .chip { border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+  .chip.on { background: var(--panel); border-color: var(--text); color: var(--text); }
+  .swatch { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 10px; align-items: start; }
+  @media (max-width: 1000px) { .two { grid-template-columns: 1fr; } }
+  #stage { width: 100%; overflow: hidden; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  svg text { font-family: inherit; pointer-events: none; }
+  .membrane { fill: rgba(140, 200, 255, 0.03); stroke: var(--border); stroke-width: 2; }
+  .membrane-label, .relation-label { fill: var(--muted); font-size: 11px; paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; }
+  .organ { cursor: pointer; }
+  .organ-shape { fill: #1c2530; stroke: var(--border); stroke-width: 1.5; transition: stroke-width 150ms ease; }
+  .organ:hover .organ-shape, .organ:focus .organ-shape, .organ.is-selected .organ-shape { stroke: var(--accent); stroke-width: 3; }
+  .organ.center .organ-shape { fill: #2b2a1c; stroke: var(--memory); stroke-width: 2; }
+  .organ.owner .organ-shape { fill: #2b1d21; stroke: var(--owner); stroke-width: 2; }
+  .organ.unbuilt .organ-shape { fill: rgba(123, 135, 151, 0.10); stroke: var(--unbuilt); stroke-dasharray: 7 5; }
+  .organ.witness .organ-shape { fill: rgba(158, 230, 184, 0.06); stroke: var(--witness); stroke-dasharray: 3 4; }
+  .organ.is-dim { opacity: .5; }   /* dimmed, never hidden: status labels stay legible */
+  .organ-title { fill: var(--text); font-size: 13px; font-weight: 600; text-anchor: middle; letter-spacing: .02em; }
+  .organ-sub { fill: var(--muted); font-size: 11px; text-anchor: middle; }
+  .organ.unbuilt .organ-sub.status { fill: var(--unbuilt); font-weight: 700; letter-spacing: .08em; }
+  .organ.center .organ-title { fill: var(--memory); }
+  .organ.owner .organ-title { fill: var(--owner); }
+  .organ-law { fill: var(--constrained); font-size: 9.5px; text-anchor: middle; font-style: italic; }
+  .room-cell { fill: rgba(158, 230, 184, 0.10); stroke: var(--challenges); stroke-width: 1; }
+  .room-label { fill: var(--text); font-size: 9px; text-anchor: middle; }
+  .edge { fill: none; stroke-width: 2; opacity: .82; transition: opacity 150ms ease; }
+  .edge.feeds { stroke: var(--feeds); }
+  .edge.challenges { stroke: var(--challenges); stroke-dasharray: 7 5; }
+  .edge.constrained { stroke: var(--constrained); stroke-dasharray: 2 5; }
+  .edge.preserves { stroke: var(--preserves); stroke-dasharray: 10 4 2 4; }
+  .edge.future { stroke: var(--unbuilt); stroke-dasharray: 4 7; opacity: .55; }
+  .edge.is-hidden { opacity: .05; }
+  .edge.lit { opacity: 1; stroke-width: 3; }
+  #token { transition: transform 750ms cubic-bezier(.4,0,.2,1); }
+  #token circle { fill: var(--memory); stroke: #fff; stroke-width: 1.5; }
+  #token .halo { fill: none; stroke: var(--memory); stroke-width: 1; opacity: .5; }
+  #token.hidden { display: none; }
+  @media (prefers-reduced-motion: reduce) { #token, .organ-shape, .edge { transition: none; } }
+  #token.no-travel { transition: none; }
+  .narr { min-height: 66px; }
+  .narr .what { font-size: 14px; margin: 0; }
+  .narr .forbid { font-size: 13px; color: var(--muted); margin: 2px 0 0; }
+  .status { font-size: 12px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { text-align: left; vertical-align: top; padding: 6px 8px; border-top: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 11.5px; }
+  tr.at td { background: rgba(255, 224, 138, 0.08); }
+  .hidden { display: none !important; }
+  code { font-size: 12px; color: var(--muted); }
+  .fields dt { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; margin-top: 8px; }
+  .fields dd { margin: 2px 0 0; }
+  .law { border-left: 3px solid var(--constrained); padding-left: 10px; margin: 8px 0; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1 id="title"></h1>
+    <p class="sub" id="subtitle"></p>
+  </div>
+  <div class="row">
+    <span class="custody" id="custody"></span>
+    <button class="link" onclick="goBack()">← back to Wordicon</button>
+  </div>
+</header>
+
+<div class="card">
+  <div class="row">
+    <span class="section-label" style="margin:0">Story</span>
+    <select id="story"></select>
+    <button class="primary" id="btn-motion" onclick="setInMotion()">Set it in motion</button>
+    <button id="btn-step" onclick="stepOnce()">Step</button>
+    <button id="btn-pause" onclick="pauseMotion()">Pause</button>
+    <button id="btn-reset" onclick="resetMotion()">Reset</button>
+    <span class="status" id="status"></span>
+  </div>
+  <div class="narr" id="narration" style="margin-top:8px"></div>
+</div>
+
+<div class="two">
+  <div class="card" style="margin:0">
+    <div class="row" style="justify-content:space-between">
+      <div class="row" id="filters"></div>
+      <div class="row">
+        <button id="view-diagram" class="chip on" onclick="setView('diagram', true)">Diagram</button>
+        <button id="view-table" class="chip" onclick="setView('table', true)">Table</button>
+      </div>
+    </div>
+    <p class="foot hidden" id="narrow-note" style="margin:6px 0 0"></p>
+    <div id="stage" style="margin-top:8px"></div>
+    <div id="table-view" class="hidden" style="margin-top:8px; overflow-x:auto"></div>
+    <p class="foot" id="legend" style="margin:8px 0 0"></p>
+  </div>
+  <div>
+    <div class="card" id="detail" style="margin:0 0 10px">
+      <div class="section-label">Organ</div>
+      <p class="muted" style="margin:0">Click an organ to read what it does, what it contributes, what constrains it, and how it can fail.</p>
+    </div>
+    <div class="card" style="margin:0">
+      <div class="section-label">The architecture in one sentence</div>
+      <p id="thesis" style="margin:0"></p>
+      <p class="foot" id="thesis-foot" style="margin:6px 0 0"></p>
+    </div>
+  </div>
+</div>
+</div>
+
+<script id="anatomy-data" type="application/json">
+{
+  "as_of": "2026-09-02",
+  "title": "The Functional Anatomy of Wordicon",
+  "subtitle": "Owner-actuated and inactive until summoned · specialized by function · unified by owner judgment",
+  "thesis": "Separation of function under unified owner authority. Rooms can present conflicting material. Friction can criticize. Tests can detect violated laws. None can overrule the owner.",
+  "thesis_foot": "These are not mutual checks and balances. Every organ is specialized; only one rules. The organism is dormant until you press Set it in motion — elaborate internal capability, and nothing begins acting merely because it can.",
+  "membrane": {
+    "top_label": "OUTSIDE WORLD — sources, readers, institutions, other people",
+    "label": "PRIVATE MEMBRANE — this machine, paired devices only; nothing moves or adapts until the owner summons a lane",
+    "path": "M380 62 C600 56 712 190 718 470 C724 720 620 905 380 912 C140 905 36 720 42 470 C48 190 160 56 380 62 Z"
+  },
+  "canvas": {
+    "w": 770,
+    "h": 1075,
+    "min_diagram_width": 620
+  },
+  "relationship_classes": [
+    {
+      "id": "feeds",
+      "label": "Feeds",
+      "marker": "arrow"
+    },
+    {
+      "id": "challenges",
+      "label": "Challenges material from",
+      "marker": "arrow"
+    },
+    {
+      "id": "constrained",
+      "label": "Is constrained by",
+      "marker": "stop"
+    },
+    {
+      "id": "preserves",
+      "label": "Preserves",
+      "marker": "arrow"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "memory",
+      "kind": "center",
+      "name": "MEMORY / JUDGMENT RECORD",
+      "tag": "the product every organ contributes to",
+      "status": "central tissue",
+      "x": 390,
+      "y": 500,
+      "w": 220,
+      "h": 118,
+      "seed": 1,
+      "does": "Accumulates the record: sources and original material, concepts, model proposals, owner rulings, rejections and revision reasons, source-support judgments, roads and relationships, Keeper entries, historical supersession, provenance and timestamps.",
+      "contributes": "The thing Wordicon is for. Memory accumulates; the owner rules what it means.",
+      "constrained_by": "Append-only. Supersession by link, never by rewrite. No persistent identity derived from a mutable title. Nothing enters it without a visible owner action or a recorded machine event with provenance.",
+      "fails": "Silent loss (a title-keyed identity dropping a second concept — happened, recovered, and the bug class killed). Drift: descriptions no longer matching the software. Receipts without snapshots.",
+      "witness": {
+        "routes": [
+          "/api/judge",
+          "/api/history",
+          "/api/concept/<id>",
+          "/api/keeper/entries"
+        ],
+        "modules": [
+          "scripts/wordicon_cli.py",
+          "src/wordicon_corpus/"
+        ],
+        "tests": [
+          "blocks 74–75, 94"
+        ]
+      }
+    },
+    {
+      "id": "owner",
+      "kind": "owner",
+      "name": "OWNER / HEART",
+      "tag": "accept · reject · revise · declare",
+      "status": "the only final authority",
+      "x": 625,
+      "y": 500,
+      "w": 170,
+      "h": 96,
+      "seed": 2,
+      "does": "Accepts, rejects, revises, or leaves unresolved. Declares roads, families, supersession, relations. Attests, cancels, rules.",
+      "contributes": "Rulings — the only thing that settles anything. Changes of mind are kept, never overwritten.",
+      "constrained_by": "The constitution binds the owner's own citations to the same evidence boundary. A ruling is visible, dated, and revisable — never silent.",
+      "fails": "Not ruling: proposals that wait forever. Ruling by accident: a click that was not a decision. The tool is built so neither happens quietly.",
+      "witness": {
+        "routes": [
+          "/api/judge",
+          "/api/library/support/rule",
+          "/api/clinic/disagree/rule",
+          "/api/keeper/rule"
+        ],
+        "modules": [
+          "server.py"
+        ],
+        "tests": [
+          "blocks 75, 85, 95"
+        ]
+      }
+    },
+    {
+      "id": "sensory",
+      "kind": "organ",
+      "name": "SENSORY TISSUE",
+      "tag": "documents · media · source doors",
+      "status": "shipped",
+      "x": 250,
+      "y": 150,
+      "w": 186,
+      "h": 94,
+      "seed": 3,
+      "does": "Admits the outside world: files you own, transcripts you supply, doors that open searches. Admission never means truth.",
+      "contributes": "Original material, byte-intact, with retrieval metadata and declared access status.",
+      "constrained_by": "The pairing gate. The document gate (identifiers, never clinical prose). Doors open only — nothing is imported by opening one. No platform is touched; no speech recognition.",
+      "fails": "Mistaking a door for evidence. A recollection rendered as a passage. A refused file silently mangled instead of refused out loud.",
+      "witness": {
+        "routes": [
+          "/api/library/ingest",
+          "/api/media/ingest",
+          "/api/works/external"
+        ],
+        "modules": [
+          "scripts/library.py"
+        ],
+        "tests": [
+          "blocks 84, 86, 87"
+        ]
+      }
+    },
+    {
+      "id": "boundary",
+      "kind": "organ",
+      "name": "BOUNDARY & CRITIQUE",
+      "tag": "pairing · PHI gates · Friction · validation · sabotage",
+      "status": "shipped",
+      "x": 520,
+      "y": 150,
+      "w": 206,
+      "h": 102,
+      "seed": 4,
+      "on_organ": "Enforces owner-ruled boundaries and advises on quality; never invents a boundary and never decides meaning.",
+      "on_organ_short": "advises, never decides",
+      "does": "Refuses unpaired devices. Refuses patient-specific questions and identifier-bearing documents. Criticizes every candidate (Friction). Validates schemas. Sabotages the build to prove the tests can see.",
+      "contributes": "Objections, refusals, and proofs — all advisory to the owner, never a gate on judgment.",
+      "constrained_by": "Advises, never decides. Friction is informational: every candidate is shown; the owner's accept/reject/revise is final. A refusal keeps only a content-free event. Screens are heuristic backstops and say so.",
+      "fails": "Over-refusal: a guideline refused for containing the word “patient” (happened; corrected). Under-refusal: a hyphenated vignette slipping past a regex. A critic that starts to gate.",
+      "witness": {
+        "routes": [
+          "/pair",
+          "/api/pair",
+          "/api/clinic/ingest",
+          "/api/clinic/ask"
+        ],
+        "modules": [
+          "scripts/gate.py",
+          "scripts/clinic.py",
+          "scripts/scan_secrets.py",
+          "tests/"
+        ],
+        "tests": [
+          "blocks 89, 95, 96 + every sabotage battery"
+        ]
+      }
+    },
+    {
+      "id": "library",
+      "kind": "organ",
+      "name": "LIBRARY / METABOLISM",
+      "tag": "custody · extraction · anchors · exact search",
+      "status": "shipped",
+      "x": 150,
+      "y": 325,
+      "w": 180,
+      "h": 96,
+      "seed": 5,
+      "does": "Keeps bytes, extracts under named versioned readers, segments deterministically, anchors every sentence, indexes exact text.",
+      "contributes": "Anchors a claim can be held against. Same bytes plus same reader revision, same anchors — forever.",
+      "constrained_by": "Zero model calls. A new reader revision creates a new reading and never rewrites an old one. Search is local-exact, never meanings, never the web.",
+      "fails": "A reader that skips text without saying so. An index mistaken for the authority (it is rebuildable, never canonical).",
+      "witness": {
+        "routes": [
+          "/api/library/doc/<id>",
+          "/api/library/search",
+          "/api/library/resolve/<anchor>"
+        ],
+        "modules": [
+          "scripts/library.py"
+        ],
+        "tests": [
+          "blocks 84, 85, 95"
+        ]
+      }
+    },
+    {
+      "id": "rooms",
+      "kind": "organ",
+      "name": "ROOMS / CHAMBERS",
+      "tag": "Work Rooms · the Clinic",
+      "status": "Clinic: shipped · awaiting shadow-mode validation",
+      "x": 380,
+      "y": 325,
+      "w": 236,
+      "h": 104,
+      "seed": 6,
+      "cells": [
+        "policy",
+        "guide",
+        "study",
+        "claim"
+      ],
+      "does": "Keeps policy, guidance, studies, manufacturer claims, and interpretations separate — each source speaking in its own institutional voice, by seat, never blended.",
+      "contributes": "Side-by-side exact passages by role and status; honest absence: “No admitted source of this role is present.”",
+      "constrained_by": "Code computes coverage, absence, status, and placement. Disagreement exists only as a model proposal or an owner ruling. Questions about a particular patient are refused at the door; nothing about a question is ever kept. Never clinical decision support.",
+      "fails": "A room that answers as one voice. A retired source answering as current because nobody declared its retirement. A room used before shadow-mode use has shown it saves anyone anything.",
+      "witness": {
+        "routes": [
+          "/clinic",
+          "/api/clinic/*",
+          "/api/works/room/<id>"
+        ],
+        "modules": [
+          "scripts/clinic.py",
+          "scripts/library.py"
+        ],
+        "tests": [
+          "blocks 86, 95, 96"
+        ]
+      }
+    },
+    {
+      "id": "cortex",
+      "kind": "organ",
+      "name": "CONCEPT CORTEX",
+      "tag": "Bench · Sprout · Refract · Archetype",
+      "status": "shipped · coinage optional",
+      "x": 612,
+      "y": 325,
+      "w": 186,
+      "h": 96,
+      "seed": 7,
+      "does": "Develops definitions, contradictions, mechanisms, and interpretations — concept readings under working titles. Coinage remains optional and last.",
+      "contributes": "Model proposals: anatomies, threads, terms, names — every one a candidate, none a fact.",
+      "constrained_by": "Concept-first: an idea may exist without a coined name. Every proposal carries its raw model output byte for byte. Recall is labeled recall; only the review searches, and says whether it did.",
+      "fails": "Sprout has never once come back empty — a stage that cannot say no. Etymologies from recall looking like lookups. Duplicate detection that compares wording, not ideas.",
+      "witness": {
+        "routes": [
+          "/api/jobs",
+          "/api/bench/*",
+          "/api/definition"
+        ],
+        "modules": [
+          "scripts/wordicon_cli.py",
+          "scripts/bone_diagnostics.py"
+        ],
+        "tests": [
+          "blocks 73, 81, 91, 92"
+        ]
+      }
+    },
+    {
+      "id": "constitution",
+      "kind": "organ",
+      "name": "CONSTITUTION / DNA",
+      "tag": "laws · schemas · stable IDs · ADRs · proofs",
+      "status": "shipped",
+      "x": 150,
+      "y": 500,
+      "w": 190,
+      "h": 96,
+      "seed": 8,
+      "does": "Holds the laws in committed, dated form: ADRs, JSON schemas, identity rules, the public panel, and the mechanical proofs that pin every sentence.",
+      "contributes": "Stability under change — a wing that changes must change its pin.",
+      "constrained_by": "Amended only by an owner ruling recorded in the same block as the change. Descriptions must match the software or the suite fails.",
+      "fails": "Drift: the panel saying PDFs are refused after the reader learned PDF (happened; pinned since). A law written down but never proven in code.",
+      "witness": {
+        "routes": [
+          "/ (What is Wordicon?)",
+          "/anatomy"
+        ],
+        "modules": [
+          "docs/adr-*.md",
+          "schemas/",
+          "config/"
+        ],
+        "tests": [
+          "blocks 94, 95, 97, 98"
+        ]
+      }
+    },
+    {
+      "id": "map",
+      "kind": "organ",
+      "name": "MAP / NERVOUS SYSTEM",
+      "tag": "stable identities · declared roads · Wayfinder",
+      "status": "shipped",
+      "x": 150,
+      "y": 675,
+      "w": 190,
+      "h": 96,
+      "seed": 9,
+      "does": "Draws the corpus as it happened: concepts as nodes with names as satellites, roads recorded or declared, routes proposed between concepts.",
+      "contributes": "Connection — and a behavioral log of where your thinking actually went, kept as statistics.",
+      "constrained_by": "Every road identifies itself as recorded, declared, or inferred. An inferred road never enters permanent geography; it lives inside a plotted route until you make it real. Renaming never moves geography.",
+      "fails": "A suggested route mistaken for an existing road. Two same-titled concepts collapsing into one box (now impossible by law).",
+      "witness": {
+        "routes": [
+          "/map",
+          "/api/map/road",
+          "/api/map/route/analyze"
+        ],
+        "modules": [
+          "scripts/wordicon_cli.py",
+          "webapp/overworld.html"
+        ],
+        "tests": [
+          "blocks 82, 83, 94"
+        ]
+      }
+    },
+    {
+      "id": "voice",
+      "kind": "organ",
+      "name": "VOICE / HANDS",
+      "tag": "the writing room · the Keeper",
+      "status": "shipped · never authority",
+      "x": 380,
+      "y": 675,
+      "w": 186,
+      "h": 94,
+      "seed": 10,
+      "does": "Expresses and narrates. The room is where writing happens; the Keeper closes a stretch of work in a jointly authored voice.",
+      "contributes": "Your writing (yours alone — the tool sees only what you hand it) and Keeper entries: event claims, marked inferences, flourish.",
+      "constrained_by": "Never becomes authority. The Keeper has custody of the narration, not authority over the record; it may disagree in voice forever and may not obstruct, relitigate, or refuse to close. Off stops adaptation as well as speech.",
+      "fails": "An inference passing as an event claim (rendered UNGROUNDED instead). Affection drift — checked by the periodic adaptation review.",
+      "witness": {
+        "routes": [
+          "/api/keeper/*"
+        ],
+        "modules": [
+          "scripts/keeper.py",
+          "webapp/index.html"
+        ],
+        "tests": [
+          "blocks 80, 93"
+        ]
+      }
+    },
+    {
+      "id": "archive",
+      "kind": "unbuilt",
+      "name": "ARCHIVE CIRCULATION",
+      "tag": "warm / cold · dedupe · rebuildables · dormancy",
+      "status": "UNBUILT TISSUE",
+      "x": 150,
+      "y": 850,
+      "w": 190,
+      "h": 96,
+      "seed": 11,
+      "does": "Future: warm/cold storage, deduplication, rebuildable derivatives, and owner-visible dormancy — never silent deletion.",
+      "contributes": "Nothing yet. It does not exist.",
+      "constrained_by": "Would be constrained by the same law as the Vault: nothing leaves the record without a visible owner action.",
+      "fails": "Being mistaken for something that exists. It has no controls and no route.",
+      "witness": {
+        "routes": [],
+        "modules": [],
+        "tests": [
+          "none — unbuilt"
+        ]
+      }
+    },
+    {
+      "id": "vault",
+      "kind": "organ",
+      "name": "VAULT / RESTORATION",
+      "tag": "encrypted custody · off-device drill",
+      "status": "shipped · drill-proven",
+      "x": 380,
+      "y": 850,
+      "w": 196,
+      "h": 100,
+      "seed": 12,
+      "on_organ": "Restores a verified past; it does not regrow or improve anything.",
+      "on_organ_short": "restoration, never regeneration",
+      "does": "Seals the corpus to an encrypted vault on every server start and after changes settle; restores from a copy fetched back from off this machine.",
+      "contributes": "Preservation of the record — proven, not hoped: a vault is real only when a copy has been opened and verified off-device.",
+      "constrained_by": "One writer at a time on the corpus. Never prunes a vault it has no sealed row for. Restores exactly; regrows nothing.",
+      "fails": "Losing the recovery secret makes every vault permanently unreadable — accepted on purpose. Drilled-never: a backup that was never proven to open.",
+      "witness": {
+        "routes": [
+          "/api/vault/status"
+        ],
+        "modules": [
+          "scripts/vault.py"
+        ],
+        "tests": [
+          "block 90"
+        ]
+      }
+    },
+    {
+      "id": "publication",
+      "kind": "unbuilt",
+      "name": "PUBLICATION / EXCHANGE",
+      "tag": "sanitized cards · essays · packets · public rooms",
+      "status": "UNBUILT TISSUE",
+      "x": 612,
+      "y": 850,
+      "w": 196,
+      "h": 96,
+      "seed": 13,
+      "does": "Future: sanitized concept cards, essays, evidence packets, public rooms, and demonstrations — owner-approved, corpus-free.",
+      "contributes": "Nothing yet. It does not exist.",
+      "constrained_by": "Corpus, keys, secrets, and the private repo stay out of every public artifact. Only what the owner approved leaves.",
+      "fails": "Being mistaken for something that exists. It has no controls and no route.",
+      "witness": {
+        "routes": [],
+        "modules": [],
+        "tests": [
+          "none — unbuilt"
+        ]
+      }
+    },
+    {
+      "id": "witness",
+      "kind": "witness",
+      "name": "EXTERNAL WITNESS",
+      "tag": "reader · peer · collaborator · public",
+      "status": "outside Wordicon · response returns only as testimony",
+      "x": 380,
+      "y": 1010,
+      "w": 300,
+      "h": 100,
+      "seed": 14,
+      "does": "Reads what the owner chose to publish and responds.",
+      "contributes": "Testimony — which enters only as testimony awaiting owner admission. It has no arrow into permanent memory.",
+      "constrained_by": "Owner review. The cycle, when the publication organ exists: owner-approved publication → external witness → external testimony → owner review.",
+      "fails": "Being treated as authority. Being wired straight into the record.",
+      "witness": {
+        "routes": [],
+        "modules": [],
+        "tests": [
+          "block 98 proves the absence of a witness→memory edge"
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "world",
+      "to": "sensory",
+      "class": "feeds",
+      "label": "",
+      "d": "M250 34 C250 52 250 72 250 102"
+    },
+    {
+      "from": "sensory",
+      "to": "library",
+      "class": "feeds",
+      "label": "admitted material",
+      "via": [
+        200,
+        240
+      ],
+      "label_at": [
+        148,
+        232
+      ]
+    },
+    {
+      "from": "library",
+      "to": "rooms",
+      "class": "feeds",
+      "label": "anchored passages"
+    },
+    {
+      "from": "library",
+      "to": "cortex",
+      "class": "feeds",
+      "label": "ingredients and spans",
+      "via": [
+        380,
+        236
+      ],
+      "label_at": [
+        380,
+        232
+      ]
+    },
+    {
+      "from": "rooms",
+      "to": "cortex",
+      "class": "feeds",
+      "label": "a passage",
+      "label_at": [
+        508,
+        382
+      ]
+    },
+    {
+      "from": "cortex",
+      "to": "owner",
+      "class": "feeds",
+      "label": "proposals",
+      "via": [
+        660,
+        412
+      ],
+      "label_at": [
+        672,
+        424
+      ]
+    },
+    {
+      "from": "cortex",
+      "to": "memory",
+      "class": "feeds",
+      "label": "proposals kept, raw output byte for byte",
+      "label_at": [
+        500,
+        408
+      ]
+    },
+    {
+      "from": "owner",
+      "to": "memory",
+      "class": "feeds",
+      "label": "rulings",
+      "via": [
+        520,
+        486
+      ],
+      "label_at": [
+        520,
+        470
+      ]
+    },
+    {
+      "from": "memory",
+      "to": "map",
+      "class": "feeds",
+      "label": "concepts and declared roads",
+      "via": [
+        250,
+        600
+      ],
+      "label_at": [
+        196,
+        582
+      ]
+    },
+    {
+      "from": "memory",
+      "to": "voice",
+      "class": "feeds",
+      "label": "",
+      "via": [
+        360,
+        590
+      ],
+      "label_at": [
+        300,
+        602
+      ]
+    },
+    {
+      "from": "voice",
+      "to": "memory",
+      "class": "feeds",
+      "label": "Keeper entries, marked by class",
+      "via": [
+        430,
+        590
+      ],
+      "label_at": [
+        492,
+        618
+      ]
+    },
+    {
+      "from": "witness",
+      "to": "owner",
+      "class": "feeds",
+      "label": "testimony only — awaiting owner admission",
+      "future": true,
+      "via": [
+        742,
+        760
+      ],
+      "label_at": [
+        733,
+        700
+      ],
+      "rotate": -80
+    },
+    {
+      "from": "owner",
+      "to": "publication",
+      "class": "feeds",
+      "label": "owner approval",
+      "future": true,
+      "via": [
+        640,
+        680
+      ],
+      "label_at": [
+        648,
+        690
+      ],
+      "rotate": 90
+    },
+    {
+      "from": "publication",
+      "to": "witness",
+      "class": "feeds",
+      "label": "sanitized publication",
+      "future": true,
+      "via": [
+        520,
+        940
+      ],
+      "label_at": [
+        536,
+        935
+      ]
+    },
+    {
+      "from": "boundary",
+      "to": "sensory",
+      "class": "challenges",
+      "label": "screens at the door",
+      "via": [
+        385,
+        118
+      ],
+      "label_at": [
+        385,
+        112
+      ]
+    },
+    {
+      "from": "boundary",
+      "to": "cortex",
+      "class": "challenges",
+      "label": "Friction criticizes every candidate",
+      "via": [
+        640,
+        238
+      ],
+      "label_at": [
+        640,
+        232
+      ]
+    },
+    {
+      "from": "owner",
+      "to": "cortex",
+      "class": "challenges",
+      "label": "accepts · rejects · revises",
+      "via": [
+        578,
+        412
+      ],
+      "label_at": [
+        513,
+        434
+      ]
+    },
+    {
+      "from": "rooms",
+      "to": "sensory",
+      "class": "challenges",
+      "label": "seats sources against each other by role",
+      "via": [
+        300,
+        240
+      ],
+      "label_at": [
+        232,
+        262
+      ]
+    },
+    {
+      "from": "sensory",
+      "to": "boundary",
+      "class": "constrained",
+      "label": "pairing · the document gate",
+      "via": [
+        385,
+        182
+      ],
+      "label_at": [
+        385,
+        196
+      ]
+    },
+    {
+      "from": "rooms",
+      "to": "boundary",
+      "class": "constrained",
+      "label": "the question gate",
+      "via": [
+        470,
+        240
+      ],
+      "label_at": [
+        468,
+        262
+      ]
+    },
+    {
+      "from": "boundary",
+      "to": "owner",
+      "class": "constrained",
+      "label": "enforces only owner-ruled boundaries",
+      "via": [
+        716,
+        330
+      ],
+      "label_at": [
+        713,
+        330
+      ],
+      "rotate": 90
+    },
+    {
+      "from": "voice",
+      "to": "owner",
+      "class": "constrained",
+      "label": "never becomes authority",
+      "via": [
+        520,
+        610
+      ],
+      "label_at": [
+        560,
+        600
+      ]
+    },
+    {
+      "from": "memory",
+      "to": "constitution",
+      "class": "constrained",
+      "label": "append-only · no title-derived identity",
+      "via": [
+        262,
+        484
+      ],
+      "label_at": [
+        262,
+        442
+      ]
+    },
+    {
+      "from": "map",
+      "to": "constitution",
+      "class": "constrained",
+      "label": "no inferred road into geography",
+      "label_at": [
+        150,
+        610
+      ]
+    },
+    {
+      "from": "library",
+      "to": "sensory",
+      "class": "preserves",
+      "label": "bytes, intact",
+      "via": [
+        116,
+        232
+      ],
+      "label_at": [
+        90,
+        246
+      ]
+    },
+    {
+      "from": "memory",
+      "to": "owner",
+      "class": "preserves",
+      "label": "every ruling and change of mind",
+      "via": [
+        520,
+        520
+      ],
+      "label_at": [
+        600,
+        566
+      ]
+    },
+    {
+      "from": "vault",
+      "to": "memory",
+      "class": "preserves",
+      "label": "the record, verified",
+      "via": [
+        520,
+        680
+      ],
+      "label_at": [
+        508,
+        700
+      ],
+      "rotate": -80
+    },
+    {
+      "from": "constitution",
+      "to": "memory",
+      "class": "preserves",
+      "label": "identity and schema",
+      "via": [
+        262,
+        522
+      ],
+      "label_at": [
+        262,
+        562
+      ]
+    }
+  ],
+  "stories": [
+    {
+      "id": "source",
+      "name": "Follow one source",
+      "available": true,
+      "steps": [
+        {
+          "at": "sensory",
+          "changed": "A source crosses the private membrane: a file you own arrives at the door.",
+          "forbidden": "It has not been read, stored, or believed. Arriving is not admission."
+        },
+        {
+          "at": "boundary",
+          "changed": "Boundary screening looks for identifiers, never for clinical prose — and either refuses it, holds it for your inspection, or permits admission.",
+          "forbidden": "No byte has reached disk and no model has seen it. A refusal keeps only its own fact: time, lane, rule."
+        },
+        {
+          "at": "library",
+          "changed": "The Library preserves the bytes intact, extracts under a named reader revision, and anchors every sentence.",
+          "forbidden": "Nothing was interpreted. A future reader revision may add a reading; it may never rewrite this one."
+        },
+        {
+          "at": "rooms",
+          "changed": "A Room assigns it a separate institutional seat — its role, status, and dates declared by you, never guessed.",
+          "forbidden": "It cannot speak for another seat, answer as current if retired, or be blended into a paragraph."
+        },
+        {
+          "at": "cortex",
+          "changed": "A passage reaches the Concept Cortex as an ingredient, and a concept reading is proposed under a working title.",
+          "forbidden": "No coined name is required. The proposal is a candidate, not a fact — its raw output is kept byte for byte."
+        },
+        {
+          "at": "boundary",
+          "changed": "Friction challenges the proposal: objections, strain, fabrication risk.",
+          "forbidden": "Friction advises. It cannot hide the candidate, gate it, or decide what it means."
+        },
+        {
+          "at": "owner",
+          "changed": "The Owner accepts, rejects, revises — or leaves it unresolved, which is also a recorded state.",
+          "forbidden": "Nothing else in the organism can make this decision, and nothing here was decided for you."
+        },
+        {
+          "at": "memory",
+          "changed": "The ruling enters Memory with its reason, its time, and its provenance — appended, never overwriting.",
+          "forbidden": "No prior ruling was rewritten. A change of mind later will supersede by link, with the lineage kept."
+        },
+        {
+          "at": "map",
+          "changed": "The Map may receive an owner-declared road between this concept and another.",
+          "forbidden": "No inferred road entered permanent geography. Renaming later will not move it."
+        },
+        {
+          "at": "voice",
+          "changed": "Voice/Hands may use it: the writing room can draw on it; the Keeper, if summoned, may narrate it.",
+          "forbidden": "Neither becomes authority over it. A Keeper inference stays a marked, revisable proposal about you."
+        },
+        {
+          "at": "vault",
+          "changed": "The Vault preserves the resulting record in the next sealed vault.",
+          "forbidden": "It restores exactly what was sealed and improves nothing. Nothing loops: the organism is at rest until you act again."
+        }
+      ]
+    },
+    {
+      "id": "concept",
+      "name": "Follow a concept",
+      "available": false,
+      "why": "later"
+    },
+    {
+      "id": "ruling",
+      "name": "Follow an owner ruling",
+      "available": false,
+      "why": "later"
+    },
+    {
+      "id": "disagreement",
+      "name": "Follow a disagreement",
+      "available": false,
+      "why": "later"
+    },
+    {
+      "id": "restoration",
+      "name": "Follow restoration",
+      "available": false,
+      "why": "later"
+    },
+    {
+      "id": "publication",
+      "name": "The publication cycle",
+      "available": false,
+      "why": "unavailable — that organ is unbuilt tissue"
+    }
+  ]
+}
+</script>
+
+<script>
+// ---------------------------------------------------------------------
+// Rendering only. Every label, law, edge, step, and coordinate above is
+// data; the code below carries none of its own. No fetch. No timer
+// before a click. Nothing loops.
+const DATA = JSON.parse(document.getElementById('anatomy-data').textContent);
+const NODES = Object.fromEntries(DATA.nodes.map(n => [n.id, n]));
+const CLS = Object.fromEntries(DATA.relationship_classes.map(c => [c.id, c]));
+const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const REDUCED = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+const state = { step: -1, running: false, timer: null, selected: null, filter: 'all', view: 'diagram', viewChosen: false, story: 'source' };
+
+document.getElementById('title').textContent = DATA.title;
+document.getElementById('subtitle').textContent = DATA.subtitle;
+document.getElementById('thesis').textContent = DATA.thesis;
+document.getElementById('thesis-foot').textContent = DATA.thesis_foot;
+document.getElementById('custody').textContent = 'as of ' + DATA.as_of + ' · commit __COMMIT__';
+
+function goBack() {
+  // Back returns to the exact Wordicon state the visitor left: the front
+  // page keeps its own state, so history is enough; a direct visit falls
+  // back to the front door.
+  if (history.length > 1 && document.referrer && document.referrer.indexOf(location.host) !== -1) history.back();
+  else location.href = '/';
+}
+
+// ---- story selector -------------------------------------------------
+const storySel = document.getElementById('story');
+DATA.stories.forEach(s => {
+  const o = document.createElement('option');
+  o.value = s.id; o.textContent = s.name + (s.available ? '' : ' — ' + s.why);
+  o.disabled = !s.available;
+  storySel.appendChild(o);
+});
+storySel.value = 'source';
+storySel.onchange = () => { state.story = storySel.value; };
+function story() { return DATA.stories.find(s => s.id === state.story); }
+
+// ---- filters ----------------------------------------------------------
+const filt = document.getElementById('filters');
+[{id:'all', label:'Whole system'}].concat(DATA.relationship_classes).forEach(c => {
+  const b = document.createElement('button');
+  b.className = 'chip' + (c.id === 'all' ? ' on' : ''); b.dataset.cls = c.id;
+  b.innerHTML = (c.id === 'all' ? '' : `<span class="swatch" style="border-color:var(--${c.id})"></span>`) + esc(c.label);
+  b.onclick = () => { state.filter = c.id; [...filt.children].forEach(x => x.classList.toggle('on', x.dataset.cls === c.id)); applyEmphasis(); };
+  filt.appendChild(b);
+});
+document.getElementById('legend').innerHTML = DATA.relationship_classes.map(c =>
+  `<span class="swatch" style="border-color:var(--${c.id})"></span>${esc(c.label)}`).join(' &nbsp; ')
+  + ' &nbsp; <span class="swatch" style="border-color:var(--unbuilt);border-top-style:dashed"></span>dashed grey pathway: future — the organ it touches is unbuilt';
+
+// ---- geometry -----------------------------------------------------------
+function blobPath(n) {
+  // an organic organ outline: an ellipse whose four radii are nudged by a
+  // deterministic seed, so no two organs share a silhouette
+  const k = 0.5523, cx = n.x, cy = n.y;
+  const j = i => 0.93 + ((Math.sin(n.seed * 7.3 + i * 2.1) + 1) / 2) * 0.14;
+  const rR = n.w / 2 * j(0), rL = n.w / 2 * j(1), rT = n.h / 2 * j(2), rB = n.h / 2 * j(3);
+  const f = v => v.toFixed(1);
+  return `M${f(cx)} ${f(cy - rT)}`
+    + ` C${f(cx + rR * k)} ${f(cy - rT)} ${f(cx + rR)} ${f(cy - rT * k)} ${f(cx + rR)} ${f(cy)}`
+    + ` C${f(cx + rR)} ${f(cy + rB * k)} ${f(cx + rR * k)} ${f(cy + rB)} ${f(cx)} ${f(cy + rB)}`
+    + ` C${f(cx - rL * k)} ${f(cy + rB)} ${f(cx - rL)} ${f(cy + rB * k)} ${f(cx - rL)} ${f(cy)}`
+    + ` C${f(cx - rL)} ${f(cy - rT * k)} ${f(cx - rL * k)} ${f(cy - rT)} ${f(cx)} ${f(cy - rT)} Z`;
+}
+function clipToEllipse(from, to, n) {
+  // where the line from `from` toward `to` leaves n's bounding ellipse
+  const rx = n.w / 2 + 2, ry = n.h / 2 + 2;
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const t = 1 / Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) || 1);
+  return {x: from.x + dx * t, y: from.y + dy * t};
+}
+function edgePath(e) {
+  if (e.d) return e.d;
+  const a = NODES[e.from], b = NODES[e.to];
+  const via = e.via ? {x: e.via[0], y: e.via[1]} : {x: (a.x + b.x) / 2, y: (a.y + b.y) / 2};
+  const p = clipToEllipse({x: a.x, y: a.y}, via, a), q = clipToEllipse({x: b.x, y: b.y}, via, b);
+  return `M${p.x.toFixed(1)} ${p.y.toFixed(1)} Q${via.x} ${via.y} ${q.x.toFixed(1)} ${q.y.toFixed(1)}`;
+}
+
+// ---- render ---------------------------------------------------------------
+function render() {
+  const stage = document.getElementById('stage');
+  const W = DATA.canvas.w, H = DATA.canvas.h;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(DATA.title)}">`;
+  s += '<defs>';
+  ['feeds', 'challenges', 'preserves', 'future'].forEach(k => {
+    s += `<marker id="arr-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="var(--${k})"/></marker>`;
+  });
+  s += `<marker id="stop-constrained" viewBox="0 0 10 12" refX="7" refY="6" markerWidth="8" markerHeight="9" orient="auto"><path d="M7 0 L7 12" stroke="var(--constrained)" stroke-width="3"/></marker>`;
+  s += `<marker id="stop-future" viewBox="0 0 10 12" refX="7" refY="6" markerWidth="8" markerHeight="9" orient="auto"><path d="M7 0 L7 12" stroke="var(--unbuilt)" stroke-width="3"/></marker>`;
+  s += '</defs>';
+  s += `<text class="membrane-label" x="${W / 2}" y="24" text-anchor="middle">${esc(DATA.membrane.top_label)}</text>`;
+  s += `<path class="membrane" d="${DATA.membrane.path}"/>`;
+  s += `<text class="membrane-label" x="${W / 2}" y="88" text-anchor="middle">${esc(DATA.membrane.label)}</text>`;
+  // pathways, under the organs
+  s += '<g aria-label="Relationship pathways">';
+  DATA.edges.forEach((e, i) => {
+    const cls = e.future ? 'future' : e.class;
+    const marker = CLS[e.class].marker === 'stop' ? `url(#stop-${e.future ? 'future' : 'constrained'})` : `url(#arr-${cls})`;
+    const fromName = e.from === 'world' ? 'the outside world' : NODES[e.from].name;
+    s += `<path class="edge ${cls}" data-i="${i}" data-from="${e.from}" data-to="${e.to}" data-cls="${e.class}" marker-end="${marker}" d="${edgePath(e)}"><title>${esc(fromName)} — ${esc(CLS[e.class].label)} — ${esc(NODES[e.to].name)}${e.label ? ': ' + esc(e.label) : ''}${e.future ? ' (future: that organ is unbuilt)' : ''}</title></path>`;
+    if (e.label && e.label_at) {
+      const [lx, ly] = e.label_at;
+      s += `<text class="relation-label" x="${lx}" y="${ly}" text-anchor="middle"${e.rotate ? ` transform="rotate(${e.rotate} ${lx} ${ly})"` : ''}>${esc(e.label)}</text>`;
+    }
+  });
+  s += '</g>';
+  // organs
+  DATA.nodes.forEach(n => {
+    const lines = [];
+    s += `<g class="organ ${n.kind}" data-id="${n.id}" tabindex="0" role="button" aria-label="${esc(n.name)}, ${esc(n.status)}">`;
+    s += `<path class="organ-shape" d="${blobPath(n)}"/>`;
+    const hasCells = Array.isArray(n.cells) && n.cells.length;
+    const hasLaw = !!n.on_organ_short;
+    const y0 = n.y - (hasCells ? 30 : hasLaw ? 26 : 14);
+    s += `<text class="organ-title" x="${n.x}" y="${y0}">${esc(n.name)}</text>`;
+    if (hasCells) {
+      const gap = 34, x0 = n.x - gap * (n.cells.length - 1) / 2;
+      n.cells.forEach((c, i) => {
+        s += `<circle class="room-cell" cx="${x0 + i * gap}" cy="${n.y - 3}" r="15"/><text class="room-label" x="${x0 + i * gap}" y="${n.y}">${esc(c)}</text>`;
+      });
+      s += `<text class="organ-sub" x="${n.x}" y="${n.y + 24}">${esc(n.tag)}</text>`;
+      s += `<text class="organ-sub status" x="${n.x}" y="${n.y + 39}">${esc(n.status)}</text>`;
+    } else if (hasLaw) {
+      s += `<text class="organ-sub" x="${n.x}" y="${y0 + 17}">${esc(n.tag)}</text>`;
+      s += `<text class="organ-law" x="${n.x}" y="${y0 + 33}">— ${esc(n.on_organ_short)} —</text>`;
+      s += `<text class="organ-sub status" x="${n.x}" y="${y0 + 49}">${esc(n.status)}</text>`;
+    } else {
+      s += `<text class="organ-sub" x="${n.x}" y="${y0 + 18}">${esc(n.tag)}</text>`;
+      s += `<text class="organ-sub status" x="${n.x}" y="${y0 + 35}">${esc(n.status)}</text>`;
+    }
+    s += '</g>';
+  });
+  s += `<g id="token" class="hidden${REDUCED ? ' no-travel' : ''}"><circle class="halo" r="14"/><circle r="7"/></g>`;
+  s += '</svg>';
+  stage.innerHTML = s;
+  stage.querySelectorAll('.organ').forEach(g => {
+    g.addEventListener('click', () => selectNode(g.dataset.id));
+    g.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selectNode(g.dataset.id); } });
+  });
+  applyEmphasis();
+  placeToken();
+}
+
+function applyEmphasis() {
+  const sel = state.selected, f = state.filter;
+  document.querySelectorAll('.edge').forEach(el => {
+    const inFilter = f === 'all' || el.dataset.cls === f;
+    const incident = !sel || el.dataset.from === sel || el.dataset.to === sel;
+    el.classList.toggle('is-hidden', !(inFilter && incident));
+    el.classList.toggle('lit', !!sel && inFilter && incident);
+  });
+  const adj = new Set();
+  if (sel) DATA.edges.forEach(e => {
+    if (f !== 'all' && e.class !== f) return;
+    if (e.from === sel) adj.add(e.to); if (e.to === sel) adj.add(e.from);
+  });
+  document.querySelectorAll('.organ').forEach(g => {
+    const id = g.dataset.id;
+    g.classList.toggle('is-selected', id === sel);
+    g.classList.toggle('is-dim', !!sel && id !== sel && !adj.has(id));
+  });
+}
+
+function selectNode(id) {
+  state.selected = state.selected === id ? null : id;
+  applyEmphasis();
+  const d = document.getElementById('detail');
+  if (!state.selected) {
+    d.innerHTML = '<div class="section-label">Organ</div><p class="muted" style="margin:0">Click an organ to read what it does, what it contributes, what constrains it, and how it can fail.</p>';
+    return;
+  }
+  const n = NODES[id], w = n.witness || {};
+  d.innerHTML = `<div class="section-label">${esc(n.kind === 'unbuilt' ? 'Unbuilt tissue — it does not exist' : n.kind === 'witness' ? 'Outside the membrane' : n.kind === 'center' ? 'Central tissue' : 'Organ')}</div>
+    <p style="margin:0 0 2px"><strong>${esc(n.name)}</strong><br><span class="muted">${esc(n.tag)} · ${esc(n.status)}</span></p>
+    ${n.on_organ ? `<p class="law">${esc(n.on_organ)}</p>` : ''}
+    <dl class="fields" style="margin:0">
+      <dt>What it does</dt><dd>${esc(n.does)}</dd>
+      <dt>What it contributes</dt><dd>${esc(n.contributes)}</dd>
+      <dt>What constrains it</dt><dd>${esc(n.constrained_by)}</dd>
+      <dt>How it can fail</dt><dd>${esc(n.fails)}</dd>
+      <dt>Implementation witness</dt><dd><code>${esc((w.routes || []).join(', ') || '—')}</code><br><code>${esc((w.modules || []).join(', ') || '—')}</code><br><code>${esc((w.tests || []).join(', '))}</code></dd>
+    </dl>`;
+  if (state.view === 'table') d.scrollIntoView({block: 'nearest'});
+}
+
+// ---- table view: the same data, for narrow screens and for reading -----
+function renderTable() {
+  const t = document.getElementById('table-view');
+  t.innerHTML = `<table><thead><tr><th>Part · status</th><th>Relationships</th></tr></thead><tbody>` +
+    DATA.nodes.map(n => `<tr data-id="${n.id}"><td><button class="link" onclick="selectNode('${n.id}')" style="text-align:left;font-weight:600">${esc(n.name)}</button><div class="foot">${esc(n.tag)}</div><div class="foot" style="color:var(--text)">${esc(n.status)}</div>${n.on_organ ? `<div class="law">${esc(n.on_organ)}</div>` : ''}</td><td>` +
+      DATA.edges.filter(e => e.from === n.id).map(e => `<div><span class="swatch" style="border-color:var(--${e.class})"></span>${esc(CLS[e.class].label)} → ${esc(NODES[e.to].name)}${e.future ? ' <span class="muted">(future)</span>' : ''}</div>`).join('') + `</td></tr>`).join('') + `</tbody></table>`;
+}
+function setView(v, chosen) {
+  // views switch; the current step does not
+  state.view = v; if (chosen) state.viewChosen = true;
+  document.getElementById('stage').classList.toggle('hidden', v !== 'diagram');
+  document.getElementById('table-view').classList.toggle('hidden', v !== 'table');
+  document.getElementById('view-diagram').classList.toggle('on', v === 'diagram');
+  document.getElementById('view-table').classList.toggle('on', v === 'table');
+  placeToken();
+}
+function fitView() {
+  // the diagram needs room for its labels to stay legible; below that
+  // width the table carries the same data (the step marker follows)
+  const w = document.getElementById('stage').parentElement.clientWidth || 900;
+  const note = document.getElementById('narrow-note');
+  if (w < DATA.canvas.min_diagram_width) {
+    note.textContent = 'The diagram needs about ' + DATA.canvas.min_diagram_width + 'px to keep its labels legible; the table below carries the same organs, laws, and pathways.';
+    note.classList.remove('hidden');
+    if (!state.viewChosen) setView('table', false);
+  } else {
+    note.classList.add('hidden');
+    if (!state.viewChosen) setView('diagram', false);
+  }
+}
+
+// ---- motion: nothing before a click; nothing loops ------------------------
+function narrate() {
+  const n = document.getElementById('narration'), st = document.getElementById('status');
+  const steps = story().steps;
+  if (state.step < 0) {
+    n.innerHTML = '<p class="what">Dormant. Nothing moves until you press <strong>Set it in motion</strong>.</p><p class="forbid">The organism has elaborate internal capability, and nothing begins acting merely because it can.</p>';
+    st.textContent = 'at rest';
+    return;
+  }
+  const s = steps[state.step];
+  n.innerHTML = `<p class="what"><span class="muted">${state.step + 1}/${steps.length} · ${esc(NODES[s.at].name)} —</span> ${esc(s.changed)}</p><p class="forbid">Forbidden from changing: ${esc(s.forbidden)}</p>`;
+  st.textContent = state.step === steps.length - 1 ? 'finished — nothing loops; press Reset to return it to rest'
+    : (state.running ? 'in motion' : 'paused');
+}
+function placeToken() {
+  const tok = document.getElementById('token');
+  document.querySelectorAll('#table-view tr[data-id]').forEach(tr => tr.classList.remove('at'));
+  if (state.step < 0) { if (tok) tok.classList.add('hidden'); return; }
+  const at = story().steps[state.step].at, n = NODES[at];
+  if (tok) {
+    tok.classList.remove('hidden');
+    // a CSS transform transition carries the travel; reduced motion turns
+    // the transition off, so a step change is discrete there
+    tok.style.transform = `translate(${n.x}px, ${(n.y - n.h / 2 - 12).toFixed(1)}px)`;
+  }
+  const tr = document.querySelector(`#table-view tr[data-id="${at}"]`);
+  if (tr) tr.classList.add('at');
+}
+function advance() {
+  const steps = story().steps;
+  state.timer = null;
+  if (state.step >= steps.length - 1) { state.running = false; narrate(); return; }
+  state.step += 1;
+  placeToken();
+  if (state.step >= steps.length - 1) { state.running = false; narrate(); return; }  // finished: no dangling timer
+  narrate();
+  state.timer = state.running ? setTimeout(advance, REDUCED ? 1200 : 1700) : null;
+}
+function setInMotion() {
+  // the ONLY entry to motion, and it is a button
+  if (state.running) return;
+  if (state.step >= story().steps.length - 1) { narrate(); return; }
+  state.running = true;
+  advance();
+}
+function stepOnce() { pauseMotion(); advance(); }
+function pauseMotion() { state.running = false; if (state.timer) { clearTimeout(state.timer); state.timer = null; } narrate(); }
+function resetMotion() { pauseMotion(); state.step = -1; placeToken(); narrate(); }
+
+// ---- boot: draw the dormant organism; start nothing ------------------------
+renderTable();
+render();
+fitView();
+narrate();
+let _rt = null;
+window.addEventListener('resize', () => { clearTimeout(_rt); _rt = setTimeout(fitView, 120); });
+</script>
+</body>
+</html>
