@@ -52,7 +52,7 @@
 <div class="wrap">
 <header>
   <h1>Clinic</h1>
-  <a href="/">← back to Wordicon</a>
+  <a href="/">← back to <span data-brand>Wordicon</span></a>
 </header>
 
 <div class="card">
@@ -145,7 +145,10 @@ async function loadRooms() {
       <button onclick="createRoomOne()">Create Room One — Adult Ventilator Liberation: Readiness, SBTs, and Extubation</button>`;
     return;
   }
-  openRoom(d.rooms[0].room_id);
+  // a deep link names the room by its id; otherwise the first room
+  const want = new URLSearchParams(location.search).get('room');
+  const hit = want && (d.rooms || []).find(r => r.room_id === want);
+  openRoom(hit ? hit.room_id : d.rooms[0].room_id);
 }
 
 async function createRoomOne() {
@@ -311,5 +314,6 @@ async function ruleDisagreement(pid, ruling) {
 
 loadRooms();
 </script>
+<script src="/brand.js"></script>
 </body>
 </html>

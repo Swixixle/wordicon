@@ -198,7 +198,7 @@
 
 <header>
   <h1>Map</h1>
-  <a href="/">← back to Wordicon</a>
+  <a href="/">← back to <span data-brand>Wordicon</span></a>
   <div class="toggles" id="toggles"></div>
   <div id="wayfinder">
     <strong style="color:var(--text)">Wayfinder</strong>
@@ -222,7 +222,7 @@
 </header>
 
 <div id="viewport"><svg id="stage" width="100%" height="100%"><g id="world"></g></svg></div>
-<div id="empty">Nothing on the map yet — run something in Wordicon first.<br>
+<div id="empty">Nothing on the map yet — run something in <span data-brand>Wordicon</span> first.<br>
   Every forge, sprout, refract, and revision lands here as it happens.</div>
 
 <div id="detail"><button class="close" onclick="closeDetail()">×</button><div id="detail-body"></div></div>
@@ -703,7 +703,7 @@ function openRunDetail(trace) {
     <p class="sub" style="color:var(--muted);font-size:12px">${escapeHtml(run.created_at || '')}</p>
     <p>${escapeHtml(run.input_text)}</p>
     ${run.summary ? `<p style="color:var(--muted);font-size:12px">${escapeHtml(run.summary)}</p>` : ''}
-    <p style="font-size:12px"><a href="/" style="color:var(--accent)">Open Wordicon</a> — this run's trace: <code style="font-size:11px">${escapeHtml(trace)}</code></p>`);
+    <p style="font-size:12px"><a href="/" style="color:var(--accent)">Open ${escapeHtml((window.BRAND || {}).name || 'Wordicon')}</a> — this run's trace: <code style="font-size:11px">${escapeHtml(trace)}</code></p>`);
 }
 async function openDetail(key, trace) {
   const box = findBox(key, trace);
@@ -1395,5 +1395,6 @@ function diveTo(colX) {
   if (restored) applyCamera(); else fitAll();
 })();
 </script>
+<script src="/brand.js"></script>
 </body>
 </html>

@@ -79,6 +79,23 @@ from wordicon_corpus.objects import Judgment  # noqa: E402
 
 WEBAPP_DIR = REPO_ROOT / "webapp"
 
+# The visible name of the environment — ONE presentation-level source
+# (config/brand.json), consumed here (pair page, manifest, the anatomy
+# stamp, terminal banner) and by the pages through /brand.js. It is a
+# label, not an identifier: routes, env vars, storage keys, stored records,
+# the repository and every historical text keep the name they were written
+# under (docs/adr-nikodemus.md, the naming law).
+def load_brand() -> dict:
+    try:
+        b = json.loads((REPO_ROOT / "config" / "brand.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        b = {}
+    b.setdefault("name", "Wordicon"); b.setdefault("formerly", "")
+    return b
+
+
+BRAND = load_brand()
+
 app = Flask(__name__, static_folder=str(WEBAPP_DIR), static_url_path="")
 
 # ---------------------------------------------------------------------------
@@ -124,7 +141,7 @@ def _gate_check():
             vault.mark_dirty()
         return None
     if path.startswith("/api/"):
-        return jsonify({"error": "not paired — this Wordicon only answers "
+        return jsonify({"error": f"not paired — this {BRAND['name']} only answers "
                                   "devices its owner has paired. POST the "
                                   "pairing code from the server terminal to "
                                   "/api/pair."}), 401
@@ -154,10 +171,10 @@ def pair_page():
                   "immediately and append-only. Rotating the master secret "
                   "(<code>python3 server.py --rotate-secret</code>, then restart) "
                   "signs out every device at once.</p>"
-                  "<p><a href='/' style='color:#8cc8ff'>back to Wordicon</a></p>")
+                  f"<p><a href='/' style='color:#8cc8ff'>back to {BRAND['name']}</a></p>")
     return f"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Wordicon — pair this device</title><style>
+<title>{BRAND['name']} — pair this device</title><style>
 body {{ background:#11161d; color:#e7ecf3; font-family:-apple-system,system-ui,sans-serif;
   display:flex; justify-content:center; padding:12vh 20px 40px; }}
 .card {{ max-width:430px; }}
@@ -170,8 +187,8 @@ button {{ background:#1f2833; color:#8cc8ff; border:1px solid #8cc8ff; border-ra
 .dev {{ border-top:1px solid #2a3441; padding:8px 0; font-size:14px; }}
 .dev button {{ font-size:12px; padding:3px 10px; margin:0 0 0 8px; }}
 #err {{ color:#e08a8a; font-size:14px; min-height:20px; }}</style></head><body>
-<div class="card"><h1>Pair this device with Wordicon</h1>
-<p class="note">This Wordicon answers only devices its owner has paired.
+<div class="card"><h1>Pair this device with {BRAND['name']}</h1>
+<p class="note">This {BRAND['name']} answers only devices its owner has paired.
 The pairing code is printed in the terminal window where the server is
 running — it never travels in a link. Type it here once; this device stays
 paired until revoked.</p>
@@ -663,7 +680,24 @@ def index():
 
 @app.route("/manifest.json")
 def manifest():
-    return send_from_directory(WEBAPP_DIR, "manifest.json")
+    """The installed app's name is a brand surface: served from the file
+    with the name fields drawn from config/brand.json."""
+    try:
+        m = json.loads((WEBAPP_DIR / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return send_from_directory(WEBAPP_DIR, "manifest.json")
+    m["name"] = BRAND["name"]; m["short_name"] = BRAND["name"]
+    return jsonify(m)
+
+
+@app.route("/brand.js")
+def brand_js():
+    """window.BRAND for the pages — the one place a page learns the
+    visible name. Same-origin, static, no model, no network."""
+    return Response("window.BRAND = " + json.dumps(BRAND, ensure_ascii=False) + ";\n"
+                    "(function(){var b=window.BRAND;document.querySelectorAll('[data-brand]').forEach(function(el){el.textContent=b.name;});"
+                    "if(document.title.indexOf(b.formerly)===0)document.title=b.name+document.title.slice(b.formerly.length);"
+                    "})();", mimetype="application/javascript")
 
 
 @app.route("/overworld/map")
@@ -1025,7 +1059,8 @@ def anatomy_page():
     requests; the only server-side touch is stamping the commit SHA so
     the page says which tree it describes. Behind the gate like all."""
     page = (pathlib.Path(WEBAPP_DIR) / "anatomy.html").read_text(encoding="utf-8")
-    return Response(page.replace("__COMMIT__", _head_commit()),
+    return Response(page.replace("__COMMIT__", _head_commit())
+                        .replace("__BRAND_NAME__", BRAND["name"]),
                     mimetype="text/html")
 
 
@@ -2665,7 +2700,7 @@ def api_result(trace_id):
             if not line.strip():
                 continue
             j = json.loads(line)
-            if j["originating_operation"] == trace_id:
+            if j.get("originating_operation", "") == trace_id:
                 decisions[j["candidate_text"]] = {"decision": j["decision"], "reason": j.get("reason")}
     snapshot["judgments"] = decisions
     return jsonify(snapshot)
@@ -2685,6 +2720,246 @@ def api_concept(concept_id):
     return jsonify({"concept_id": concept_id, "judgments": cli.judgments_for_concept(concept_id)})
 
 
+# ---------------------------------------------------------------------------
+# Home — the entrance (backlog item 39, the owner's execution ruling).
+# Everything here is read from local structured records; nothing below may
+# import, construct, or consult the model gateway, and the suite poisons
+# server_gateway to prove it. Two honesty rules the route enforces itself:
+# a Continue card exists only for a real stored object reachable through a
+# stable id (a run alone never qualifies), and a legacy ruling whose title
+# names two concepts — or none — is EXCLUDED and counted, never guessed.
+
+def _read_jsonl(path: pathlib.Path) -> "list[dict]":
+    if not path.exists():
+        return []
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+    return out
+
+
+def _home_concepts(limit: int = 6) -> "tuple[list, dict]":
+    """Concepts the owner ruled on, newest first, dated by the receipt of
+    the run the ruling was filed against (judgment rows carry no clock of
+    their own — the Keeper met the same fact). Identity comes from the
+    judgment's concept_id when it has one; a legacy row without one
+    resolves only when exactly ONE lexicon concept carries its title."""
+    lexicon = cli.load_accepted_concepts()
+    by_id = {c.get("concept_id"): c for c in lexicon if c.get("concept_id")}
+    by_title = {}
+    for c in lexicon:
+        by_title.setdefault((c.get("name") or "").strip().lower(), []).append(c)
+    receipts = {}
+    if cli.RECEIPTS_DIR.exists():
+        for path in cli.RECEIPTS_DIR.glob("*.json"):
+            try:
+                r = json.loads(path.read_text())
+            except (ValueError, OSError):
+                continue
+            if r.get("trace_id"):
+                receipts[r["trace_id"]] = r
+    latest = {}          # concept_id -> card
+    excluded = {"legacy_title_only": 0, "ambiguous_titles": [], "unmatched": 0}
+    for j in _read_jsonl(cli.JUDGMENTS_LOG):
+        title = (j.get("candidate_text") or "").strip()
+        cid = j.get("concept_id") or ""
+        if not cid:
+            hits = by_title.get(title.lower(), [])
+            if len(hits) == 1 and hits[0].get("concept_id"):
+                cid = hits[0]["concept_id"]
+            else:
+                excluded["legacy_title_only"] += 1
+                if len(hits) > 1 and title not in excluded["ambiguous_titles"]:
+                    excluded["ambiguous_titles"].append(title)
+                if not hits:
+                    excluded["unmatched"] += 1
+                continue
+        rec = receipts.get(j.get("originating_operation") or "", {})
+        at = rec.get("created_at") or (by_id.get(cid) or {}).get("accepted_at") or ""
+        prev = latest.get(cid)
+        if prev and prev["_at"] > at:
+            continue
+        acc = by_id.get(cid) or {}
+        trace = j.get("originating_operation") or ""
+        # On the shelf (accepted): the card opens the concept by its id.
+        # Ruled but not on the shelf (revised, rejected): the ruling lives
+        # in the run it was filed against, which has a stable trace id —
+        # the card opens THAT, and says so; it never resolves by title.
+        on_shelf = bool(acc)
+        latest[cid] = {"_at": at, "kind": "concept", "id": cid,
+                       "title": acc.get("name") or title,
+                       "when": at, "decision": j.get("decision", ""),
+                       "reason": (j.get("reason") or "")[:160],
+                       "definition": (acc.get("definition") or "")[:200],
+                       "on_shelf": on_shelf,
+                       "same_title_count": len(by_title.get((acc.get("name") or title).lower(), [])),
+                       "open": ({"type": "concept", "id": cid} if on_shelf
+                                else {"type": "run", "id": trace, "concept_id": cid}),
+                       "instruments": ([{"label": "Bench", "href": "/bench?concept_id=" + cid},
+                                        {"label": "Map", "href": "/map"}] if on_shelf else [])}
+        if not on_shelf and not trace:
+            latest.pop(cid, None)   # nothing to open: no card
+    cards = sorted(latest.values(), key=lambda c: c["_at"], reverse=True)[:limit]
+    for c in cards:
+        c.pop("_at", None)
+    return cards, excluded
+
+
+def _home_rooms() -> list:
+    out = []
+    for rid, room in clinic.load_rooms().items():
+        try:
+            st = clinic.room_state(rid)
+        except ValueError:
+            continue
+        members = st.get("members") or []
+        when = max([m.get("declared_at", "") for m in members] + [room.get("created_at", "")])
+        filled = [x for x in st.get("seats", []) if not x.get("absent")]
+        empty = [x.get("seat") for x in st.get("seats", []) if x.get("absent")]
+        out.append({"kind": "room", "id": rid, "title": room.get("title", ""), "when": when,
+                    "seats_filled": len(filled), "seats_total": len(st.get("seats", [])),
+                    "empty_seats": empty, "members": len(members),
+                    "open": {"type": "room", "id": rid, "href": "/clinic?room=" + rid}})
+    return out
+
+
+def _home_documents() -> list:
+    docs = library.load_documents()
+    by_rep = {}
+    for did, d in docs.items():
+        for rep in d.get("representation_ids", []) or [d.get("current_representation_id", "")]:
+            by_rep[rep] = (did, d)
+    per_doc = {}
+    for c in library.load_crossings():
+        if c.get("retracted"):
+            continue
+        rep = (c.get("span_ref") or {}).get("representation_id", "")
+        did, d = by_rep.get(rep, (c.get("document_id", ""), None))
+        if not did:
+            continue
+        card = per_doc.setdefault(did, {"kind": "document", "id": did,
+                                        "title": (d or {}).get("title", "") or did,
+                                        "representation_id": rep, "when": "", "crossings": 0,
+                                        "claims_unruled": 0,
+                                        "open": {"type": "document", "id": did, "representation_id": rep}})
+        card["crossings"] += 1
+        if c.get("kind") == "claim" and c.get("support") == "unruled":
+            card["claims_unruled"] += 1
+        card["when"] = max(card["when"], c.get("created_at", ""))
+    return list(per_doc.values())
+
+
+def _home_recordings() -> list:
+    media = library.load_media()
+    per = {}
+    for c in library.load_media_crossings():
+        if c.get("retracted"):
+            continue
+        mid = c.get("media_id", "")
+        if mid not in media:
+            continue
+        card = per.setdefault(mid, {"kind": "recording", "id": mid,
+                                    "title": media[mid].get("title", "") or mid,
+                                    "when": "", "passages": 0, "claims_unruled": 0,
+                                    "at_time": None,
+                                    "open": {"type": "recording", "id": mid,
+                                             "transcript_id": c.get("transcript_id", "")}})
+        card["passages"] += 1
+        if c.get("kind") == "claim" and c.get("support") == "unruled":
+            card["claims_unruled"] += 1
+        if c.get("created_at", "") >= card["when"]:
+            card["when"] = c.get("created_at", "")
+            card["at_time"] = c.get("start_time")
+            card["open"]["transcript_id"] = c.get("transcript_id", "")
+    return list(per.values())
+
+
+def _home_pending() -> dict:
+    """Only what the record represents as awaiting the owner. Five sources,
+    each a structured local file; project-backlog decisions have no source
+    here and are never implied."""
+    items = []
+    for c in library.load_crossings():
+        if c.get("kind") == "claim" and c.get("support") == "unruled" and not c.get("retracted"):
+            items.append({"source": "claim", "id": c["crossing_id"],
+                          "label": (c.get("owner_text") or "")[:140] or "a claim from a passage",
+                          "when": c.get("created_at", ""),
+                          "open": {"type": "document", "id": c.get("document_id", ""),
+                                   "representation_id": (c.get("span_ref") or {}).get("representation_id", "")}})
+    for c in library.load_media_crossings():
+        if c.get("kind") == "claim" and c.get("support") == "unruled" and not c.get("retracted"):
+            items.append({"source": "media_claim", "id": c["crossing_id"],
+                          "label": (c.get("owner_text") or "")[:140] or "a claim from a recording",
+                          "when": c.get("created_at", ""),
+                          "open": {"type": "recording", "id": c.get("media_id", ""),
+                                   "transcript_id": c.get("transcript_id", "")}})
+    # Clinic: only DISAGREEMENT proposals are decisions awaiting the owner.
+    # Date candidates the extractor saw are hints that grant nothing and
+    # need no ruling; listing them here would manufacture work.
+    ruled = {r.get("proposal_id") for r in clinic._rows("disagreements.jsonl")}
+    for r in clinic._rows("proposals.jsonl"):
+        if r.get("kind") == "disagreement" and r.get("status") == "awaiting_owner" \
+                and r.get("proposal_id") not in ruled:
+            items.append({"source": "clinic_disagreement", "id": r.get("proposal_id", ""),
+                          "label": "the model proposes two passages disagree"
+                                   + (" — " + r.get("model_says", {}).get("point", "")[:90]
+                                      if r.get("model_says", {}).get("point") else ""),
+                          "when": r.get("at", ""),
+                          "open": {"type": "room", "id": r.get("room_id", ""),
+                                   "href": "/clinic?room=" + str(r.get("room_id", ""))}})
+    ks = {}
+    try:
+        ks = keeper.status()
+    except Exception:
+        ks = {}
+    if ks.get("active") and ks.get("unruled"):
+        items.append({"source": "keeper", "id": "keeper", "label": f"{ks['unruled']} Keeper entr{'y' if ks['unruled'] == 1 else 'ies'} awaiting your ruling",
+                      "when": "", "open": {"type": "keeper"}})
+    queue = [r for r in _read_jsonl(cli.LOCAL_STATE / "recovery_review_queue.jsonl")
+             if r.get("status") == "needs_owner_ruling"]
+    if queue:
+        items.append({"source": "recovery_review", "id": "recovery_review",
+                      "label": f"{len(queue)} accepted-but-absent concept{'s' if len(queue) != 1 else ''}, receipt-only — Accept, Reject, or Revise each",
+                      "when": max(r.get("queued_at", "") for r in queue), "open": {"type": "recovery_review"}})
+    items.sort(key=lambda x: x.get("when", ""), reverse=True)
+    counts = {}
+    for it in items:
+        counts[it["source"]] = counts.get(it["source"], 0) + 1
+    return {"total": len(items), "counts": counts, "items": items[:12],
+            "sources": ["claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"],
+            "note": "Only what the record can count. Decisions that live in the backlog are not here."}
+
+
+@app.route("/api/home")
+def api_home():
+    """Everything Home paints, from local records, with no model in the
+    path. A Continue card carries a stable id and a resumable target or
+    it is not a card."""
+    concepts, excluded = _home_concepts()
+    cards = concepts + _home_rooms() + _home_documents() + _home_recordings()
+    try:
+        ks = keeper.status()
+    except Exception:
+        ks = {"active": False}
+    if ks.get("active"):
+        cards.append({"kind": "keeper", "id": ks.get("keeper_id") or "keeper",
+                      "title": ks.get("name") or "The Keeper", "when": "",
+                      "unruled": ks.get("unruled", 0), "closes": ks.get("closes", 0),
+                      "open": {"type": "keeper"}})
+    cards.sort(key=lambda c: c.get("when", ""), reverse=True)
+    for c in cards:
+        assert c.get("id") and c.get("open", {}).get("type"), "a card without identity"
+    return jsonify({"brand": BRAND, "continue": cards[:8], "continue_total": len(cards),
+                    "excluded": excluded, "pending": _home_pending(),
+                    "keeper_active": bool(ks.get("active"))})
+
+
 @app.route("/api/history")
 def api_history():
     receipts_dir = cli.RECEIPTS_DIR
@@ -2697,22 +2972,27 @@ def api_history():
             if not line.strip():
                 continue
             j = json.loads(line)
-            judgments_by_trace.setdefault(j["originating_operation"], []).append(j)
+            judgments_by_trace.setdefault(j.get("originating_operation", ""), []).append(j)
 
     items = []
     for path in sorted(receipts_dir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)[:30]:
-        receipt = json.loads(path.read_text())
-        trace_id = receipt["trace_id"]
+        try:
+            receipt = json.loads(path.read_text())
+        except (ValueError, OSError):
+            continue
+        # a partial receipt (the record holds some — the Keeper's own
+        # fixtures prove the shape) must not 500 the page that lists it
+        trace_id = receipt.get("trace_id") or path.stem
         judgments = judgments_by_trace.get(trace_id, [])
-        decision_by_title = {j["candidate_text"]: j["decision"] for j in judgments}
+        decision_by_title = {j.get("candidate_text", ""): j.get("decision", "") for j in judgments}
         for c in receipt.get("candidates", []):
             items.append({
                 "trace_id": trace_id,
-                "operation": receipt["operation"],
-                "created_at": receipt["created_at"],
-                "title": c["title"],
-                "decision": decision_by_title.get(c["title"]),
-                "receipt_id": receipt["receipt_id"],
+                "operation": receipt.get("operation", ""),
+                "created_at": receipt.get("created_at", ""),
+                "title": c.get("title", ""),
+                "decision": decision_by_title.get(c.get("title", "")),
+                "receipt_id": receipt.get("receipt_id", path.stem),
             })
     return jsonify({"items": items[:50]})
 
@@ -2852,7 +3132,7 @@ def api_library():
             if not line.strip():
                 continue
             j = json.loads(line)
-            judgments_by_trace.setdefault(j["originating_operation"], {})[j["candidate_text"]] = j["decision"]
+            judgments_by_trace.setdefault(j.get("originating_operation", ""), {})[j.get("candidate_text", "")] = j.get("decision", "")
 
     snaps, snaps_full = {}, {}
     if cli.RESULTS_DIR.exists():
@@ -2881,7 +3161,7 @@ def api_library():
                 receipt = json.loads(path.read_text())
             except (json.JSONDecodeError, OSError):
                 continue
-            trace_id = receipt["trace_id"]
+            trace_id = receipt.get("trace_id") or path.stem
             snap = snaps.get(trace_id)
             runs.append({
                 "trace_id": trace_id,
@@ -3053,7 +3333,7 @@ if __name__ == "__main__":
     host = gate.bind_host()
     gate.ensure_master()
     code = gate.new_pairing_code()
-    print(f"\nWordicon server starting on port {port}.")
+    print(f"\n{BRAND['name']} server starting on port {port}.")
     if host == "0.0.0.0":
         print("LAN: ON — reachable by devices on this Wi-Fi, behind the gate.")
         print("On your PHONE (same Wi-Fi as this computer), open:")

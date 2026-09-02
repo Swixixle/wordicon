@@ -1,5 +1,29 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.3.0 — the entrance: Nikodemus (formerly Wordicon), continuation-first Home
+
+Effective 2026-09-02T08:20:00Z, by owner ruling (`docs/adr-nikodemus.md`).
+The visible name of the environment is now **Nikodemus**; the change is
+presentation-level and lives in one source, `config/brand.json`. Under the
+naming law adopted with it — a new name begins when it is ruled;
+historical records keep the identity they were created under; nothing is
+rewritten to make the new name look older than it is — every entry below
+this one, every route, identifier, environment variable, storage key, and
+stored record keeps the name Wordicon. This changelog keeps its title.
+
+Home is continuation-first: Continue (stored objects through stable ids;
+a run alone never earns a card; ambiguous legacy titles excluded and
+counted), Needs your ruling (five structured sources, never an alarm),
+Bring something in (the original phrase box, one band down), then the
+places — Concepts, Rooms, Library, Map, Write. Home paints with the
+model gateway poisoned; healthy infrastructure is a quiet dot; the
+provider's name moved to About & proof. The writing room is untouched.
+Two navigation defects from the reconnaissance are closed: the concept
+door resolves by id and asks when a title names two; the Bench hand-off
+sends the id first. The Clinic is reachable from Home (Rooms) and takes
+`?room=<id>`.
+
+
 ## v1.2.3 — concept-first identity migration (landed in the application; blueprint text now trails it)
 
 The application is now concept-first and coinage-optional

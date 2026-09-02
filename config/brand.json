@@ -1,0 +1,12 @@
+{
+  "name": "Nikodemus",
+  "formerly": "Wordicon",
+  "effective": "2026-09-02T08:20:00Z",
+  "effective_local": "September 2, 2026, 4:20 a.m. EDT",
+  "ruled_by": "owner",
+  "adr": "docs/adr-nikodemus.md",
+  "law": "A new name begins when it is ruled. Historical records retain the identity under which they were created. Nothing is rewritten to make a new name appear older than it is.",
+  "explanation": "Nikodemus (formerly Wordicon) is a private environment for developing concepts beside your sources and your writing. It keeps your concepts, sources, and judgments separate, connected, and reviewable: nothing you ruled on is overwritten, nothing the model proposed is treated as your conclusion, and material it was forbidden to accept is refused before it is stored. It began as a word-coining tool; the forge is still inside.",
+  "lead": "Continue where your thinking left off.",
+  "lead_sub": "Your concepts, sources, and judgments—kept separate, connected, and reviewable."
+}

@@ -2034,8 +2034,11 @@ def main() -> int:
     # sabotage run caught exactly that: gutting the panel's description of
     # the thread split still passed, because a legacy-thread note further
     # down happened to contain the same words.
-    _pstart = idx11.index('<summary style="cursor:pointer;font-size:13px;color:var(--muted);font-weight:600">What is Wordicon?')
-    _pend = idx11.index('<textarea id="input-text"', _pstart)
+    # ledger (block 99): the panel is "What is <brand>?" and sits below the
+    # intake now; the delimiter follows the panel's own element, not the
+    # old page order. A layout pin, not a law — every sentence still pinned.
+    _pstart = idx11.index('<details class="card" id="about-panel"')
+    _pend = idx11.index('</main>', _pstart)
     panel = " ".join(idx11[_pstart:_pend].split())
     if len(panel) < 2000:
         failures.append("the What-is panel could not be isolated — the checks below would be vacuous")
@@ -3151,7 +3154,7 @@ console.log(JSON.stringify(out));
         failures.append("59: there is no way to deliberately start over")
     if 'onclick="startFresh()"' not in _pg59:
         failures.append("59: starting over is not something he can click")
-    _init_tail59 = _pg59[_pg59.rindex("loadConfig();"):]
+    _init_tail59 = _pg59[_pg59.rindex("loadWriteStyle();\nloadInkPref();"):]   # ledger (block 99): loadConfig() left the boot
     if "startFresh()" in _init_tail59:
         failures.append("59: the page resets itself on load — the one thing he asked it not "
                         "to do without being asked")
@@ -6484,7 +6487,7 @@ console.log(out.join('\\n'));
     # actual property (socket + gateway poisoned); this pin holds the shape.
     if any(not (f.startswith("api/library") or f.startswith("api/works")
                 or f.startswith("api/media")
-                or f == "api/vault/status") for f in _fetches84):
+                or f in ("api/vault/status", "api/home")) for f in _fetches84):   # ledger (block 99): /api/home is zero-model
         failures.append(f"84: the Documents card fetches outside the "
                         f"zero-model lanes: {sorted(_fetches84)}")
 
@@ -6893,7 +6896,7 @@ console.log(out.join('\\n'));
     _f85 = set(re.findall(r"fetch\([`'\"]/?([a-z/]+)", _djs85))
     if any(not (f.startswith("api/library") or f.startswith("api/works")
                 or f.startswith("api/media")
-                or f == "api/vault/status") for f in _f85):
+                or f in ("api/vault/status", "api/home")) for f in _f85):   # ledger (block 99): /api/home is zero-model
         failures.append(f"85: the Documents JS fetches outside the "
                         f"zero-model lanes: {sorted(_f85)}")
 
@@ -10267,9 +10270,11 @@ console.log(out.join('\\n'));
 
     # -- the panel carries the constitution, verbatim, pinned so it
     #    cannot quietly disappear --
-    _ps91 = _idx91.index('font-weight:600">What is Wordicon?')
-    _pe91 = _idx91.index('<textarea id="input-text"', _ps91)
-    _panel91 = " ".join(_idx91[_ps91:_pe91].split())
+    # ledger (block 99): delimiter follows the panel element; the brand span
+    # is folded to the name so the pinned sentence compares as prose
+    _ps91 = _idx91.index('<details class="card" id="about-panel"')
+    _pe91 = _idx91.index('</main>', _ps91)
+    _panel91 = " ".join(_re.sub(r'<span data-brand>[^<]*</span>', 'Wordicon', _idx91[_ps91:_pe91]).split())
     for _pin91, _why91 in [
         ("Guardrails belong on consequential actions, not on language.",
          "the constitutional line is gone from the panel"),
@@ -12311,7 +12316,7 @@ console.log(out.join('\\n'));
             _f98(f"an organ label leaked into rendering code: {_name!r}")
 
     # 2. the governing title and the forbidden words
-    if _d98.get("title") != "The Functional Anatomy of Wordicon":
+    if _d98.get("title") != "The Functional Anatomy of __BRAND_NAME__":   # ledger (block 99): stamped from the brand source
         _f98("the governing title changed")
     if _d98.get("subtitle") != ("Owner-actuated and inactive until summoned · specialized by "
                                 "function · unified by owner judgment"):
@@ -12484,7 +12489,7 @@ console.log(out.join('\\n'));
     # 9. placement: one quiet link inside the What-is-Wordicon panel, none in the room
     _idx98 = (_root98 / "webapp" / "index.html").read_text(encoding="utf-8")
     _links = [m.start() for m in _re98.finditer(r'href="/anatomy"', _idx98)]
-    _panel = _idx98.find("What is Wordicon?")
+    _panel = _idx98.find('id="about-panel"')   # ledger (block 99): the panel is "What is <brand>?"
     _room = _idx98.find('id="compose-text"')
     if len(_links) != 1 or _links[0] < _panel:
         _f98(f"the See the anatomy link is not a single quiet link in the panel ({len(_links)})")
@@ -12509,6 +12514,225 @@ console.log(out.join('\\n'));
     for _bad in ("alex", "maksimovich", "community hospital", "aarc", "indianapolis"):
         if _bad in _alltext98:
             _f98(f"personal or institutional material in the anatomy: {_bad!r}")
+
+    # ================= block 99: the entrance ============================
+    # The owner's execution ruling (backlog item 39): Home is continuation-
+    # first and the visible name is Nikodemus. Twenty required proofs, the
+    # ones a static suite can hold; the browser journey holds the rest
+    # (first paint, the writing room's object identity, Back, widths).
+    import json as _json99
+    import re as _re99
+    import importlib as _il99
+    import os as _os99
+    from datetime import datetime as _dt99, timezone as _tz99, timedelta as _td99
+    _root99 = Path(cli.__file__).parent.parent
+    _idx99 = (_root99 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _brand99 = _json99.loads((_root99 / "config" / "brand.json").read_text(encoding="utf-8"))
+
+    def _f99(msg):
+        failures.append(f"99: {msg}")
+
+    # 18. one declared effective point, in the record
+    for _k in ("name", "formerly", "effective", "adr", "law"):
+        if not _brand99.get(_k):
+            _f99(f"config/brand.json lacks {_k}")
+    if not _re99.match(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", _brand99.get("effective", "")):
+        _f99("the naming change has no ISO-8601 UTC effective point")
+    _adr99 = _root99 / _brand99.get("adr", "docs/adr-nikodemus.md")
+    if not _adr99.exists() or _brand99["effective"] not in _adr99.read_text(encoding="utf-8"):
+        _f99("the ADR does not record the effective point of the visible name")
+    _chg99 = (_root99 / "docs" / "CHANGELOG.md").read_text(encoding="utf-8")
+    if _brand99["name"] not in _chg99 or "formerly" not in _chg99.lower():
+        _f99("the change record does not carry the rename and its provenance")
+    if server.BRAND.get("name") != _brand99["name"]:
+        _f99("the server's brand is not the file's brand — two sources")
+
+    # 16/17. history keeps its name; identifiers, routes, env vars unchanged
+    _older = _chg99.split("## v1.2.3", 1)[1] if "## v1.2.3" in _chg99 else ""
+    if _older.count("Wordicon") < 3 or "Nikodemus" in _older:
+        _f99("the changelog's earlier entries lost the name they were written under, or gained one they never had")
+    for _doc in ("adr-concept-first.md", "adr-medical-wing.md", "threat-model.md"):
+        if "Wordicon" not in (_root99 / "docs" / _doc).read_text(encoding="utf-8"):
+            _f99(f"docs/{_doc} was rewritten to a name it was not written under")
+    _srv99 = (_root99 / "server.py").read_text(encoding="utf-8")
+    for _tok in ("WORDICON_LAN", "WORDICON_MODEL", "X-Wordicon-Manifest-Sha256", '"/api/library"',
+                 '"/clinic"', '"/bench"', '"/map"', '"/trails"', '"/anatomy"', "wordicon_corpus"):
+        if _tok not in _srv99:
+            _f99(f"a technical identifier changed: {_tok}")
+    for _key in ("wordicon.session.v1", "wordicon.workspace.v1", "wordicon.write.style.v1",
+                 "wordicon_work_open", "wordicon_media_open", "wordicon_active_job"):
+        if _key not in _idx99:
+            _f99(f"a storage key changed: {_key}")
+    if 'data-history>Wordicon</span>' not in _idx99:
+        _f99("the About panel lost the provenance of the name")
+    _rule_urls = {r.rule for r in server.app.url_map.iter_rules()}
+    for _u in ("/", "/pair", "/map", "/trails", "/bench", "/clinic", "/anatomy", "/overworld", "/map/world",
+               "/api/home", "/brand.js", "/manifest.json", "/api/history", "/api/library", "/api/judge"):
+        if _u not in _rule_urls:
+            _f99(f"route missing: {_u}")
+
+    # 2/19/20. first paint order and the header: lead, Continue, rulings,
+    # intake; the wordmark from the brand; no provider as identity
+    _hdr = _idx99[_idx99.index("<header>"):_idx99.index("</header>")]
+    if 'data-brand' not in _hdr or _brand99["name"] not in _hdr:
+        _f99("the wordmark is not drawn from the brand source")
+    for _bad in ("anthropic", "gateway", 'id="status"', "live ·"):
+        if _bad in _hdr:
+            _f99(f"the header still shows the provider as identity ({_bad})")
+    if "formerly" in _hdr:
+        _f99("'formerly Wordicon' sits beside the wordmark — the ruling puts it in About")
+    _order = [_idx99.index(x) for x in ('id="lead"', 'id="continue-card"', 'id="ruling-card"', 'id="intake-card"',
+                                        'id="recent-head"', 'id="concepts"', 'id="rooms"', 'id="library"', 'id="about-panel"')]
+    if _order != sorted(_order):
+        _f99("Home's bands are not in the ruled order (Continue, rulings, intake, places)")
+    if _idx99.index('<textarea id="input-text"') < _idx99.index('id="continue-card"'):
+        _f99("the phrase box is above Continue — the hero again")
+    for _place in ('data-place="concepts"', 'data-place="rooms"', 'data-place="library"', 'href="/map"', 'onclick="openCompose();return false">Write'):
+        if _place not in _hdr:
+            _f99(f"a place is missing from navigation: {_place}")
+    if _brand99["lead"] not in _idx99 or _brand99["lead_sub"] not in _idx99:
+        _f99("the lead sentences are not the ruled ones")
+
+    # 1. Home paints with the provider poisoned: no client construction on
+    # the way to the page or any endpoint it loads
+    _boot = _idx99[_idx99.index("loadWriteStyle();\nloadInkPref();"):_idx99.index("// ---- Documents (the Library wing")]
+    if "loadConfig()" in _boot:
+        _f99("Home constructs the provider client on boot (loadConfig at boot)")
+    _home_js = _idx99[_idx99.index("// ---- Home: Continue, Needs your ruling"):_idx99.index("document.addEventListener('DOMContentLoaded'")]
+    for _tok in ("/api/config", "gateway", "getElementById('compose", "compose-text", "createElement", "innerHTML = ''"):
+        if _tok in _home_js:
+            _f99(f"Home's own code reaches {_tok!r}")
+    _real_gw = server.server_gateway
+
+    def _poisoned():
+        raise RuntimeError("the provider must not be constructed to paint Home")
+    server.server_gateway = _poisoned
+    _old_key = _os99.environ.pop("ANTHROPIC_API_KEY", None)
+    try:
+        with server.app.test_client() as _c99:
+            _paired(_c99)
+            for _u in ("/", "/api/home", "/api/history", "/api/inflight", "/api/vault/status",
+                       "/api/keeper/status", "/api/library", "/api/works", "/api/media", "/brand.js", "/manifest.json"):
+                _r = _c99.get(_u)
+                if _r.status_code != 200:
+                    _f99(f"{_u} did not paint with the provider poisoned ({_r.status_code})")
+            _r = _c99.get("/api/config")
+            if _r.status_code == 200 and (_r.get_json() or {}).get("ok"):
+                _f99("the poison did not reach /api/config — the proof is not a proof")
+    finally:
+        server.server_gateway = _real_gw
+        if _old_key is not None:
+            _os99.environ["ANTHROPIC_API_KEY"] = _old_key
+
+    # 3/4/5/6. Continue and the rulings, on a seeded scratch record
+    _il99.reload(_cl95); _cl95.library = _lib95
+    with server.app.test_client() as _c99:
+        _paired(_c99)
+
+        def _rc(trace, title, days):
+            cli.RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
+            (cli.RECEIPTS_DIR / f"{trace}.json").write_text(_json.dumps({
+                "trace_id": trace, "receipt_id": "rcpt_" + trace, "operation": "forge",
+                "created_at": (_dt99.now(_tz99.utc) - _td99(days=days)).isoformat(),
+                "candidates": [{"title": title}], "titles": [title], "input_preview": "x"}))
+        _rc("tr99_a", "Common Ground", 0.001); _rc("tr99_b", "Common Ground", 0.002); _rc("tr99_run_only", "Threshold Grief", 0.0005)
+        for _t, _cid in (("tr99_a", "concept_99a"), ("tr99_b", "concept_99b")):
+            _r = _c99.post("/api/judge", json={"trace_id": _t, "candidate_title": "Common Ground", "decision": "a",
+                                                "concept_id": _cid, "definition": "d", "note": ""})
+            if _r.status_code != 200:
+                _f99(f"seed judge failed: {_r.get_data(as_text=True)[:100]}")
+        with open(cli.JUDGMENTS_LOG, "a") as _jf:
+            _jf.write(_json.dumps({"id": "jdg_legacy_99", "decision": "accepted", "candidate_text": "Common Ground",
+                                   "originating_operation": "tr99_a", "decision_source": "owner", "confidence": 1.0}) + "\n")
+            _jf.write(_json.dumps({"id": "jdg_legacy_99b", "decision": "rejected", "candidate_text": "Never Kept 99",
+                                   "originating_operation": "tr99_x", "decision_source": "owner", "confidence": 1.0}) + "\n")
+        _ing = _lib95.ingest(b"Readiness screening precedes every liberation attempt. A trial follows the screen.",
+                             "notes99.txt", source="unit", title="Notes 99")
+        _r = _c99.post("/api/library/crossing", json={"kind": "claim", "representation_id": _ing["representation_id"],
+                                                      "start_path": "0.0.0", "start_offset": 0, "end_path": "0.0.0",
+                                                      "end_offset": 9, "owner_text": "screening first"})
+        if _r.status_code != 200:
+            _f99(f"seed crossing failed: {_r.get_data(as_text=True)[:120]}")
+        _room = _cl95.create_room("Room 99")
+        (cli.LOCAL_STATE / "recovery_review_queue.jsonl").write_text(
+            _json.dumps({"title": "Armory Stasis", "trace": "t", "status": "needs_owner_ruling", "queued_at": "2026-09-01T00:00:00Z"}) + "\n")
+        _h = _c99.get("/api/home").get_json() or {}
+        _cont = _h.get("continue") or []
+        _kinds = [(c.get("kind"), c.get("id")) for c in _cont]
+        if ("concept", "concept_99a") not in _kinds or ("concept", "concept_99b") not in _kinds:
+            _f99(f"two same-titled ruled concepts did not both get cards by id: {_kinds}")
+        if any(c.get("title") == "Threshold Grief" for c in _cont):
+            _f99("a run with no ruling entered Continue")
+        for c in _cont:
+            if not c.get("id") or not (c.get("open") or {}).get("type") or \
+                    ((c.get("open") or {}).get("type") in ("concept", "room", "document", "recording", "run") and not (c.get("open") or {}).get("id")):
+                _f99(f"a Continue card without a stable id: {c.get('kind')}")
+        if (_h.get("excluded") or {}).get("legacy_title_only", 0) < 2 or "Common Ground" not in ((_h.get("excluded") or {}).get("ambiguous_titles") or []):
+            _f99(f"legacy title-only rulings were not excluded and counted: {_h.get('excluded')}")
+        if len([c for c in _cont if c.get("kind") == "concept"]) != 2:
+            _f99("the ambiguous legacy row was guessed into a third concept card")
+        if not any(c.get("kind") == "room" and c["id"] == _room["room_id"] for c in _cont):
+            _f99("the Room is not a Continue card")
+        if not any(c.get("kind") == "document" and c.get("claims_unruled") == 1 for c in _cont):
+            _f99("the document with an unruled claim is not a Continue card")
+        _p = _h.get("pending") or {}
+        _srcs = {it.get("source") for it in _p.get("items", [])}
+        if _p.get("total", 0) < 2 or not {"claim", "recovery_review"} <= _srcs or \
+                not _srcs <= {"claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"}:
+            _f99(f"Needs your ruling is not derived from the record's sources: total={_p.get('total')} {_srcs}")
+        if set(_p.get("sources") or []) != {"claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"}:
+            _f99("the rulings band's sources are not the five structured ones")
+        if "backlog" not in (_p.get("note") or "").lower():
+            _f99("the rulings band does not say backlog decisions are absent")
+        # the Clinic deep link resolves by room id
+        _cl = (_root99 / "webapp" / "clinic.html").read_text(encoding="utf-8")
+        if "get('room')" not in _cl:
+            _f99("the Clinic does not accept ?room=<id>")
+    _rend = _idx99[_idx99.index("function ruleRow("):_idx99.index("function renderRooms(")]
+    if "--bad" in _rend or "error" in _rend.lower().replace("errors", ""):
+        _f99("the rulings band uses failure styling")
+
+    # 7. the phrase intake keeps its behavior: same element, same wiring
+    _intake = _idx99[_idx99.index('id="intake-card"'):_idx99.index('id="page-note"')]
+    for _need in ('<textarea id="input-text" placeholder="a word, a feeling, a handful of words, or a whole passage…" oninput="toggleClearBtn();rememberInput()">',
+                  'id="go-btn" onclick="runOperation(false)"', 'id="deep-btn" onclick="runOperation(true)"',
+                  'id="gesture-chooser"', 'onclick="gesturePlay()"', 'onclick="gestureInterpret()"', 'onclick="gestureTrial()"',
+                  'id="file-in"', 'onclick="openCompose()"', "onclick=\"openWorkspace('split')\""):
+        if _need not in _intake:
+            _f99(f"the intake lost {_need[:50]!r}")
+    if _idx99.count('id="input-text"') != 1:
+        _f99("the phrase box was duplicated")
+
+    # 10. the writing room's markup is byte-identical to the committed one
+    _room_now = _idx99[_idx99.index("<!-- The writing room: one pane of the workspace"):_idx99.index("<script>", _idx99.index("<!-- The writing room"))]
+    for _need in ('<div id="compose" class="compose"', '<textarea id="compose-text"', 'id="ink"', 'compose-cols'):
+        if _need not in _room_now:
+            _f99(f"the writing room lost {_need}")
+    if "openCompose" in _rend or "compose" in _rend:
+        _f99("the rulings band reaches into the room")
+
+    # 12/13. healthy infrastructure quiet; failures loud
+    _vs = _idx99[_idx99.index("async function loadVaultStrip"):_idx99.index("function setQuiet")]
+    if "el.hidden = true; setQuiet(true" not in _vs:
+        _f99("a healthy vault does not go quiet")
+    for _need in ("red(); setQuiet(false, el.textContent); return;", "if (v.stale_red || v.failure) { red();", "UNREACHABLE"):
+        if _need not in _vs:
+            _f99(f"a vault failure lost its loud path ({_need[:30]})")
+
+    # 15. reduced motion honored on the new pieces
+    if "prefers-reduced-motion: reduce) { .collapse-head .caret { transition: none; }" not in _idx99:
+        _f99("reduced motion is not honored on the shell")
+
+    # the concept door: id first, ask on a title naming two
+    _door = _idx99[_idx99.index("  if (type === 'concept') {"):_idx99.index("  if (type === 'source') {")]
+    if "c.concept_id === id" not in _door or "names ${sameTitle.length} concepts" not in _door:
+        _f99("the concept door does not resolve by id and ask on ambiguity")
+    if "'/bench?concept_id=' + encodeURIComponent(conceptId)" not in _idx99 or "'/bench?title=' + encodeURIComponent(title)\n    + (conceptId" in _idx99:
+        _f99("the Bench hand-off still sends the title first")
+
+    # 20. the provider survives where it belongs: About, on demand
+    if "id=\"about-provider\"" not in _idx99 or "ontoggle=\"if(this.open)loadConfig()\"" not in _idx99:
+        _f99("the provider has no home in About & proof")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

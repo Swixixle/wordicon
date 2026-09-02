@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Wordicon</title>
+<title>Nikodemus</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -366,6 +366,44 @@
 
   .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 20px 0; }
   .error { color: var(--bad); font-size: 14px; padding: 10px; }
+  /* ---- the entrance (block 99): places, lead, continuation ---- */
+  header { align-items: center; gap: 14px; flex-wrap: wrap; }
+  header .wordmark { font-size: 20px; font-weight: 700; letter-spacing: 0.2px; color: var(--text); text-decoration: none; }
+  header nav.places { display: flex; gap: 4px; flex-wrap: wrap; }
+  header nav.places a { color: var(--muted); text-decoration: none; font-size: 13.5px; padding: 4px 9px; border-radius: 7px; }
+  header nav.places a.here { color: var(--text); background: var(--panel-2); }
+  header nav.places a:hover { color: var(--text); }
+  header .quiet { margin-left: auto; display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+  header .quiet a { color: var(--muted); text-decoration: none; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--muted); }
+  .dot.ok { background: var(--good); box-shadow: 0 0 0 2px rgba(111,207,151,.18); }
+  .dot.bad { background: var(--bad); box-shadow: 0 0 0 2px rgba(224,138,138,.18); }
+  .lead { margin: 6px 0 14px; }
+  .lead h1 { font-size: 24px; margin: 0 0 4px; font-weight: 600; line-height: 1.25; }
+  .lead p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .band-head { display: flex; align-items: baseline; gap: 10px; margin: 0 0 8px; }
+  .band-head .section-label { margin: 0; }
+  .band-head .more { font-size: 12px; color: var(--muted); }
+  .place-head { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; font-weight: 600; scroll-margin-top: 70px; }
+  .cont-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+  .cont { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .cont .kind { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); display: flex; gap: 7px; align-items: center; }
+  .cont .kind i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: var(--muted); }
+  .cont .obj { font-size: 15px; font-weight: 600; margin: 5px 0 2px; }
+  .cont .what { font-size: 12.5px; color: var(--muted); }
+  .cont .resume { margin-top: 8px; font-size: 13px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .cont .resume a { color: var(--accent); text-decoration: none; cursor: pointer; }
+  .rule-row { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--border); font-size: 14px; flex-wrap: wrap; }
+  .rule-row:first-child { border-top: none; }
+  .rule-row .k { color: var(--muted); font-size: 12px; min-width: 120px; }
+  .rule-row .act { margin-left: auto; font-size: 13px; }
+  .rule-row .act a { color: var(--accent); text-decoration: none; cursor: pointer; }
+  .doors { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-top: 10px; }
+  .doors a { display: block; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 8px 11px; font-size: 13px; color: var(--accent); text-decoration: none; cursor: pointer; }
+  .quiet-line { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; margin: 4px 0 18px; }
+  .foot { font-size: 12.5px; color: var(--muted); }
+  @media (max-width: 640px) { .rule-row .k { min-width: 0; } .rule-row .act { margin-left: 0; width: 100%; } header .quiet { width: 100%; margin-left: 0; } }
+  @media (prefers-reduced-motion: reduce) { .collapse-head .caret { transition: none; } }
 </style>
 </head>
 <body>
@@ -373,12 +411,16 @@
 <div id="page">
 
 <header>
-  <h1>Wordicon</h1>
-  <div style="display:flex;align-items:baseline;gap:12px">
-    <a href="/map" style="color:var(--accent);text-decoration:none;font-size:13px;font-weight:600">🗺 Map</a>
-    <a href="/bench" style="color:var(--accent);text-decoration:none;font-size:13px;font-weight:600;margin-left:12px">⚒ Bench</a>
-    <div class="status" id="status">checking…</div>
-  </div>
+  <a class="wordmark" href="/" data-brand>Nikodemus</a>
+  <nav class="places" aria-label="Places">
+    <a href="/" class="here">Home</a>
+    <a href="#concepts" data-place="concepts">Concepts</a>
+    <a href="#rooms" data-place="rooms">Rooms</a>
+    <a href="#library" data-place="library">Library</a>
+    <a href="/map">Map</a>
+    <a href="#write" onclick="openCompose();return false">Write</a>
+  </nav>
+  <div class="quiet"><span class="dot" id="quiet-dot"></span><span id="quiet-text">checking…</span> · <a href="#about" onclick="openAbout();return false">About &amp; proof</a></div>
 </header>
 
 <!-- The vault strip: quiet when backups are healthy, red and specific the
@@ -389,25 +431,233 @@
      style="font-size:12px;padding:3px 24px;color:var(--muted);border-bottom:1px solid var(--border);background:var(--panel)"></div>
 
 <main>
+  <section class="lead" id="lead">
+    <h1 id="lead-line">Continue where your thinking left off.</h1>
+    <p id="lead-sub">Your concepts, sources, and judgments—kept separate, connected, and reviewable.</p>
+  </section>
+
+  <!-- CONTINUE: real stored objects, reached through stable ids, resumable
+       — never a card because a model run happened. Painted from /api/home
+       plus what this browser holds (the draft, the open Work Room). -->
+  <div class="card" id="continue-card">
+    <div class="band-head"><div class="section-label">Continue</div><span class="more" id="continue-more">the objects you were using, as themselves</span></div>
+    <div id="continue-area"><div class="empty">Looking at the record…</div></div>
+    <div id="continue-excluded" class="foot" style="margin-top:8px"></div>
+  </div>
+
+  <!-- NEEDS YOUR RULING: bounded, mechanical, never an alarm. -->
+  <div class="card" id="ruling-card">
+    <div class="band-head"><div class="section-label">Needs your ruling</div><span class="more" id="ruling-more">only what the record can count</span></div>
+    <div id="ruling-area"><div class="empty">Looking at the record…</div></div>
+    <div id="ruling-fold" class="foot" style="margin-top:6px"></div>
+  </div>
+
+  <!-- BRING SOMETHING IN: the same intake as before, one band down. The
+       phrase box below is the ORIGINAL element — same id, same wiring, the
+       same draft the writing room writes through to. -->
+  <div class="card" id="intake-card">
+    <div class="band-head"><div class="section-label">Bring something in</div><span class="more">an idea, a passage, a document, a recording, a source</span></div>
+    <div style="position:relative">
+      <textarea id="input-text" placeholder="a word, a feeling, a handful of words, or a whole passage…" oninput="toggleClearBtn();rememberInput()"></textarea>
+      <div id="intake-row" style="display:flex;align-items:center;gap:10px;margin-top:6px">
+        <button class="go-btn" id="clip-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px"
+                onclick="document.getElementById('file-in').click()">📎 attach a file</button>
+        <button class="go-btn" id="compose-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px"
+                onclick="openCompose()">⤢ full page</button>
+                <button class="go-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px"
+                onclick="openWorkspace('split')">⫞ write beside the page</button>
+        <span class="note" style="margin:0;font-size:12px">or drop one here, or paste a screenshot</span>
+        <input type="file" id="file-in" style="display:none"
+               accept=".txt,.md,.markdown,text/plain,text/markdown,application/pdf,image/png,image/jpeg,image/gif,image/webp"
+               onchange="uploadFile(this.files[0])">
+      </div>
+      <div id="source-card"></div>
+      <button id="clear-input-btn" onclick="clearInput()" title="Clear the input"
+        style="display:none;position:absolute;top:6px;right:6px;background:var(--panel-2);color:var(--muted);border:1px solid var(--border);border-radius:6px;font-size:12px;padding:3px 9px;cursor:pointer">✕ clear</button>
+    </div>
+    <button class="go-btn" id="go-btn" onclick="runOperation(false)">Run it</button>
+    <button class="go-btn" id="deep-btn" onclick="runOperation(true)"
+      style="background:var(--panel-2);color:var(--text);border:1px solid var(--border)">Go deep — full workup</button>
+    <!-- The gesture chooser (owner's ruling): a bare unexplained phrase
+         gets a VISIBLE four-way choice — never an automatic guess about
+         which gesture was meant. The Play lane is constitutionally
+         protected; the courtroom is one choice among four, not a default
+         verdict on wordplay. -->
+    <div id="gesture-chooser" style="display:none">
+      <div class="body muted" style="font-size:12px;margin:8px 0 6px">A bare phrase gets a visible
+      choice — nothing guesses which you meant:</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="go-btn" style="flex:1;min-width:130px" onclick="gesturePlay()">Play with it</button>
+        <button class="go-btn" style="flex:1;min-width:130px;background:var(--panel-2);color:var(--text);border:1px solid var(--border)" onclick="gestureDefine()">I'll tell you what it means</button>
+        <button class="go-btn" style="flex:1;min-width:130px;background:var(--panel-2);color:var(--text);border:1px solid var(--border)" onclick="gestureInterpret()">Interpret it</button>
+        <button class="go-btn" style="flex:1;min-width:130px;background:var(--panel-2);color:var(--text);border:1px solid var(--border)" onclick="gestureTrial()">Put it on trial</button>
+      </div>
+      <div id="gloss-row" style="display:none;margin-top:8px">
+        <input id="gesture-gloss" placeholder="what does it mean, in your words?"
+          style="width:68%;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:14px">
+        <button class="go-btn" style="width:auto;padding:8px 14px" onclick="gestureDefineRun()">Run with your meaning</button>
+      </div>
+    </div>
+    <div class="doors">
+      <a onclick="openPlace('library', 'doc-file');return false" href="#library">📄 Add a document — EPUB, saved page, text, PDF, DOCX</a>
+      <a onclick="openPlace('library', 'med-file');return false" href="#library">🎧 Keep a recording — with the transcript you supply</a>
+      <a href="/clinic">🏛 Admit a source to a Room — declared role, dates, status</a>
+    </div>
+  </div>
+
+  <!-- One line, above the result and outside it, because every render of
+       result-area replaces its contents wholesale — a note written into
+       that box is wiped by the next poll. Empty and invisible unless there
+       is something true to say. -->
+  <div id="page-note" class="muted" style="font-size:12px;margin:0 0 8px"></div>
+  <div id="result-area"></div>
+
+  <div class="card">
+    <div class="section-label collapse-head open" id="recent-head" style="margin-top:0"
+         onclick="toggleSection('history-area','recent-head')">
+      <span class="caret">▶</span>Recent <span class="count-pill" id="recent-count"></span>
+    </div>
+    <div id="history-area"><div class="empty">Loading…</div></div>
+  </div>
+
+
+  <div class="place-head" id="concepts">Concepts</div>
+  <div class="card">
+    <div class="section-label collapse-head open" id="library-head" style="margin-top:0"
+         onclick="toggleSection('library-body','library-head')">
+      <span class="caret">▶</span>Concepts
+    </div>
+    <div id="library-body">
+    <p class="body muted" style="font-size:13.5px">Every concept you ruled on, with its ruling and its history — and every run, all the way back. Nothing falls off this shelf.</p>
+    <button class="go-btn" id="library-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border)" onclick="toggleLibrary()">Open the shelf</button>
+    <div id="library-area" style="display:none;margin-top:12px">
+      <details style="margin:0 0 10px">
+        <summary class="section-label" style="cursor:pointer;margin:0">Take it out of here</summary>
+        <div id="export-panel" style="margin-top:8px"></div>
+      </details>
+      <input class="note" id="library-search" placeholder="search words, definitions, inputs…" oninput="renderLibrary(this.value)" style="margin-top:0">
+      <div id="library-sorts" style="margin:8px 0 4px;font-size:12px"></div>
+      <div id="library-content"><div class="empty">Loading…</div></div>
+    </div>
+    </div>
+  </div>
+
+  <div class="place-head" id="rooms">Rooms</div>
+  <div class="card" id="rooms-card">
+    <p class="body muted" style="font-size:13.5px;margin-top:0">Work Rooms — a work as a place you can enter; and the Clinic, where sources keep their institutional voices apart.</p>
+    <div id="rooms-area"><div class="empty">Looking at the record…</div></div>
+  </div>
+  <div class="card" id="work-room-card" style="display:none">
+    <div class="section-label" style="margin-top:0;display:flex;align-items:baseline;gap:10px">
+      <span id="wr-title">Work Room</span>
+      <button class="go-btn" style="width:auto;padding:2px 10px;font-size:11.5px;background:var(--panel-2);color:var(--muted);border:1px solid var(--border);margin-left:auto" onclick="closeWorkRoom()">close</button>
+    </div>
+    <div id="wr-head" class="body muted" style="font-size:12.5px"></div>
+    <div id="wr-body"></div>
+  </div>
+
+
+  <div class="place-head" id="library">Library</div>
+  <div class="card">
+    <div class="section-label collapse-head" id="docs-head" style="margin-top:0"
+         onclick="toggleSection('docs-body','docs-head')">
+      <span class="caret">▶</span>Documents
+    </div>
+    <div id="docs-body" style="display:none">
+    <p class="body muted" style="font-size:13.5px">Whole works, kept as themselves: a book, a
+    chapter, a saved news article. Bringing one in costs <strong>zero model calls</strong> — the
+    file is stored byte-intact, split deterministically into sections, paragraphs and sentences,
+    and indexed for exact search. Re-ingest the identical file under the same reader revisions and you get
+    identical anchors; that is a property the tests hold, not a hope — and a revised reader makes a
+    new immutable reading, never a rewrite. Anything the reader had to skip or could not
+    parse is written on the document's face, never silently smoothed over.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0">
+      <input type="file" id="doc-file" accept=".epub,.html,.htm,.xhtml,.txt,.md" style="font-size:12px">
+      <input class="note" id="doc-source" placeholder="where it came from (URL or note) — optional" style="margin:0;flex:1;min-width:180px">
+      <button class="go-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px" onclick="ingestDoc()">Add to the library</button>
+    </div>
+    <div id="doc-ingest-note" class="body muted" style="font-size:12.5px"></div>
+    <input class="note" id="doc-search" placeholder="search this library — exact text only, not the web" style="margin-top:6px" onkeydown="if(event.key==='Enter')docSearch()">
+    <div id="doc-search-results"></div>
+    <div id="doc-list"><div class="empty">Nothing here yet — add an EPUB, a saved page, a text file, a PDF, or a DOCX.</div></div>
+    <div id="doc-reader" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-label collapse-head" id="media-head" style="margin-top:0"
+         onclick="toggleSection('media-body','media-head')">
+      <span class="caret">▶</span>Media
+    </div>
+    <div id="media-body" style="display:none">
+    <p class="body muted" style="font-size:13.5px">Recordings you own — a lecture, a podcast episode
+    you have the file for, an interview — kept byte-intact with <strong>zero model calls</strong>,
+    beside the transcripts you supply. <strong>The transcript is a derivative that can be
+    wrong; the recording remains the source</strong>, and every transcript version — publisher's,
+    platform's, your own correction — is kept separately, never overwritten and never merged.
+    Nothing here transcribes, fetches, or touches a platform: SRT or WebVTT come from you, because
+    a transcript without timestamps cannot anchor time.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0">
+      <input type="file" id="med-file" accept=".mp3,.m4a,.wav,.ogg,.oga,.flac,.mp4,.m4v,.webm,.mov" style="font-size:12px">
+      <input class="note" id="med-source" placeholder="where it came from (a note for the record) — optional" style="margin:0;flex:1;min-width:170px">
+      <button class="go-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px" onclick="ingestMedia()">Keep the recording</button>
+    </div>
+    <div id="med-ingest-note" class="body muted" style="font-size:12.5px"></div>
+    <div id="med-list"><div class="empty">Nothing here yet — add a recording you own, then attach its transcript.</div></div>
+    <div id="media-panel" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-label collapse-head" id="sources-head" style="margin-top:0"
+         onclick="toggleSection('sources-body','sources-head')">
+      <span class="caret">▶</span>Sources
+    </div>
+    <div id="sources-body" style="display:none">
+    <p class="body muted" style="font-size:13.5px">Every work, figure and episode a sprout has
+    ever travelled to — read as itself, not as a parallel to one of your words. Which of your
+    concepts arrived here is folded under each entry, not above it.</p>
+    <button class="go-btn" id="sources-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border)" onclick="toggleSources()">Open the sources</button>
+    <div id="sources-area" style="display:none;margin-top:12px">
+      <div class="body muted" style="font-size:12px;border-left:3px solid var(--border);padding-left:10px;margin-bottom:10px">
+        All of this is recall, not retrieval. The locator says where to check; it is not a record
+        that anything was checked. Where more than one run described a source, every account is
+        kept — merging them would invent an authority nothing here has, and difference is not
+        disagreement. Even a clean account chose its emphasis: it was written by a run hunting a
+        resemblance, and the wording check below catches the concept's name and copied phrasing,
+        nothing subtler. This whole index is rebuilt from the runs on every load — delete a run
+        and its accounts leave with it; a source with no account gains one the next time a run
+        travels there, dated then, never backfilled.</div>
+      <input class="note" id="sources-search" placeholder="search sources, works, accounts…" oninput="renderSources()" style="margin-top:0">
+      <div id="sources-sorts" style="margin:8px 0 4px;font-size:12px"></div>
+      <div id="sources-content"><div class="empty">Loading…</div></div>
+    </div>
+    </div>
+  </div>
+
+
+  <div class="place-head" id="system">The Keeper · About</div>
   <!-- The Keeper: the Book's resident narrator. Summoned only — this card
        is the ONLY thing that ever asks it to speak. Custody of the
        narration, never authority over the record. -->
   <details class="card" id="keeper-card" style="padding:12px 16px">
-    <summary style="cursor:pointer;font-size:13px;color:var(--muted);font-weight:600">The Keeper — ask it to close the Book</summary>
+    <summary style="cursor:pointer;font-size:13px;color:var(--muted);font-weight:600">The Keeper — <span id="keeper-summary-state">not yet named</span></summary>
     <div id="keeper-body" style="margin-top:10px;font-size:13px">loading…</div>
   </details>
-
-  <details class="card" style="padding:12px 16px">
-    <summary style="cursor:pointer;font-size:13px;color:var(--muted);font-weight:600">What is Wordicon?</summary>
+  <details class="card" id="about-panel" style="padding:12px 16px" ontoggle="if(this.open)loadConfig()">
+    <summary style="cursor:pointer;font-size:13px;color:var(--muted);font-weight:600">What is <span data-brand>Nikodemus</span>? — and proof</summary>
     <div style="margin-top:10px">
-      <p class="body">Bring Wordicon a feeling with no name and it forges you concept readings
+      <p class="body" id="about-explanation">Nikodemus (formerly Wordicon) is a private environment for developing concepts beside your sources and your writing. It keeps your concepts, sources, and judgments separate, connected, and reviewable: nothing you ruled on is overwritten, nothing the model proposed is treated as your conclusion, and material it was forbidden to accept is refused before it is stored. It began as a word-coining tool; the forge is still inside.</p>
+      <p class="foot" id="about-name"><strong data-brand>Nikodemus</strong> is the name since September 2, 2026, 4:20 a.m. EDT (<code>2026-09-02T08:20:00Z</code>), ruled by the owner; the history keeps the name it was written under — <span data-history>Wordicon</span> — and nothing was rewritten to make the new name look older than it is. The record of the change is <code>docs/adr-nikodemus.md</code>.</p>
+      <div id="about-system" class="foot" style="margin:6px 0 12px">System: <span id="about-provider">not checked yet — opening this panel asks the server</span></div>
+      <p class="body">Bring <span data-brand>Nikodemus</span> a feeling with no name and it forges you concept readings
       worth arguing with — the idea's anatomy under a plain working title. Bring it a book and the
       book stays a book — byte-intact, mechanically read, every sentence an anchor you can hold a
       claim against. Bring it a recording and the transcript scrolls under the sound, one click
       from any sentence to its exact second. Coin a word at the Bench when you want one, cross a
       passage into evidence, walk the Map of everywhere your thinking has been, enter a work the
       way you'd enter a room — and every step leaves a record you can reopen, dispute, and
-      re-rule, because in here <strong>the record is the product</strong>. Wordicon is <strong>a
+      re-rule, because in here <strong>the record is the product</strong>. <span data-brand>Nikodemus</span> is <strong>a
       private, evidence-bearing workshop</strong>: it began as a word-coiner, and use revealed
       that naming was only one small part of the work — so it is now concept-first and
       coinage-optional. An idea is allowed to exist without a coined name; a name is a handle for
@@ -444,7 +694,7 @@
       leaves.</p>
       <p class="body"><strong>Guardrails belong on consequential actions, not on language.</strong>
       That erudition-meets-filth register is part of your voice—the Trickster-Sage and the
-      grotesquerie at the same table. Wordicon is supposed to give that voice more room and more
+      grotesquerie at the same table. <span data-brand>Nikodemus</span> is supposed to give that voice more room and more
       structure, not wash its mouth out with soap.</p>
       <p class="body"><strong>⫞ split</strong> puts the room beside <em>the page itself</em> — the
       same shelf, cards, documents and controls fitted into half the window,
@@ -835,7 +1085,7 @@
         works named <em>The Fall</em> stay two works forever: the tool will never merge them, which
         also means a duplicate you created by mistake is yours to retract, never its to clean
         up.</p>
-        <p class="body"><strong>Media transcribes nothing.</strong> Wordicon has no speech
+        <p class="body"><strong>Media transcribes nothing.</strong> <span data-brand>Nikodemus</span> has no speech
         recognition: you supply the SRT or WebVTT, and a plain-text transcript is refused because
         it cannot anchor time. No platform is touched — no YouTube, no RSS, no stream capture; a
         recording enters only as a file you own, and duration is the player's live reading, never a
@@ -865,178 +1115,15 @@
       every tell stripped, shuffled, and you pick — then it tells you how often a coin flip does that
       well. Under six decided pairs it refuses to conclude anything.</p>
 
-      <p class="body muted" style="font-size:13.5px">Wordicon is the concept lens of a larger
+      <p class="body muted" style="font-size:13.5px"><span data-brand>Nikodemus</span> is the concept lens of a larger
       family — the same receipts-not-verdicts machinery that elsewhere investigates public records,
       corporate conduct, and news coverage, here pointed inward at ideas. Tap anything under Recent
       to reopen it. “Another round” retries briefed on what failed. Runs keep working when you close
       the tab, and whatever was going is waiting under <strong>Where you left off</strong>.</p>
     </div>
   </details>
+</main>
 
-  <div class="card">
-    <div style="position:relative">
-      <textarea id="input-text" placeholder="a word, a feeling, a handful of words, or a whole passage…" oninput="toggleClearBtn();rememberInput()"></textarea>
-      <div id="intake-row" style="display:flex;align-items:center;gap:10px;margin-top:6px">
-        <button class="go-btn" id="clip-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px"
-                onclick="document.getElementById('file-in').click()">📎 attach a file</button>
-        <button class="go-btn" id="compose-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px"
-                onclick="openCompose()">⤢ full page</button>
-                <button class="go-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px"
-                onclick="openWorkspace('split')">⫞ write beside the page</button>
-        <span class="note" style="margin:0;font-size:12px">or drop one here, or paste a screenshot</span>
-        <input type="file" id="file-in" style="display:none"
-               accept=".txt,.md,.markdown,text/plain,text/markdown,application/pdf,image/png,image/jpeg,image/gif,image/webp"
-               onchange="uploadFile(this.files[0])">
-      </div>
-      <div id="source-card"></div>
-      <button id="clear-input-btn" onclick="clearInput()" title="Clear the input"
-        style="display:none;position:absolute;top:6px;right:6px;background:var(--panel-2);color:var(--muted);border:1px solid var(--border);border-radius:6px;font-size:12px;padding:3px 9px;cursor:pointer">✕ clear</button>
-    </div>
-    <button class="go-btn" id="go-btn" onclick="runOperation(false)">Run it</button>
-    <button class="go-btn" id="deep-btn" onclick="runOperation(true)"
-      style="background:var(--panel-2);color:var(--text);border:1px solid var(--border)">Go deep — full workup</button>
-    <!-- The gesture chooser (owner's ruling): a bare unexplained phrase
-         gets a VISIBLE four-way choice — never an automatic guess about
-         which gesture was meant. The Play lane is constitutionally
-         protected; the courtroom is one choice among four, not a default
-         verdict on wordplay. -->
-    <div id="gesture-chooser" style="display:none">
-      <div class="body muted" style="font-size:12px;margin:8px 0 6px">A bare phrase gets a visible
-      choice — nothing guesses which you meant:</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="go-btn" style="flex:1;min-width:130px" onclick="gesturePlay()">Play with it</button>
-        <button class="go-btn" style="flex:1;min-width:130px;background:var(--panel-2);color:var(--text);border:1px solid var(--border)" onclick="gestureDefine()">I'll tell you what it means</button>
-        <button class="go-btn" style="flex:1;min-width:130px;background:var(--panel-2);color:var(--text);border:1px solid var(--border)" onclick="gestureInterpret()">Interpret it</button>
-        <button class="go-btn" style="flex:1;min-width:130px;background:var(--panel-2);color:var(--text);border:1px solid var(--border)" onclick="gestureTrial()">Put it on trial</button>
-      </div>
-      <div id="gloss-row" style="display:none;margin-top:8px">
-        <input id="gesture-gloss" placeholder="what does it mean, in your words?"
-          style="width:68%;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:14px">
-        <button class="go-btn" style="width:auto;padding:8px 14px" onclick="gestureDefineRun()">Run with your meaning</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- One line, above the result and outside it, because every render of
-       result-area replaces its contents wholesale — a note written into
-       that box is wiped by the next poll. Empty and invisible unless there
-       is something true to say. -->
-  <div id="page-note" class="muted" style="font-size:12px;margin:0 0 8px"></div>
-  <div id="result-area"></div>
-
-  <div class="card">
-    <div class="section-label collapse-head open" id="recent-head" style="margin-top:0"
-         onclick="toggleSection('history-area','recent-head')">
-      <span class="caret">▶</span>Recent <span class="count-pill" id="recent-count"></span>
-    </div>
-    <div id="history-area"><div class="empty">Loading…</div></div>
-  </div>
-
-  <div class="card">
-    <div class="section-label collapse-head" id="sources-head" style="margin-top:0"
-         onclick="toggleSection('sources-body','sources-head')">
-      <span class="caret">▶</span>Sources
-    </div>
-    <div id="sources-body" style="display:none">
-    <p class="body muted" style="font-size:13.5px">Every work, figure and episode a sprout has
-    ever travelled to — read as itself, not as a parallel to one of your words. Which of your
-    concepts arrived here is folded under each entry, not above it.</p>
-    <button class="go-btn" id="sources-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border)" onclick="toggleSources()">Open the sources</button>
-    <div id="sources-area" style="display:none;margin-top:12px">
-      <div class="body muted" style="font-size:12px;border-left:3px solid var(--border);padding-left:10px;margin-bottom:10px">
-        All of this is recall, not retrieval. The locator says where to check; it is not a record
-        that anything was checked. Where more than one run described a source, every account is
-        kept — merging them would invent an authority nothing here has, and difference is not
-        disagreement. Even a clean account chose its emphasis: it was written by a run hunting a
-        resemblance, and the wording check below catches the concept's name and copied phrasing,
-        nothing subtler. This whole index is rebuilt from the runs on every load — delete a run
-        and its accounts leave with it; a source with no account gains one the next time a run
-        travels there, dated then, never backfilled.</div>
-      <input class="note" id="sources-search" placeholder="search sources, works, accounts…" oninput="renderSources()" style="margin-top:0">
-      <div id="sources-sorts" style="margin:8px 0 4px;font-size:12px"></div>
-      <div id="sources-content"><div class="empty">Loading…</div></div>
-    </div>
-    </div>
-  </div>
-
-  <div class="card" id="work-room-card" style="display:none">
-    <div class="section-label" style="margin-top:0;display:flex;align-items:baseline;gap:10px">
-      <span id="wr-title">Work Room</span>
-      <button class="go-btn" style="width:auto;padding:2px 10px;font-size:11.5px;background:var(--panel-2);color:var(--muted);border:1px solid var(--border);margin-left:auto" onclick="closeWorkRoom()">close</button>
-    </div>
-    <div id="wr-head" class="body muted" style="font-size:12.5px"></div>
-    <div id="wr-body"></div>
-  </div>
-
-  <div class="card">
-    <div class="section-label collapse-head" id="docs-head" style="margin-top:0"
-         onclick="toggleSection('docs-body','docs-head')">
-      <span class="caret">▶</span>Documents
-    </div>
-    <div id="docs-body" style="display:none">
-    <p class="body muted" style="font-size:13.5px">Whole works, kept as themselves: a book, a
-    chapter, a saved news article. Bringing one in costs <strong>zero model calls</strong> — the
-    file is stored byte-intact, split deterministically into sections, paragraphs and sentences,
-    and indexed for exact search. Re-ingest the identical file under the same reader revisions and you get
-    identical anchors; that is a property the tests hold, not a hope — and a revised reader makes a
-    new immutable reading, never a rewrite. Anything the reader had to skip or could not
-    parse is written on the document's face, never silently smoothed over.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0">
-      <input type="file" id="doc-file" accept=".epub,.html,.htm,.xhtml,.txt,.md" style="font-size:12px">
-      <input class="note" id="doc-source" placeholder="where it came from (URL or note) — optional" style="margin:0;flex:1;min-width:180px">
-      <button class="go-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px" onclick="ingestDoc()">Add to the library</button>
-    </div>
-    <div id="doc-ingest-note" class="body muted" style="font-size:12.5px"></div>
-    <input class="note" id="doc-search" placeholder="search this library — exact text only, not the web" style="margin-top:6px" onkeydown="if(event.key==='Enter')docSearch()">
-    <div id="doc-search-results"></div>
-    <div id="doc-list"><div class="empty">Nothing here yet — add an EPUB, a saved article, or a text file.</div></div>
-    <div id="doc-reader" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px"></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="section-label collapse-head" id="media-head" style="margin-top:0"
-         onclick="toggleSection('media-body','media-head')">
-      <span class="caret">▶</span>Media
-    </div>
-    <div id="media-body" style="display:none">
-    <p class="body muted" style="font-size:13.5px">Recordings you own — a lecture, a podcast episode
-    you have the file for, an interview — kept byte-intact with <strong>zero model calls</strong>,
-    beside the transcripts you supply. <strong>The transcript is a derivative that can be
-    wrong; the recording remains the source</strong>, and every transcript version — publisher's,
-    platform's, your own correction — is kept separately, never overwritten and never merged.
-    Nothing here transcribes, fetches, or touches a platform: SRT or WebVTT come from you, because
-    a transcript without timestamps cannot anchor time.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0">
-      <input type="file" id="med-file" accept=".mp3,.m4a,.wav,.ogg,.oga,.flac,.mp4,.m4v,.webm,.mov" style="font-size:12px">
-      <input class="note" id="med-source" placeholder="where it came from (a note for the record) — optional" style="margin:0;flex:1;min-width:170px">
-      <button class="go-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px" onclick="ingestMedia()">Keep the recording</button>
-    </div>
-    <div id="med-ingest-note" class="body muted" style="font-size:12.5px"></div>
-    <div id="med-list"><div class="empty">Nothing here yet — add a recording you own, then attach its transcript.</div></div>
-    <div id="media-panel" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px"></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="section-label collapse-head open" id="library-head" style="margin-top:0"
-         onclick="toggleSection('library-body','library-head')">
-      <span class="caret">▶</span>Library
-    </div>
-    <div id="library-body">
-    <p class="body muted" style="font-size:13.5px">Every word and every run, all the way back. Nothing falls off this shelf.</p>
-    <button class="go-btn" id="library-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border)" onclick="toggleLibrary()">Open the Library</button>
-    <div id="library-area" style="display:none;margin-top:12px">
-      <details style="margin:0 0 10px">
-        <summary class="section-label" style="cursor:pointer;margin:0">Take it out of here</summary>
-        <div id="export-panel" style="margin-top:8px"></div>
-      </details>
-      <input class="note" id="library-search" placeholder="search words, definitions, inputs…" oninput="renderLibrary(this.value)" style="margin-top:0">
-      <div id="library-sorts" style="margin:8px 0 4px;font-size:12px"></div>
-      <div id="library-content"><div class="empty">Loading…</div></div>
-    </div>
-    </div>
-  </div>
 </main>
 
 </div>
@@ -1177,16 +1264,24 @@ const STAGE_LABELS = {
 const OVERRIDE_MODES = {etymon: 'Take the word apart', forge: 'Forge', crack: 'Crack',
                         riff: 'Riff', decompose: 'Decompose'};
 
+// The provider is provenance, not identity: it is asked for only when the
+// About panel is opened, never to paint Home.
 async function loadConfig() {
+  const el = document.getElementById('about-provider');
+  if (!el) return;
   try {
     const r = await fetch('/api/config');
     const d = await r.json();
-    document.getElementById('status').textContent = d.ok
-      ? (d.gateway === 'mock' ? 'mock gateway' : `live · ${d.gateway}`)
-      : 'config error';
+    el.textContent = d.ok
+      ? (d.gateway === 'mock' ? 'mock gateway' : `model lane live · ${d.gateway}`) + ' · the suite and the secret scanner run on every push (.github/workflows/suite.yml)'
+      : 'config error — the model lane is not available; everything else on this page still works';
   } catch (e) {
-    document.getElementById('status').textContent = 'offline';
+    el.textContent = 'offline — the model lane is unreachable; the record is unaffected';
   }
+}
+function openAbout() {
+  const d = document.querySelector('details#about-panel');
+  if (d) { d.open = true; d.scrollIntoView({block: 'start'}); loadConfig(); }
 }
 
 // Mode colours, one source of truth. Names the tool uses internally
@@ -2143,8 +2238,10 @@ function renderCandidateCard(cand, traceId, extra) {
 }
 
 function openBenchFromCard(title, conceptId) {
-  window.location.href = '/bench?title=' + encodeURIComponent(title)
-    + (conceptId ? '&concept_id=' + encodeURIComponent(conceptId) : '');
+  // identity first: a concept id addresses one concept; a title may name two
+  window.location.href = conceptId
+    ? '/bench?concept_id=' + encodeURIComponent(conceptId)
+    : '/bench?title=' + encodeURIComponent(title);
 }
 
 function escapeJs(s) {
@@ -4241,7 +4338,20 @@ async function openDestination(dest, fallbackTrace) {
   if (type === 'concept') {
     const lib = await ensureLibrary();
     const words = (lib && lib.words) || [];
-    const hit = words.find(w => w.name.toLowerCase() === id.toLowerCase());
+    // a concept id opens exactly one concept; a title is a question when
+    // it names two — the door never guesses which
+    const byId = (lib && lib.lexicon || []).find(c => c.concept_id && c.concept_id === id);
+    let hit = byId ? words.find(w => w.name.toLowerCase() === (byId.name || '').toLowerCase()) : null;
+    if (!hit) {
+      const sameTitle = (lib && lib.lexicon || []).filter(c => (c.name || '').toLowerCase() === id.toLowerCase());
+      if (sameTitle.length > 1) {
+        pageNote(`“${escapeHtml(id)}” names ${sameTitle.length} concepts — nothing was opened in one's place; open the shelf and pick the one you mean.`);
+        await toggleLibraryOpen(); const search = document.getElementById('library-search');
+        if (search) { search.value = id; renderLibrary(id); }
+        return;
+      }
+      hit = words.find(w => w.name.toLowerCase() === id.toLowerCase());
+    }
     if (!hit) { await destUnresolved(spec, fallbackTrace); return; }
     const area = document.getElementById('library-area');
     if (area && area.style.display === 'none') await toggleLibrary();
@@ -4932,8 +5042,8 @@ document.addEventListener('paste', e => {
 
 loadWriteStyle();
 loadInkPref();
-loadConfig();
 loadHistory();
+loadHome();
 // Panels he closed stay closed; then the page he left comes back. Neither
 // of these clears anything — a reset is something he asks for.
 resumeJobIfAny();
@@ -6054,7 +6164,7 @@ async function loadVaultStrip() {
     if (!v.initialized) {
       el.textContent = 'No vault — the corpus exists on this disk only. '
         + 'Set up encrypted backups: python scripts/vault.py init';
-      red(); return;
+      red(); setQuiet(false, el.textContent); return;
     }
     const bits = ['Vault: sealed ' + vaultAge(v.last_seal_at),
                   'drilled ' + vaultAge(v.last_drill_at), v.cloud,
@@ -6064,12 +6174,20 @@ async function loadVaultStrip() {
     else if (v.stale_red) bits.push('unsealed changes for '
       + Math.round(v.dirty_seconds / 60) + ' min');
     el.textContent = bits.join(' · ');
-    if (v.stale_red) red(); else el.hidden = false;
+    if (v.stale_red || v.failure) { red(); setQuiet(false, el.textContent); }
+    else { el.hidden = true; setQuiet(true, bits.join(' · ')); }   // healthy: the thing protected outranks the machinery
   } catch (e) {
     el.textContent = 'Vault status UNREACHABLE — backups may not be '
       + 'running (' + e + ')';
-    red();
+    red(); setQuiet(false, el.textContent);
   }
+}
+function setQuiet(ok, detail) {
+  const dot = document.getElementById('quiet-dot'), txt = document.getElementById('quiet-text');
+  if (!dot || !txt) return;
+  dot.className = 'dot ' + (ok ? 'ok' : 'bad');
+  txt.textContent = ok ? 'all quiet' : 'attention';
+  dot.title = detail || ''; txt.title = detail || '';
 }
 
 // ---- The Keeper ----------------------------------------------------------
@@ -6192,6 +6310,8 @@ async function loadKeeper() {
   let st;
   try { st = await keeperApi('/api/keeper/status'); }
   catch (e) { el.textContent = 'Keeper status unreachable (' + e.message + ')'; return; }
+  const ks = document.getElementById('keeper-summary-state');
+  if (ks) ks.textContent = st.active ? (kEsc(st.name || 'named') + (st.unruled ? ' · ' + st.unruled + ' awaiting your ruling' : '')) : 'not yet named';
   if (!st.active) {
     el.innerHTML =
       '<p class="body">The Book has no Keeper yet. The Keeper is a resident character with '
@@ -6253,8 +6373,158 @@ async function loadKeeper() {
   }
 }
 
+// ---- Home: Continue, Needs your ruling, Rooms — from /api/home ------------
+// Zero model calls. Every card below carries a stable id and opens into a
+// resumable state; the draft card is the one thing this browser knows that
+// the record does not, and it says so.
+let HOME = null;
+function contTime(t) { if (!t) return ''; try { return new Date(t).toLocaleDateString(undefined, {month: 'short', day: 'numeric'}); } catch (e) { return ''; } }
+async function loadHome() {
+  const area = document.getElementById('continue-area');
+  try {
+    const r = await fetch('/api/home');
+    HOME = await r.json();
+  } catch (e) {
+    if (area) area.innerHTML = '<div class="empty">Could not read the record (' + escapeHtml(String(e)) + ').</div>';
+    return;
+  }
+  renderContinue(); renderRulings(); renderRooms();
+}
+function draftCard() {
+  const text = (SESSION.input || '').trim();
+  if (!text) return '';
+  const words = text.split(/\s+/).filter(Boolean).length;
+  const head = text.slice(0, 70).replace(/\s+/g, ' ');
+  return `<div class="cont" data-kind="writing" data-id="draft"><div class="kind"><i style="background:var(--good)"></i>Writing · left open on this device</div>
+    <div class="obj">“${escapeHtml(head)}${text.length > 70 ? '…' : ''}”</div>
+    <div class="what">${words} word${words === 1 ? '' : 's'} in the room, unsent. Kept in this browser only.</div>
+    <div class="resume"><a onclick="openCompose()">Back into the room</a><a onclick="openWorkspace('split')">Write beside the page</a></div></div>`;
+}
+function workRoomCard() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('wordicon_work_open'));
+    if (!saved || !saved.work_id) return '';
+    const w = (WORKS_LIST || []).find(x => x.work_id === saved.work_id);
+    if (!w) return '';
+    return `<div class="cont" data-kind="work" data-id="${escapeHtml(w.work_id)}"><div class="kind"><i style="background:var(--accent)"></i>Work Room · you were inside</div>
+      <div class="obj">${escapeHtml(w.title || w.work_id)}</div><div class="what">Passages, readings, variations and paths — as you left them.</div>
+      <div class="resume"><a onclick="enterWork('${escapeJs(w.work_id)}')">Back in</a></div></div>`;
+  } catch (e) { return ''; }
+}
+function contCard(c) {
+  const id = escapeHtml(c.id);
+  if (c.kind === 'concept') {
+    const dup = c.same_title_count > 1 ? `<span class="count-pill" title="another concept carries this title; this card opens this one by its id">1 of ${c.same_title_count} with this title</span> ` : '';
+    return `<div class="cont" data-kind="concept" data-id="${id}"><div class="kind"><i style="background:#FFE08A"></i>Concept · ${escapeHtml(c.decision || 'ruled')}${c.when ? ' · ' + contTime(c.when) : ''}</div>
+      <div class="obj">${escapeHtml(c.title)}</div><div class="what">${dup}${escapeHtml(c.reason || c.definition || '')}</div>
+      <div class="resume">${c.on_shelf ? `<a onclick="openConceptById('${escapeJs(c.id)}')">Open the concept</a>` : `<a onclick="loadPastResult('${escapeJs(c.open.id)}','','',true)">Open the ruling</a><span class="muted" style="font-size:12px">not on the shelf — the ruling lives in its run</span>`}${(c.instruments || []).map(i => `<a href="${escapeHtml(i.href)}">${escapeHtml(i.label)}</a>`).join('')}</div></div>`;
+  }
+  if (c.kind === 'room') {
+    return `<div class="cont" data-kind="room" data-id="${id}"><div class="kind"><i style="background:#D9B3FF"></i>Room${c.when ? ' · ' + contTime(c.when) : ''}</div>
+      <div class="obj">${escapeHtml(c.title)}</div><div class="what">${c.seats_filled} of ${c.seats_total} seats filled${c.empty_seats && c.empty_seats.length ? ' — empty: ' + escapeHtml(c.empty_seats.join(', ')) : ''}. In trial use — not yet relied on.</div>
+      <div class="resume"><a href="${escapeHtml(c.open.href)}">Enter the room</a><a href="${escapeHtml(c.open.href)}">Admit a source</a></div></div>`;
+  }
+  if (c.kind === 'document') {
+    return `<div class="cont" data-kind="document" data-id="${id}"><div class="kind"><i style="background:var(--accent)"></i>Document · ${c.crossings} crossing${c.crossings === 1 ? '' : 's'}${c.when ? ' · ' + contTime(c.when) : ''}</div>
+      <div class="obj">${escapeHtml(c.title)}</div><div class="what">${c.claims_unruled ? c.claims_unruled + ' claim' + (c.claims_unruled === 1 ? '' : 's') + ' with support unruled' : 'no claim is waiting on you'}</div>
+      <div class="resume"><a onclick="openPlace('library');openDoc('${escapeJs(c.representation_id)}',0)">Read it</a><a onclick="openPlace('library');openDoc('${escapeJs(c.representation_id)}',0);openWorkspace('split')">Read in split</a></div></div>`;
+  }
+  if (c.kind === 'recording') {
+    return `<div class="cont" data-kind="recording" data-id="${id}"><div class="kind"><i style="background:var(--accent)"></i>Recording · ${c.passages} passage${c.passages === 1 ? '' : 's'} marked${c.when ? ' · ' + contTime(c.when) : ''}</div>
+      <div class="obj">${escapeHtml(c.title)}</div><div class="what">${c.at_time != null ? 'Last mark at ' + escapeHtml(String(c.at_time)) + 's; ' : ''}the recording stays the source, transcripts beside it.</div>
+      <div class="resume"><a onclick="openPlace('library');openMedia('${escapeJs(c.id)}','${escapeJs(c.open.transcript_id || '')}')">Open it</a></div></div>`;
+  }
+  if (c.kind === 'keeper') {
+    return `<div class="cont" data-kind="keeper" data-id="${id}"><div class="kind"><i style="background:#ff9aa2"></i>The Keeper · ${c.closes} close${c.closes === 1 ? '' : 's'}</div>
+      <div class="obj">${escapeHtml(c.title)}</div><div class="what">${c.unruled ? c.unruled + ' entr' + (c.unruled === 1 ? 'y' : 'ies') + ' awaiting your ruling' : 'nothing awaiting you'}</div>
+      <div class="resume"><a onclick="openPlace('system');document.getElementById('keeper-card').open=true">Read it</a></div></div>`;
+  }
+  return '';
+}
+function renderContinue() {
+  const area = document.getElementById('continue-area'), more = document.getElementById('continue-more'), ex = document.getElementById('continue-excluded');
+  if (!area || !HOME) return;
+  const cards = [draftCard(), workRoomCard()].filter(Boolean).concat((HOME.continue || []).map(contCard).filter(Boolean));
+  area.innerHTML = cards.length ? `<div class="cont-grid">${cards.join('')}</div>`
+    : '<div class="empty">Nothing to continue yet. Rule on a concept, admit a source to a Room, cross a passage into a claim, or leave a draft in the room — it will be here.</div>';
+  if (more) more.textContent = cards.length ? 'the objects you were using, as themselves' : '';
+  const e = HOME.excluded || {};
+  if (ex) ex.innerHTML = e.legacy_title_only
+    ? `${e.legacy_title_only} older ruling${e.legacy_title_only === 1 ? '' : 's'} could not be tied to a single concept by anything but a title${e.ambiguous_titles && e.ambiguous_titles.length ? ' (' + e.ambiguous_titles.map(t => '“' + escapeHtml(t) + '”').join(', ') + (e.ambiguous_titles.length === 1 ? ' names more than one concept' : ' each name more than one concept') + ')' : ''} — not guessed into a card; they stay on the <a href="#concepts" onclick="openPlace('concepts');return false">Concepts</a> shelf under their titles.`
+    : '';
+}
+function ruleRow(it) {
+  const k = {claim: 'Claim · support', media_claim: 'Recording claim', clinic_disagreement: 'Room · disagreement', keeper: 'The Keeper', recovery_review: 'Recovery Review'}[it.source] || it.source;
+  let act = '';
+  if (it.source === 'claim') act = `<a onclick="openPlace('library');openDoc('${escapeJs(it.open.representation_id)}',0)">Rule on it</a>`;
+  else if (it.source === 'media_claim') act = `<a onclick="openPlace('library');openMedia('${escapeJs(it.open.id)}','${escapeJs(it.open.transcript_id || '')}')">Rule on it</a>`;
+  else if (it.source === 'clinic_disagreement') act = `<a href="${escapeHtml(it.open.href)}">They disagree · they don’t · can’t tell</a>`;
+  else if (it.source === 'keeper') act = `<a onclick="openPlace('system');document.getElementById('keeper-card').open=true">Read the entries</a>`;
+  else if (it.source === 'recovery_review') act = `<span class="muted" title="the review is a ruled step that has no page yet; the queue is the record of it">review not built yet — the queue is the record</span>`;
+  return `<div class="rule-row"><span class="k">${escapeHtml(k)}</span><span>${escapeHtml(it.label)}</span><span class="act">${act}</span></div>`;
+}
+let rulingsExpanded = false;
+function renderRulings() {
+  const area = document.getElementById('ruling-area'), more = document.getElementById('ruling-more'), fold = document.getElementById('ruling-fold');
+  if (!area || !HOME) return;
+  const p = HOME.pending || {items: [], total: 0};
+  const items = p.items || [];
+  if (!items.length) {
+    area.innerHTML = '<div class="empty" style="padding:8px 0">Nothing awaits your ruling. ' + escapeHtml(p.note || '') + '</div>';
+    if (more) more.textContent = ''; if (fold) fold.textContent = ''; return;
+  }
+  const shown = rulingsExpanded ? items : items.slice(0, 3);
+  area.innerHTML = shown.map(ruleRow).join('');
+  if (more) more.textContent = p.total + ' · only what the record can count';
+  if (fold) fold.innerHTML = (items.length > 3 ? `${shown.length} shown · <a href="#" onclick="rulingsExpanded=!rulingsExpanded;renderRulings();return false">${rulingsExpanded ? 'fewer' : (items.length - 3) + ' more'}</a> · ` : '')
+    + escapeHtml(p.note || '');
+}
+function renderRooms() {
+  const area = document.getElementById('rooms-area');
+  if (!area || !HOME) return;
+  const works = (WORKS_LIST || []).map(w => `<div class="rule-row"><span class="k">Work Room</span><span>${escapeHtml(w.title || w.work_id)}</span><span class="act"><a onclick="enterWork('${escapeJs(w.work_id)}')">Enter</a></span></div>`);
+  const rooms = (HOME.continue || []).filter(c => c.kind === 'room').map(c => `<div class="rule-row"><span class="k">Clinic room</span><span>${escapeHtml(c.title)} — ${c.seats_filled} of ${c.seats_total} seats</span><span class="act"><a href="${escapeHtml(c.open.href)}">Enter</a></span></div>`);
+  area.innerHTML = (rooms.concat(works).join('') || '<div class="empty" style="padding:8px 0">No rooms yet.</div>')
+    + `<div class="rule-row"><span class="k">The Clinic</span><span>Institutional sources by seat — policy, guidance, label, study, manufacturer — never blended.</span><span class="act"><a href="/clinic">Open the Clinic</a></span></div>`;
+}
+async function toggleLibraryOpen() {
+  const area = document.getElementById('library-area');
+  const body = document.getElementById('library-body');
+  if (body && body.style.display === 'none') toggleSection('library-body', 'library-head');
+  if (area && area.style.display === 'none') await toggleLibrary();
+}
+async function openConceptById(id) {
+  const lib = await ensureLibrary();
+  const c = (lib && lib.lexicon || []).find(x => x.concept_id === id);
+  if (!c) { pageNote('that concept id is not on the shelf — nothing was opened in its place.'); return; }
+  await toggleLibraryOpen();
+  const search = document.getElementById('library-search');
+  if (search) { search.value = c.name; renderLibrary(c.name); }
+  const row = document.getElementById('wrow_' + (c.name || '').replace(/[^a-z0-9]+/gi, '_'));
+  if (row) row.scrollIntoView({block: 'center'});
+  openPlace('concepts');
+}
+// Places: in-page destinations, so the writing room and everything else
+// keep their state; the hash makes Back return to the place you left.
+function openPlace(place, focusId) {
+  const head = document.getElementById(place);
+  if (place === 'concepts') { toggleLibraryOpen(); }
+  if (place === 'library') {
+    const body = document.getElementById('docs-body');
+    if (body && body.style.display === 'none') toggleSection('docs-body', 'docs-head');
+    if (focusId === 'med-file') { const mb = document.getElementById('media-body'); if (mb && mb.style.display === 'none') toggleSection('media-body', 'media-head'); }
+  }
+  if (head) head.scrollIntoView({block: 'start'});
+  if (focusId) { const f = document.getElementById(focusId); if (f) { try { f.focus(); } catch (e) {} } }
+  if (location.hash !== '#' + place) history.pushState(null, '', '#' + place);
+  document.querySelectorAll('header nav.places a').forEach(a => a.classList.toggle('here', a.dataset.place === place));
+}
+window.addEventListener('hashchange', () => { const p = location.hash.slice(1); if (['concepts', 'rooms', 'library', 'system'].includes(p)) openPlace(p); });
+document.querySelectorAll('header nav.places a[data-place]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); openPlace(a.dataset.place); }));
+
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('input-text').addEventListener('input', updateGestureChooser);
+  document.getElementById('input-text').addEventListener('input', () => { if (HOME) renderContinue(); });
   updateGestureChooser();
   loadVaultStrip();
   setInterval(loadVaultStrip, 60000);
@@ -6275,7 +6545,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const saved = JSON.parse(localStorage.getItem('wordicon_work_open'));
     if (saved && saved.work_id) enterWork(saved.work_id, saved.section, true);
   } catch (e) {}
+  const p0 = location.hash.slice(1);
+  if (['concepts', 'rooms', 'library', 'system'].includes(p0)) setTimeout(() => openPlace(p0), 250);
 });
 </script>
+<script src="/brand.js"></script>
 </body>
 </html>

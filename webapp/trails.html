@@ -116,7 +116,7 @@
 
 <header>
   <h1>Trails</h1>
-  <a href="/">← back to Wordicon</a>
+  <a href="/">← back to <span data-brand>Wordicon</span></a>
   <span class="sub" id="counts" style="margin-left:auto"></span>
   <button id="warp-toggle" onclick="toggleWarps()"></button>
   <a href="/map/world" title="the spatial map, where the Wayfinder lives">the spatial map →</a>
@@ -382,7 +382,7 @@ function render() {
       <div class="trail-head"><span class="trail-root" style="font-size:15px;color:var(--bad)">Runs built on a contaminated source</span>
         <span class="trail-meta">${DATA.contaminated_runs.length} run(s)</span></div>
       <p class="note" style="margin-top:0">These ran before the source boundary was fixed. Their input
-      included Wordicon's own instructions, so their line numbers are shifted and some of their concepts
+      included <span data-brand>Wordicon</span>'s own instructions, so their line numbers are shifted and some of their concepts
       may have been extracted from text you never wrote. Nothing has been deleted — a bad run is still a
       record — but they should not be read as findings about your source.</p>
       ${DATA.contaminated_runs.slice(0, 10).map(r => `<div class="loose-row">
@@ -405,12 +405,13 @@ function render() {
      records something <em>you</em> did rather than something a run did: while one thing was open, you reached
      back and opened another. A dotted pipe is not an arrow, and the difference is the point — an arrow means
      one run produced another, and a warp means only that one was on screen when you opened the next.
-     Wordicon cannot see a reason and will never write one; the reading under a pipe is there because you typed
+     <span data-brand>Wordicon</span> cannot see a reason and will never write one; the reading under a pipe is there because you typed
      it. Jumps are recorded only after ${DATA.warp_min_dwell_s || 20} seconds on a run, so clicking down the
      archive is not logged as a leap of thought. That threshold is a guess, not a measurement.</p>`;
 }
 
 load().then(restoreTrailsView);
 </script>
+<script src="/brand.js"></script>
 </body>
 </html>
