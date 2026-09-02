@@ -18,7 +18,10 @@ redirected to the scratch, the model gateway poisoned, the API key
 removed, outbound HTTP pointed at a dead proxy — then runs `quiet.js`
 (block 104: browsing with encounter recording off; `run.sh` hashes the
 scratch store before and after it and fails if a byte changed),
-`home.js`, `anatomy.js` and `encounter.js` (the switch turned on and off
+`home.js`, `anatomy.js`, `chooser.js` (block 105: the cats sentence and
+an invented name read by the destination chooser, nothing run by typing,
+a question kept verbatim, Run it reached only through Develop the idea)
+and `encounter.js` (the switch turned on and off
 from About & proof with each flip recorded, one `owner_opened` row by
 id, and an unresolved Recovery Review case found on Home and reopened).
 Every check prints one line. A failing check saves a

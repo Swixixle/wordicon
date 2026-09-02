@@ -400,6 +400,13 @@
   .rule-row .act a { color: var(--accent); text-decoration: none; cursor: pointer; }
   .doors { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-top: 10px; }
   .doors a { display: block; background: var(--panel-2); border: 1px solid var(--border); border-radius: 9px; padding: 8px 11px; font-size: 13px; color: var(--accent); text-decoration: none; cursor: pointer; }
+  .dest { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 9px; padding: 7px 11px; font-size: 13px; cursor: pointer; text-align: left; min-width: 150px; flex: 1 1 150px; font-family: inherit; }
+  .dest .dest-sub { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .dest.suggested { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .dest.unbuilt { opacity: .62; cursor: not-allowed; border-style: dashed; }
+  .dest.unbuilt .dest-status { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-top: 3px; }
+  .dest.chosen { background: var(--accent); color: #0b0f14; }
+  .dest.chosen .dest-sub { color: #0b0f14; opacity: .8; }
   .quiet-line { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; margin: -6px 0 16px; padding: 0 16px; }
   .quiet-line[hidden] { display: none; }
   .quiet-line .k { text-transform: uppercase; letter-spacing: .08em; font-size: 10.5px; white-space: nowrap; }
@@ -458,6 +465,7 @@
   </div>
   <div id="ruling-saved" class="quiet-line" hidden></div>
   <div id="ruling-unresolved" class="quiet-line" hidden></div>
+  <div id="ruling-questions" class="quiet-line" hidden></div>
 
   <!-- BRING SOMETHING IN: the same intake as before, one band down. The
        phrase box below is the ORIGINAL element — same id, same wiring, the
@@ -482,6 +490,20 @@
       <button id="clear-input-btn" onclick="clearInput()" title="Clear the input"
         style="display:none;position:absolute;top:6px;right:6px;background:var(--panel-2);color:var(--muted);border:1px solid var(--border);border-radius:6px;font-size:12px;padding:3px 9px;cursor:pointer">✕ clear</button>
     </div>
+    <!-- The destination chooser (block 105; items 42, 50, 53): once words
+         are in, the record asks where they go. A mechanical reading of
+         their shape highlights one destination; nothing runs because
+         words were typed — the owner's click on a destination is the only
+         thing that summons a lane. Unbuilt destinations are shown as
+         unbuilt, never as buttons that quietly do something else. -->
+    <div id="destination-row" hidden>
+      <div class="body muted" id="destination-reading" style="font-size:12px;margin:10px 0 6px"></div>
+      <div id="destination-chips" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div id="destination-note" class="foot" style="margin-top:6px"></div>
+    </div>
+    <!-- Develop the idea: the original Run it / Go deep and the gesture
+         chooser, unchanged, shown only after that destination is chosen. -->
+    <div id="develop-controls" hidden>
     <button class="go-btn" id="go-btn" onclick="runOperation(false)">Run it</button>
     <button class="go-btn" id="deep-btn" onclick="runOperation(true)"
       style="background:var(--panel-2);color:var(--text);border:1px solid var(--border)">Go deep — full workup</button>
@@ -504,6 +526,7 @@
           style="width:68%;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:14px">
         <button class="go-btn" style="width:auto;padding:8px 14px" onclick="gestureDefineRun()">Run with your meaning</button>
       </div>
+    </div>
     </div>
     <div class="doors">
       <a onclick="openPlace('library', 'doc-file');return false" href="#library">📄 Add a document — EPUB, saved page, text, PDF, DOCX</a>
@@ -588,6 +611,19 @@
     <div id="doc-search-results"></div>
     <div id="doc-list"><div class="empty">Nothing here yet — add an EPUB, a saved page, a text file, a PDF, or a DOCX.</div></div>
     <div id="doc-reader" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-label collapse-head" id="questions-head" style="margin-top:0"
+         onclick="toggleSection('questions-body','questions-head')">
+      <span class="caret">▶</span>Open questions <span class="count-pill" id="questions-count"></span>
+    </div>
+    <div id="questions-body" style="display:none">
+    <p class="body muted" style="font-size:13.5px">Questions you chose to keep instead of sending anywhere — verbatim,
+    with how each arrived. Nothing reads them into a lane; when the research lane exists they will still be here.
+    Withdrawing one appends a status; the words are never rewritten.</p>
+    <div id="questions-list"><div class="empty">Loading…</div></div>
     </div>
   </div>
 
@@ -702,11 +738,17 @@
       receipt like any other run. Encounter recording is off until you turn it on in this panel; while off nothing is
       written, and the flip itself is recorded. A recovery case ruled “not enough survives” stays findable and can be
       reopened by a later ruling that cites it.</p>
+      <p class="body"><strong>Words go where you send them.</strong> Once something is in the box, a row of
+      destinations appears — Research this question, Search my record, Develop the idea, Start a Room, Write
+      from this, Save as an open question, and for a name with a date, Study the name and the rest. The record reads
+      the words' shape and highlights one; it never chooses. Nothing runs until you choose, and a destination that
+      is not built yet says so instead of doing something else. How the words arrived — typed, attached, later
+      spoken — travels beside them and changes nothing about where they may go.</p>
       <p class="body"><strong>The first minute:</strong> type into the box below — a feeling you don't
-      have a word for, a word you're curious about, a handful of loose words, or a whole passage — and
-      press <em>Run it</em>. Cards come back; open them, argue with them, rule on them or don't. Or
-      skip all of that, press <strong>⤢ full page</strong>, and just write — everything else will
-      still be here.</p>
+      have a word for, a word you're curious about, a handful of loose words, or a whole passage — choose
+      <em>Develop the idea</em>, and press <em>Run it</em>. Cards come back; open them, argue with them, rule on
+      them or don't. Or skip all of that, press <strong>⤢ full page</strong>, and just write — everything else
+      will still be here.</p>
       <p class="body">The whole tool is one loop, and every part below is a station on it:
       <strong>encounter</strong> something (Documents), <strong>examine</strong> it (runs and the
       Bench), <strong>keep</strong> what survives (the Library), <strong>connect</strong> it (the
@@ -1554,6 +1596,7 @@ function clearInput() {
   const box = document.getElementById('input-text');
   box.value = '';
   toggleClearBtn();
+  scheduleDestinations();
   box.focus();
 }
 
@@ -1603,6 +1646,91 @@ function gestureDefineRun() {
   submitRun('auto', combined);
 }
 
+// ---- the destination chooser (block 105) ----------------------------
+// The words' shape is read on the server, mechanically (no model), and
+// one destination is highlighted; nothing runs until a destination is
+// chosen by a click. Develop the idea reveals the original Run it / Go
+// deep controls; the other built destinations open their own lane with
+// the words; unbuilt ones are shown as unbuilt and do nothing.
+let DEST = {text: '', provenance: 'typed', data: null, chosen: '', timer: null};
+function intakeWords() {
+  const typed = document.getElementById('input-text').value.trim();
+  const fromFile = (ATTACHED && ATTACHED.representation && ATTACHED.representation.text) || '';
+  return {text: typed || fromFile, provenance: typed ? 'typed' : (fromFile ? 'attached' : 'typed')};
+}
+function scheduleDestinations() {
+  clearTimeout(DEST.timer);
+  DEST.timer = setTimeout(refreshDestinations, 250);
+}
+async function refreshDestinations() {
+  const row = document.getElementById('destination-row'), dev = document.getElementById('develop-controls');
+  if (!row || !dev) return;
+  const w = intakeWords();
+  if (!w.text) { row.hidden = true; dev.hidden = true; DEST = {...DEST, text: '', data: null, chosen: ''}; return; }
+  if (w.text === DEST.text && w.provenance === DEST.provenance && DEST.data) { renderDestinations(); return; }
+  DEST.text = w.text; DEST.provenance = w.provenance; DEST.chosen = ''; dev.hidden = true;
+  try {
+    const r = await fetch('/api/destinations', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text: w.text, provenance: w.provenance})});
+    const d = await r.json();
+    if (d.error) { row.hidden = true; return; }
+    if (w.text !== DEST.text) return;   // the words changed while the reading was in flight
+    DEST.data = d;
+  } catch (e) { row.hidden = true; return; }
+  renderDestinations();
+}
+function renderDestinations() {
+  const row = document.getElementById('destination-row'), d = DEST.data;
+  if (!row || !d) return;
+  row.hidden = false;
+  const reading = {question: 'a question', identity: 'a name with a date and a place', word: 'a single word', phrase: 'a short phrase', passage: 'a passage', statement: 'a statement'}[d.shape] || d.shape;
+  document.getElementById('destination-reading').innerHTML = `Reads as <strong>${escapeHtml(reading)}</strong> (${escapeHtml((d.signals || []).join(', '))}) — arrived <em>${escapeHtml(d.provenance)}</em>. Where should it go? <span class="muted">Nothing runs until you choose.</span>`;
+  document.getElementById('destination-chips').innerHTML = (d.destinations || []).map(x => {
+    const cls = 'dest' + (x.suggested ? ' suggested' : '') + (x.built ? '' : ' unbuilt') + (DEST.chosen === x.id ? ' chosen' : '');
+    const title = x.built ? (x.suggested ? 'highlighted from the words\' shape — still your choice' : '') : (x.why_unbuilt || 'not built yet');
+    return `<button class="${cls}" data-dest="${escapeHtml(x.id)}" ${x.built ? '' : 'disabled aria-disabled="true"'} title="${escapeHtml(title)}" onclick="chooseDestination('${escapeJs(x.id)}')">${escapeHtml(x.label)}${x.suggested ? ' <span class="muted" style="font-size:10.5px">· suggested</span>' : ''}<span class="dest-sub">${escapeHtml(x.sub || '')}</span>${x.built ? '' : '<span class="dest-status">not built — ' + escapeHtml(x.why_unbuilt || '') + '</span>'}</button>`;
+  }).join('');
+  document.getElementById('destination-note').textContent = d.suggested_built ? '' : 'The highlighted destination is not built yet; the others are real doors.';
+}
+async function chooseDestination(id) {
+  const d = DEST.data; if (!d) return;
+  const x = (d.destinations || []).find(y => y.id === id);
+  if (!x || !x.built) return;   // an unbuilt destination is a label, not a door
+  DEST.chosen = id; renderDestinations();
+  const dev = document.getElementById('develop-controls');
+  dev.hidden = id !== 'develop';
+  if (id === 'develop') { updateGestureChooser(); return; }
+  if (id === 'write') { openCompose(); return; }
+  if (id === 'search') {
+    await ensureLibrary(); await toggleLibraryOpen();
+    const search = document.getElementById('library-search');
+    if (search) { search.value = DEST.text; renderLibrary(DEST.text); }
+    const ds = document.getElementById('doc-search');
+    if (ds) { ds.value = DEST.text; docSearch(); }
+    openPlace('concepts');
+    pageNote('searched your record for these exact words — the shelf and the library; nothing on the web.');
+    return;
+  }
+  if (id === 'room') {
+    if (!confirm('Start a Clinic room with these words as its subject? Nothing is admitted to it by starting it.')) { DEST.chosen = ''; renderDestinations(); return; }
+    try {
+      const r = await fetch('/api/clinic/rooms', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({title: DEST.text.slice(0, 200)})});
+      const rd = await r.json();
+      if (rd.error || !(rd.room_id || (rd.room && rd.room.room_id))) { pageNote('the room was not started: ' + (rd.error || 'no room id came back')); return; }
+      location.href = '/clinic?room=' + encodeURIComponent(rd.room_id || rd.room.room_id);
+    } catch (e) { pageNote('could not reach the server to start a room.'); }
+    return;
+  }
+  if (id === 'question') {
+    try {
+      const r = await fetch('/api/questions', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text: DEST.text, provenance: DEST.provenance, shape: d.shape})});
+      const qd = await r.json();
+      if (qd.error) { pageNote('the question was not saved: ' + qd.error); return; }
+      pageNote('kept as an open question, verbatim — in the Library under Open questions. Nothing ran.');
+      HOME = null; loadHome(); loadOpenQuestions();
+    } catch (e) { pageNote('could not reach the server to keep the question.'); }
+  }
+}
+
 async function runOperation(deep, explicitMode) {
   const typed = document.getElementById('input-text').value.trim();
   // An attached file's read text becomes the input when you haven't typed
@@ -1632,7 +1760,11 @@ async function submitRun(submitMode, text, fromArtifact, gesture) {
       body: JSON.stringify({mode: submitMode, input_text: text,
                             gesture: gesture || undefined,
                             from_artifact: fromArtifact || '',
-                            provenance: fromArtifact ? 'attached' : 'typed'}),
+                            provenance: fromArtifact ? 'attached' : 'typed',
+                            // block 105: the door chosen and what the chooser had highlighted
+                            destination: DEST.chosen || undefined,
+                            shape: (DEST.data && DEST.data.shape) || undefined,
+                            suggested: (DEST.data && DEST.data.suggested) || undefined}),
     });
     const d = await r.json();
     reset();
@@ -4397,6 +4529,7 @@ function restoreInput(text) {
   box.value = text;
   rememberInput();
   toggleClearBtn();
+  scheduleDestinations();
   box.scrollIntoView({behavior: 'smooth', block: 'center'});
   box.focus();
 }
@@ -5086,6 +5219,7 @@ async function uploadFile(file) {
   }
   ATTACHED = d;
   renderSourceCard();
+  scheduleDestinations();   // block 105: an attached file's text is words brought in — the chooser asks where they go
 }
 
 function renderSourceCard() {
@@ -5113,7 +5247,7 @@ function renderSourceCard() {
           still on disk as version 1.</p>` : ''}
       </details>` : ''}
     <button class="go-btn" style="background:none;border:1px solid var(--border);color:var(--muted);width:auto;padding:4px 10px;font-size:12px;margin-top:8px"
-            onclick="ATTACHED=null;renderSourceCard()">remove</button>
+            onclick="ATTACHED=null;renderSourceCard();scheduleDestinations()">remove</button>
   </div>`;
 }
 
@@ -6589,6 +6723,7 @@ function renderRulings() {
   const items = p.items || [];
   renderSaved(p.saved || []);
   renderUnresolved(p.unresolved || null);
+  renderOpenQuestions(p.open_questions || null);
   if (!items.length) {
     area.innerHTML = '<div class="empty" style="padding:8px 0">Nothing awaits your ruling. ' + escapeHtml(p.note || '') + '</div>';
     if (more) more.textContent = ''; if (fold) fold.textContent = ''; return;
@@ -6627,6 +6762,35 @@ function renderUnresolved(u) {
   line.hidden = false;
   line.innerHTML = '<span class="k">Unresolved</span> ' +
     `<span title="${escapeHtml((u.titles || []).join(' · '))}">${u.count} case${u.count === 1 ? '' : 's'} ruled “not enough survives” — reopenable on the <a href="${escapeHtml(u.href || '/recovery')}">Recovery Review</a></span>`;
+}
+// Open questions (block 105): what the owner chose to keep as a question,
+// verbatim. Not due, not saved-for-later: counted, named on hover, with
+// the Library's door; never in the ruling count.
+function renderOpenQuestions(q) {
+  const line = document.getElementById('ruling-questions');
+  if (!line) return;
+  if (!q || !q.count) { line.hidden = true; line.textContent = ''; return; }
+  line.hidden = false;
+  line.innerHTML = '<span class="k">Open questions</span> ' +
+    `<span title="${escapeHtml((q.titles || []).join(' · '))}">${q.count} kept verbatim — <a href="#library" onclick="openPlace('library','questions');return false">in the Library</a></span>`;
+}
+async function loadOpenQuestions() {
+  const list = document.getElementById('questions-list'), pill = document.getElementById('questions-count');
+  if (!list) return;
+  try {
+    const d = await (await fetch('/api/questions')).json();
+    const open = d.open || [];
+    if (pill) pill.textContent = open.length ? String(open.length) : '';
+    list.innerHTML = open.length ? open.slice().reverse().map(q => `<div class="rule-row"><span class="k">${escapeHtml(q.provenance || '')}</span><span>${escapeHtml(q.text)}<span class="muted" style="font-size:11.5px"> — ${q.at ? new Date(q.at).toLocaleString() : ''}</span></span><span class="act"><a onclick="withdrawQuestion('${escapeJs(q.question_id)}')">Withdraw</a></span></div>`).join('')
+      : '<div class="empty" style="padding:8px 0">No open questions. Words you bring in can be kept here, verbatim, by choosing “Save as an open question”.</div>';
+  } catch (e) { list.innerHTML = '<div class="empty">Could not read the open questions.</div>'; }
+}
+async function withdrawQuestion(id) {
+  try {
+    const d = await (await fetch('/api/questions/status', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question_id: id, status: 'withdrawn'})})).json();
+    if (d.error) { pageNote('not withdrawn: ' + d.error); return; }
+    loadOpenQuestions(); HOME = null; loadHome();
+  } catch (e) { pageNote('could not reach the server.'); }
 }
 async function toggleLibraryOpen() {
   const area = document.getElementById('library-area');
@@ -6678,6 +6842,7 @@ function openPlace(place, focusId) {
     const body = document.getElementById('docs-body');
     if (body && body.style.display === 'none') toggleSection('docs-body', 'docs-head');
     if (focusId === 'med-file') { const mb = document.getElementById('media-body'); if (mb && mb.style.display === 'none') toggleSection('media-body', 'media-head'); }
+    if (focusId === 'questions') { const qb = document.getElementById('questions-body'); if (qb && qb.style.display === 'none') toggleSection('questions-body', 'questions-head'); loadOpenQuestions(); }
   }
   if (head) head.scrollIntoView({block: 'start'});
   if (focusId) { const f = document.getElementById(focusId); if (f) { try { f.focus(); } catch (e) {} } }
@@ -6690,6 +6855,8 @@ document.querySelectorAll('header nav.places a[data-place]').forEach(a => a.addE
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('input-text').addEventListener('input', updateGestureChooser);
   document.getElementById('input-text').addEventListener('input', () => { if (HOME) renderContinue(); });
+  document.getElementById('input-text').addEventListener('input', scheduleDestinations);   // block 105: the chooser reads, never runs
+  loadOpenQuestions();
   updateGestureChooser();
   loadVaultStrip();
   setInterval(loadVaultStrip, 60000);

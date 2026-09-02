@@ -1,5 +1,24 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.3.5 — the destination chooser (the intent layer, fixed once)
+
+Block 105 (`docs/adr-nikodemus.md`, amendment). Words brought into Home
+now go where the owner sends them: a mechanical, zero-model reading of
+their shape highlights one destination and the owner's click summons a
+lane — Research this question, Search my record, Develop the idea,
+Start a Room, Write from this, Save as an open question, and for a name
+with a date, Study the name / Create a private portrait / Save
+owner-declared facts. Nothing runs until the owner chooses; Run it /
+Go deep and the gesture chooser are unchanged but appear only under
+Develop the idea; unbuilt destinations are shown as unbuilt and do
+nothing. Open questions are a new small object (`open_questions.jsonl`,
+verbatim, with provenance; withdraw appends a status), in the Library
+with a quiet count on Home. `spoken` joins the input provenance
+vocabulary ahead of the microphone; typed and spoken versions of one
+sentence receive the same destinations by construction. The job route
+records the destination chosen and the chooser's reading on the input
+row. Pinned by the cats sentence and an invented name with birth data.
+
 ## v1.3.4 — the record primitives (measuring instruments before ordinary use)
 
 Block 104, held for inspection (`docs/adr-record-primitives.md`).

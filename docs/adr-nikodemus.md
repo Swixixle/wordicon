@@ -177,3 +177,60 @@ construction. The browser journey renders all four shelf states and
 opens the bridged entry by its id. `scripts/home_smoke.py` run against
 the real store is the acceptance: the three accepted concepts stop
 saying they are absent; the sibling stays unresolved.
+
+## Amendment (block 105), 2026-09-02: the destination chooser — the intent layer, fixed once
+
+Ruled by the reviewer's execution order (backlog items 42, 50, 53) and
+pinned by the two failures that forced it. Home's intake band read
+"press Run it" and ran whatever was typed through a deterministic
+router into a concept-building lane: the owner's question about the
+historical superstitions involving cats was forged into concept
+readings of the wish to know, and his own name with his birth data
+would have been forged the same way. Both were routing failures of one
+kind — the record had no layer for *what he wanted done* — so one
+layer fixes both, generally, and the router is not patched for names.
+
+**What changed.** Once words are in the box (typed, or an attached
+file's text), a row of destinations appears under it. The server reads
+the words' shape mechanically — a question, a name beside a date and a
+place, a single word, a short phrase, a passage, a statement — with no
+model and no write, and returns the destinations that shape offers with
+exactly one highlighted: Research this question, Search my record,
+Develop the idea, Start a Room, Write from this, Save as an open
+question; for a name with a date, Study the name, Create a private
+portrait, Save owner-declared facts, and the rest. The highlight is a
+reading, said as such with its signals; the law of the band is that
+nothing runs until the owner chooses — the original Run it / Go deep controls and the gesture
+chooser are unchanged but appear only after *Develop the idea* is
+chosen, and Develop is offered for every shape so concept analysis
+stays a deliberate choice, highlighted only where it is the plain
+reading. A destination that does not exist yet — Research, Study the
+name, the Portrait, the Owner Card — is shown as **unbuilt**, disabled,
+with the reason, never as a button that quietly does something else.
+The built destinations open their own lanes with the words: exact-text
+search of the shelf and the library, a Clinic room with the words as
+its subject (confirmed first), the writing room with the words as
+words, and a new small object — an **open question**, kept verbatim
+with how it arrived, in the Library under its own card, counted on
+Home in a quiet line that is not a ruling due; withdrawing one appends
+a status and rewrites nothing.
+
+**Provenance.** `spoken` joins the input vocabulary before any
+microphone exists, so the chooser is held from the first day to the
+reviewer's law: the same sentence typed or spoken receives the same
+destinations — provenance travels beside the words and never branches.
+The job route records the door chosen and what the chooser had
+highlighted on the input row, so the record can later count how often
+its reading matched the owner's choice; it never infers either.
+
+**Proofs (block 105).** The cats sentence reads as a question with
+Research highlighted and unbuilt and Develop offered but not
+highlighted; an invented name with a date and a place reads as identity
+with the three studies unbuilt; typed and spoken give identical rows;
+the reading route writes nothing and refuses the unpaired; the chooser's
+page code calls nothing that runs; an open question is kept verbatim,
+listed, counted, withdrawn by an appended status, and never due; the
+intake's order is box → destinations → Develop's controls → doors; the
+browser journey types the cats sentence, sees the row, saves it as an
+open question without anything running, and reaches Run it only
+through Develop.

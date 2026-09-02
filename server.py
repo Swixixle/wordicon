@@ -1122,6 +1122,49 @@ def api_recovery_rule():
 
 
 # ---------------------------------------------------------------------------
+# The destination chooser (block 105; items 42, 50, 53). Zero-model, reads
+# nothing but the words it is handed, writes nothing: the shape of the
+# words and the destinations it offers, with one highlighted. Nothing runs
+# from here — the owner's choice on the page summons a lane's own route.
+
+@app.route("/api/destinations", methods=["POST"])
+def api_destinations():
+    data = request.get_json(force=True) or {}
+    text = str(data.get("text") or "")
+    if not text.strip():
+        return jsonify({"error": "no words to read"}), 400
+    return jsonify(cli.suggest_destinations(text[:20000], provenance=str(data.get("provenance") or "typed")))
+
+
+@app.route("/api/questions", methods=["GET"])
+def api_questions():
+    return jsonify({"open": cli.load_open_questions(), "all": cli.load_open_questions(all_statuses=True),
+                    "note": "kept verbatim, with how each arrived; nothing reads them into a lane"})
+
+
+@app.route("/api/questions", methods=["POST"])
+def api_question_save():
+    data = request.get_json(force=True) or {}
+    try:
+        row = cli.record_open_question(str(data.get("text") or ""), provenance=str(data.get("provenance") or "typed"),
+                                       shape=str(data.get("shape") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"saved": True, "question": row})
+
+
+@app.route("/api/questions/status", methods=["POST"])
+def api_question_status():
+    data = request.get_json(force=True) or {}
+    try:
+        out = cli.set_open_question_status(str(data.get("question_id") or ""), str(data.get("status") or ""),
+                                           note=str(data.get("note") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(out)
+
+
+# ---------------------------------------------------------------------------
 # Encounters, behind the owner's switch (block 104). Off by default; while
 # off, these routes write nothing — a refused encounter is a 409 with the
 # reason, not a row. The switch's own flips are recorded. Ids and event
@@ -2090,9 +2133,13 @@ def api_create_job():
     # job that grew from a stored object (a door, a candidate, a passage)
     # is a door; anything else is unstated, never guessed.
     _prov = str(data.get("provenance") or "")
-    if _prov not in ("typed", "attached", "door"):
+    if _prov not in ("typed", "attached", "spoken", "door"):   # block 105: spoken joins the vocabulary before the microphone
         _prov = "door" if (parent_door_id or via or parent_trace_id) else ("attached" if data.get("from_artifact") else "unstated")
-    cli.record_input(job_id, mode, input_text, parent_trace_id or "", provenance=_prov)
+    # block 105: the door the owner chose and what the chooser had
+    # highlighted ride on the input row — recorded, never inferred
+    cli.record_input(job_id, mode, input_text, parent_trace_id or "", provenance=_prov,
+                     destination=str(data.get("destination") or "")[:32], shape=str(data.get("shape") or "")[:16],
+                     suggested=str(data.get("suggested") or "")[:32])
     thread = threading.Thread(target=_run_job, args=(job_id, mode, input_text), daemon=True)
     thread.start()
     return jsonify({"job_id": job_id, "status": "queued"})
@@ -3192,9 +3239,15 @@ def _home_pending() -> dict:
     unresolved_rows = recovery.unresolved_cases()
     unresolved = {"count": len(unresolved_rows), "href": "/recovery",
                   "titles": [r.get("title", "") for r in unresolved_rows][:12]}
+    # Open questions (block 105): what the owner chose to keep as a
+    # question, verbatim — not due, not saved-for-later, kept in the
+    # Library with its own door; counted here, named on hover.
+    oq = cli.load_open_questions()
+    open_questions = {"count": len(oq), "place": "library", "focus": "questions",
+                      "titles": [(r.get("text") or "")[:80] for r in oq][:12]}
     return {"total": len(items), "counts": counts, "items": items[:12],
             "sources": ["claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"],
-            "saved": saved, "saved_sources": [], "unresolved": unresolved,
+            "saved": saved, "saved_sources": [], "unresolved": unresolved, "open_questions": open_questions,
             "note": "Only what the record can count. Decisions that live in the backlog are not here."}
 
 

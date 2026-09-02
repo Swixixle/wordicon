@@ -1787,11 +1787,214 @@ def load_encounters() -> "list[dict]":
     return out
 
 
-INPUT_PROVENANCE = ("typed", "attached", "door", "connector", "unstated")
+# block 105: "spoken" joins the vocabulary before any microphone exists,
+# so the chooser can be held to "typed and spoken versions of one sentence
+# receive the same destinations" from the first day the value can arrive.
+INPUT_PROVENANCE = ("typed", "attached", "spoken", "door", "connector", "unstated")
+
+
+# ---- the destination chooser (block 105; backlog items 42, 50, 53) ------
+#
+# The intent layer, fixed once and generally: after the owner has brought
+# words in, the record asks where they go — nothing runs because words
+# were typed. A mechanical reading of the words' SHAPE highlights one
+# destination; the owner's click is the only thing that summons any
+# machinery. Destinations that do not exist yet are shown as what they
+# are — unbuilt — never as buttons that quietly do something else.
+# No model reads the words here, and nothing below writes.
+
+DESTINATIONS = (
+    {"id": "research", "label": "Research this question", "built": False,
+     "sub": "sources found and read, each claim placed and cited",
+     "why_unbuilt": "the research record is not built yet — save the question and it waits, findable, in the Library"},
+    {"id": "search", "label": "Search my record", "built": True,
+     "sub": "exact text, in the shelf and the library — never the web"},
+    {"id": "develop", "label": "Develop the idea", "built": True,
+     "sub": "concept readings, a workup, or a word taken apart — Run it or Go deep, with the routing chips"},
+    {"id": "room", "label": "Start a Room", "built": True,
+     "sub": "a Clinic room with these words as its subject"},
+    {"id": "write", "label": "Write from this", "built": True,
+     "sub": "the words as words, in the writing room — nothing interprets them"},
+    {"id": "question", "label": "Save as an open question", "built": True,
+     "sub": "kept verbatim, with how it arrived, until you come back to it"},
+    {"id": "name_study", "label": "Study the name", "built": False,
+     "sub": "structure, sourced etymology per part, scripts, construction",
+     "why_unbuilt": "the Name Study is the next block after the chooser"},
+    {"id": "portrait", "label": "Create a private portrait", "built": False,
+     "sub": "positions computed, conventions declared, readings labeled",
+     "why_unbuilt": "the Portrait is a separate opt-in object, after the Name Study"},
+    {"id": "owner_facts", "label": "Save owner-declared facts", "built": False,
+     "sub": "an Owner Card you can edit and erase",
+     "why_unbuilt": "the Owner Card needs its privacy contract before a line of it exists"},
+)
+DESTINATION_IDS = tuple(d["id"] for d in DESTINATIONS)
+SHAPES = ("question", "identity", "word", "phrase", "passage", "statement")
+# which destinations are offered for which shape (item 50's two lists,
+# plus report 42's; Develop is always offered — the owner may still
+# choose concept analysis deliberately — but is highlighted only where
+# it is the plain reading of the words)
+_SHAPE_OFFERS = {
+    "question": ("research", "search", "develop", "room", "write", "question"),
+    "identity": ("name_study", "portrait", "owner_facts", "write", "search", "develop"),
+    "word": ("develop", "search", "write", "question"),
+    "phrase": ("develop", "search", "room", "write", "question"),
+    "passage": ("develop", "write", "room", "search"),
+    "statement": ("develop", "search", "room", "write", "question"),
+}
+_SHAPE_SUGGESTS = {"question": "research", "identity": "name_study", "word": "develop",
+                   "phrase": "develop", "passage": "develop", "statement": "develop"}
+_QUESTION_OPENERS = re.compile(
+    r"^(who|what|when|where|why|how|which|whom|whose|is|are|was|were|do|does|did|can|could|would|should|"
+    r"will|shall|may|might|have|has|had)\b|^(i would like to know|i'd like to know|i want to know|i wonder|"
+    r"tell me about|explain|what's|whats|is there|are there|any idea|does anyone|remind me)", re.I)
+_DATE_RX = re.compile(
+    r"\b(\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4}|"
+    r"(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+\d{4}|"
+    r"\d{1,2}\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4})\b", re.I)
+_TIME_RX = re.compile(r"\b(\d{1,2}(:\d{2})?\s*(a\.?m\.?|p\.?m\.?)|\d{1,2}:\d{2})\b", re.I)
+_PLACE_RX = re.compile(r"\b(in|at|from)\s+[A-Z][a-zA-Z.'-]+(,?\s+[A-Z][a-zA-Z.'-]+){0,3}")
+_BORN_RX = re.compile(r"\b(born|birth|b\.)\b", re.I)
+
+
+def input_shape(text: str) -> dict:
+    """The words' shape, read mechanically — no model, no store. Returns
+    {shape, signals}. `identity` is a person's name beside a date and a
+    place or time (the owner's own name-and-birth input, item 50);
+    `question` is an interrogative opening, a wish to know, or a trailing
+    question mark; the rest follow the router's word counts. The signals
+    say WHY, so the page can show the reading and the owner can disagree."""
+    t = (text or "").strip()
+    words = re.findall(r"[A-Za-z']+", t)
+    n_words = len(words)
+    segs = [x.strip() for x in re.split(r"[,\n;.]+", t) if x.strip()]
+    n_sentences = len([x for x in re.split(r"[.!?]+", t) if x.strip()])
+    signals = []
+    first_line = t.split("\n", 1)[0].strip()
+    has_date = bool(_DATE_RX.search(t))
+    has_time = bool(_TIME_RX.search(t))
+    has_place = bool(_PLACE_RX.search(t))
+    caps_lead = re.match(r"^([A-Z][a-zA-Z'.-]+)(\s+[A-Z][a-zA-Z'.-]+){1,4}", first_line)
+    if has_date and (has_place or has_time or _BORN_RX.search(t)) and caps_lead and n_words <= 40:
+        signals += ["a capitalized name at the start", "a date"]
+        if has_time:
+            signals.append("a clock time")
+        if has_place:
+            signals.append("a place after in / at / from")
+        return {"shape": "identity", "signals": signals}
+    if t.endswith("?") or _QUESTION_OPENERS.search(t):
+        signals.append("ends with a question mark" if t.endswith("?") else "opens like a question or a wish to know")
+        if n_words <= 60 and n_sentences <= 2:
+            return {"shape": "question", "signals": signals}
+    if n_words >= 60 or n_sentences >= 3:
+        signals.append(f"{n_words} words, {n_sentences} sentence(s)")
+        return {"shape": "passage", "signals": signals}
+    if n_words == 1 and len(segs) == 1:
+        signals.append("a single word")
+        return {"shape": "word", "signals": signals}
+    if n_words <= 7 and "\n" not in t and not re.search(r"[.!?]$", t):
+        signals.append(f"{n_words} words, no sentence end")
+        return {"shape": "phrase", "signals": signals}
+    signals.append(f"{n_words} words, {n_sentences} sentence(s)")
+    return {"shape": "statement", "signals": signals}
+
+
+def suggest_destinations(text: str, provenance: str = "typed") -> dict:
+    """What the chooser shows: every destination the shape offers, each
+    saying whether it is built, with exactly one highlighted. Provenance
+    is carried beside the words and never branches: the same sentence
+    typed or spoken receives the same destinations, by construction."""
+    if provenance not in INPUT_PROVENANCE:
+        provenance = "unstated"
+    sh = input_shape(text)
+    offered = _SHAPE_OFFERS[sh["shape"]]
+    suggested = _SHAPE_SUGGESTS[sh["shape"]]
+    by_id = {d["id"]: d for d in DESTINATIONS}
+    rows = []
+    for did in offered:
+        d = dict(by_id[did])
+        d["suggested"] = did == suggested
+        rows.append(d)
+    return {"shape": sh["shape"], "signals": sh["signals"], "suggested": suggested,
+            "suggested_built": bool(by_id[suggested]["built"]), "provenance": provenance,
+            "destinations": rows,
+            "note": "the highlight is a reading of the words' shape, not a choice — nothing runs until you choose"}
+
+
+# ---- open questions (block 105): a question kept verbatim, until later ----
+
+OPEN_QUESTIONS_LOG = LOCAL_STATE / "open_questions.jsonl"
+OPEN_QUESTION_STATUSES = ("open", "withdrawn", "answered")
+
+
+def _question_rows() -> "list[dict]":
+    if not OPEN_QUESTIONS_LOG.exists():
+        return []
+    out = []
+    for line in OPEN_QUESTIONS_LOG.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and row.get("question_id"):
+            out.append(row)
+    return out
+
+
+def record_open_question(text: str, provenance: str = "typed", shape: str = "") -> dict:
+    """Keep a question exactly as it arrived. Append-only; nothing reads it
+    back into any lane — it waits."""
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("an open question needs the words")
+    if provenance not in INPUT_PROVENANCE:
+        provenance = "unstated"
+    row = {"object_type": "open_question", "question_id": "q_" + uuid.uuid4().hex[:12],
+           "text": text[:4000], "provenance": provenance, "shape": shape or input_shape(text)["shape"],
+           "status": "open", "at": _now(), "epoch": current_epoch()}
+    LOCAL_STATE.mkdir(exist_ok=True)
+    with OPEN_QUESTIONS_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return row
+
+
+def set_open_question_status(question_id: str, status: str, note: str = "") -> dict:
+    """A later row for the same question supersedes the earlier one's
+    status; the question's text and arrival are never rewritten."""
+    if status not in OPEN_QUESTION_STATUSES:
+        raise ValueError("status must be open, withdrawn or answered")
+    current = load_open_questions(all_statuses=True)
+    q = next((r for r in current if r.get("question_id") == question_id), None)
+    if not q:
+        raise ValueError("no such open question")
+    if q.get("status") == status:
+        return {"changed": False, "question_id": question_id, "status": status}
+    row = {"object_type": "open_question_status", "question_id": question_id, "status": status,
+           "note": (note or "")[:300], "at": _now(), "epoch": current_epoch()}
+    with OPEN_QUESTIONS_LOG.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return {"changed": True, "question_id": question_id, "status": status, "at": row["at"]}
+
+
+def load_open_questions(all_statuses: bool = False) -> "list[dict]":
+    """Each question with its status in force (the latest row), oldest
+    first. Only the open ones unless asked otherwise."""
+    by_id: dict[str, dict] = {}
+    for r in _question_rows():
+        if r.get("object_type") == "open_question":
+            by_id[r["question_id"]] = dict(r)
+        elif r.get("object_type") == "open_question_status" and r["question_id"] in by_id:
+            by_id[r["question_id"]]["status"] = r.get("status", "open")
+            by_id[r["question_id"]]["status_at"] = r.get("at", "")
+    rows = list(by_id.values())
+    return rows if all_statuses else [r for r in rows if r.get("status") == "open"]
 
 
 def record_input(job_id: str, mode: str, text: str, parent: str = "",
-                 provenance: str = "unstated") -> None:
+                 provenance: str = "unstated", destination: str = "",
+                 shape: str = "", suggested: str = "") -> None:
     """Append-only, best-effort, and deliberately dumb: no schema to
     validate, no gateway to reach, nothing that can refuse. This runs
     before any model is contacted, so it must not be able to fail the
@@ -1808,12 +2011,20 @@ def record_input(job_id: str, mode: str, text: str, parent: str = "",
     try:
         LOCAL_STATE.mkdir(exist_ok=True)
         with INPUTS_LOG.open("a", encoding="utf-8") as f:
-            f.write(json.dumps({
+            row = {
                 "object_type": "input", "job_id": job_id, "mode": mode,
                 "text": text, "chars": len(text or ""),
                 "parent_trace_id": parent, "provenance": provenance,
                 "epoch": current_epoch(), "created_at": _now(),
-            }, ensure_ascii=False) + "\n")
+            }
+            # block 105: where the owner sent the words, and what the
+            # chooser had highlighted — so the record can later count
+            # how often its reading matched his choice, and never guess
+            if destination in DESTINATION_IDS:
+                row["destination"] = destination
+                row["shape"] = shape if shape in SHAPES else ""
+                row["suggested"] = suggested if suggested in DESTINATION_IDS else ""
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
     except Exception:
         pass
 

@@ -47,6 +47,7 @@ _REDIRECTED = {
     "DEFINITION_EVENTS_LOG": _SCRATCH / "definition_events.jsonl",
     "ENCOUNTER_SWITCH_LOG": _SCRATCH / "encounter_switch.jsonl",
     "ENCOUNTERS_LOG": _SCRATCH / "encounters.jsonl",
+    "OPEN_QUESTIONS_LOG": _SCRATCH / "open_questions.jsonl",   # block 105
 }
 for _name, _path in _REDIRECTED.items():
     setattr(cli, _name, _path)
@@ -6493,7 +6494,7 @@ console.log(out.join('\\n'));
     # and — since the Work Room (block 86) — /api/works*. Block 86 holds the
     # actual property (socket + gateway poisoned); this pin holds the shape.
     if any(not (f.startswith("api/library") or f.startswith("api/works")
-                or f.startswith("api/media")
+                or f.startswith("api/media") or f.startswith("api/questions")   # ledger (block 105): open questions are zero-model
                 or f in ("api/vault/status", "api/home")) for f in _fetches84):   # ledger (block 99): /api/home is zero-model
         failures.append(f"84: the Documents card fetches outside the "
                         f"zero-model lanes: {sorted(_fetches84)}")
@@ -6902,7 +6903,7 @@ console.log(out.join('\\n'));
     _djs85 = _idx85[_idx85.index("// ---- Documents (the Library wing"):]
     _f85 = set(re.findall(r"fetch\([`'\"]/?([a-z/]+)", _djs85))
     if any(not (f.startswith("api/library") or f.startswith("api/works")
-                or f.startswith("api/media")
+                or f.startswith("api/media") or f.startswith("api/questions")   # ledger (block 105)
                 or f in ("api/vault/status", "api/home")) for f in _f85):   # ledger (block 99): /api/home is zero-model
         failures.append(f"85: the Documents JS fetches outside the "
                         f"zero-model lanes: {sorted(_f85)}")
@@ -13424,11 +13425,11 @@ console.log(out.join('\\n'));
             _f103(f"an ordinary ruling does not carry its clock, epoch and origin: {_cl}")
         # input provenance: typed, attached, door — never guessed beyond the record
         _srv_jobs = _srv103[_srv103.index("def api_create_job("):_srv103.index("def api_get_job(")]
-        if 'provenance=_prov' not in _srv_jobs or '"unstated"' not in _srv_jobs or '("typed", "attached", "door")' not in _srv_jobs:
+        if 'provenance=_prov' not in _srv_jobs or '"unstated"' not in _srv_jobs or '("typed", "attached", "spoken", "door")' not in _srv_jobs:   # ledger (block 105): spoken joins the page-claimable provenances
             _f103("job creation does not record input provenance honestly")
         if "provenance: fromArtifact ? 'attached' : 'typed'" not in _idx103:
             _f103("the page does not say how the words arrived")
-        if 'INPUT_PROVENANCE = ("typed", "attached", "door", "connector", "unstated")' not in _srv_cli or '"provenance": provenance' not in _srv_cli:
+        if 'INPUT_PROVENANCE = ("typed", "attached", "spoken", "door", "connector", "unstated")' not in _srv_cli or '"provenance": provenance' not in _srv_cli:   # ledger (block 105): spoken added before the microphone exists
             _f103("record_input does not carry the provenance type")
         cli.record_input("job_r103", "forge", "words", provenance="attached")
         cli.record_input("job_r103b", "forge", "words", provenance="nonsense")
@@ -13978,6 +13979,194 @@ console.log(out.join('\\n'));
         if _bad in _cli104[_cli104.index("# ---- prompt identity (block 104)"):_cli104.index("# ---- prompt construction: only resolved text")] \
                 or _bad in _srv104[_srv104.index("# Encounters, behind the owner's switch"):_srv104.index("def api_epoch():")]:
             _f104(f"block 104 carries {_bad!r}")
+
+    # ================= block 105: the destination chooser ================
+    # The intent layer, fixed once (items 42, 50, 53): once words are in,
+    # the record asks where they go. A mechanical reading of their shape
+    # highlights one destination; nothing runs because words were typed;
+    # unbuilt destinations are shown as unbuilt and do nothing; typed and
+    # spoken versions of one sentence receive the same destinations; a
+    # question can be kept verbatim as an open question. Pinned by the two
+    # failures that forced it: the cats sentence, and a name with a date
+    # and a place (an invented one — never the owner's).
+    import json as _json105
+    import hashlib as _hl105
+    _root105 = Path(cli.__file__).parent.parent
+    _cli105 = (_root105 / "scripts" / "wordicon_cli.py").read_text(encoding="utf-8")
+    _srv105 = (_root105 / "server.py").read_text(encoding="utf-8")
+    _idx105 = (_root105 / "webapp" / "index.html").read_text(encoding="utf-8")
+
+    def _f105(msg):
+        failures.append(f"105: {msg}")
+
+    def _digest105(root):
+        h = _hl105.sha256()
+        for p in sorted(Path(root).rglob("*")):
+            if p.is_file():
+                h.update(str(p.relative_to(root)).encode()); h.update(b"\0"); h.update(p.read_bytes()); h.update(b"\0")
+        return h.hexdigest()
+
+    _cats = "I would like to know about the historical superstitions involving cats."
+    _ident = "Rowan Ashby Pell, born 1985-04-11 at 3 p.m. in Duluth, Minnesota"
+    # ---- (1) the shapes and the offers, mechanical -----------------------
+    _sc = cli.suggest_destinations(_cats)
+    if _sc.get("shape") != "question" or _sc.get("suggested") != "research" or _sc.get("suggested_built") is not False \
+            or [d["id"] for d in _sc["destinations"]] != ["research", "search", "develop", "room", "write", "question"] \
+            or sum(1 for d in _sc["destinations"] if d.get("suggested")) != 1 \
+            or next(d for d in _sc["destinations"] if d["id"] == "develop").get("suggested") \
+            or not next(d for d in _sc["destinations"] if d["id"] == "research").get("why_unbuilt"):
+        _f105(f"the cats sentence is not read as a question with research highlighted-and-unbuilt and develop offered-not-highlighted: {_sc.get('shape')} {_sc.get('suggested')} {[d['id'] for d in _sc.get('destinations') or []]}")
+    _si = cli.suggest_destinations(_ident)
+    if _si.get("shape") != "identity" or _si.get("suggested") != "name_study" or _si.get("suggested_built") is not False \
+            or [d["id"] for d in _si["destinations"]] != ["name_study", "portrait", "owner_facts", "write", "search", "develop"] \
+            or any(d.get("built") for d in _si["destinations"] if d["id"] in ("name_study", "portrait", "owner_facts")):
+        _f105(f"a name with a date and a place is not read as identity with the unbuilt studies said as unbuilt: {_si.get('shape')} {[d['id'] for d in _si.get('destinations') or []]}")
+    for _t, _shape, _sugg in (("television", "word", "develop"), ("the ache of being between", "phrase", "develop"),
+                               ("What is a liminal space?", "question", "research"), ("A passage. " * 40, "passage", "develop"),
+                               ("Black cats are unlucky, they say, in some places.", "statement", "develop")):
+        _r = cli.suggest_destinations(_t)
+        if _r.get("shape") != _shape or _r.get("suggested") != _sugg or not _r.get("signals"):
+            _f105(f"{_t[:30]!r} reads as {_r.get('shape')}/{_r.get('suggested')}, not {_shape}/{_sugg}")
+    if set(cli.DESTINATION_IDS) != {"research", "search", "develop", "room", "write", "question", "name_study", "portrait", "owner_facts"} \
+            or {d["id"] for d in cli.DESTINATIONS if d["built"]} != {"search", "develop", "room", "write", "question"}:
+        _f105(f"the destinations or their built flags changed: {cli.DESTINATION_IDS}")
+    # typed and spoken: the same destinations, the provenance carried beside the words, never branching
+    _st, _ss = cli.suggest_destinations(_cats, "typed"), cli.suggest_destinations(_cats, "spoken")
+    if _ss.get("provenance") != "spoken" or {k: v for k, v in _st.items() if k != "provenance"} != {k: v for k, v in _ss.items() if k != "provenance"}:
+        _f105("typed and spoken versions of one sentence receive different destinations")
+    if "spoken" not in cli.INPUT_PROVENANCE or cli.suggest_destinations(_cats, "vibes").get("provenance") != "unstated":
+        _f105("provenance vocabulary: spoken missing, or an invented provenance kept")
+    _chooser_cli = _cli105[_cli105.index("# ---- the destination chooser (block 105"):_cli105.index("def record_input(")]
+    for _bad in ("gateway", "Gateway", ".complete(", "open(", "write_text", "LOCAL_STATE"):
+        _seg = _chooser_cli[:_chooser_cli.index("# ---- open questions (block 105)")]
+        if _bad in _seg:
+            _f105(f"the suggester reaches for {_bad!r} — it must read the words and nothing else")
+
+    # ---- (2) the routes: zero-model, paired, writing nothing ------------
+    _oldgw105 = server.server_gateway
+    server.server_gateway = lambda: (_ for _ in ()).throw(RuntimeError("105: the chooser must never construct the gateway"))
+    try:
+        with server.app.test_client() as _c105:
+            _paired(_c105)
+            _dg0 = _digest105(cli.LOCAL_STATE)
+            _r = _c105.post("/api/destinations", json={"text": _cats, "provenance": "typed"})
+            _d = _r.get_json() or {}
+            if _r.status_code != 200 or _d.get("shape") != "question" or _d.get("suggested") != "research" or "Nothing runs until you choose" not in (_d.get("note") or "") \
+                    and "nothing runs until you choose" not in (_d.get("note") or ""):
+                _f105(f"/api/destinations does not read the cats sentence: {_r.status_code} {_d.get('shape')}")
+            _r2 = _c105.post("/api/destinations", json={"text": _cats, "provenance": "spoken"}).get_json() or {}
+            if {k: v for k, v in _d.items() if k != "provenance"} != {k: v for k, v in _r2.items() if k != "provenance"} or _r2.get("provenance") != "spoken":
+                _f105("the route gives typed and spoken different destinations")
+            if _c105.post("/api/destinations", json={"text": "   "}).status_code != 400:
+                _f105("empty words were read")
+            if _digest105(cli.LOCAL_STATE) != _dg0:
+                _f105("reading the words' shape wrote to the store")
+            _un = server.app.test_client().post("/api/destinations", json={"text": _cats})
+            if _un.status_code == 200 and "destinations" in (_un.get_json() or {}):
+                _f105("/api/destinations answers an unpaired visitor")
+            # ---- (3) open questions: kept verbatim, append-only, counted on Home, never due ----
+            _r = _c105.post("/api/questions", json={"text": _cats, "provenance": "spoken", "shape": "question"}).get_json() or {}
+            _q = _r.get("question") or {}
+            if not _r.get("saved") or not str(_q.get("question_id", "")).startswith("q_") or _q.get("text") != _cats or _q.get("provenance") != "spoken" \
+                    or _q.get("shape") != "question" or _q.get("status") != "open" or _q.get("epoch") != "ordinary_use" or not _q.get("at"):
+                _f105(f"an open question was not kept verbatim with its arrival: {_q}")
+            _qlog = cli.OPEN_QUESTIONS_LOG.read_bytes() if cli.OPEN_QUESTIONS_LOG.exists() else b""
+            if not _qlog:
+                _f105("the open question was answered as saved but nothing was written")
+            _lst = _c105.get("/api/questions").get_json() or {}
+            if [x.get("question_id") for x in _lst.get("open") or []] != [_q["question_id"]]:
+                _f105(f"the open list is not the one question: {_lst.get('open')}")
+            _h = _c105.get("/api/home").get_json() or {}
+            _pq = (_h.get("pending") or {}).get("open_questions") or {}
+            if _pq.get("count") != 1 or _pq.get("place") != "library" or _pq.get("focus") != "questions" or (_pq.get("titles") or [""])[0] != _cats[:80] \
+                    or any(it.get("source") not in ("claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review") for it in (_h.get("pending") or {}).get("items") or []) \
+                    or (_h.get("pending") or {}).get("saved") != []:
+                _f105(f"Home does not carry the open question as a quiet, undue count with the Library's door: {_pq}")
+            _r = _c105.post("/api/questions/status", json={"question_id": _q["question_id"], "status": "withdrawn", "note": "suite"}).get_json() or {}
+            if not _r.get("changed") or (_c105.get("/api/questions").get_json() or {}).get("open") != []:
+                _f105("withdrawing did not take the question off the open list")
+            _all = (_c105.get("/api/questions").get_json() or {}).get("all") or []
+            if len(_all) != 1 or _all[0].get("status") != "withdrawn" or _all[0].get("text") != _cats or not cli.OPEN_QUESTIONS_LOG.read_bytes().startswith(_qlog):
+                _f105("the withdrawal rewrote the question instead of appending a status")
+            _r = _c105.post("/api/questions/status", json={"question_id": _q["question_id"], "status": "withdrawn"}).get_json() or {}
+            _n_rows = len([l for l in cli.OPEN_QUESTIONS_LOG.read_text(encoding="utf-8").splitlines() if l.strip()]) if cli.OPEN_QUESTIONS_LOG.exists() else 0
+            if _r.get("changed") is not False or _n_rows != 2:
+                _f105("a status already in force wrote a row")
+            for _bad in ({"question_id": _q["question_id"], "status": "answered_by_vibes"}, {"question_id": "q_nope", "status": "withdrawn"}, {"text": "   "}):
+                _path = "/api/questions/status" if "status" in _bad else "/api/questions"
+                if _c105.post(_path, json=_bad).status_code != 400:
+                    _f105(f"{_path} accepted {_bad}")
+            if ((_c105.get("/api/home").get_json() or {}).get("pending") or {}).get("open_questions", {}).get("count") != 0:
+                _f105("Home still counts a withdrawn question")
+            _un = server.app.test_client().get("/api/questions")
+            if _un.status_code == 200 and "open" in (_un.get_json() or {}):
+                _f105("/api/questions answers an unpaired visitor")
+    finally:
+        server.server_gateway = _oldgw105
+    # ---- (4) the jobs route records the door chosen and the chooser's reading — never inferred ----
+    # (the mock gateway here: the row is written before the thread starts, and the run itself is not the point)
+    server.server_gateway = lambda: cli.MockGateway()
+    try:
+        with server.app.test_client() as _c105:
+            _paired(_c105)
+            _c105.post("/api/jobs", json={"mode": "forge", "input_text": "ZZ chooser probe 105", "provenance": "spoken",
+                                          "destination": "develop", "shape": "statement", "suggested": "develop"})
+            _c105.post("/api/jobs", json={"mode": "forge", "input_text": "ZZ chooser probe 105b", "provenance": "typed",
+                                          "destination": "teleport", "shape": "vibes", "suggested": "horoscope"})
+            _c105.post("/api/jobs", json={"mode": "forge", "input_text": "ZZ chooser probe 105c", "provenance": "typed"})
+    finally:
+        server.server_gateway = _oldgw105
+    _rows = [_json105.loads(l) for l in cli.INPUTS_LOG.read_text(encoding="utf-8").splitlines() if '"ZZ chooser probe 105' in l]
+    _a = next((r for r in _rows if r.get("text") == "ZZ chooser probe 105"), {})
+    _b = next((r for r in _rows if r.get("text") == "ZZ chooser probe 105b"), {})
+    _c = next((r for r in _rows if r.get("text") == "ZZ chooser probe 105c"), {})
+    if _a.get("provenance") != "spoken" or _a.get("destination") != "develop" or _a.get("shape") != "statement" or _a.get("suggested") != "develop":
+        _f105(f"the input row does not carry the door chosen, the shape and the highlight: {_a}")
+    if "destination" in _b or "shape" in _b or "destination" in _c:
+        _f105(f"an invented destination or shape was recorded, or one was invented for a row that named none: {_b} {_c}")
+    if "destination=str(data.get(\"destination\")" not in _srv105 or 'if destination in DESTINATION_IDS:' not in _cli105:
+        _f105("the jobs route or record_input does not carry the destination honestly")
+    _chooser_srv = _srv105[_srv105.index("# The destination chooser (block 105"):_srv105.index("# Encounters, behind the owner's switch")]
+    for _bad in ("server_gateway", "Gateway(", ".complete(", "/api/jobs", "route_input", "threading"):
+        if _bad in _chooser_srv:
+            _f105(f"the chooser's routes reach for {_bad!r}")
+
+    # ---- (5) the page: the row, the gate on Develop, the unbuilt labels, the doors ----
+    _intake105 = _idx105[_idx105.index('id="intake-card"'):_idx105.index('id="page-note"')]
+    _order105 = [_intake105.index(x) for x in ('<textarea id="input-text"', 'id="destination-row" hidden', 'id="destination-chips"', 'id="develop-controls" hidden',
+                                                 'id="go-btn" onclick="runOperation(false)"', 'id="deep-btn" onclick="runOperation(true)"', 'id="gesture-chooser"', '<div class="doors">')]
+    if _order105 != sorted(_order105):
+        _f105("the intake's order is not box → destination row → Develop's controls (Run it, Go deep, the gesture chooser) → doors")
+    _js105 = _idx105[_idx105.index("// ---- the destination chooser (block 105)"):_idx105.index("async function runOperation(deep, explicitMode)")]
+    for _need in ("async function refreshDestinations()", "fetch('/api/destinations'", "function renderDestinations()", "async function chooseDestination(id)",
+                  "if (!x || !x.built) return;", "disabled aria-disabled=\"true\"", "Nothing runs until you choose", "dev.hidden = id !== 'develop'",
+                  "if (id === 'write') { openCompose(); return; }", "fetch('/api/clinic/rooms'", "fetch('/api/questions'", "renderLibrary(DEST.text)", "docSearch()",
+                  "if (!confirm('Start a Clinic room"):
+        if _need not in _js105:
+            _f105(f"the chooser's page code lost {_need[:44]!r}")
+    for _bad in ("submitRun(", "runOperation(", "/api/jobs"):
+        if _bad in _js105:
+            _f105(f"the chooser's page code runs something itself: {_bad!r}")
+    # the highlight is never a choice: the reading and the painting call chooseDestination nowhere but the chip's own onclick
+    _paint105 = _js105[_js105.index("async function refreshDestinations()"):_js105.index("async function chooseDestination(id)")]
+    if _paint105.count("chooseDestination(") != 1 or "onclick=\"chooseDestination('${escapeJs(x.id)}')\"" not in _paint105:
+        _f105("the reading or the painting chooses a destination by itself")
+    for _need in ("addEventListener('input', scheduleDestinations)", "destination: DEST.chosen || undefined", "shape: (DEST.data && DEST.data.shape) || undefined",
+                  'id="ruling-questions" class="quiet-line" hidden', "function renderOpenQuestions(q)", "renderOpenQuestions(p.open_questions || null)",
+                  'id="questions-head"', 'id="questions-list"', "async function loadOpenQuestions()", "async function withdrawQuestion(id)",
+                  "if (focusId === 'questions')", "Words go where you send them.", "it never chooses. Nothing runs until you choose",
+                  "changes nothing about where they may go", "scheduleDestinations();   // block 105: an attached file's text"):
+        if _need not in _idx105:
+            _f105(f"the page lost {_need[:48]!r}")
+    if _idx105.count('id="go-btn"') != 1 or _idx105.count('id="input-text"') != 1 or _idx105.count('id="destination-row"') != 1:
+        _f105("an intake element was duplicated")
+    # ---- (6) the docs -------------------------------------------------
+    if "v1.3.5" not in (_root105 / "docs" / "CHANGELOG.md").read_text(encoding="utf-8"):
+        _f105("the changelog has no v1.3.5")
+    _adr105 = (_root105 / "docs" / "adr-nikodemus.md").read_text(encoding="utf-8")
+    for _need in ("Amendment (block 105)", "destination chooser", "nothing runs until the owner chooses", "unbuilt", "open question", "spoken"):
+        if _need not in _adr105:
+            _f105(f"the ADR amendment does not say {_need!r}")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

@@ -39,7 +39,8 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
     ok(fp.cards >= 3 && fp.firstCard && fp.firstCard.bottom <= fp.ih, `a real resumable object is on the first paint (${fp.cards} cards; first card bottom ${Math.round(fp.firstCard && fp.firstCard.bottom)} of ${fp.ih})`);
     ok(fp.ta && fp.ta.top > fp.cont.bottom, 'the phrase box sits below Continue');
     ok(fp.ta && fp.ta.area < fp.cont.area, 'the phrase box is smaller than the Continue band');
-    ok(fp.run && fp.run.top > fp.ih, 'Run it is below the fold — not the strongest first-paint object (top ' + Math.round(fp.run.top) + ')');
+    // ledger (block 105): Run it is not on the first paint at all — it appears only after Develop the idea is chosen; an empty box shows no controls
+    ok(fp.run && (fp.run.area === 0 || fp.run.top > fp.ih), 'Run it is not a first-paint object — hidden until Develop the idea is chosen (area ' + Math.round(fp.run.area) + ', top ' + Math.round(fp.run.top) + ')');
     ok(fp.strip === true && fp.dot === 'dot ok' && fp.quiet === 'all quiet', 'a healthy vault is quiet: strip hidden, green dot, "all quiet"');
     ok(/cannot yet be tied safely to a single concept/.test(fp.excluded) && /“Common Ground” names more than one shelf entry/.test(fp.excluded), 'ambiguous legacy rulings are reported as excluded, not guessed: ' + fp.excluded.slice(0, 90));
     // block 100/103: two rulings due — the claim, and the recovery queue now that it has a door; nothing is saved for later

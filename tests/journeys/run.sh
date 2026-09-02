@@ -47,7 +47,7 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy encounter; do
+for j in quiet home anatomy chooser encounter; do
   echo "== journey: $j"
   if [ "$j" = quiet ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
@@ -70,9 +70,12 @@ grep -q "^ok   dormant after" "$JOURNEY_OUT/anatomy.log" || { echo "== anatomy: 
 for need in "browsing with recording off posted nothing" "About says recording is off by default"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/quiet.log" || { echo "== quiet: missing check: $need"; status=1; }
 done
+for need in "nothing was posted to /api/jobs by typing" "Research is highlighted and unbuilt" "the question is kept verbatim with its arrival" "choosing Develop reveals Run it" "a lone word highlights Develop without choosing it"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/chooser.log" || { echo "== chooser: missing check: $need"; status=1; }
+done
 for need in "the switch is on and the flip is the first row" "opening the bridged entry recorded one owner_opened row" "turning off is a confirmed action and the second recorded flip" "Home paints the quiet Unresolved line" "the reopened ruling is recorded, on the shelf, citing the unresolved ruling"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/encounter.log" || { echo "== encounter: missing check: $need"; status=1; }
 done
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/encounter.log | awk '{s+=$2} END {print s+0}')
+total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/encounter.log | awk '{s+=$2} END {print s+0}')
 echo "== journeys: $total checks, exit $status"
 exit $status
