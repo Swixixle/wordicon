@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wordicon — Clinic</title>
+<style>
+  :root {
+    --bg: #11161d; --panel: #181f29; --panel-2: #1f2833; --border: #2a3441;
+    --text: #e7ecf3; --muted: #8b98a9; --accent: #78aaff;
+    --good: #6fcf97; --bad: #e08a8a; --warn: #d9a441;
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 18px 16px 60px; }
+  header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 14px; }
+  h1 { font-size: 20px; margin: 0; }
+  header a { color: var(--accent); text-decoration: none; font-size: 13px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 16px; margin: 12px 0; }
+  .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin-bottom: 6px; }
+  .body { font-size: 14px; line-height: 1.55; margin: 6px 0; }
+  .muted { color: var(--muted); }
+  .foot { font-size: 12px; color: var(--muted); }
+  .badge { display: inline-block; font-size: 10.5px; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted); margin-left: 6px;
+    text-transform: uppercase; letter-spacing: 0.05em; }
+  .badge.retired, .badge.superseded { border-color: var(--warn); color: var(--warn); }
+  .badge.current { border-color: var(--good); color: var(--good); }
+  .badge.unknown { border-color: var(--border); }
+  .seat-empty { color: var(--bad); font-size: 12.5px; }
+  input, select, textarea { background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px;
+    font-size: 13px; font-family: inherit; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 56px; resize: vertical; }
+  button { background: var(--panel-2); color: var(--accent); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+  .grid label { font-size: 11.5px; color: var(--muted); display: block; margin-bottom: 3px; }
+  .passage { border-left: 3px solid var(--accent); background: rgba(120,170,255,0.06);
+    border-radius: 4px; padding: 7px 10px; margin: 6px 0; font-size: 13.5px; }
+  .passage .foot { margin-top: 3px; }
+  .refusal { border-left: 3px solid var(--bad); background: rgba(224,138,138,0.08);
+    border-radius: 4px; padding: 9px 11px; }
+  .error { color: var(--bad); font-size: 13px; }
+  mark { background: rgba(255,217,125,0.3); color: inherit; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Clinic</h1>
+  <a href="/">← back to Wordicon</a>
+</header>
+
+<div class="card">
+  <div class="section-label">The lane, plainly</div>
+  <p class="body muted" style="font-size:13px">This room answers questions about its
+  <strong>admitted documents</strong> — policies, guidelines, labels, manuals, studies —
+  each speaking in its own institutional voice, never blended, with exact passages.
+  It does not advise on patients, and anything that looks patient-identifying is refused
+  before it is stored or sent anywhere. Whether two sources <em>disagree</em> is a judgment:
+  the model may propose it, you rule on it — the page never claims it on its own.</p>
+</div>
+
+<div class="card" id="room-card">
+  <div class="section-label">Room</div>
+  <div id="room-area"><p class="body muted">loading…</p></div>
+</div>
+
+<div class="card" id="ask-card" style="display:none">
+  <div class="section-label">Ask this room</div>
+  <textarea id="ask-input" placeholder="What does the policy require before an SBT? What does the current guideline say? Which sources are retired?"></textarea>
+  <button onclick="askRoom()" style="margin-top:8px">Ask</button>
+  <div id="ask-area"></div>
+</div>
+
+<div class="card" id="admit-card" style="display:none">
+  <div class="section-label">Admit a source — declared by you, invented by no one</div>
+  <p class="foot">Dates must be a value, <em>unknown</em>, or <em>not_applicable</em> —
+  the form is never completed by guessing. Charts, handoff sheets, EHR screenshots and
+  patient records are refused by law.</p>
+  <div class="grid">
+    <div><label>file (PDF, DOCX, HTML, TXT, EPUB)</label><input type="file" id="f-file"></div>
+    <div><label>role</label><select id="f-role"></select></div>
+    <div><label>title</label><input id="f-title"></div>
+    <div><label>issuing institution</label><input id="f-issuer"></div>
+    <div><label>published (value / unknown)</label><input id="f-published" value="unknown"></div>
+    <div><label>effective from (value / unknown / not_applicable)</label><input id="f-effective" value="not_applicable"></div>
+    <div><label>review or expiry</label><input id="f-review" value="unknown"></div>
+    <div><label>status</label><select id="f-status"></select></div>
+    <div><label>jurisdiction or facility</label><input id="f-jur"></div>
+    <div><label>population / clinical scope</label><input id="f-scope"></div>
+    <div style="grid-column:1/3"><label>acquired from (URL or place)</label><input id="f-acq" style="width:100%;box-sizing:border-box"></div>
+  </div>
+  <button onclick="admitSource()">Admit and declare</button>
+  <div id="admit-said" class="foot" style="margin-top:6px"></div>
+</div>
+
+<div class="card" id="disagree-card" style="display:none">
+  <div class="section-label">Propose a disagreement — the only model doorway here</div>
+  <p class="foot">Pick two passages from an answer above (their anchor ids), and the model
+  will read exactly those and propose whether they conflict. Its answer is a proposal;
+  your ruling is the record.</p>
+  <div class="grid">
+    <div><label>anchor A</label><input id="d-a" style="width:100%;box-sizing:border-box"></div>
+    <div><label>anchor B</label><input id="d-b" style="width:100%;box-sizing:border-box"></div>
+  </div>
+  <button onclick="proposeDisagreement()">Ask the model to compare</button>
+  <div id="disagree-area"></div>
+</div>
+
+</div>
+<script>
+let ROOM = null, ROLES = [], STATUSES = [];
+const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const snip = s => esc(s).replace(/«/g,'<mark>').replace(/»/g,'</mark>');
+
+async function readJson(r) {
+  try { return await r.json(); } catch (e) { return {error: 'The server answered unreadably (HTTP ' + r.status + ').'}; }
+}
+
+async function loadRooms() {
+  const area = document.getElementById('room-area');
+  let d;
+  try { d = await readJson(await fetch('/api/clinic/rooms')); }
+  catch (e) { area.innerHTML = '<p class="error">Could not reach the server.</p>'; return; }
+  if (d.error) { area.innerHTML = `<p class="error">${esc(d.error)}</p>`; return; }
+  ROLES = d.roles || []; STATUSES = d.statuses || [];
+  document.getElementById('f-role').innerHTML = ROLES.map(r => `<option>${esc(r)}</option>`).join('');
+  document.getElementById('f-status').innerHTML = STATUSES.map(s => `<option>${esc(s)}</option>`).join('');
+  if (!(d.rooms || []).length) {
+    area.innerHTML = `<p class="body muted">No rooms yet.</p>
+      <button onclick="createRoomOne()">Create Room One — Adult Ventilator Liberation: Readiness, SBTs, and Extubation</button>`;
+    return;
+  }
+  openRoom(d.rooms[0].room_id);
+}
+
+async function createRoomOne() {
+  const d = await readJson(await fetch('/api/clinic/rooms', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({title: 'Adult Ventilator Liberation: Readiness, SBTs, and Extubation'})}));
+  if (d.error) { alert(d.error); return; }
+  openRoom(d.room_id);
+}
+
+async function openRoom(id) {
+  const area = document.getElementById('room-area');
+  const d = await readJson(await fetch('/api/clinic/room/' + encodeURIComponent(id)));
+  if (d.error) { area.innerHTML = `<p class="error">${esc(d.error)}</p>`; return; }
+  ROOM = d;
+  document.getElementById('ask-card').style.display = '';
+  document.getElementById('admit-card').style.display = '';
+  document.getElementById('disagree-card').style.display = '';
+  const seats = d.seats.map(s => s.filled_by.length
+    ? `<p class="body" style="margin:3px 0">✓ ${esc(s.seat)} <span class="foot">(${s.filled_by.length})</span></p>`
+    : `<p class="body seat-empty" style="margin:3px 0">○ ${esc(s.seat)} — ${esc(s.absent)}</p>`).join('');
+  const members = d.members.map(m =>
+    `<p class="body" style="margin:4px 0">${esc(m.title)}
+      <span class="badge">${esc(m.role.replace(/_/g,' '))}</span>
+      <span class="badge ${esc(m.status)}">${esc(m.status)}</span>
+      <span class="foot">${esc(m.issuer)} · published ${esc(m.published_at)} · effective ${esc(m.effective_from)}</span></p>`).join('')
+    || '<p class="body muted" style="font-size:13px">Nothing admitted yet.</p>';
+  area.innerHTML = `<p class="body" style="font-weight:600">${esc(d.title)}</p>
+    <div class="section-label" style="margin-top:10px">Seats</div>${seats}
+    <div class="section-label" style="margin-top:10px">Admitted sources</div>${members}`;
+}
+
+async function askRoom() {
+  const q = document.getElementById('ask-input').value.trim();
+  const area = document.getElementById('ask-area');
+  if (!q || !ROOM) return;
+  area.innerHTML = '<p class="foot">searching the admitted record…</p>';
+  const d = await readJson(await fetch('/api/clinic/ask', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({room_id: ROOM.room_id, question: q})}));
+  if (d.error) { area.innerHTML = `<p class="error">${esc(d.error)}</p>`; return; }
+  if (d.refused) {
+    area.innerHTML = `<div class="refusal" style="margin-top:10px"><p class="body" style="margin:0">${esc(d.why)}</p>
+      <p class="foot">rule: ${esc(d.rule)} — only this refusal event was recorded, content-free.</p></div>`;
+    return;
+  }
+  const blocks = (d.blocks || []).map(b => `
+    <div style="margin-top:12px">
+      <p class="body" style="margin:0;font-weight:600">${esc(b.title)}
+        <span class="badge">${esc(b.role.replace(/_/g,' '))}</span>
+        <span class="badge ${esc(b.status)}">${esc(b.status)}</span></p>
+      ${b.passages.map(p => `<div class="passage">${snip(p.snippet)}
+        <div class="foot">${esc(p.heading)} · <code style="font-size:10.5px">${esc(p.anchor_id)}</code></div></div>`).join('')}
+    </div>`).join('');
+  const silent = (d.silent_members || []).map(m =>
+    `<p class="foot" style="margin:3px 0">— ${esc(m.title)} (${esc(m.role.replace(/_/g,' '))}): ${esc(m.note)}</p>`).join('');
+  const empty = (d.empty_seats || []).map(s =>
+    `<p class="foot seat-empty" style="margin:3px 0">○ ${esc(s.seat)}: ${esc(s.absent)}</p>`).join('');
+  area.innerHTML = blocks
+    + (silent ? `<div style="margin-top:10px">${silent}</div>` : '')
+    + (empty ? `<div style="margin-top:6px">${empty}</div>` : '')
+    + `<p class="foot" style="margin-top:10px">${esc(d.note)}</p>`;
+}
+
+async function admitSource() {
+  const said = document.getElementById('admit-said');
+  const file = document.getElementById('f-file').files[0];
+  if (!file || !ROOM) { said.textContent = 'pick a file first'; return; }
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('room_id', ROOM.room_id);
+  fd.append('role', document.getElementById('f-role').value);
+  fd.append('title', document.getElementById('f-title').value);
+  fd.append('issuer', document.getElementById('f-issuer').value);
+  fd.append('published_at', document.getElementById('f-published').value);
+  fd.append('effective_from', document.getElementById('f-effective').value);
+  fd.append('review_or_expiry', document.getElementById('f-review').value);
+  fd.append('status', document.getElementById('f-status').value);
+  fd.append('jurisdiction_or_facility', document.getElementById('f-jur').value);
+  fd.append('population_scope', document.getElementById('f-scope').value);
+  fd.append('acquired_from', document.getElementById('f-acq').value);
+  said.textContent = 'screening and admitting…';
+  const d = await readJson(await fetch('/api/clinic/ingest', {method:'POST', body: fd}));
+  if (d.error) { said.innerHTML = `<span class="error">${esc(d.error)}</span>`; return; }
+  said.textContent = 'admitted and declared'
+    + ((d.date_proposals || []).length
+       ? ` — dates seen in the text (proposals only): ${d.date_proposals.join(', ')}` : '');
+  openRoom(ROOM.room_id);
+}
+
+async function proposeDisagreement() {
+  const area = document.getElementById('disagree-area');
+  const a = document.getElementById('d-a').value.trim(), b = document.getElementById('d-b').value.trim();
+  if (!a || !b || !ROOM) return;
+  area.innerHTML = '<p class="foot">the model is reading exactly those two passages…</p>';
+  const d = await readJson(await fetch('/api/clinic/disagree', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({room_id: ROOM.room_id, anchor_a: a, anchor_b: b})}));
+  if (d.error) { area.innerHTML = `<p class="error">${esc(d.error)}</p>`; return; }
+  const says = d.model_says || {};
+  area.innerHTML = `<div class="passage" style="margin-top:10px">
+      <p class="body" style="margin:0"><strong>Model proposal:</strong>
+        ${says.disagree ? 'these passages conflict' : 'no conflict found'}
+        ${says.point ? ' — ' + esc(says.point) : ''}</p>
+      <p class="foot">A: ${esc((d.passage_a||{}).text || '').slice(0,140)}</p>
+      <p class="foot">B: ${esc((d.passage_b||{}).text || '').slice(0,140)}</p>
+      <button onclick="ruleDisagreement('${esc(d.proposal_id)}','accepted')">Accept — record the disagreement</button>
+      <button onclick="ruleDisagreement('${esc(d.proposal_id)}','rejected')">Reject the proposal</button>
+    </div>`;
+}
+
+async function ruleDisagreement(pid, ruling) {
+  const area = document.getElementById('disagree-area');
+  const d = await readJson(await fetch('/api/clinic/disagree/rule', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({proposal_id: pid, ruling})}));
+  if (d.error) { area.innerHTML += `<p class="error">${esc(d.error)}</p>`; return; }
+  area.innerHTML += `<p class="foot" style="color:var(--good)">ruled: ${esc(ruling)} — on the record.</p>`;
+}
+
+loadRooms();
+</script>
+</body>
+</html>

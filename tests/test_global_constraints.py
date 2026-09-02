@@ -11639,6 +11639,331 @@ console.log(out.join('\\n'));
                      "be sanitized (an owner-sanctioned exception is a "
                      "deliberate baseline addition, in its own diff)")
 
+    # ================= block 95: the medical wing =====================
+    # docs/adr-medical-wing.md. Two versioned custody adapters; declared
+    # — never inferred — roles, dates, families, and supersession; one
+    # room whose absences speak in the ruled phrasing; Ask This Room
+    # answering questions and never orders; and the PHI non-retention
+    # law enforced before every persistence path.
+    import io as _io95
+    import zipfile as _zip95
+    import importlib as _il95
+    import inspect as _ins95
+    import library as _lib95
+    import clinic as _cl95
+    _il95.reload(_lib95)
+    _il95.reload(_cl95)
+    _cl95.library = _lib95
+
+    def _f95(msg):
+        failures.append(f"95: {msg}")
+
+    try:
+        import pdfminer  # noqa: F401
+        _PDF_OK95 = True
+    except ImportError:
+        _PDF_OK95 = False
+
+    def _docx95(paras):
+        buf = _io95.BytesIO()
+        with _zip95.ZipFile(buf, "w") as z:
+            z.writestr("[Content_Types].xml", "<Types/>")
+            body = "".join(f"<w:p><w:r><w:t>{p}</w:t></w:r></w:p>"
+                           for p in paras)
+            z.writestr("word/document.xml",
+                       '<w:document xmlns:w="http://schemas.openxmlformats'
+                       '.org/wordprocessingml/2006/main"><w:body>'
+                       f"{body}</w:body></w:document>")
+        return buf.getvalue()
+
+    _PDF95 = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+              b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+              b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]"
+              b"/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n"
+              b"4 0 obj<</Length 90>>stream\nBT /F1 12 Tf 72 720 Td "
+              b"(Readiness screening precedes every liberation attempt.)"
+              b" Tj ET\nendstream endobj\n"
+              b"5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>"
+              b"endobj\ntrailer<</Root 1 0 R>>\n%%EOF")
+
+    # 1. the bytes are the fact: magic beats extension both ways
+    if _lib95.detect_kind("mislabeled.txt", _PDF95) != "pdf":
+        _f95("a PDF named .txt would be mangled into text")
+    if _lib95.detect_kind("mislabeled.txt", _docx95(["x"])) != "docx":
+        _f95("a DOCX named .txt would be mangled into text")
+    if _lib95.detect_kind("x.bin", b"\x00\x01") != "unsupported":
+        _f95("junk stopped being refused")
+
+    # 2. docx_text_v1: deterministic, revision-isolated, stdlib
+    _dx95 = _docx95(["An SBT requires a physician order.",
+                     "Readiness is assessed each morning."])
+    _r95a = _lib95.ingest(_dx95, "policy.docx", source="unit")
+    _r95b = _lib95.ingest(_dx95, "policy.docx", source="unit")
+    if _r95a["representation_id"] != _r95b["representation_id"]:
+        _f95("same DOCX bytes made two representations")
+    _rep95 = _lib95.load_representation(_r95a["representation_id"])
+    if _rep95.get("extractor", {}).get("name") != "docx_text_v1":
+        _f95(f"docx extractor identity wrong: {_rep95.get('extractor')}")
+    _old_dx = _lib95.DOCX_EXTRACTOR
+    _lib95.DOCX_EXTRACTOR = "docx_text_v2_hypothetical"
+    try:
+        _rep95v2 = _lib95.build_representation(
+            _r95a["blob_id"], "docx", _dx95)
+        if _rep95v2["representation_id"] == _r95a["representation_id"]:
+            _f95("a new extractor revision reused the old representation "
+                 "id — old anchors would silently change meaning")
+        _repfile95 = (_lib95.reps_dir()
+                      / f"{_r95a['representation_id']}.json")
+        if not _repfile95.exists() or _json.loads(
+                _repfile95.read_text())["extractor"]["name"] != "docx_text_v1":
+            _f95("bumping an extractor revision touched the OLD "
+                 "representation on disk")
+    finally:
+        _lib95.DOCX_EXTRACTOR = _old_dx
+
+    # 3. pdf_text_v1: page-anchored, versioned identity, scanned refused
+    if _PDF_OK95:
+        _p95a = _lib95.ingest(_PDF95, "guideline.pdf", source="unit")
+        _p95b = _lib95.ingest(_PDF95, "guideline.pdf", source="unit")
+        if _p95a["representation_id"] != _p95b["representation_id"]:
+            _f95("same PDF bytes made two representations")
+        _prep95 = _lib95.load_representation(_p95a["representation_id"])
+        _pname95 = _prep95.get("extractor", {}).get("name", "")
+        if not _pname95.startswith("pdf_text_v1+pdfminer.six-"):
+            _f95(f"pdf extractor identity lost its library version: "
+                 f"{_pname95!r}")
+        if _prep95["sections"][0]["heading"] != "page 1":
+            _f95("pdf anchors are not page-anchored")
+        _scan95 = _PDF95.replace(
+            b"BT /F1 12 Tf 72 720 Td (Readiness screening precedes every "
+            b"liberation attempt.) Tj ET\n", b"")
+        try:
+            _lib95.ingest(_scan95, "scan.pdf")
+            _f95("a scanned (text-free) PDF was accepted instead of "
+                 "refused with the OCR finding")
+        except ValueError as _e95:
+            if "OCR" not in str(_e95):
+                _f95("the scanned-PDF refusal lost its visible finding")
+    if "pdfminer.six==" not in (Path(cli.__file__).parent.parent
+                                / "requirements.txt").read_text():
+        _f95("pdfminer.six is not pinned in requirements.txt")
+
+    # 4. declarations: explicit or refused — never silently blank,
+    # never invented
+    _s95a = _cl95.declare_source(
+        _r95a["document_id"], _r95a["representation_id"], _r95a["blob_id"],
+        "hospital_policy", "Test Hospital", "SBT Policy",
+        published_at="unknown", effective_from="2025-01-01",
+        review_or_expiry="not_applicable", status="current",
+        jurisdiction_or_facility="Test ICU")
+    for _bad95 in (dict(published_at="", effective_from="unknown",
+                        review_or_expiry="unknown"),
+                   dict(published_at="unknown", effective_from="unknown",
+                        review_or_expiry="unknown", status="probably fine"),
+                   dict(published_at="unknown", effective_from="unknown",
+                        review_or_expiry="unknown", role="vibes")):
+        _kw95 = {"role": "independent_study", "issuer": "X", "title": "Y",
+                 **_bad95}
+        _role95 = _kw95.pop("role")
+        try:
+            _cl95.declare_source(_r95a["document_id"],
+                                 _r95a["representation_id"],
+                                 _r95a["blob_id"], _role95, _kw95.pop("issuer"),
+                                 _kw95.pop("title"), **_kw95)
+            _f95(f"an invalid declaration was accepted: {_bad95}")
+        except ValueError:
+            pass
+
+    # 5. relations and families: ruled, never derived; no title path
+    _g95 = _lib95.ingest(b"Daily screening is recommended for liberation "
+                         b"readiness.", "gl2024.txt")
+    _o95 = _lib95.ingest(b"T-piece trials of two hours were standard "
+                         b"practice.", "gl1995.txt")
+    _s95b = _cl95.declare_source(
+        _g95["document_id"], _g95["representation_id"], _g95["blob_id"],
+        "professional_guideline", "Body", "Liberation Guidance",
+        published_at="2024", effective_from="not_applicable",
+        review_or_expiry="unknown", status="current")
+    _s95c = _cl95.declare_source(
+        _o95["document_id"], _o95["representation_id"], _o95["blob_id"],
+        "professional_guideline", "Body", "Liberation Guidance",
+        published_at="1995", effective_from="not_applicable",
+        review_or_expiry="not_applicable", status="retired")
+    # same title, same issuer — and NO family exists until ruled
+    if any(r.get("kind") == "same_family" for r in _cl95.load_relations()):
+        _f95("a family appeared without an owner ruling — title-derived "
+             "identity is back")
+    _fam95 = _cl95.rule_family([_s95b["source_id"], _s95c["source_id"]],
+                                label="liberation guidance")
+    if not _fam95.get("family_id", "").startswith("fam_"):
+        _f95("family identity is not a minted id")
+    try:
+        _cl95.rule_relation("supersedes", _s95b["source_id"],
+                             "src_never_declared")
+        _f95("a relation to an undeclared source was accepted — fiction "
+             "on the record")
+    except ValueError:
+        pass
+    _cl95.rule_relation("supersedes", _s95b["source_id"],
+                         _s95c["source_id"])
+
+    # 6. proposals grant nothing
+    _n_src95 = len(_cl95.load_sources())
+    _props95 = _cl95.propose_metadata(_lib95.load_representation(
+        _g95["representation_id"]))
+    if len(_cl95.load_sources()) != _n_src95:
+        _f95("a code-scanned proposal changed the source record")
+    if _props95 and any(p.get("status") != "awaiting_owner"
+                        for p in _props95):
+        _f95("a proposal minted itself ruled")
+
+    # 7. the room: computed coverage, ruled phrasing, status-aware seats
+    _room95 = _cl95.create_room(_cl95.ROOM_ONE_TITLE)
+    for _sid95 in (_s95a["source_id"], _s95b["source_id"],
+                   _s95c["source_id"]):
+        _cl95.add_to_room(_room95["room_id"], _sid95)
+    _st95 = _cl95.room_state(_room95["room_id"])
+    _seat95 = {s["seat"]: s for s in _st95["seats"]}
+    if not _seat95["retired or superseded guidance"]["filled_by"]:
+        _f95("the retired-guidance seat ignored the declared status")
+    if _seat95["manufacturer"]["absent"] != \
+            "No admitted source of this role is present.":
+        _f95("absence lost the ruled phrasing")
+    try:
+        _cl95.add_to_room(_room95["room_id"], "src_never_declared")
+        _f95("an undeclared source joined a room")
+    except ValueError:
+        pass
+
+    # 8. Ask This Room: separated blocks, honest silence, outside
+    # sources excluded, and CODE NEVER CONCLUDES DISAGREEMENT
+    _out95 = _lib95.ingest(b"Readiness liberation screening chatter from "
+                           b"outside the room.", "outsider.txt")
+    _ans95 = _cl95.ask_room(_room95["room_id"],
+                             "What precedes a liberation readiness "
+                             "screening or SBT?")
+    if _ans95.get("refused"):
+        _f95("a plain policy question was refused")
+    else:
+        _by_src95 = {b["source_id"] for b in _ans95["blocks"]}
+        if _s95a["source_id"] not in _by_src95:
+            _f95("the policy's own words did not answer")
+        if any(_out95["representation_id"] in p["anchor_id"]
+               for b in _ans95["blocks"] for p in b["passages"]):
+            _f95("a source OUTSIDE the admitted room answered in it")
+        if _ans95["silent_members"] and any(
+                m["note"] != "No admitted source answered this question."
+                for m in _ans95["silent_members"]):
+            _f95("silence lost the ruled phrasing")
+        if "makes no such claim" not in _ans95.get("note", ""):
+            _f95("the answer stopped disclaiming semantic authority")
+        if _ans95.get("question_persisted") is not False:
+            _f95("the answer no longer attests non-persistence")
+        # the response SCHEMA is pinned: a computed conclusion field
+        # (a "disagreement", a verdict, a score) cannot ride in quietly
+        if set(_ans95) != {"refused", "question_persisted", "room_id",
+                           "title", "blocks", "silent_members",
+                           "empty_seats", "note"}:
+            _f95(f"the answer grew or lost fields — code claiming an "
+                 f"authority it does not have? {sorted(_ans95)}")
+    if "gateway" in _ins95.signature(_cl95.ask_room).parameters:
+        _f95("ask_room grew a model doorway — retrieval must stay "
+             "deterministic")
+
+    # 9. the PHI non-retention law, enforced at every persistence path
+    _marker95 = "zqphi95marker"
+    _q95 = (f"my patient {_marker95} in bed 4 was intubated yesterday "
+            "and presents with distress")
+    _ref95 = _cl95.ask_room(_room95["room_id"], _q95)
+    if not _ref95.get("refused"):
+        _f95("a patient-narrative question was not refused")
+    _leak95 = [str(p) for p in _SCRATCH.rglob("*")
+               if p.is_file() and _marker95 in
+               p.read_text(encoding="utf-8", errors="ignore")]
+    if _leak95:
+        _f95(f"the refused query is persisted at {_leak95} — the "
+             "non-retention law is broken")
+    _refp95 = _SCRATCH / "clinic" / "phi_refusals.jsonl"
+    _refrows95 = ([_json.loads(l) for l in
+                   _refp95.read_text().splitlines() if l.strip()]
+                  if _refp95.exists() else [])
+    if not _refrows95 or set(_refrows95[-1]) != {"at", "lane", "rule"}:
+        _f95(f"the refusal event is not content-free: "
+             f"{_refrows95[-1] if _refrows95 else 'missing'}")
+    _ok95 = _cl95.ask_room(_room95["room_id"],
+                            f"what does policy say about {_marker95}x")
+    if not _ok95.get("refused"):
+        _leak95b = [str(p) for p in _SCRATCH.rglob("*")
+                    if p.is_file() and (_marker95 + "x") in
+                    p.read_text(encoding="utf-8", errors="ignore")]
+        if _leak95b:
+            _f95("even an ACCEPTED question was persisted — the clinic "
+                 "lane must write nothing about questions")
+
+    # 10. the order lane: refused in words, not just intentions
+    _ord95 = _cl95.ask_room(_room95["room_id"],
+                             "should I extubate now or wean first?")
+    if not _ord95.get("refused") or "belongs to the clinician" not in \
+            _ord95.get("why", ""):
+        _f95("an order-lane question was answered, or the refusal lost "
+             "its honest sentence")
+    _pol95 = _cl95.ask_room(_room95["room_id"],
+                             "what does the policy require before an SBT?")
+    if _pol95.get("refused"):
+        _f95("the lane guard overreached onto a plain policy question")
+
+    # 11. uploads screened BEFORE the blob store (server route,
+    # end to end)
+    _blobs_before95 = len(list(_lib95.blobs_dir().glob("*"))) \
+        if _lib95.blobs_dir().exists() else 0
+    with server.app.test_client() as _c95m:
+        _paired(_c95m)
+        _bad_doc95 = _docx95([f"Patient {_marker95}handoff, MRN 4457812,"
+                              " admitted for respiratory failure."])
+        _r95u = _c95m.post("/api/clinic/ingest", data={
+            "file": (_io95.BytesIO(_bad_doc95), "handoff.docx"),
+            "role": "hospital_policy", "title": "x",
+            "published_at": "unknown", "effective_from": "unknown",
+            "review_or_expiry": "unknown", "status": "unknown"})
+        if _r95u.status_code != 400 or \
+                not (_r95u.get_json() or {}).get("refused"):
+            _f95(f"an EHR-looking upload was not refused "
+                 f"({_r95u.status_code})")
+        if len(list(_lib95.blobs_dir().glob("*"))) != _blobs_before95:
+            _f95("the refused upload reached the blob store — refusal "
+                 "came AFTER a persistent write")
+        _r95q = _c95m.post("/api/clinic/ask", json={
+            "room_id": _room95["room_id"],
+            "question": "which sources are retired?"})
+        if _r95q.status_code != 200 or _r95q.get_json().get("refused"):
+            _f95("the ask route failed a plain question")
+
+    # 12. the paper holds the law: ADR + page pins
+    _adr95 = (Path(cli.__file__).parent.parent / "docs"
+              / "adr-medical-wing.md").read_text()
+    for _pin95 in ("before model transmission and before any persistent "
+                   "write",
+                   "content-free refusal event",
+                   "not charts, handoff sheets, screenshots of EHRs, or "
+                   "patient records",
+                   "No admitted source of this role is present",
+                   'never a shared "universal extraction" revision',
+                   "family membership is ruled, never derived from a "
+                   "title match"):
+        if " ".join(_pin95.split()) not in " ".join(_adr95.split()):
+            _f95(f"the ADR lost the law: {_pin95[:50]!r}")
+    _page95 = (Path(cli.__file__).parent.parent / "webapp"
+               / "clinic.html").read_text()
+    for _pin95 in ("never blended", "the model may propose it, you rule "
+                   "on it", "refused before it is stored"):
+        if " ".join(_pin95.split()) not in " ".join(_page95.split()):
+            _f95(f"clinic.html lost the lane language {_pin95!r}")
+    if not _PDF_OK95:
+        print("DISCLOSED: pdfminer.six absent in this environment — "
+              "block 95's four PDF checks did not run here (they run "
+              "in the container, the venv, and CI); nothing about "
+              "this is a pass claim for PDF behavior.")
+
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to
     # add to. This notices the day that happens, names the file, and does it

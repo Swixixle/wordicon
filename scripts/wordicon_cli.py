@@ -1990,6 +1990,21 @@ class MockGateway(Gateway):
                  "note": "The shift is real; that specific year is not one I would stake."},
                 {"index": 3, "attestation": "attested", "note": "Standard back-formation."},
             ]})
+        if prompt.startswith("You are comparing two exact passages"):
+            # The clinic's only model doorway. Deterministic: propose a
+            # conflict when both passages carry a number (two criteria
+            # citing different thresholds), otherwise honestly none.
+            import re as _re_cmp
+            _nums = _re_cmp.findall(r"\b\d+\b", prompt.split("PASSAGE A", 1)[-1])
+            if len(set(_nums)) >= 2:
+                return json.dumps({"disagree": True,
+                                   "point": "The two passages state "
+                                            "different numeric thresholds "
+                                            "for the same readiness "
+                                            "criterion."})
+            return json.dumps({"disagree": False,
+                               "point": "The passages address different "
+                                        "aspects and do not conflict."})
         if prompt.startswith("You are the archetype stage"):
             # Deliberately mixed: one sourced facet, one properly referenced
             # tradition, one honest invention, and one tradition claim with

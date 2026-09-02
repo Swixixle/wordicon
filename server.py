@@ -70,6 +70,7 @@ from flask import Flask, Response, g, jsonify, redirect, request, send_from_dire
 
 import wordicon_cli as cli  # noqa: E402
 import library as library  # noqa: E402  (the Library wing — zero model calls)
+import clinic  # noqa: E402  (the medical wing — docs/adr-medical-wing.md)
 import gate  # noqa: E402
 import vault  # noqa: E402  (encrypted backup — the corpus-writers lock lives there)
 import notify  # noqa: E402
@@ -982,6 +983,171 @@ def api_map_stats():
 # The Library wing — Phase 0. Ingestion is mechanical: hash, segment,
 # index, render. server_gateway is never consulted on any route below, and
 # the suite proves it by poisoning the gateway and ingesting anyway.
+
+# ---- the medical wing (docs/adr-medical-wing.md) --------------------------
+# Questions are never persisted here, accepted or refused — the PHI
+# non-retention law is satisfied by construction: the only thing the
+# clinic lane ever writes about a question is a content-free refusal
+# event. Uploads are screened BEFORE any byte reaches the blob store.
+
+@app.route("/clinic")
+def clinic_page():
+    return send_from_directory(WEBAPP_DIR, "clinic.html")
+
+
+@app.route("/api/clinic/rooms", methods=["GET", "POST"])
+def api_clinic_rooms():
+    if request.method == "POST":
+        d = request.get_json(force=True) or {}
+        title = str(d.get("title") or "").strip()[:200]
+        if not title:
+            return jsonify({"error": "a room needs a title"}), 400
+        return jsonify(clinic.create_room(title))
+    rooms = clinic.load_rooms()
+    return jsonify({"rooms": [{"room_id": r["room_id"], "title": r["title"],
+                                "members": len(r["member_source_ids"])}
+                               for r in rooms.values()],
+                    "roles": list(clinic.MEDICAL_ROLES),
+                    "statuses": list(clinic.SOURCE_STATUSES)})
+
+
+@app.route("/api/clinic/room/<room_id>")
+def api_clinic_room(room_id):
+    try:
+        return jsonify(clinic.room_state(room_id))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
+
+@app.route("/api/clinic/ingest", methods=["POST"])
+def api_clinic_ingest():
+    """Admit one medical source: screen BEFORE any persistent write,
+    then ingest, then record the owner's declaration. V1 accepts
+    policies, guidelines, labels, manuals, and studies — not charts,
+    handoff sheets, EHR screenshots, or patient records; the screen
+    refuses documents that look patient-specific."""
+    f = request.files.get("file")
+    if f is None:
+        return jsonify({"error": "no file was sent"}), 400
+    data = f.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        return jsonify({"error": f"that file is over the "
+                                 f"{MAX_UPLOAD_BYTES // (1024*1024)}MB limit."}), 400
+    if not data:
+        return jsonify({"error": "that file is empty"}), 400
+    kind = library.detect_kind(f.filename or "", data)
+    if kind == "unsupported":
+        return jsonify({"error": "The library reads EPUB, HTML, plain text, "
+                                 "PDF, and DOCX."}), 400
+    try:
+        # extraction in memory only — nothing is written yet
+        rep_preview = library.build_representation(
+            hashlib.sha256(data).hexdigest(), kind, data,
+            fallback_title=f.filename or "")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    preview_text = " ".join(sec.get("text", "")
+                             for sec in rep_preview["sections"])
+    ok, rule = clinic.phi_screen(preview_text)
+    if not ok:
+        clinic.record_refusal("clinic_upload", rule)
+        return jsonify({"refused": True, "rule": rule,
+                        "error": "This document looks patient-specific "
+                                 "(charts, handoff sheets, and records are "
+                                 "out of this lane by law). It was refused "
+                                 "before anything was stored."}), 400
+    form = request.form
+    try:
+        result = library.ingest(data, filename=f.filename or "",
+                                 source=str(form.get("acquired_from") or "")[:500],
+                                 title=str(form.get("title") or "")[:200])
+        src = clinic.declare_source(
+            result["document_id"], result["representation_id"],
+            result["blob_id"],
+            role=str(form.get("role") or ""),
+            issuer=str(form.get("issuer") or "")[:200],
+            title=str(form.get("title") or f.filename or "")[:200],
+            published_at=str(form.get("published_at") or "")[:40],
+            effective_from=str(form.get("effective_from") or "")[:40],
+            review_or_expiry=str(form.get("review_or_expiry") or "")[:40],
+            status=str(form.get("status") or clinic.UNKNOWN),
+            jurisdiction_or_facility=str(form.get("jurisdiction_or_facility")
+                                          or "")[:200],
+            population_scope=str(form.get("population_scope") or "")[:300],
+            acquired_from=str(form.get("acquired_from") or "")[:500])
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    room_id = str(form.get("room_id") or "").strip()
+    if room_id:
+        try:
+            clinic.add_to_room(room_id, src["source_id"])
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+    rep_full = library.load_representation(result["representation_id"]) or {}
+    proposals = clinic.propose_metadata(rep_full) if rep_full else []
+    return jsonify({"ingested": result, "source": src,
+                    "date_proposals": [p["value"] for p in proposals],
+                    "note": "date proposals are code-scanned candidates — "
+                            "they grant nothing until you declare them"})
+
+
+@app.route("/api/clinic/ask", methods=["POST"])
+def api_clinic_ask():
+    d = request.get_json(force=True) or {}
+    room_id = str(d.get("room_id") or "").strip()
+    question = str(d.get("question") or "")[:2000]
+    try:
+        return jsonify(clinic.ask_room(room_id, question))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/clinic/relation", methods=["POST"])
+def api_clinic_relation():
+    d = request.get_json(force=True) or {}
+    kind = str(d.get("kind") or "")
+    try:
+        if kind == "same_family":
+            row = clinic.rule_family(
+                [str(x) for x in (d.get("member_source_ids") or [])][:20],
+                family_id=str(d.get("family_id") or "")[:40],
+                label=str(d.get("label") or "")[:120])
+        else:
+            row = clinic.rule_relation(kind,
+                                        str(d.get("from_source_id") or ""),
+                                        str(d.get("to_source_id") or ""),
+                                        proposed_by=str(d.get("proposed_by")
+                                                         or "owner")[:40])
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(row)
+
+
+@app.route("/api/clinic/disagree", methods=["POST"])
+def api_clinic_disagree():
+    d = request.get_json(force=True) or {}
+    try:
+        row = clinic.propose_disagreement(
+            str(d.get("room_id") or ""), str(d.get("anchor_a") or ""),
+            str(d.get("anchor_b") or ""), server_gateway())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": cli.explain_component_failure(str(e))}), 500
+    return jsonify(row)
+
+
+@app.route("/api/clinic/disagree/rule", methods=["POST"])
+def api_clinic_disagree_rule():
+    d = request.get_json(force=True) or {}
+    try:
+        row = clinic.rule_disagreement(str(d.get("proposal_id") or ""),
+                                        str(d.get("ruling") or ""),
+                                        note=str(d.get("note") or "")[:400])
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(row)
+
 
 @app.route("/api/library/ingest", methods=["POST"])
 def api_library_ingest():
