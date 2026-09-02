@@ -13239,7 +13239,8 @@ console.log(out.join('\\n'));
     cli.RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
     _cases = (("Armory Stasis 103", "trace_cli_r103a", "jdg_cli_candidate_r103a"),
               ("Quiet Tariff 103", "trace_cli_r103b", "jdg_cli_candidate_r103b"),
-              ("Salt Ledger 103", "trace_cli_r103c", "jdg_cli_candidate_r103c"))
+              ("Salt Ledger 103", "trace_cli_r103c", "jdg_cli_candidate_r103c"),
+              ("Thin Receipt 103", "trace_cli_r103u", "jdg_cli_candidate_r103u"))
     with open(cli.JUDGMENTS_LOG, "a") as _jf:
         for _t, _tr, _jid in _cases:
             _jf.write(_json103.dumps({"id": _jid, "object_type": "judgment", "decision": "accepted", "candidate_text": _t,
@@ -13269,7 +13270,7 @@ console.log(out.join('\\n'));
         # only what survived, said as such
         _d = _c103.get("/api/recovery").get_json() or {}
         _open = {c["queue_judgment_id"]: c for c in _d.get("open") or []}
-        if set(_open) != {j for _, _, j in _cases} or _d.get("open_count") != 3 or _d.get("epoch") != "development_and_calibration":
+        if set(_open) != {j for _, _, j in _cases} or _d.get("open_count") != 4 or _d.get("epoch") != "development_and_calibration":
             _f103(f"the open cases are not the queue's: {sorted(_open)} epoch={_d.get('epoch')}")
         _ca = _open.get("jdg_cli_candidate_r103a") or {}
         if not (_ca.get("acceptance") or {}).get("found") or (_ca.get("acceptance") or {}).get("has_clock") is not False:
@@ -13349,10 +13350,24 @@ console.log(out.join('\\n'));
         _r = _c103.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cli_candidate_r103b", "decision": "revise", "definition": "x", "new_title": "Y"})
         if _r.status_code != 400:
             _f103("a ruling on a closed case was accepted")
+        # Unresolved (the reviewer's amendment): not enough survives — an explicit
+        # event, no definition demanded, nothing on the shelf, the case closed,
+        # the old acceptance untouched in history
+        _r = _c103.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cli_candidate_r103u", "decision": "unresolved"})
+        if _r.status_code != 200 or (_r.get_json() or {}).get("ruling", {}).get("shelf_entry_added") or (_r.get_json() or {}).get("ruling", {}).get("kept_title"):
+            _f103(f"Leave unresolved failed, demanded a definition, or kept something: {_r.get_data(as_text=True)[:160]}")
+        _rows = [_json103.loads(l) for l in cli.JUDGMENTS_LOG.read_text().splitlines() if l.strip()]
+        _un = [j for j in _rows if j.get("origin") == "recovery_review" and j.get("candidate_text") == "Thin Receipt 103"]
+        if len(_un) != 1 or _un[0].get("decision") != "unresolved" or not _un[0].get("ruled_at") or "not enough survives" not in (_un[0].get("reason") or ""):
+            _f103(f"Leave unresolved did not append one unresolved event saying why: {_un}")
+        if any((c.get("name") or "") == "Thin Receipt 103" for c in cli.load_accepted_concepts()):
+            _f103("an unresolved receipt-only acceptance is still shown back on the shelf")
+        if not any(j.get("id") == "jdg_cli_candidate_r103u" and j.get("decision") == "accepted" and "ruled_at" not in j for j in _rows):
+            _f103("the old acceptance did not stand untouched in history")
         # all ruled: the page and the band empty through the record; the queue bytes unchanged
         _d = _c103.get("/api/recovery").get_json() or {}
-        if _d.get("open_count") != 0 or _d.get("ruled_count") != 3 or _d.get("queue_total") != 3:
-            _f103(f"after three rulings the review is not empty through the record: {_d.get('open_count')} / {_d.get('ruled_count')}")
+        if _d.get("open_count") != 0 or _d.get("ruled_count") != 4 or _d.get("queue_total") != 4:
+            _f103(f"after four rulings the review is not empty through the record: {_d.get('open_count')} / {_d.get('ruled_count')}")
         _h = _c103.get("/api/home").get_json() or {}
         if any(it.get("source") == "recovery_review" for it in (_h.get("pending") or {}).get("items") or []) or (_h.get("pending") or {}).get("saved"):
             _f103("Home still lists the recovery queue after every case was ruled")
@@ -13360,10 +13375,10 @@ console.log(out.join('\\n'));
             _f103("the recovery queue was rewritten by the rulings")
         _rl = cli.LOCAL_STATE / "recovery_review_rulings.jsonl"
         _rl_rows = [_json103.loads(l) for l in _rl.read_text().splitlines() if l.strip()] if _rl.exists() else []
-        if len(_rl_rows) != 3:
-            _f103("the rulings log does not hold exactly the three rulings")
+        if len(_rl_rows) != 4:
+            _f103("the rulings log does not hold exactly the four rulings")
         # identities: one per ruling, unique, minted from nothing a title could reproduce
-        if len({r.get("concept_id") for r in _rl_rows}) != 3 or len({r.get("ruling_id") for r in _rl_rows}) != 3:
+        if len({r.get("concept_id") for r in _rl_rows}) != 4 or len({r.get("ruling_id") for r in _rl_rows}) != 4:
             _f103(f"rulings share an identity: {[r.get('concept_id') for r in _rl_rows]}")
         _mint_src = _rsrc_mint = (_root103 / "scripts" / "recovery.py").read_text(encoding="utf-8")
         _mint_src = _mint_src[_mint_src.index("def _mint_concept_id("):_mint_src.index("def rule(")]
@@ -13437,7 +13452,8 @@ console.log(out.join('\\n'));
             if _need not in _idx103:
                 _f103(f"the page lost {_need[:50]!r}")
         for _need in ("No definition survives.", "Reconstructible mechanically", "You must supply", "Unknowable", "nothing is suggested",
-                      "a definition from you is required", "The queue is never rewritten", "__BRAND_NAME__"):
+                      "a definition from you is required", "The queue is never rewritten", "__BRAND_NAME__",
+                      "Not enough survives — leave unresolved", "you never\n  invent a definition merely to clear it"):
             if _need not in _rec_page:
                 _f103(f"the review page lost {_need[:40]!r}")
         for _bad in ("/api/config", "/api/jobs", "regenerate", "propose"):

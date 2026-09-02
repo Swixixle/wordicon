@@ -8,7 +8,10 @@ rewritten) for the owner. This module shows each case exactly as the
 record holds it and takes the owner's ruling as a NEW judgment event:
 Accept requires a definition the owner supplies and mints the concept's
 identity at that ruling; Revise takes a corrected title and/or
-definition the same way; Reject is a rejection. Nothing is regenerated,
+definition the same way; Reject is a rejection; Unresolved records that
+not enough survives to accept or reject — the old acceptance stands in
+history, nothing enters the shelf, the case leaves the queue, and the
+owner never invents a definition merely to clear it. Nothing is regenerated,
 reconstructed, or inferred. Rulings append to
 recovery_review_rulings.jsonl; the queue file is read, never written.
 The Home band reads queue minus rulings, so it empties through the
@@ -24,7 +27,7 @@ from wordicon_corpus.objects import Judgment
 
 QUEUE_NAME = "recovery_review_queue.jsonl"
 RULINGS_NAME = "recovery_review_rulings.jsonl"
-DECISIONS = ("accept", "reject", "revise")
+DECISIONS = ("accept", "reject", "revise", "unresolved")
 
 
 def queue_path() -> pathlib.Path:
@@ -171,7 +174,7 @@ def rule(queue_judgment_id: str, decision: str, definition: str = "", new_title:
     revise without an owner-supplied definition, a revise that changes
     nothing, an unknown case."""
     if decision not in DECISIONS:
-        raise ValueError("decision must be accept, reject, or revise")
+        raise ValueError("decision must be accept, reject, revise, or unresolved")
     row = next((r for r in load_queue() if r.get("judgment_id") == queue_judgment_id), None)
     if not row:
         raise ValueError("that case is not in the recovery queue")
@@ -217,6 +220,10 @@ def rule(queue_judgment_id: str, decision: str, definition: str = "", new_title:
                                              concept_id=concept_id)
     elif decision == "reject":
         _event("rejected", title, note)
+    elif decision == "unresolved":
+        # not enough survives: said as such, never papered over with a
+        # definition the owner does not have
+        _event("unresolved", title, note or "not enough survives to accept or reject")
     else:
         kept_title = new_title or title
         if new_title:
@@ -226,7 +233,7 @@ def rule(queue_judgment_id: str, decision: str, definition: str = "", new_title:
                                              concept_id=concept_id)
     ruling = {"object_type": "recovery_ruling", "ruling_id": "rr_" + uuid.uuid4().hex[:12],
               "queue_judgment_id": queue_judgment_id, "title": title, "trace": trace,
-              "decision": decision, "kept_title": kept_title if decision != "reject" else "",
+              "decision": decision, "kept_title": kept_title if decision not in ("reject", "unresolved") else "",
               "concept_id": concept_id, "judgment_ids": events, "shelf_entry_added": bool(added),
               "definition_supplied_by": "owner" if definition else "", "note": note,
               "ruled_at": now, "epoch": epoch}

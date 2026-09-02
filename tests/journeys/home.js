@@ -60,6 +60,8 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
     ok(rv.url === '/recovery' && /Recovery Review/.test(rv.title) && rv.cases === 2, 'the door opens the Recovery Review with the two queued cases: ' + JSON.stringify([rv.url, rv.cases]));
     ok(/No definition survives\./.test(rv.text) && /receipt: found/.test(rv.text) && /Sibling A · Sibling B|Contraband Pedagogy · Sibling A/.test(rv.text) && /no clock/.test(rv.text), 'a case shows what survived and says what did not: ' + rv.text.slice(0, 200));
     ok(rv.defs.every(v => v === '') && !rv.suggested, 'no definition is suggested or prefilled — the field is the owner\'s');
+    const fourth = await page.$$eval('#cases .card[data-queue-id] .actions button', bs => bs.slice(0, 4).map(b => b.textContent.trim()));
+    ok(fourth.join('|') === 'Accept|Revise|Reject|Not enough survives — leave unresolved', 'the four rulings are offered, unresolved among them: ' + fourth.join(' | '));
     ok(/epoch: development_and_calibration/.test(rv.epoch), 'the page names the epoch: ' + rv.epoch);
     await page.click('#cases .card[data-queue-id] .actions button');   // Accept with an empty definition
     await page.waitForTimeout(300);
