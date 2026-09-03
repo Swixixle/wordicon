@@ -1665,9 +1665,14 @@ function renderHistory() {
   const pill = document.getElementById('recent-count');
   // Both numbers, because they are different facts and the row count alone
   // would now under-report how much work is in there.
+  // "18 of 20" said nothing about what the two numbers were. Rows are runs
+  // grouped by the subject they named, so both numbers are facts and each
+  // one now says which fact it is.
   if (pill) pill.textContent = groups.length === historyRuns.length
     ? `${historyRuns.length} run${historyRuns.length === 1 ? '' : 's'}`
-    : `${groups.length} of ${historyRuns.length} runs`;
+    : `${historyRuns.length} runs · ${groups.length} subject${groups.length === 1 ? '' : 's'}`;
+  if (pill) pill.title = groups.length === historyRuns.length ? ''
+    : `${historyRuns.length} runs in all; runs that named the same subject are shown as one row, so ${groups.length} rows.`;
 }
 
 function toggleSection(id, headId) {
@@ -7061,13 +7066,26 @@ function renderRulings() {
   renderSaved(p.saved || []);
   renderUnresolved(p.unresolved || null);
   renderOpenQuestions(p.open_questions || null);
+  const blocked = p.blocked || [], blockedTotal = p.blocked_total || 0;
+  const blockedHtml = blockedTotal ? '<div class="rule-row"><span class="k">Blocked</span><span>'
+    + blocked.map(b => escapeHtml(b.label) + ' — ' + escapeHtml(b.blocked_because || 'no surface exists yet')).join('<br>')
+    + (blockedTotal > blocked.length ? '<br>and ' + (blockedTotal - blocked.length) + ' more' : '')
+    + '</span><span class="act foot">no door yet</span></div>' : '';
   if (!items.length) {
-    area.innerHTML = '<div class="empty" style="padding:8px 0">Nothing awaits your ruling. ' + escapeHtml(p.note || '') + '</div>';
-    if (more) more.textContent = ''; if (fold) fold.textContent = ''; return;
+    // A zero must never exclude a class the record can name. If something is
+    // known to need a ruling and has no surface, Home says so instead of
+    // saying nothing awaits.
+    area.innerHTML = blockedTotal
+      ? '<div class="empty" style="padding:8px 0">Nothing here can be ruled from a page yet — '
+        + blockedTotal + ' need' + (blockedTotal === 1 ? 's' : '') + ' a surface that does not exist.</div>' + blockedHtml
+      : '<div class="empty" style="padding:8px 0">Nothing awaits your ruling. ' + escapeHtml(p.note || '') + '</div>';
+    if (more) more.textContent = blockedTotal ? '0 ready · ' + blockedTotal + ' blocked' : '';
+    if (fold) fold.textContent = ''; return;
   }
   const shown = rulingsExpanded ? items : items.slice(0, 3);
-  area.innerHTML = shown.map(ruleRow).join('');
-  if (more) more.textContent = p.total + ' · only what the record can count';
+  area.innerHTML = shown.map(ruleRow).join('') + blockedHtml;
+  if (more) more.textContent = (blockedTotal ? p.total + ' ready · ' + blockedTotal + ' blocked' : String(p.total))
+    + ' · only what the record can count';
   if (fold) fold.innerHTML = (items.length > 3 ? `${shown.length} shown · <a href="#" onclick="rulingsExpanded=!rulingsExpanded;renderRulings();return false">${rulingsExpanded ? 'fewer' : (items.length - 3) + ' more'}</a> · ` : '')
     + escapeHtml(p.note || '');
 }

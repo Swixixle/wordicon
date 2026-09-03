@@ -76,7 +76,8 @@
 <div class="card" id="ask-card" style="display:none">
   <div class="section-label">Ask this room</div>
   <textarea id="ask-input" placeholder="What does the policy require before an SBT? What does the current guideline say? Which sources are retired?"></textarea>
-  <button onclick="askRoom()" style="margin-top:8px">Ask</button>
+  <button id="ask-btn" onclick="askRoom()" style="margin-top:8px">Ask</button>
+  <span class="foot" id="ask-why" style="margin-left:8px"></span>
   <div id="ask-area"></div>
 </div>
 
@@ -109,20 +110,43 @@
 
 <div class="card" id="disagree-card" style="display:none">
   <div class="section-label">Propose a disagreement — the only model doorway here</div>
-  <p class="foot">Pick two passages from an answer above (their anchor ids), and the model
-  will read exactly those and propose whether they conflict. Its answer is a proposal;
+  <p class="foot">Choose two passages from an answer above with their <em>Use as A</em> and
+  <em>Use as B</em> buttons — the page carries the anchors, you never copy an id. The model
+  reads exactly those two and proposes whether they conflict. Its answer is a proposal;
   your ruling is the record.</p>
-  <div class="grid">
-    <div><label>anchor A</label><input id="d-a" style="width:100%;box-sizing:border-box"></div>
-    <div><label>anchor B</label><input id="d-b" style="width:100%;box-sizing:border-box"></div>
-  </div>
-  <button onclick="proposeDisagreement()">Ask the model to compare</button>
+  <div id="picks"></div>
+  <button id="cmp-btn" onclick="proposeDisagreement()">Ask the model to compare</button>
+  <span class="foot" id="cmp-why" style="margin-left:8px"></span>
   <div id="disagree-area"></div>
 </div>
 
 </div>
 <script>
 let ROOM = null, ROLES = [], STATUSES = [];
+// The two passages the owner picked, carried by the page. An anchor id is
+// proof, not something a person should retype from one card into another.
+let PICK = {a: null, b: null};
+function pickPassage(side, anchorId, title, heading) {
+  PICK[side] = {anchor_id: anchorId, title: title, heading: heading};
+  renderPicks();
+}
+function clearPick(side) { PICK[side] = null; renderPicks(); }
+function renderPicks() {
+  const el = document.getElementById('picks'), btn = document.getElementById('cmp-btn'),
+        why = document.getElementById('cmp-why');
+  if (!el) return;
+  const one = (side, p) => p
+    ? `<p class="body" style="margin:3px 0"><strong>${side.toUpperCase()}</strong> ${esc(p.title)}
+        <span class="foot">${esc(p.heading)} · <code style="font-size:10.5px">${esc(p.anchor_id)}</code></span>
+        <button class="quiet" onclick="clearPick('${side}')" style="margin-left:6px">clear</button></p>`
+    : `<p class="body muted" style="margin:3px 0"><strong>${side.toUpperCase()}</strong> — not chosen yet</p>`;
+  el.innerHTML = one('a', PICK.a) + one('b', PICK.b);
+  const ready = !!(PICK.a && PICK.b) && PICK.a.anchor_id !== PICK.b.anchor_id;
+  if (btn) { btn.disabled = !ready; btn.setAttribute('aria-disabled', String(!ready)); }
+  if (why) why.textContent = ready ? ''
+    : (PICK.a && PICK.b) ? 'Choose two different passages.'
+    : 'Choose two passages from an answer above.';
+}
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
   .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const snip = s => esc(s).replace(/«/g,'<mark>').replace(/»/g,'</mark>');
@@ -170,6 +194,18 @@ async function openRoom(id) {
   document.getElementById('ask-card').style.display = '';
   document.getElementById('admit-card').style.display = '';
   document.getElementById('disagree-card').style.display = '';
+  // An empty room cannot answer from admitted sources, so Ask does not
+  // promise it. Admitting a source — the act that repairs the emptiness —
+  // stays available (slice 1, the empty-state law).
+  const admitted = (d.members || []).length;
+  const askBtn = document.getElementById('ask-btn'), askIn = document.getElementById('ask-input'),
+        askWhy = document.getElementById('ask-why');
+  askBtn.disabled = !admitted;
+  askIn.disabled = !admitted;
+  askBtn.setAttribute('aria-disabled', String(!admitted));
+  askWhy.textContent = admitted ? '' : 'No sources admitted — admit a source to ask this room.';
+  if (!admitted) document.getElementById('ask-area').innerHTML = '';
+  renderPicks();
   const seats = d.seats.map(s => s.filled_by.length
     ? `<p class="body" style="margin:3px 0">✓ ${esc(s.seat)} <span class="foot">(${s.filled_by.length})</span></p>`
     : `<p class="body seat-empty" style="margin:3px 0">○ ${esc(s.seat)} — ${esc(s.absent)}</p>`).join('');
@@ -204,7 +240,9 @@ async function askRoom() {
         <span class="badge">${esc(b.role.replace(/_/g,' '))}</span>
         <span class="badge ${esc(b.status)}">${esc(b.status)}</span></p>
       ${b.passages.map(p => `<div class="passage">${snip(p.snippet)}
-        <div class="foot">${esc(p.heading)} · <code style="font-size:10.5px">${esc(p.anchor_id)}</code></div></div>`).join('')}
+        <div class="foot">${esc(p.heading)} · <code style="font-size:10.5px">${esc(p.anchor_id)}</code>
+        <button class="quiet" onclick="pickPassage('a', '${esc(p.anchor_id)}', '${esc(b.title)}', '${esc(p.heading)}')">Use as A</button>
+        <button class="quiet" onclick="pickPassage('b', '${esc(p.anchor_id)}', '${esc(b.title)}', '${esc(p.heading)}')">Use as B</button></div></div>`).join('')}
     </div>`).join('');
   const silent = (d.silent_members || []).map(m =>
     `<p class="foot" style="margin:3px 0">— ${esc(m.title)} (${esc(m.role.replace(/_/g,' '))}): ${esc(m.note)}</p>`).join('');
@@ -288,8 +326,8 @@ async function holdAttest(id) {
 
 async function proposeDisagreement() {
   const area = document.getElementById('disagree-area');
-  const a = document.getElementById('d-a').value.trim(), b = document.getElementById('d-b').value.trim();
-  if (!a || !b || !ROOM) return;
+  const a = PICK.a ? PICK.a.anchor_id : '', b = PICK.b ? PICK.b.anchor_id : '';
+  if (!a || !b || a === b || !ROOM) return;
   area.innerHTML = '<p class="foot">the model is reading exactly those two passages…</p>';
   const d = await readJson(await fetch('/api/clinic/disagree', {method:'POST',
     headers:{'Content-Type':'application/json'},

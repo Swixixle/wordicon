@@ -4617,8 +4617,13 @@ console.log(JSON.stringify({
     if "event.stopPropagation();" not in _chips74:
         failures.append("74: clicking a route chip also opens the row's own run")
     # Both numbers, since a row count alone now under-reports the work.
-    if "of ${historyRuns.length} runs" not in _pg74:
-        failures.append("74: the Recent count reports rows as though they were runs")
+    # ledger (slice 1): the old text was "18 of 20 runs", which named neither
+    # number. Rows are runs grouped by the subject they named, so each number
+    # now says which fact it is, and the bare "N of M" form is gone.
+    if "${historyRuns.length} runs · ${groups.length} subject" not in _pg74 or "of ${historyRuns.length} runs" in _pg74:
+        failures.append("74: the Recent count does not name both facts (runs, and subjects) in its own words")
+    if "pill.title" not in _pg74:
+        failures.append("74: the Recent count does not explain the two numbers on hover")
 
     # ---- 75. TWO BANDS: WHAT YOU RULED, AND WHAT HAPPENED -----------
     #
@@ -12796,8 +12801,15 @@ console.log(out.join('\\n'));
     if not hasattr(server, "HOME_RULING_DOORS") or set(server.HOME_RULING_DOORS) != {"document", "recording", "room", "keeper", "recovery"}:
         _f100("the set of doors a ruling may open through is not declared (or grew silently)")
     _pend_src = _srv100[_srv100.index("def _home_pending("):_srv100.index("@app.route(\"/api/home\")")]
-    if 'in HOME_RULING_DOORS' not in _pend_src or "assert" not in _pend_src.split("in HOME_RULING_DOORS")[0][-120:]:
-        _f100("nothing enforces that every ruling due has a door")
+    # ledger (slice 1): the law is unchanged — a ruling due must have a door —
+    # but it was held by an assert, which crashed the whole page instead of
+    # reporting, and dropping the item quietly would have been worse. A
+    # doorless ruling is now its own visible state that names what is missing;
+    # it still never appears in `items` and is never counted as ready.
+    if 'in HOME_RULING_DOORS' not in _pend_src or "blocked.append" not in _pend_src or "items = ready" not in _pend_src:
+        _f100("nothing separates a ruling with a door from one without")
+    if "assert" in _pend_src:
+        _f100("a doorless ruling still crashes the page instead of being reported")
     # ledger (block 103): the queue IS in the ruling list now, through
     # recovery.open_cases() (queue minus rulings) — with its door; the
     # route exists because the review was built, as ruled.
@@ -12887,8 +12899,10 @@ console.log(out.join('\\n'));
     `<span title="${escapeHtml((s.titles || []).join(' · '))}">${escapeHtml(s.label)} — ${escapeHtml(s.why || '')}</span>`).join(' ');
 }''':
         _f100("renderSaved is not the ruled function, line for line")
-    if "p.total + ' · only what the record can count'" not in _rend100:
-        _f100("the ruling count is no longer the server's actionable total")
+    # ledger (slice 1): the count is still the server's actionable total, and
+    # now says so out loud when a blocked class exists beside it.
+    if "p.total + ' ready · ' + blockedTotal + ' blocked'" not in _rend100 or "String(p.total)" not in _rend100:
+        _f100("the ruling count is no longer the server's actionable total, named as ready beside anything blocked")
     # ledger: the block-99 proof that the band draws on the record was
     # narrowed to the four actionable sources above, in the same change.
 
@@ -15546,6 +15560,114 @@ console.log(out.join('\\n'));
             _f107(f"the {_org} organ does not mention {_need!r}")
     if len(_ad.get("relationship_classes", [])) != 4:
         _f107("the anatomy gained a fifth relationship class")
+
+    # ================= slice 1: the four repairs the shell does not wait for ==========
+    # Defects the redesign named but that stand on their own (revision 3 of
+    # the interface design, §14 slice 1). Each is a place where the page
+    # said something that was not true: an Ask that promised an answer from
+    # an empty room, an anchor id the owner had to copy by hand, a counter
+    # whose two numbers named neither fact, and a zero that could exclude a
+    # class the record can name. None of them touches the shell.
+    import json as _jsonS1
+    import re as _reS1
+    _rootS1 = Path(cli.__file__).parent.parent
+    _clinS1 = (_rootS1 / "webapp" / "clinic.html").read_text(encoding="utf-8")
+    _idxS1 = (_rootS1 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _srvS1 = (_rootS1 / "server.py").read_text(encoding="utf-8")
+
+    def _fS1(msg):
+        failures.append(f"slice 1: {msg}")
+
+    # ---- (1) an empty Room does not offer an evidence-bound answer -------
+    # The rule is narrow on purpose: the action that PROMISES evidence is
+    # disabled and says why; the action that REPAIRS the emptiness stays
+    # live. "Calm" is not the same as hiding the door out.
+    _openS1 = _clinS1[_clinS1.index("async function openRoom("):_clinS1.index("async function askRoom(")]
+    for _need in ("const admitted = (d.members || []).length;", "askBtn.disabled = !admitted;",
+                  "askIn.disabled = !admitted;", "aria-disabled"):
+        if _need not in _openS1:
+            _fS1(f"the room does not gate Ask on an admitted source ({_need!r})")
+    if "No sources admitted — admit a source to ask this room." not in _openS1:
+        _fS1("a disabled Ask does not say why it is disabled")
+    if _reS1.search(r"admit(Btn|-card)[^\n]*disabled\s*=\s*(true|!admitted)", _openS1) or \
+            "document.getElementById('admit-card').style.display = 'none'" in _openS1:
+        _fS1("admitting a source — the act that repairs the emptiness — was disabled or hidden too")
+    # and the same emptiness must not silently leave a stale answer on screen
+    if "if (!admitted) document.getElementById('ask-area').innerHTML = '';" not in _openS1:
+        _fS1("an answer from a previous room survives into a room with no sources")
+
+    # ---- (2) the owner never retypes an anchor id -----------------------
+    if _reS1.search(r'<input[^>]*id="d-[ab]"', _clinS1):
+        _fS1("the disagreement form still asks the owner to type an anchor id")
+    for _need in ("function pickPassage(side, anchorId, title, heading)", "let PICK = {a: null, b: null};",
+                  "function renderPicks()", "Use as A", "Use as B", "function clearPick(side)"):
+        if _need not in _clinS1:
+            _fS1(f"passage selection is not built ({_need!r})")
+    _propS1 = _clinS1[_clinS1.index("async function proposeDisagreement("):]
+    _propS1 = _propS1[:_propS1.index("\n}")]
+    if "PICK.a ? PICK.a.anchor_id" not in _propS1 or "a === b" not in _propS1:
+        _fS1("the comparison does not take its anchors from the owner's selection, or allows the same passage twice")
+    if "getElementById('d-a')" in _clinS1 or "getElementById('d-b')" in _clinS1:
+        _fS1("the typed-anchor inputs are still read")
+    # the anchor stays VISIBLE — it is the proof — it simply is never typed
+    # the anchor is shown in two places and must stay in both: beside the
+    # passage in the answer, and beside each chosen passage in the picks —
+    # it is the proof the owner is choosing, so hiding it anywhere hides
+    # what the comparison will actually read
+    _askS1 = _clinS1[_clinS1.index("async function askRoom("):_clinS1.index("async function admitSource(")]
+    _picksOnly = _clinS1[_clinS1.index("function renderPicks()"):_clinS1.index("async function readJson(")]
+    _codeS1 = '<code style="font-size:10.5px">${esc(p.anchor_id)}</code>'
+    if _codeS1 not in _askS1:
+        _fS1("the anchor id stopped being shown beside its passage in the answer")
+    if _codeS1 not in _picksOnly:
+        _fS1("the anchor id stopped being shown beside a chosen passage")
+    # Compare is disabled until two different passages are chosen, and says why
+    _picksS1 = _clinS1[_clinS1.index("function renderPicks()"):_clinS1.index("async function readJson(")] \
+        if "async function readJson(" in _clinS1[_clinS1.index("function renderPicks()"):] else _clinS1[_clinS1.index("function renderPicks()"):]
+    if "btn.disabled = !ready" not in _picksS1 or "Choose two passages from an answer above." not in _picksS1:
+        _fS1("the compare button is not disabled-with-a-reason until two passages are chosen")
+
+    # ---- (3) the Recent counter names both facts ------------------------
+    if "of ${historyRuns.length} runs" in _idxS1:
+        _fS1("the unexplained 'N of M runs' counter is back")
+    if "${historyRuns.length} runs · ${groups.length} subject" not in _idxS1:
+        _fS1("the counter does not name runs and subjects as the two different facts they are")
+
+    # ---- (4) a zero never excludes a class the record can name ----------
+    for _need in ('"blocked": blocked[:12]', '"blocked_total": len(blocked)', "blocked_because"):
+        if _need not in _srvS1:
+            _fS1(f"the server does not report blocked rulings ({_need!r})")
+    _rendS1 = _idxS1[_idxS1.index("function renderRulings()"):_idxS1.index("function renderSaved(")]
+    if "Nothing here can be ruled from a page yet" not in _rendS1 or "area.innerHTML = blockedTotal" not in _rendS1:
+        _fS1("Home can still say nothing awaits while a blocked class exists")
+    if "'0 ready · ' + blockedTotal + ' blocked'" not in _rendS1:
+        _fS1("an empty ready list with blocked items does not report both numbers")
+
+    # behaviour, not only source: a ruling whose door this build cannot open
+    # is reported as blocked, is absent from items, and is not in the total.
+    _saved_doors = server.HOME_RULING_DOORS
+    _saved_cross = server.library.load_crossings
+    try:
+        server.library.load_crossings = lambda: [{"kind": "claim", "support": "unruled", "crossing_id": "x_slice1",
+                                                  "owner_text": "a claim the slice-1 probe made up",
+                                                  "created_at": "2026-09-03T09:00:00+00:00",
+                                                  "document_id": "doc_probe", "span_ref": {"representation_id": "rep_probe"}}]
+        _withdoor = server._home_pending()
+        server.HOME_RULING_DOORS = ()          # a build where no surface exists at all
+        _nodoor = server._home_pending()
+    finally:
+        server.HOME_RULING_DOORS = _saved_doors
+        server.library.load_crossings = _saved_cross
+    if not any(i.get("id") == "x_slice1" for i in _withdoor["items"]) or _withdoor.get("blocked_total"):
+        _fS1(f"a ruling WITH a door is not counted as ready: {_withdoor.get('total')} / {_withdoor.get('blocked_total')}")
+    if any(i.get("id") == "x_slice1" for i in _nodoor["items"]):
+        _fS1("a ruling with no surface is still offered as actionable")
+    if _nodoor.get("blocked_total", 0) < 1 or not any(b.get("id") == "x_slice1" for b in _nodoor["blocked"]):
+        _fS1("a ruling with no surface vanished instead of being reported as blocked")
+    if _nodoor.get("total") != len(_nodoor["items"]):
+        _fS1("the ruling total counts something other than the items it can open")
+    if not all(b.get("blocked_because") for b in _nodoor["blocked"]):
+        _fS1("a blocked ruling does not name what is missing")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

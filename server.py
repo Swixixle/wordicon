@@ -3755,9 +3755,22 @@ def _home_pending() -> dict:
                       "when": max(r.get("queued_at", "") for r in open_cases),
                       "open": {"type": "recovery", "href": "/recovery"}})
     items.sort(key=lambda x: x.get("when", ""), reverse=True)
+    # Ready or blocked, never silently dropped (slice 1). The law is still
+    # "a ruling due must have a door": an item without one is NOT counted as
+    # ready and cannot appear in `items`. But crashing the whole page was the
+    # wrong way to hold that line, and dropping it quietly would be worse —
+    # a zero that excludes a known class is a lie the page tells calmly.
+    # A doorless ruling is now its own visible state, naming what is missing.
+    blocked = []
+    ready = []
     for it in items:
-        # structural, not stylistic: nothing without a door is a ruling due
-        assert it.get("open", {}).get("type") in HOME_RULING_DOORS, f"a ruling with no surface: {it.get('source')}"
+        door = (it.get("open") or {}).get("type")
+        if door in HOME_RULING_DOORS:
+            ready.append(it)
+        else:
+            blocked.append({**it, "blocked_because": f"no surface exists yet for a {it.get('source', 'ruling')} "
+                                                     f"(door {door!r} is not one this build can open)"})
+    items = ready
     counts = {}
     for it in items:
         counts[it["source"]] = counts.get(it["source"], 0) + 1
@@ -3779,6 +3792,7 @@ def _home_pending() -> dict:
                       "titles": [(r.get("text") or "")[:80] for r in oq][:12]}
     return {"total": len(items), "counts": counts, "items": items[:12],
             "sources": ["claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"],
+            "blocked": blocked[:12], "blocked_total": len(blocked),
             "saved": saved, "saved_sources": [], "unresolved": unresolved, "open_questions": open_questions,
             "note": "Only what the record can count. Decisions that live in the backlog are not here."}
 
