@@ -47,7 +47,7 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser speak speakkeep encounter federation; do
+for j in quiet home anatomy chooser speak speakkeep encounter federation shell; do
   echo "== journey: $j"
   if [ "$j" = quiet ] || [ "$j" = speak ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
@@ -86,6 +86,13 @@ done
 for need in "opening the page posted nothing" "Check reaches Open Case through the credential and imports nothing" "importing by id verifies the EthicalAlt package under the pinned key" "a foreign address is refused and nothing is fetched" "the exact-bytes door returns the bytes received" "a package with one changed byte is kept UNVERIFIED" "server-boom lands as http_5xx, not as nothing found" "gateway-502 lands as html_error_page, not as nothing found" "each instrument keeps its own standing" "the seats are filled apart by instrument and kind" "each seat item carries its instrument's own label" "the documented absence, the failed search and the producer's own gaps stay distinct" "three exact name matches are proposed" "Reject and Leave unresolved converge nothing" "Declare produces the two instruments' dated records" "the form is pre-filled and nothing was fetched" "About & proof states the registry, custody and rulings" "federation: no request left the scratch origin"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/federation.log" || { echo "== federation: missing check: $need"; status=1; }
 done
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log | awk '{s+=$2} END {print s+0}')
+# slice 2: the shell must have proved the three things a source pin cannot —
+# same window, same element, and an undo stack that walked back through an
+# edit made before the walk. A journey that quietly stops making these is not
+# a pass, however green it looks.
+for need in "the document was never replaced" "the writing room is the SAME element" "the caret AND the selection survived the walk" "undo walked back through an edit made BEFORE the walk" "a closed place stops running" "Home came back to where it was scrolled" "the anatomy takes the whole window, as ruled"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/shell.log" || { echo "== shell: missing check: $need"; status=1; }
+done
+total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log | awk '{s+=$2} END {print s+0}')
 echo "== journeys: $total checks, exit $status"
 exit $status

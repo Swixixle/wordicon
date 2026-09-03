@@ -5405,11 +5405,19 @@ console.log(JSON.stringify({
     # (a) Structure: the page has ONE wrapper, and the room is its SIBLING.
     # A room inside the wrapper would scroll with the page; a page without
     # the wrapper cannot become a pane at all.
-    _ipage80 = _pg80.index('<div id="page">')
-    if not (_ipage80 < _pg80.index("<header>") < _pg80.index("\n<main>")
-            < _pg80.index("</main>") < _pg80.index('<div id="compose"')):
-        failures.append("80: the page wrapper does not enclose header and main, or the "
-                        "room is inside it — the two panes must be siblings")
+    # ledger (slice 2): Home's <main> is named now, because the shell has a
+    # second one — the place pane — and a pin that says "the first <main>"
+    # cannot tell them apart. The invariant is unchanged: both mains inside
+    # the wrapper, the room outside it.
+    _marks80 = ('<div id="page">', "<header>", '\n<main id="home-main">', "</main>",
+                '<main id="place"', '<div id="compose"')
+    _missing80 = [m for m in _marks80 if m not in _pg80]
+    if _missing80:
+        failures.append(f"80: the page's structural landmarks are gone: {_missing80} — the "
+                        "wrapper, Home, the place pane and the room must all be findable")
+    elif [_pg80.index(m) for m in _marks80] != sorted(_pg80.index(m) for m in _marks80):
+        failures.append("80: the page wrapper does not enclose header, Home and the place "
+                        "pane, or the room is inside it — the room must be their sibling")
     # (b) The pane mechanics, pinned as CSS because they ARE CSS.
     for _need80, _why80 in (
             ("body.ws-open #page { position: fixed", "the page never becomes a pane"),
@@ -5463,8 +5471,14 @@ const els={ 'compose':{style:{},setAttribute(){},classList:mkClassList()},
   'page':{scrollTop:0,setAttribute(){}}, 'ws-split-btn':{style:{}}, 'ws-write-btn':{style:{}},
   'ws-info-btn':{style:{}}, 'write-style':{style:{}}, 'write-save':{style:{}} };
 globalThis.document={ body, getElementById:id=>els[id]||null,
-  documentElement:{style:{setProperty(){}}}, querySelector:()=>null };
-globalThis.window={scrollY:0, scrollTo(){}};
+  documentElement:{style:{setProperty(){}}}, querySelector:()=>null,
+  // ledger (slice 2): the shell's place router lives in this same stretch of
+  // source and registers listeners at the top level. The stub carries them
+  // now, which also proves the router LOADS without a DOM to hold it.
+  querySelectorAll:()=>[], addEventListener(){} };
+globalThis.window={scrollY:0, scrollTo(){}, addEventListener(){}, innerHeight:900};
+globalThis.location={pathname:'/', search:'', href:'http://scratch.invalid/'};
+globalThis.history={pushState(){}, replaceState(){}};
 globalThis.applyWriteStyle=()=>{}; globalThis.applyInk=()=>{}; globalThis.composeMirror=()=>{};
 """ + _src80 + """
 let bad=[];
@@ -5831,8 +5845,10 @@ console.log(bad.join('\\n'));
     _ow82 = (_pathlib.Path(cli.__file__).parent.parent / "webapp" / "overworld.html").read_text(encoding="utf-8")
     _tr82 = (_pathlib.Path(cli.__file__).parent.parent / "webapp" / "trails.html").read_text(encoding="utf-8")
     _sv82 = (_pathlib.Path(cli.__file__).parent.parent / "server.py").read_text(encoding="utf-8")
-    if "<title>Wordicon — Map</title>" not in _ow82 or "<h1>Map</h1>" not in _ow82:
-        failures.append("82: the spatial map page is not titled Map")
+    # ledger (the naming pass): the tab title is read before any script runs,
+    # so it carries the ruled name rather than waiting for /brand.js to patch it
+    if "<title>Nikodemus — Map</title>" not in _ow82 or "<h1>Map</h1>" not in _ow82:
+        failures.append("82: the spatial map page is not titled Map under the ruled name")
     for _f82, _nm82 in ((_ow82, "overworld.html"), (_tr82, "trails.html")):
         if "Overworld" in _f82:
             failures.append(f"82: {_nm82} still says 'Overworld' — the label was killed")
@@ -5980,7 +5996,7 @@ console.log(bad.join('\\n'));
         failures.append("82: /map or /map/world does not serve")
     if _tc82.get("/overworld").status_code != 200:
         failures.append("82: /overworld no longer serves — bookmarks break silently")
-    if b"Wordicon \xe2\x80\x94 Map" not in _tc82.get("/map/world").data:
+    if b"Nikodemus \xe2\x80\x94 Map" not in _tc82.get("/map/world").data:
         failures.append("82: /map/world serves a page not titled Map")
     _r82a = _tc82.post("/api/map/road", json={"a": {"key": "word:nowhere", "label": "Nowhere",
                         "kind": "word"}, "b": _ext82, "verb": "v", "note": ""})
@@ -15803,6 +15819,164 @@ console.log(out.join('\\n'));
                    "webapp/clinic.html", "webapp/recovery.html", "webapp/investigation.html"):
         if _wingN not in _rdN:
             _fN(f"the README's map of the machine has no {_wingN} — a wing that ships is described")
+
+    # ============ slice 2: the shell that does not unload =================
+    # Walking from Home to the Map, the Bench, a Room, Trails, an
+    # Investigation Room or the Recovery Review used to REPLACE this
+    # document, and the writing room went with it. The draft's TEXT came
+    # back — every keystroke writes through to #input-text and that is kept
+    # in this browser — but the caret, the selection, the undo stack, the
+    # scroll and the workspace layout did not, because those live in an
+    # element and the element was destroyed.
+    #
+    # The place now opens inside the shell, in #place, beside a #compose
+    # that is never touched. What a source pin can hold is the CONTRACT:
+    # the pane exists, the room stays a sibling of it, the two ruled
+    # standalone documents are not places, the server still answers every
+    # old URL on its own, and the frame's history is replaced rather than
+    # pushed. What a source pin CANNOT hold — that the caret and the undo
+    # stack actually survived a walk — is held by tests/journeys/shell.js,
+    # which is required to run and to make those exact checks.
+    def _slice2():
+        _rootS2 = Path(cli.__file__).parent.parent
+        _idxS2 = (_rootS2 / "webapp" / "index.html").read_text(encoding="utf-8")
+
+        def _fS2(msg):
+            failures.append("slice 2: " + msg)
+
+        # ---- the pane exists, and the room is not inside it ------------------
+        # Every landmark is checked for BEFORE anything slices on it: a missing
+        # landmark must fail by name, not by a ValueError from the checker. The
+        # first run of this battery caught the removed pane by crashing, which is
+        # a caught mutation and a bad message.
+        _landS2 = ('<div id="page">', '<main id="home-main">', '<main id="place" hidden',
+                   '<main id="place"', '<div id="compose"', 'id="place-frame"',
+                   'id="place-name"', 'id="place-why"', 'id="place-bar"',
+                   "const PLACES = {", "function openPlace(url, push)", "function closePlace(push)",
+                   "function goPlace(url)", "let PLACE = ''", "frame.addEventListener('load'",
+                   "window.addEventListener('resize', sizePlace)")
+        _goneS2 = [x for x in _landS2 if x not in _idxS2]
+        if _goneS2:
+            for _g in _goneS2:
+                _fS2(f"the shell is missing a part it is built from: {_g!r}")
+            return          # from these checks only — main() still reports
+        _pageS2 = _idxS2[_idxS2.index('<div id="page">'):_idxS2.index('<div id="compose"')]
+        if '<main id="place"' not in _pageS2:
+            _fS2("the place pane is not inside #page — it would not share the workspace with the room")
+        # Structural, not a substring: between the pane and the room there must be
+        # the pane's own </main> and then the </div> that CLOSES #page. Delete that
+        # </div> and the room becomes a child of the page pane, which is the one
+        # arrangement block 80 exists to forbid — and the obvious check
+        # ("is 'compose' inside the slice") can never fire, because the slice ends
+        # at compose. That is the same hole slice 1's three bad pins had.
+        _gapS2 = _idxS2[_idxS2.index('<main id="place"'):_idxS2.index('<div id="compose"')]
+        if _gapS2.count("</main>") != 1 or _gapS2.count("</div>") < 1 \
+                or _gapS2.index("</main>") > _gapS2.rindex("</div>"):
+            _fS2("#page does not close between the place pane and the writing room — the room "
+                 "would be inside the pane, and a place could take it down with it")
+        if _idxS2.index('<div id="compose"') < _idxS2.index('<main id="place"'):
+            _fS2("the writing room is no longer after the shell in the document")
+
+        # ---- the two names that used to be one -------------------------------
+        # Both the band opener and the place opener were called openPlace, and the
+        # later declaration silently ate the earlier one, so a header link to /map
+        # scrolled to a band. Two declarations, two names, and neither may go back.
+        if _idxS2.count("function openPlace(") != 1 or _idxS2.count("function openBand(") != 1:
+            _fS2(f"the shell has {_idxS2.count('function openPlace(')} openPlace and "
+                 f"{_idxS2.count('function openBand(')} openBand declarations — one of each, or one eats the other")
+        if _re.search(r"function openPlace\(place", _idxS2) or "openPlace('concepts')" in _idxS2 \
+                or "openPlace('library')" in _idxS2 or "openPlace('system')" in _idxS2:
+            _fS2("a band is being opened through openPlace again")
+
+        # ---- the ruled standalone documents are not places --------------------
+        _tblS2 = _idxS2[_idxS2.index("const PLACES = {"):]
+        _tblS2 = _tblS2[:_tblS2.index("\n};") + 3]
+        for _st in ("'/anatomy'", "'/pair'"):
+            if _st in _tblS2:
+                _fS2(f"{_st} became a pane — it is ruled a standalone document")
+        if "const STANDALONE = ['/anatomy', '/pair'];" not in _idxS2:
+            _fS2("the shell does not name the documents it must break out of the frame for")
+        for _p in ("'/map'", "'/map/world'", "'/trails'", "'/bench'", "'/clinic'",
+                   "'/recovery'", "'/investigation'"):
+            if _p not in _tblS2:
+                _fS2(f"a place the page links to is missing from the shell's table ({_p})")
+        # every place in the table is a route this server actually answers
+        _srvS2 = (_rootS2 / "server.py").read_text(encoding="utf-8")
+        for _m in _re.finditer(r"^  '(/[a-z/]*)':", _tblS2, _re.M):
+            if f'@app.route("{_m.group(1)}")' not in _srvS2:
+                _fS2(f"the shell offers {_m.group(1)!r} as a place but the server has no such route")
+        # ...and every route the shell opens still answers on its own, which is
+        # what "old URLs remain compatible entry points" means here. Behaviour,
+        # not a grep: the route is actually requested.
+        _cS2 = _paired(server.app.test_client())
+        for _m in _re.finditer(r"^  '(/[a-z/]*)':", _tblS2, _re.M):
+            _rS2 = _cS2.get(_m.group(1))
+            if _rS2.status_code != 200:
+                _fS2(f"the old URL {_m.group(1)} no longer answers on its own ({_rS2.status_code})")
+        # and the ruled standalone documents answer too, since the shell sends the
+        # whole window to them
+        for _stp in ("/anatomy", "/pair"):
+            if _cS2.get(_stp).status_code != 200:
+                _fS2(f"{_stp} does not answer — the shell breaks the window out to it")
+
+        # ---- history discipline ----------------------------------------------
+        # An iframe's own navigation joins the window's session history. If the
+        # shell also pushes, one move costs two entries and Back looks broken.
+        if "frame.contentWindow.location.replace(url)" not in _idxS2:
+            _fS2("the shell navigates the frame in a way that adds a history entry of its own")
+        _loadS2 = _idxS2[_idxS2.index("frame.addEventListener('load'"):]
+        _loadS2 = _loadS2[:_loadS2.index("window.addEventListener('resize', sizePlace)")]
+        if "history.replaceState({place: want}, '', want)" not in _loadS2 or "pushState" in _loadS2:
+            _fS2("a place's own navigation pushes a second history entry instead of replacing the one it made")
+        if "STANDALONE.indexOf(path) !== -1) { window.location.href" not in _loadS2:
+            _fS2("a ruled standalone document reached from inside a place would be drawn inside the frame")
+        if "if (path === '/') { closePlace(); return; }" not in _loadS2:
+            _fS2("a place's own way home would load Home inside the frame")
+        if "d.querySelectorAll('a[href=\"/\"]').forEach" not in _loadS2:
+            _fS2("a place inside the shell still shows its own 'back to Nikodemus' — a way out of "
+                 "somewhere you never left, beside the bar that is the real one")
+        # ...but only in presentation: the documents themselves keep their link
+        for _pf in ("trails.html", "bench.html", "clinic.html", "recovery.html", "investigation.html"):
+            if 'href="/"' not in (_rootS2 / "webapp" / _pf).read_text(encoding="utf-8"):
+                _fS2(f"webapp/{_pf} lost its own way home — it must still work opened on its own")
+
+        # ---- the pane may never take the caret out of an open draft -----------
+        _openS2 = _idxS2[_idxS2.index("function openPlace(url, push)"):_idxS2.index("function closePlace(push)")]
+        if "if (!document.body.classList.contains('ws-open'))" not in _openS2 or "frame.focus" not in _openS2:
+            _fS2("opening a place either never focuses it, or focuses it while the writing room is open")
+        _closeS2 = _idxS2[_idxS2.index("function closePlace(push)"):_idxS2.index("function goPlace(url)")]
+        if "frameGo(frame, 'about:blank')" not in _closeS2:
+            _fS2("a closed place keeps running behind the page")
+        if "sc.scrollTop = PLACE_RETURN" not in _closeS2:
+            _fS2("coming back from a place does not return Home to where it was")
+
+        # ---- the journey that proves what source cannot -----------------------
+        _shellS2 = _rootS2 / "tests" / "journeys" / "shell.js"
+        if not _shellS2.exists():
+            _fS2("tests/journeys/shell.js is gone — nothing proves the caret and the undo stack survive")
+        else:
+            _jS2 = _shellS2.read_text(encoding="utf-8")
+            for _need, _why in (("window.__shellLoadId", "the same-window proof"),
+                                ("dataset.shellProbe", "the same-element proof"),
+                                ("the stack survived", "the undo-stack proof"),
+                                ("the caret AND the selection survived", "the caret proof"),
+                                ("still answers on its own", "the old-URL proof")):
+                if _need not in _jS2:
+                    _fS2(f"the shell journey no longer makes {_why} ({_need!r})")
+            _runS2 = (_rootS2 / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
+            if _re.search(r"^for j in .*\bshell\b", _runS2, _re.M) is None:
+                _fS2("the shell journey exists but is not in the list run.sh runs")
+
+        # ---- one file that was binary, for two invisible bytes ----------------
+        # overworld.html carried two raw NUL bytes inside JS string literals as
+        # never-match sentinels. They worked, and they made the file unreadable
+        # to grep, diff and `file`. A sentinel nobody can see is not reviewable.
+        for _f in ("index.html", "overworld.html", "trails.html", "bench.html", "clinic.html",
+                   "recovery.html", "investigation.html", "anatomy.html"):
+            if b"\x00" in (_rootS2 / "webapp" / _f).read_bytes():
+                _fS2(f"webapp/{_f} contains a raw NUL byte — write it as an escape, not a byte")
+
+    _slice2()
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

@@ -184,6 +184,8 @@
   .compose-cols { display: flex; gap: 30px; width: 100%; max-width: 34em;
     height: 100%; min-height: 0; justify-content: center; }
   body.ws-open { overflow: hidden; }
+  body.place-open { overflow: hidden; }
+  body.place-open #page { overflow: hidden; }
   body.ws-open #page { position: fixed; top: 0; bottom: 0; left: 0;
     overflow-y: auto; -webkit-overflow-scrolling: touch;
     /* the control bar floats top-right; this keeps the first card from
@@ -212,6 +214,40 @@
   #ws-bar { display: none; }
   body.ws-open #ws-bar { display: flex; }
   body.ws-info .ws-write-only { display: none; }
+  /* ---- the place pane: the shell that does not unload ------------------
+     Slice 2. Walking to the Map, the Bench, a Room, Trails, an
+     Investigation Room or the Recovery Review used to REPLACE this
+     document — and the writing room went with it. The draft's TEXT came
+     back, because every keystroke writes through to #input-text and that
+     is kept in this browser; the caret, the selection, the undo stack,
+     the scroll and the workspace layout did not, because those live in an
+     element and the element was destroyed.
+     The place now opens here instead, inside #page, beside a #compose that
+     is never touched. Each place stays its own document with its own
+     constitution and its own pins, and every one of them still answers
+     when opened directly — one document per place, one shell around them.
+     /anatomy and /pair are not places: they are ruled standalone
+     documents and they still take the whole window. */
+  #place { display: flex; flex-direction: column; padding: 0; margin: 0; max-width: none; }
+  #place-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 8px 24px; border-bottom: 1px solid var(--border); background: var(--panel);
+    font-size: 12.5px; color: var(--muted); }
+  #place-bar .name { color: var(--text); font-weight: 600; letter-spacing: .04em;
+    text-transform: uppercase; font-size: 11px; }
+  #place-bar button { background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 7px; padding: 3px 10px;
+    font-size: 12px; font-family: inherit; cursor: pointer; }
+  #place-bar .why { flex: 1 1 16em; min-width: 0; }
+  #place-frame { flex: 1 1 auto; width: 100%; border: 0; display: block;
+    background: var(--bg); }
+  /* On a phone the split stacks and the page pane is half the window, so the
+     bar has to be one line rather than three. It is measured, not guessed:
+     sizePlace gives the frame exactly what is left under it. */
+  @media (max-width: 820px) {
+    #place-bar { padding: 6px 14px; gap: 8px; flex-wrap: nowrap; overflow: hidden; }
+    #place-bar .why { display: none; }
+    #place-bar .name { white-space: nowrap; }
+  }
   @media (max-width: 820px) {
     /* Side by side has no room on a phone: the split stacks, and the swap
        trades top for bottom instead of left for right. */
@@ -452,7 +488,7 @@
 <div id="vault-strip" hidden
      style="font-size:12px;padding:3px 24px;color:var(--muted);border-bottom:1px solid var(--border);background:var(--panel)"></div>
 
-<main>
+<main id="home-main">
   <section class="lead" id="lead">
     <h1 id="lead-line">Continue where your thinking left off.</h1>
     <p id="lead-sub">Your concepts, sources, and judgments—kept separate, connected, and reviewable.</p>
@@ -562,8 +598,8 @@
     </div>
     </div>
     <div class="doors">
-      <a onclick="openPlace('library', 'doc-file');return false" href="#library">📄 Add a document — EPUB, saved page, text, PDF, DOCX</a>
-      <a onclick="openPlace('library', 'med-file');return false" href="#library">🎧 Keep a recording — with the transcript you supply</a>
+      <a onclick="openBand('library', 'doc-file');return false" href="#library">📄 Add a document — EPUB, saved page, text, PDF, DOCX</a>
+      <a onclick="openBand('library', 'med-file');return false" href="#library">🎧 Keep a recording — with the transcript you supply</a>
       <a href="/clinic">🏛 Admit a source to a Room — declared role, dates, status</a>
     </div>
   </div>
@@ -1274,6 +1310,18 @@
   </details>
 </main>
 
+<!-- The place pane. Hidden until a place is opened; it holds ONE document at
+     a time and blanks itself on the way out, so a closed place stops running
+     rather than idling behind the page. (It also replaces a stray second
+     </main> that closed nothing and had been sitting here.) -->
+<main id="place" hidden aria-hidden="true">
+  <div id="place-bar">
+    <span class="name" id="place-name"></span>
+    <button type="button" onclick="closePlace()">← Home</button>
+    <span class="why" id="place-why"></span>
+    <a id="place-own" href="/" target="_blank" rel="noopener noreferrer">open on its own ↗</a>
+  </div>
+  <iframe id="place-frame" title="" src="about:blank"></iframe>
 </main>
 
 </div>
@@ -2053,15 +2101,15 @@ async function chooseDestination(id) {
   // block 107: the connected instruments — each opens the Investigation page with the words carried in the address; nothing is fetched until a press there
   if (id === 'import_open_case' || id === 'import_ethicalalt') {
     const m = x.match || d.connector_match || {};
-    location.href = '/investigation?import=' + encodeURIComponent(DEST.text.trim()) + '&connector=' + encodeURIComponent(m.connector_id || '') + '&object=' + encodeURIComponent(m.object_id || '');
+    goPlace('/investigation?import=' + encodeURIComponent(DEST.text.trim()) + '&connector=' + encodeURIComponent(m.connector_id || '') + '&object=' + encodeURIComponent(m.object_id || ''));
     return;
   }
   if (id === 'look_ethicalalt' || id === 'search_open_case') {
-    location.href = '/investigation?locate=' + encodeURIComponent(DEST.text.trim()) + '&producer=' + (id === 'look_ethicalalt' ? 'ethicalalt' : 'open_case');
+    goPlace('/investigation?locate=' + encodeURIComponent(DEST.text.trim()) + '&producer=' + (id === 'look_ethicalalt' ? 'ethicalalt' : 'open_case'));
     return;
   }
   if (id === 'investigation_room') {
-    location.href = '/investigation?new=' + encodeURIComponent(DEST.text.trim().slice(0, 160));
+    goPlace('/investigation?new=' + encodeURIComponent(DEST.text.trim().slice(0, 160)));
     return;
   }
   if (id === 'write') { openCompose(); return; }
@@ -2071,7 +2119,7 @@ async function chooseDestination(id) {
     if (search) { search.value = DEST.text; renderLibrary(DEST.text); }
     const ds = document.getElementById('doc-search');
     if (ds) { ds.value = DEST.text; docSearch(); }
-    openPlace('concepts');
+    openBand('concepts');
     pageNote('searched your record for these exact words — the shelf and the library; nothing on the web.');
     return;
   }
@@ -2081,7 +2129,7 @@ async function chooseDestination(id) {
       const r = await fetch('/api/clinic/rooms', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({title: DEST.text.slice(0, 200)})});
       const rd = await r.json();
       if (rd.error || !(rd.room_id || (rd.room && rd.room.room_id))) { pageNote('the room was not started: ' + (rd.error || 'no room id came back')); return; }
-      location.href = '/clinic?room=' + encodeURIComponent(rd.room_id || rd.room.room_id);
+      goPlace('/clinic?room=' + encodeURIComponent(rd.room_id || rd.room.room_id));
     } catch (e) { pageNote('could not reach the server to start a room.'); }
     return;
   }
@@ -2843,9 +2891,9 @@ function renderCandidateCard(cand, traceId, extra) {
 
 function openBenchFromCard(title, conceptId) {
   // identity first: a concept id addresses one concept; a title may name two
-  window.location.href = conceptId
+  goPlace(conceptId
     ? '/bench?concept_id=' + encodeURIComponent(conceptId)
-    : '/bench?title=' + encodeURIComponent(title);
+    : '/bench?title=' + encodeURIComponent(title));
 }
 
 function escapeJs(s) {
@@ -4824,6 +4872,227 @@ function closeWorkspace() {
   if (src) src.focus({preventScroll: true});
 }
 function closeCompose() { closeWorkspace(); }
+
+// ---- the places: one shell, one document per place --------------------
+// Slice 2 of the shell redesign, and the only thing it does.
+//
+// Until now, walking from Home to the Map, the Bench, a Room, Trails, an
+// Investigation Room or the Recovery Review REPLACED this document. The
+// draft's TEXT survived — every keystroke writes through to #input-text and
+// that is kept in this browser — but the caret, the selection, the undo
+// stack, the scroll and the workspace layout did not, because those live in
+// an element and the element was destroyed. Coming back gave you your words
+// with the cursor at the front and nothing to undo.
+//
+// So the place opens INSIDE the shell now, in #place, and #compose is never
+// touched. Each place stays its own document with its own constitution and
+// its own pins; every one of them still answers when opened directly, which
+// is what "old URLs remain compatible entry points" means here. No route
+// changed and no page was merged into this one.
+//
+// /anatomy and /pair are ruled standalone and are not in this table: the
+// anatomy is its own constitutional document, and a pairing screen that
+// rendered inside an unpaired page would be a lie about what is locked.
+const PLACES = {
+  '/map':           {name: 'Map',            why: 'your runs, each item a typed door'},
+  '/map/world':     {name: 'Map · the world', why: 'the same record laid out in space, with the Wayfinder'},
+  '/overworld':     {name: 'Map',            why: 'your runs, each item a typed door'},
+  '/trails':        {name: 'Trails',         why: 'your runs, each item a typed door'},
+  '/bench':         {name: 'The Bench',      why: 'reworking a word you already kept'},
+  '/clinic':        {name: 'Clinic',         why: 'authorities admitted by role, never blended'},
+  '/recovery':      {name: 'Recovery Review', why: 'acceptances that survived without a definition'},
+  '/investigation': {name: 'Investigation Rooms', why: 'what your other instruments deposited'},
+};
+const STANDALONE = ['/anatomy', '/pair'];
+
+let PLACE = '';        // pathname of the open place; '' means Home
+let PLACE_RETURN = 0;  // where Home was scrolled when we left it
+
+// History discipline, which is most of the difficulty here. An iframe's own
+// navigations join the window's session history, so a careless shell puts TWO
+// entries behind one move and Back appears to do nothing. The rule: the
+// browser owns the frame's history and the shell only labels the address.
+//   · a move the shell starts REPLACES the frame's document, so it adds no
+//     frame entry, and the shell pushes exactly one entry of its own;
+//   · a move the place starts has already made its entry, so the shell
+//     REPLACES the address on it rather than pushing a second;
+//   · going back therefore always pops exactly one move.
+function frameAt(frame) {
+  try {
+    const l = frame && frame.contentWindow && frame.contentWindow.location;
+    return l && l.href && l.href !== 'about:blank' ? l.pathname + l.search : '';
+  } catch (e) { return ''; }
+}
+function frameGo(frame, url) {
+  try {
+    if (frame.contentWindow && frame.contentWindow.location) { frame.contentWindow.location.replace(url); return; }
+  } catch (e) {}
+  frame.src = url;
+}
+
+function markPlace() {
+  document.querySelectorAll('header nav.places a').forEach(a => {
+    const h = a.getAttribute('href') || '';
+    a.classList.toggle('here', PLACE ? h === PLACE : h === '/');
+  });
+}
+
+// The bar only: used both when a place is opened from here and when a place
+// walks to another place on its own, where re-setting src would reload it.
+function paintPlace(path, search) {
+  const meta = PLACES[path];
+  if (!meta) return;
+  document.getElementById('place-name').textContent = meta.name;
+  document.getElementById('place-why').textContent = meta.why;
+  document.getElementById('place-own').href = path + (search || '');
+  document.getElementById('place-frame').title = meta.name;
+  PLACE = path;
+  markPlace();
+}
+
+// The pane fills exactly what is left, so nothing behind it scrolls and the
+// place keeps its own scroll inside its own document. Guarded against the
+// obvious loop: setting the height changes #page's box, which is what the
+// observer below watches.
+function sizePlace() {
+  const pane = document.getElementById('place'), frame = document.getElementById('place-frame');
+  if (!pane || pane.hidden || !frame) return;
+  const pg = document.getElementById('page');
+  const top = frame.getBoundingClientRect().top;
+  const bottom = document.body.classList.contains('ws-open') && pg
+    ? pg.getBoundingClientRect().bottom : window.innerHeight;
+  // exactly what is left, never a floor: a floor would push the frame past
+  // the bottom of a stacked split on a phone and lie about the fit
+  const h = Math.max(0, Math.floor(bottom - top)) + 'px';
+  if (frame.style.height !== h) frame.style.height = h;
+}
+
+function placeLoading(on) {
+  const why = document.getElementById('place-why');
+  if (!why) return;
+  if (on) { why.dataset.why = why.textContent; why.textContent = 'opening…'; }
+  else if (why.dataset.why !== undefined) { why.textContent = why.dataset.why; delete why.dataset.why; }
+}
+
+function openPlace(url, push) {
+  let u;
+  try { u = new URL(url, location.href); } catch (e) { return false; }
+  if (u.origin !== location.origin || !PLACES[u.pathname]) return false;
+  const main = document.getElementById('home-main');
+  const pane = document.getElementById('place');
+  const frame = document.getElementById('place-frame');
+  if (!main || !pane || !frame) return false;
+  const sc = pageScroller();
+  if (!PLACE) PLACE_RETURN = sc ? sc.scrollTop : window.scrollY;
+  main.hidden = true;
+  main.setAttribute('aria-hidden', 'true');
+  pane.hidden = false;
+  pane.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('place-open');
+  paintPlace(u.pathname, u.search);
+  const want = u.pathname + u.search;
+  if (frameAt(frame) !== want) { placeLoading(true); frameGo(frame, want); }
+  if (sc) sc.scrollTop = 0; else window.scrollTo(0, 0);
+  sizePlace();
+  if (push !== false && location.pathname + location.search !== want) {
+    history.pushState({place: want}, '', want);
+  }
+  // Focus goes into the place ONLY when the writing room is not open. A
+  // place opened beside a draft must not take the caret out of the draft.
+  if (!document.body.classList.contains('ws-open')) {
+    try { frame.focus({preventScroll: true}); } catch (e) {}
+  }
+  return true;
+}
+
+function closePlace(push) {
+  const pane = document.getElementById('place');
+  const frame = document.getElementById('place-frame');
+  if (!pane || pane.hidden) return;
+  pane.hidden = true;
+  pane.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('place-open');
+  // A closed place stops running rather than idling behind the page.
+  if (frame) { frameGo(frame, 'about:blank'); frame.style.height = ''; }
+  const main = document.getElementById('home-main');
+  if (main) { main.hidden = false; main.setAttribute('aria-hidden', 'false'); }
+  PLACE = '';
+  markPlace();
+  const sc = pageScroller();
+  if (sc) sc.scrollTop = PLACE_RETURN; else window.scrollTo(0, PLACE_RETURN);
+  if (push !== false && location.pathname !== '/') history.pushState({place: '/'}, '', '/');
+}
+
+// For the handful of places the page reaches from script rather than a link.
+// If it is not a place, the old navigation still happens — nothing is
+// silently swallowed.
+function goPlace(url) { if (!openPlace(url)) location.href = url; }
+
+// One delegated handler, so every link to a place — the header, "open the
+// Map →", a Room's door — goes through the shell without being rewritten.
+document.addEventListener('click', function (e) {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+  if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+  const raw = a.getAttribute('href') || '';
+  if (!raw || raw.charAt(0) === '#') return;          // an in-page anchor is not a place
+  let u;
+  try { u = new URL(raw, location.href); } catch (err) { return; }
+  if (u.origin !== location.origin) return;
+  if (PLACES[u.pathname]) { e.preventDefault(); openPlace(u.pathname + u.search); return; }
+  if (u.pathname === '/' && PLACE) { e.preventDefault(); closePlace(); }
+});
+
+window.addEventListener('popstate', function (e) {
+  const at = (e.state && e.state.place) || (location.pathname + location.search);
+  let path = '/';
+  try { path = new URL(at, location.href).pathname; } catch (err) {}
+  if (PLACES[path]) openPlace(at, false); else closePlace(false);
+});
+
+// What the open place does with itself. Same origin, so its location is
+// readable: a place that walks home closes the pane, a place that walks to
+// another place moves the bar and the address without reloading anything,
+// and a place that reaches a ruled standalone document breaks OUT of the
+// shell rather than drawing it inside a frame.
+(function () {
+  const frame = document.getElementById('place-frame');
+  if (!frame) return;
+  frame.addEventListener('load', function () {
+    let loc = null;
+    try { loc = frame.contentWindow.location; } catch (err) { return; }
+    if (!loc || !loc.pathname || loc.href === 'about:blank') return;
+    const path = loc.pathname;
+    if (STANDALONE.indexOf(path) !== -1) { window.location.href = path + loc.search; return; }
+    if (path === '/') { closePlace(); return; }
+    placeLoading(false);
+    // A place's own "← back to Nikodemus" is true when the place is the whole
+    // window and false inside the shell: you never left. The bar above is the
+    // one way back, so the duplicate is hidden HERE, in presentation only —
+    // the document is not edited and still shows its link when opened on its
+    // own, which tests/journeys/home.js still checks.
+    try {
+      const d = frame.contentDocument;
+      if (d) d.querySelectorAll('a[href="/"]').forEach(function (a) { a.style.display = 'none'; });
+    } catch (err) {}
+    if (PLACES[path]) {
+      paintPlace(path, loc.search);
+      const want = path + loc.search;
+      // REPLACE, never push: the place's own navigation already made the entry
+      if (location.pathname + location.search !== want) history.replaceState({place: want}, '', want);
+    }
+    sizePlace();
+  });
+  window.addEventListener('resize', sizePlace);
+  if (window.ResizeObserver) {
+    const pg = document.getElementById('page');
+    if (pg) new ResizeObserver(sizePlace).observe(pg);
+  }
+  // A place reached directly still opens as a place if this document is ever
+  // served under one of those paths.
+  if (PLACES[location.pathname]) openPlace(location.pathname + location.search, false);
+})();
+
 
 // The divider: drag to give either pane more room; the width is remembered.
 // Clamped so neither pane can be dragged out of usefulness.
@@ -7045,17 +7314,17 @@ function contCard(c) {
   if (c.kind === 'document') {
     return `<div class="cont" data-kind="document" data-id="${id}"><div class="kind"><i style="background:var(--accent)"></i>Document · ${c.crossings} crossing${c.crossings === 1 ? '' : 's'}${c.when ? ' · ' + contTime(c.when) : ''}</div>
       <div class="obj">${escapeHtml(c.title)}</div><div class="what">${c.claims_unruled ? c.claims_unruled + ' claim' + (c.claims_unruled === 1 ? '' : 's') + ' with support unruled' : 'no claim is waiting on you'}</div>
-      <div class="resume"><a onclick="openPlace('library');openDoc('${escapeJs(c.representation_id)}',0)">Read it</a><a onclick="openPlace('library');openDoc('${escapeJs(c.representation_id)}',0);openWorkspace('split')">Read in split</a></div></div>`;
+      <div class="resume"><a onclick="openBand('library');openDoc('${escapeJs(c.representation_id)}',0)">Read it</a><a onclick="openBand('library');openDoc('${escapeJs(c.representation_id)}',0);openWorkspace('split')">Read in split</a></div></div>`;
   }
   if (c.kind === 'recording') {
     return `<div class="cont" data-kind="recording" data-id="${id}"><div class="kind"><i style="background:var(--accent)"></i>Recording · ${c.passages} passage${c.passages === 1 ? '' : 's'} marked${c.when ? ' · ' + contTime(c.when) : ''}</div>
       <div class="obj">${escapeHtml(c.title)}</div><div class="what">${c.at_time != null ? 'Last mark at ' + escapeHtml(String(c.at_time)) + 's; ' : ''}the recording stays the source, transcripts beside it.</div>
-      <div class="resume"><a onclick="openPlace('library');openMedia('${escapeJs(c.id)}','${escapeJs(c.open.transcript_id || '')}')">Open it</a></div></div>`;
+      <div class="resume"><a onclick="openBand('library');openMedia('${escapeJs(c.id)}','${escapeJs(c.open.transcript_id || '')}')">Open it</a></div></div>`;
   }
   if (c.kind === 'keeper') {
     return `<div class="cont" data-kind="keeper" data-id="${id}"><div class="kind"><i style="background:#ff9aa2"></i>The Keeper · ${c.closes} close${c.closes === 1 ? '' : 's'}</div>
       <div class="obj">${escapeHtml(c.title)}</div><div class="what">${c.unruled ? c.unruled + ' entr' + (c.unruled === 1 ? 'y' : 'ies') + ' awaiting your ruling' : 'nothing awaiting you'}</div>
-      <div class="resume"><a onclick="openPlace('system');document.getElementById('keeper-card').open=true">Read it</a></div></div>`;
+      <div class="resume"><a onclick="openBand('system');document.getElementById('keeper-card').open=true">Read it</a></div></div>`;
   }
   return '';
 }
@@ -7070,16 +7339,16 @@ function renderContinue() {
   // Title-only rulings, counted by what they are — never tied to a concept
   // by a title, never made into cards.
   if (ex) ex.innerHTML = e.legacy_title_only
-    ? `${e.legacy_title_only} older ruling${e.legacy_title_only === 1 ? '' : 's'} cannot yet be tied safely to a single concept${e.with_shelf_entry ? ' — ' + e.with_shelf_entry + (e.with_shelf_entry === 1 ? ' corresponds to a <a href="#concepts" onclick="openPlace(\'concepts\');return false">shelf entry</a>' : ' correspond to <a href="#concepts" onclick="openPlace(\'concepts\');return false">shelf entries</a>') : ''}${e.rejections_or_revisions ? (e.with_shelf_entry ? ', ' : ' — ') + e.rejections_or_revisions + (e.rejections_or_revisions === 1 ? ' is a revision or rejection' : ' are revisions or rejections') : ''}${e.ambiguous_titles && e.ambiguous_titles.length ? ' (' + e.ambiguous_titles.map(t => '“' + escapeHtml(t) + '”').join(', ') + (e.ambiguous_titles.length === 1 ? ' names more than one shelf entry' : ' each name more than one shelf entry') + ')' : ''}. None were guessed into Continue.`
+    ? `${e.legacy_title_only} older ruling${e.legacy_title_only === 1 ? '' : 's'} cannot yet be tied safely to a single concept${e.with_shelf_entry ? ' — ' + e.with_shelf_entry + (e.with_shelf_entry === 1 ? ' corresponds to a <a href="#concepts" onclick="openBand(\'concepts\');return false">shelf entry</a>' : ' correspond to <a href="#concepts" onclick="openBand(\'concepts\');return false">shelf entries</a>') : ''}${e.rejections_or_revisions ? (e.with_shelf_entry ? ', ' : ' — ') + e.rejections_or_revisions + (e.rejections_or_revisions === 1 ? ' is a revision or rejection' : ' are revisions or rejections') : ''}${e.ambiguous_titles && e.ambiguous_titles.length ? ' (' + e.ambiguous_titles.map(t => '“' + escapeHtml(t) + '”').join(', ') + (e.ambiguous_titles.length === 1 ? ' names more than one shelf entry' : ' each name more than one shelf entry') + ')' : ''}. None were guessed into Continue.`
     : '';
 }
 function ruleRow(it) {
   const k = {claim: 'Claim · support', media_claim: 'Recording claim', clinic_disagreement: 'Room · disagreement', keeper: 'The Keeper', recovery_review: 'Recovery Review'}[it.source] || it.source;
   let act = '';
-  if (it.source === 'claim') act = `<a onclick="openPlace('library');openDoc('${escapeJs(it.open.representation_id)}',0)">Rule on it</a>`;
-  else if (it.source === 'media_claim') act = `<a onclick="openPlace('library');openMedia('${escapeJs(it.open.id)}','${escapeJs(it.open.transcript_id || '')}')">Rule on it</a>`;
+  if (it.source === 'claim') act = `<a onclick="openBand('library');openDoc('${escapeJs(it.open.representation_id)}',0)">Rule on it</a>`;
+  else if (it.source === 'media_claim') act = `<a onclick="openBand('library');openMedia('${escapeJs(it.open.id)}','${escapeJs(it.open.transcript_id || '')}')">Rule on it</a>`;
   else if (it.source === 'clinic_disagreement') act = `<a href="${escapeHtml(it.open.href)}">They disagree · they don’t · can’t tell</a>`;
-  else if (it.source === 'keeper') act = `<a onclick="openPlace('system');document.getElementById('keeper-card').open=true">Read the entries</a>`;
+  else if (it.source === 'keeper') act = `<a onclick="openBand('system');document.getElementById('keeper-card').open=true">Read the entries</a>`;
   else if (it.source === 'recovery_review') act = `<a href="${escapeHtml(it.open.href || '/recovery')}">Review them</a>`;
   return `<div class="rule-row"><span class="k">${escapeHtml(k)}</span><span>${escapeHtml(it.label)}</span><span class="act">${act}</span></div>`;
 }
@@ -7154,7 +7423,7 @@ function renderOpenQuestions(q) {
   if (!q || !q.count) { line.hidden = true; line.textContent = ''; return; }
   line.hidden = false;
   line.innerHTML = '<span class="k">Open questions</span> ' +
-    `<span title="${escapeHtml((q.titles || []).join(' · '))}">${q.count} kept verbatim — <a href="#library" onclick="openPlace('library','questions');return false">in the Library</a></span>`;
+    `<span title="${escapeHtml((q.titles || []).join(' · '))}">${q.count} kept verbatim — <a href="#library" onclick="openBand('library','questions');return false">in the Library</a></span>`;
 }
 async function loadOpenQuestions() {
   const list = document.getElementById('questions-list'), pill = document.getElementById('questions-count');
@@ -7205,7 +7474,7 @@ async function openShelfTitle(title) {
   await toggleLibraryOpen();
   const search = document.getElementById('library-search');
   if (search) { search.value = title; renderLibrary(title); }
-  openPlace('concepts');
+  openBand('concepts');
 }
 async function showShelfEntry(c) {
   await toggleLibraryOpen();
@@ -7213,14 +7482,21 @@ async function showShelfEntry(c) {
   if (search) { search.value = c.name; renderLibrary(c.name); }
   const row = document.getElementById('wrow_' + (c.name || '').replace(/[^a-z0-9]+/gi, '_'));
   if (row) row.scrollIntoView({block: 'center'});
-  openPlace('concepts');
+  openBand('concepts');
 }
-// Places: in-page destinations, so the writing room and everything else
-// keep their state; the hash makes Back return to the place you left.
-function openPlace(place, focusId) {
-  const head = document.getElementById(place);
-  if (place === 'concepts') { toggleLibraryOpen(); }
-  if (place === 'library') {
+// Bands: in-page destinations ON HOME, so the writing room and everything
+// else keep their state; the hash makes Back return to the band you left.
+// Not a PLACE, which is a whole document the shell holds — openPlace, above.
+// Until slice 2 both were called openPlace and the second declaration
+// silently ate the first, which is how a header link to /map ended up
+// scrolling to a band instead of opening the Map.
+function openBand(band, focusId) {
+  // A band lives on Home, so opening one means we are on Home: a place
+  // filling the shell has to give the window back first.
+  if (PLACE) closePlace();
+  const head = document.getElementById(band);
+  if (band === 'concepts') { toggleLibraryOpen(); }
+  if (band === 'library') {
     const body = document.getElementById('docs-body');
     if (body && body.style.display === 'none') toggleSection('docs-body', 'docs-head');
     if (focusId === 'med-file') { const mb = document.getElementById('media-body'); if (mb && mb.style.display === 'none') toggleSection('media-body', 'media-head'); }
@@ -7228,11 +7504,11 @@ function openPlace(place, focusId) {
   }
   if (head) head.scrollIntoView({block: 'start'});
   if (focusId) { const f = document.getElementById(focusId); if (f) { try { f.focus(); } catch (e) {} } }
-  if (location.hash !== '#' + place) history.pushState(null, '', '#' + place);
-  document.querySelectorAll('header nav.places a').forEach(a => a.classList.toggle('here', a.dataset.place === place));
+  if (location.hash !== '#' + band) history.pushState(null, '', '#' + band);
+  document.querySelectorAll('header nav.places a').forEach(a => a.classList.toggle('here', a.dataset.place === band));
 }
-window.addEventListener('hashchange', () => { const p = location.hash.slice(1); if (['concepts', 'rooms', 'library', 'system'].includes(p)) openPlace(p); });
-document.querySelectorAll('header nav.places a[data-place]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); openPlace(a.dataset.place); }));
+window.addEventListener('hashchange', () => { const p = location.hash.slice(1); if (['concepts', 'rooms', 'library', 'system'].includes(p)) openBand(p); });
+document.querySelectorAll('header nav.places a[data-place]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); openBand(a.dataset.place); }));
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('input-text').addEventListener('input', updateGestureChooser);
@@ -7261,7 +7537,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (saved && saved.work_id) enterWork(saved.work_id, saved.section, true);
   } catch (e) {}
   const p0 = location.hash.slice(1);
-  if (['concepts', 'rooms', 'library', 'system'].includes(p0)) setTimeout(() => openPlace(p0), 250);
+  if (['concepts', 'rooms', 'library', 'system'].includes(p0)) setTimeout(() => openBand(p0), 250);
 });
 </script>
 <script src="/brand.js"></script>

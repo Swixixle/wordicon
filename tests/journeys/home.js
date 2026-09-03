@@ -7,7 +7,7 @@
 // doors, the Clinic deep link, the brand on every page, phone and split
 // widths, reduced motion. Prints one line per check; exits 1 on any
 // failure. Run by tests/journeys/run.sh (locally or in CI).
-const { BASE, ok, launch, pairedContext, finish } = require('./lib');
+const { BASE, ok, place, launch, pairedContext, finish } = require('./lib');
 const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 * 60000).toISOString(), last_drill_at: new Date(Date.now() - 86400000).toISOString(), cloud: 'iCloud', n_vaults: 31, total_bytes: 125638 * 1024, failure: '', stale_red: false, dirty_seconds: 0 };
 
 (async () => {
@@ -54,24 +54,30 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
     ok(gone.hidden && gone.display === 'none' && gone.rulings === 2, 'with nothing saved the line is gone and the ruling count is unchanged');
     await page.evaluate(() => { HOME = null; }); await page.evaluate(() => loadHome()); await page.waitForTimeout(600);
     // block 103: the door opens the Recovery Review; a case shows only what survived; Accept needs the owner's definition; the ruling is a new event with its clock
+    // slice 2: a door opens the place INSIDE the shell, so what the review
+    // draws is a frame in this same window — which is the point of it.
     await page.click('#ruling-area .rule-row a[href="/recovery"]'); await page.waitForTimeout(1200);
-    const rv = await page.evaluate(() => ({ url: location.pathname, title: document.title, cases: document.querySelectorAll('#cases .card[data-queue-id]').length,
+    const rec = await place(page, '/recovery');
+    ok(!!rec, 'the door opened the Recovery Review inside the shell');
+    const shellAt = await page.evaluate(() => ({ url: location.pathname, name: document.getElementById('place-name').textContent, homeHidden: document.getElementById('home-main').hidden }));
+    ok(shellAt.url === '/recovery' && shellAt.homeHidden && /Recovery/.test(shellAt.name), 'the shell says where you are without leaving the document: ' + JSON.stringify(shellAt));
+    const rv = await rec.evaluate(() => ({ url: location.pathname, title: document.title, cases: document.querySelectorAll('#cases .card[data-queue-id]').length,
       text: document.getElementById('cases').textContent.replace(/\s+/g, ' '), epoch: document.getElementById('epoch-line').textContent,
       defs: Array.from(document.querySelectorAll('#cases textarea')).map(t => t.value), suggested: /suggestion|proposed|suggested value/i.test(document.getElementById('cases').textContent) }));
     ok(rv.url === '/recovery' && /Recovery Review/.test(rv.title) && rv.cases === 2, 'the door opens the Recovery Review with the two queued cases: ' + JSON.stringify([rv.url, rv.cases]));
     ok(/No definition survives\./.test(rv.text) && /receipt: found/.test(rv.text) && /Sibling A · Sibling B|Quorum Pedagogy · Sibling A/.test(rv.text) && /no clock/.test(rv.text), 'a case shows what survived and says what did not: ' + rv.text.slice(0, 200));
     ok(rv.defs.every(v => v === '') && !rv.suggested, 'no definition is suggested or prefilled — the field is the owner\'s');
-    const fourth = await page.$$eval('#cases .card[data-queue-id] .actions button', bs => bs.slice(0, 4).map(b => b.textContent.trim()));
+    const fourth = await rec.$$eval('#cases .card[data-queue-id] .actions button', bs => bs.slice(0, 4).map(b => b.textContent.trim()));
     ok(fourth.join('|') === 'Accept|Revise|Reject|Not enough survives — leave unresolved', 'the four rulings are offered, unresolved among them: ' + fourth.join(' | '));
     ok(/epoch: development_and_calibration/.test(rv.epoch), 'the page names the epoch: ' + rv.epoch);
-    await page.click('#cases .card[data-queue-id] .actions button');   // Accept with an empty definition
+    await rec.click('#cases .card[data-queue-id] .actions button');   // Accept with an empty definition
     await page.waitForTimeout(300);
-    const refused = await page.evaluate(() => document.querySelector('#cases .card[data-queue-id] .error').textContent);
+    const refused = await rec.evaluate(() => document.querySelector('#cases .card[data-queue-id] .error').textContent);
     ok(/definition from you is required/.test(refused), 'Accept without a definition is refused on the page: ' + refused);
-    await page.fill('#cases .card[data-queue-id] textarea', 'teaching that survives by being forbidden');
-    await page.fill('#cases .card[data-queue-id] input[id$="_note"]', 'kept, from the journey');
-    await page.click('#cases .card[data-queue-id] .actions button'); await page.waitForTimeout(1200);
-    const after = await page.evaluate(() => ({ open: document.querySelectorAll('#cases .card[data-queue-id]').length, ruled: document.querySelectorAll('#ruled .card.ruled').length, ruledText: document.getElementById('ruled').textContent.replace(/\s+/g, ' ') }));
+    await rec.fill('#cases .card[data-queue-id] textarea', 'teaching that survives by being forbidden');
+    await rec.fill('#cases .card[data-queue-id] input[id$="_note"]', 'kept, from the journey');
+    await rec.click('#cases .card[data-queue-id] .actions button'); await page.waitForTimeout(1200);
+    const after = await rec.evaluate(() => ({ open: document.querySelectorAll('#cases .card[data-queue-id]').length, ruled: document.querySelectorAll('#ruled .card.ruled').length, ruledText: document.getElementById('ruled').textContent.replace(/\s+/g, ' ') }));
     ok(after.open === 1 && after.ruled === 1 && /accept — kept, from the journey · concept concept_[0-9a-f]{12} · 1 judgment event\(s\) · on the shelf/.test(after.ruledText) && /development_and_calibration/.test(after.ruledText), 'the ruling is recorded with its identity, its clock and its epoch, and the case leaves the open list: ' + after.ruledText.slice(0, 200));
     const apiAfter = await (await page.request.get(BASE + '/api/home')).json();
     const recRow = (apiAfter.pending.items || []).find(i => i.source === 'recovery_review');

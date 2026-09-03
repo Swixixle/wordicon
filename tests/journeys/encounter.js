@@ -7,7 +7,7 @@
 // due) with the review's door, the review lists it as reopenable, and a
 // later Accept with a definition appends a ruling that cites the
 // unresolved one. Prints one line per check; exits 1 on any failure.
-const { BASE, ok, launch, pairedContext, finish } = require('./lib');
+const { BASE, ok, launch, pairedContext, finish, place } = require('./lib');
 const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 * 60000).toISOString(), last_drill_at: new Date(Date.now() - 86400000).toISOString(), cloud: 'iCloud', n_vaults: 31, total_bytes: 125638 * 1024, failure: '', stale_red: false, dirty_seconds: 0 };
 
 (async () => {
@@ -75,15 +75,17 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
   ok(!line.insideCard && line.top >= line.rulingBottom - 8 && !/^0 /.test(line.more) && line.rows === 1 && /^1 · only/.test(line.more), 'the line sits under the ruling band and is not counted as a ruling: ' + JSON.stringify([line.rows, line.more]));
   ok(line.title.length > 0 && !/Gutter Loop|Quorum/.test(line.text), 'the title is on hover, not in the line');
   await page.click('#ruling-unresolved a[href="/recovery"]'); await page.waitForTimeout(1000);
-  ok((await page.evaluate(() => location.pathname)) === '/recovery', 'the door opens the review');
+  // slice 2: the door opens the review inside the shell
+  const rv2 = await place(page, '/recovery');
+  ok(!!rv2 && (await page.evaluate(() => location.pathname)) === '/recovery', 'the door opens the review');
   // reopen: Accept without a definition is refused; with one, the ruling cites the unresolved one
-  await page.click('#unresolved .card[data-queue-id] .actions button'); await page.waitForTimeout(300);
-  const refused = await page.evaluate(() => document.querySelector('#unresolved .card[data-queue-id] .error').textContent);
+  await rv2.click('#unresolved .card[data-queue-id] .actions button'); await page.waitForTimeout(300);
+  const refused = await rv2.evaluate(() => document.querySelector('#unresolved .card[data-queue-id] .error').textContent);
   ok(/definition from you is required/.test(refused), 'reopening with Accept and no definition is refused on the page');
-  await page.fill('#unresolved .card[data-queue-id] textarea', 'a loop that drains what it was meant to carry');
-  await page.fill('#unresolved .card[data-queue-id] input[id$="_note"]', 'more survived, from the journey');
-  await page.click('#unresolved .card[data-queue-id] .actions button'); await page.waitForTimeout(1200);
-  const u2 = await page.evaluate(() => ({ unresolved: document.getElementById('unresolved').textContent.trim(), open: document.querySelectorAll('#cases .card[data-queue-id]').length, ruled: document.querySelectorAll('#ruled .card.ruled').length,
+  await rv2.fill('#unresolved .card[data-queue-id] textarea', 'a loop that drains what it was meant to carry');
+  await rv2.fill('#unresolved .card[data-queue-id] input[id$="_note"]', 'more survived, from the journey');
+  await rv2.click('#unresolved .card[data-queue-id] .actions button'); await page.waitForTimeout(1200);
+  const u2 = await rv2.evaluate(() => ({ unresolved: document.getElementById('unresolved').textContent.trim(), open: document.querySelectorAll('#cases .card[data-queue-id]').length, ruled: document.querySelectorAll('#ruled .card.ruled').length,
     ruledText: document.getElementById('ruled').textContent.replace(/\s+/g, ' ') }));
   ok(u2.unresolved === '' && u2.open === 0 && u2.ruled === 3 && /accept — more survived, from the journey · concept concept_[0-9a-f]{12} · 1 judgment event\(s\) · on the shelf · reopens rr_[0-9a-f]{12}/.test(u2.ruledText),
      'the reopened ruling is recorded, on the shelf, citing the unresolved ruling; the case leaves the unresolved list: ' + u2.ruledText.slice(0, 220));

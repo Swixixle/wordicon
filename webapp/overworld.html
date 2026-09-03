@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Wordicon — Map</title>
+<title>Nikodemus — Map</title>
 <meta name="theme-color" content="#11161d">
 <style>
   /* Links: the ruled palette (measured >=8.4:1 on these surfaces),
@@ -753,8 +753,8 @@ async function openDetail(key, trace) {
         ${fr.hostile_read ? `<p style="font-size:12px;color:var(--muted)"><em>Friction:</em> ${escapeHtml(fr.hostile_read)}</p>` : ''}
       </div>`;
     } else {
-      const th = (snap.threads || []).find(t => it.label.startsWith(t.anchor_name || ' '));
-      const rf = (snap.refractions || []).find(x => it.label.startsWith((x.romanization || x.term || ' ')));
+      const th = (snap.threads || []).find(t => it.label.startsWith(t.anchor_name || '\0'));
+      const rf = (snap.refractions || []).find(x => it.label.startsWith((x.romanization || x.term || '\0')));
       const note = (th && th.review_note) || (rf && rf.review_note) || '';
       extra.innerHTML = note ? `<div style="border-top:1px solid var(--border);padding-top:8px">
         <p style="font-size:12.5px;color:var(--muted)"><em>Reviewer:</em> ${escapeHtml(note)}</p></div>` : '';

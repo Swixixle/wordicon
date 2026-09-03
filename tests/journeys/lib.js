@@ -56,4 +56,18 @@ function finish(name) {
   process.exit(fails.length ? 1 : 0);
 }
 
-module.exports = { BASE, DIR, OUT, tok, ck, ok, launch, pairedContext, finish, setPage: p => { lastPage = p; } };
+// Slice 2: a place opens inside the shell now, so what used to be "the page"
+// after clicking a door is a frame inside it. This waits for that frame and
+// hands it back; everything a journey did to the page it does to this.
+async function place(page, path, ms) {
+  const until = Date.now() + (ms || 8000);
+  while (Date.now() < until) {
+    const f = page.frames().find(fr => fr !== page.mainFrame() && fr.url().indexOf(path) !== -1);
+    if (f) { try { await f.waitForLoadState('domcontentloaded'); } catch (e) {} return f; }
+    await page.waitForTimeout(150);
+  }
+  return null;
+}
+
+module.exports = {
+  place, BASE, DIR, OUT, tok, ck, ok, launch, pairedContext, finish, setPage: p => { lastPage = p; } };

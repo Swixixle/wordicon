@@ -15,7 +15,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { BASE, DIR, ok, launch, pairedContext, finish } = require('./lib');
+const { BASE, DIR, ok, launch, pairedContext, finish, place } = require('./lib');
 const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 * 60000).toISOString(), last_drill_at: new Date(Date.now() - 86400000).toISOString(), cloud: 'iCloud', n_vaults: 31, total_bytes: 125638 * 1024, failure: '', stale_red: false, dirty_seconds: 0 };
 const PPORT = fs.readFileSync(path.join(DIR, 'producer_port'), 'utf8').trim();
 const PBASE = 'http://127.0.0.1:' + PPORT;
@@ -167,7 +167,11 @@ const OC_ID = OC.object.id, EA_ID = EA.object.id;
   await page.click('#destination-chips .dest[data-dest="import_open_case"]'); await page.waitForTimeout(1500);
   const u = new URL(page.url());
   ok(u.pathname === '/investigation' && u.searchParams.get('object') === OC_ID && u.searchParams.get('connector') === 'open-case-dev', 'choosing the import lands on the Investigation page with the address and the recognized object carried: ' + u.search.slice(0, 120));
-  const pre = await page.evaluate(() => ({ obj: document.getElementById('imp-object').value, note: document.getElementById('imp-note').textContent, conn: document.getElementById('imp-connector').value }));
+  // slice 2: the destination opens the Investigation Room inside the shell,
+  // so the words that sent you there are still in the box behind it
+  const inv = await place(page, '/investigation');
+  ok(!!inv, 'the import destination opened the Investigation Room inside the shell');
+  const pre = await inv.evaluate(() => ({ obj: document.getElementById('imp-object').value, note: document.getElementById('imp-note').textContent, conn: document.getElementById('imp-connector').value }));
   ok(pre.obj.includes(OC_ID) && /nothing has been fetched/.test(pre.note) && pre.conn === 'open-case-dev' && JSON.stringify(await attempts()) === attBefore, 'the form is pre-filled and nothing was fetched: ' + pre.note);
   await page.goto(BASE + '/'); await page.waitForTimeout(1000);
   await page.fill('#input-text', 'Exemplar Holdings'); await page.dispatchEvent('#input-text', 'input'); await page.waitForTimeout(900);
