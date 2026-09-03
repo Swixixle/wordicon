@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__BRAND_NAME__ — Investigation Rooms</title>
+<style>
+  :root {
+    --bg: #11161d; --panel: #181f29; --panel-2: #1f2833; --border: #2a3441;
+    --text: #e7ecf3; --muted: #8b98a9; --accent: #78aaff;
+    --good: #6fcf97; --bad: #e08a8a; --warn: #d9a441;
+    --oc: #9bb8ff; --ea: #b9d7a8; --nk: #d9c7ff;
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 18px 16px 60px; }
+  header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 15px; margin: 0 0 6px; }
+  header a, a { color: var(--accent); text-decoration: none; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin: 12px 0; }
+  .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+  .body { font-size: 14px; line-height: 1.55; margin: 6px 0; }
+  .muted { color: var(--muted); }
+  .foot { font-size: 12px; color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+  label { font-size: 11.5px; color: var(--muted); display: block; margin: 8px 0 3px; }
+  input, textarea, select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 9px; font-size: 13px; font-family: inherit; width: 100%; box-sizing: border-box; }
+  textarea { min-height: 64px; resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  button { background: var(--panel-2); color: var(--accent); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.reject { color: var(--bad); } button.unresolved { color: var(--muted); } button.quiet { color: var(--muted); font-size: 12px; padding: 4px 9px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .error { color: var(--bad); font-size: 13px; }
+  .ok { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+  .item { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; margin: 6px 0; font-size: 13px; line-height: 1.5; }
+  .item .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .seat { border-left: 3px solid var(--border); padding-left: 10px; margin: 12px 0; }
+  .seat.open_case { border-left-color: var(--oc); } .seat.ethicalalt { border-left-color: var(--ea); } .seat.nikodemus { border-left-color: var(--nk); }
+  .tag { display: inline-block; font-size: 10.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); margin-right: 4px; }
+  .tag.open_case { color: var(--oc); border-color: var(--oc); } .tag.ethicalalt { color: var(--ea); border-color: var(--ea); } .tag.nikodemus { color: var(--nk); border-color: var(--nk); }
+  code { font-size: 12px; color: var(--muted); word-break: break-all; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { text-align: left; padding: 5px 7px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .scroll { overflow-x: auto; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  details summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } .wrap { padding: 12px 10px 60px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Investigation Rooms</h1>
+  <a href="/">← back to <span data-brand>__BRAND_NAME__</span></a>
+  <span class="foot" id="fed-line">connected instruments · manual pull only · no model on this page</span>
+</header>
+
+<div class="card">
+  <div class="section-label">What this is</div>
+  <div class="body">Open Case and EthicalAlt stay their own systems, outside this record's private membrane. Here you register each one
+    as a named instrument with a key you pin yourself, pull one signed record at a time by your own press, and keep what arrived
+    byte for byte. Their records sit in separate seats — an Open Case signal stays Open Case's, an EthicalAlt concern level stays
+    EthicalAlt's — and nothing is joined across them until you declare that two named things are one. After a declaration, and only
+    then, the room computes a mechanical timeline that names its source records. Nothing on this page calls a model, polls, or refreshes.</div>
+  <div class="foot" id="fed-libs"></div>
+</div>
+
+<div class="card" id="connectors-card">
+  <div class="section-label">Connected instruments</div>
+  <div id="connectors"></div>
+  <details style="margin-top:8px"><summary>Register an instrument</summary>
+    <div class="grid2">
+      <div><label for="reg-id">Connector id</label><input id="reg-id" placeholder="open-case-main"></div>
+      <div><label for="reg-producer">Producer</label><select id="reg-producer"><option value="open_case">Open Case</option><option value="ethicalalt">EthicalAlt</option></select></div>
+      <div><label for="reg-url">Base URL (the whole network permission — https; plain http only on loopback for development)</label><input id="reg-url" placeholder="https://open-case.example.org"></div>
+      <div><label for="reg-cred">Credential reference (a name in the server's environment, never a value)</label><input id="reg-cred" placeholder="env:OPEN_CASE_API_KEY"></div>
+      <div><label for="reg-display">Display name</label><input id="reg-display" placeholder="Open Case"></div>
+      <div><label><input type="checkbox" id="reg-dev" style="width:auto"> development endpoint on loopback (plain http allowed)</label></div>
+    </div>
+    <div class="row"><button onclick="registerConnector()">Register</button><span class="foot" id="reg-note"></span></div>
+  </details>
+</div>
+
+<div class="card" id="import-card">
+  <div class="section-label">Bring a record in — one at a time, by your press</div>
+  <div class="grid2">
+    <div>
+      <label for="imp-connector">Instrument</label><select id="imp-connector"></select>
+      <label for="imp-object">Object id, or a URL of that instrument</label><input id="imp-object" placeholder="a case id, a profile slug, or a pasted URL">
+      <div class="row"><button onclick="importObject()">Fetch and import the signed record</button><span class="foot" id="imp-note"></span></div>
+      <div class="foot">The fetch reaches only the instrument's configured origin. What arrives is verified against the key you pinned and kept byte for byte, verified or not.</div>
+    </div>
+    <div>
+      <label for="loc-query">Or look in the instrument's own list</label><input id="loc-query" placeholder="a name or a word to filter by">
+      <div class="row"><button onclick="locateObjects()">Locate</button><span class="foot" id="loc-note"></span></div>
+      <div id="loc-results"></div>
+    </div>
+  </div>
+  <details style="margin-top:8px"><summary>Import a package you already have (a file the producer gave you)</summary>
+    <label for="pkg-body">The package, exactly as received (JSON)</label><textarea id="pkg-body" placeholder='{"schema":"nikodemus.deposition.v1", ...}'></textarea>
+    <div class="row"><button onclick="importPackage()">Import these bytes</button><span class="foot" id="pkg-note"></span></div>
+  </details>
+</div>
+
+<div class="card" id="depositions-card">
+  <div class="section-label">Depositions in custody</div>
+  <div id="depositions"></div>
+</div>
+
+<div class="card" id="rooms-card">
+  <div class="section-label">Rooms</div>
+  <div class="row"><input id="room-title" placeholder="a title for a new room" style="max-width:420px"><button onclick="createRoom()">Create an Investigation Room</button><span class="foot" id="room-note"></span></div>
+  <div id="rooms"></div>
+</div>
+
+<div class="card" id="room-card" hidden>
+  <div class="section-label">Room</div>
+  <h2 id="room-title-line"></h2>
+  <div class="foot" id="room-foot"></div>
+  <div class="row" style="margin-top:8px">
+    <select id="room-add-dep" style="max-width:420px"></select>
+    <button onclick="addToRoom()">Add this deposition to the room</button>
+    <button onclick="proposeMechanically()">Propose relationships (exact name matches)</button>
+  </div>
+  <div id="room-unverified"></div>
+  <div id="room-seats"></div>
+  <div class="section-label" style="margin-top:12px">Relationships — proposed, declared, rejected, unresolved</div>
+  <div id="room-relationships"></div>
+  <div class="section-label" style="margin-top:12px">Convergence — mechanical, after a declaration</div>
+  <div id="room-convergence"></div>
+</div>
+
+<script>
+const STATE = { connectors: [], depositions: [], rooms: [], room: null, producers: {} };
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const short = (s, n = 18) => { s = String(s || ''); return s.length > n ? s.slice(0, n) + '…' : s; };
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  let d = null; try { d = await r.json(); } catch (e) { d = { error: 'not JSON (' + r.status + ')' }; }
+  if (r.status === 401) { location.href = '/pair'; }
+  return { status: r.status, d };
+}
+const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+
+async function loadAll() {
+  const c = await api('/api/connectors');
+  STATE.connectors = (c.d && c.d.connectors) || []; STATE.producers = (c.d && c.d.producers) || {};
+  const libs = (c.d && c.d.libraries) || {};
+  document.getElementById('fed-libs').textContent = 'verification libraries on this machine: jcs ' + (libs.jcs ? 'present' : 'ABSENT') + ' · cryptography ' + (libs.cryptography ? 'present' : 'ABSENT') + (libs.jcs && libs.cryptography ? '' : ' — pip install -r requirements.txt');
+  const d = await api('/api/depositions'); STATE.depositions = (d.d && d.d.depositions) || [];
+  const r = await api('/api/investigations'); STATE.rooms = (r.d && r.d.rooms) || [];
+  renderConnectors(); renderDepositions(); renderRooms();
+  if (STATE.room) await openRoom(STATE.room.room_id);
+}
+function renderConnectors() {
+  const el = document.getElementById('connectors');
+  if (!STATE.connectors.length) { el.innerHTML = '<div class="foot">No instrument is registered yet. Register one below, then pin its public key — out of band, from the operator, never from a package.</div>'; }
+  else el.innerHTML = STATE.connectors.map(c => `
+    <div class="item" data-connector="${esc(c.connector_id)}">
+      <span class="tag ${esc(c.producer)}">${esc((STATE.producers[c.producer] || {}).display || c.producer)}</span>
+      <strong>${esc(c.display)}</strong> <code>${esc(c.connector_id)}</code> · ${c.enabled ? '<span class="ok">enabled</span>' : '<span class="warn">disabled</span>'}
+      <div class="foot">origin <code>${esc(c.origin)}</code>${c.dev_loopback ? ' · development loopback' : ''} · capabilities: read-only (locate, import, verify); mutating: none</div>
+      <div class="foot">status: <span class="${c.last_attempt && c.last_attempt.ok ? 'ok' : (c.last_attempt ? 'bad' : 'muted')}">${esc(c.status)}</span>${c.last_attempt ? ' · last attempt ' + esc(c.last_attempt.recorded_at) + ' (' + esc(c.last_attempt.outcome) + ')' : ''}${c.last_success_at ? ' · last reachable ' + esc(c.last_success_at) : ''}</div>
+      <div class="foot">credential: ${c.credential_ref ? '<code>' + esc(c.credential_ref) + '</code> ' + (c.credential_configured ? '<span class="ok">set in the server environment</span>' : '<span class="warn">NOT set in the server environment</span>') : 'none (this producer needs none)'} · depositions ${c.depositions}${c.latest_deposition ? ' · latest <code>' + esc(c.latest_deposition) + '</code>' : ''}</div>
+      <div class="foot">trusted keys: ${(c.trusted_keys || []).length ? c.trusted_keys.map(k => '<code>' + esc(short(k.key_id, 36)) + '</code> ' + esc(k.label || '') + ' <button class="quiet" onclick="unpinKey(\'' + esc(c.connector_id) + '\',\'' + esc(k.key_id) + '\')">unpin</button>').join(' ') : '<span class="warn">none pinned — nothing from this instrument can verify until you pin its public key</span>'}</div>
+      <div class="row"><input placeholder="public key (Ed25519 SPKI, base64) — from the operator, out of band" data-pin="${esc(c.connector_id)}" style="max-width:460px"><input placeholder="label" data-pinlabel="${esc(c.connector_id)}" style="max-width:140px"><button onclick="pinKey('${esc(c.connector_id)}')">Pin this key</button></div>
+      <div class="row"><button onclick="checkConnector('${esc(c.connector_id)}')">Check reachability (your press)</button><button class="quiet" onclick="setEnabled('${esc(c.connector_id)}', ${c.enabled ? 'false' : 'true'})">${c.enabled ? 'Disable' : 'Enable'}</button><span class="foot" data-checknote="${esc(c.connector_id)}"></span></div>
+    </div>`).join('');
+  const sel = document.getElementById('imp-connector');
+  sel.innerHTML = STATE.connectors.filter(c => c.enabled).map(c => `<option value="${esc(c.connector_id)}">${esc(c.display)} (${esc(c.connector_id)})</option>`).join('') || '<option value="">no enabled instrument</option>';
+  const params = new URLSearchParams(location.search);
+  if (params.get('connector') && [...sel.options].some(o => o.value === params.get('connector'))) sel.value = params.get('connector');
+}
+async function registerConnector() {
+  const note = document.getElementById('reg-note');
+  const r = await post('/api/connectors', { connector_id: document.getElementById('reg-id').value, producer: document.getElementById('reg-producer').value, base_url: document.getElementById('reg-url').value,
+    display: document.getElementById('reg-display').value, credential_ref: document.getElementById('reg-cred').value, dev_loopback: document.getElementById('reg-dev').checked });
+  note.textContent = r.d.error ? r.d.error : 'registered — now pin its public key';
+  note.className = r.d.error ? 'error' : 'foot';
+  loadAll();
+}
+async function pinKey(cid) {
+  const inp = document.querySelector(`input[data-pin="${cid}"]`), lab = document.querySelector(`input[data-pinlabel="${cid}"]`);
+  const r = await post(`/api/connectors/${encodeURIComponent(cid)}/keys`, { public_key_b64: inp.value.trim(), label: lab.value.trim() });
+  const note = document.querySelector(`[data-checknote="${cid}"]`); if (note) { note.textContent = r.d.error ? r.d.error : 'pinned ' + short(r.d.key_id, 40); note.className = r.d.error ? 'error' : 'foot'; }
+  if (!r.d.error) loadAll();
+}
+async function unpinKey(cid, kid) { if (!confirm('Unpin this key? Packages that name it will no longer verify.')) return; await post(`/api/connectors/${encodeURIComponent(cid)}/keys/unpin`, { key_id: kid }); loadAll(); }
+async function setEnabled(cid, enabled) { await post(`/api/connectors/${encodeURIComponent(cid)}/enabled`, { enabled }); loadAll(); }
+async function checkConnector(cid) {
+  document.querySelector(`[data-checknote="${cid}"]`).textContent = 'checking…';
+  const r = await post(`/api/connectors/${encodeURIComponent(cid)}/check`, {});
+  await loadAll();   // re-render first (the registry's standing changed), then the answer — so the answer survives the re-render
+  const note = document.querySelector(`[data-checknote="${cid}"]`); if (!note) return;
+  note.textContent = r.d.ok ? `reachable — the producer lists ${r.d.count} object(s); nothing was imported` : `NOT reachable: ${r.d.outcome} — ${r.d.detail || ''}; what is already in custody stays readable`;
+  note.className = r.d.ok ? 'foot ok' : 'foot bad';
+}
+async function importObject() {
+  const cid = document.getElementById('imp-connector').value, raw = document.getElementById('imp-object').value.trim(), note = document.getElementById('imp-note');
+  if (!cid || !raw) { note.textContent = 'choose an instrument and name an object'; return; }
+  note.textContent = 'fetching from the configured origin…';
+  const body = /^https?:\/\//i.test(raw) ? { url: raw } : { object_id: raw };
+  const r = await post(`/api/connectors/${encodeURIComponent(cid)}/import`, body);
+  if (r.d.error) { note.textContent = r.d.error; note.className = 'error'; return; }
+  if (!r.d.ok) { note.textContent = `not imported — ${r.d.outcome}: ${r.d.detail || ''}`; note.className = 'error'; loadAll(); return; }
+  const v = r.d.verification || {};
+  note.textContent = (r.d.duplicate ? 'already in custody (same bytes) — an import event was recorded, nothing else' : (v.ok ? 'imported and VERIFIED against the pinned key' : 'imported UNVERIFIED — ' + (v.why || ''))) + ' · ' + r.d.deposition_id;
+  note.className = v.ok ? 'foot ok' : 'foot warn';
+  loadAll();
+}
+async function locateObjects() {
+  const cid = document.getElementById('imp-connector').value, q = document.getElementById('loc-query').value.trim(), note = document.getElementById('loc-note'), out = document.getElementById('loc-results');
+  note.textContent = 'asking the instrument for its list…';
+  const r = await post(`/api/connectors/${encodeURIComponent(cid)}/locate`, { query: q });
+  if (!r.d.ok) { note.textContent = `${r.d.outcome || 'error'}: ${r.d.detail || r.d.error || ''}`; note.className = 'error'; out.innerHTML = ''; return; }
+  note.textContent = `${r.d.count} object(s) in the producer's own list${q ? ' matching "' + q + '"' : ''} — nothing imported`; note.className = 'foot';
+  out.innerHTML = (r.d.items || []).slice(0, 40).map(it => {
+    const id = it.id || it.brand_slug || it.slug || '';
+    const label = it.title || it.brand_name || it.name || id;
+    return `<div class="item"><strong>${esc(label)}</strong> <code>${esc(id)}</code>${it.sealed === false ? ' <span class="warn">unsealed</span>' : ''}${it.self_contained === false ? ' <span class="warn">legacy seal</span>' : ''} <button class="quiet" onclick="document.getElementById('imp-object').value='${esc(id)}'; importObject()">Import</button></div>`;
+  }).join('') || '<div class="foot">nothing listed</div>';
+}
+async function importPackage() {
+  const cid = document.getElementById('imp-connector').value, body = document.getElementById('pkg-body').value, note = document.getElementById('pkg-note');
+  if (!cid || !body.trim()) { note.textContent = 'choose an instrument and paste the package'; return; }
+  const r = await fetch(`/api/connectors/${encodeURIComponent(cid)}/import-package`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+  const d = await r.json();
+  if (d.error) { note.textContent = d.error; note.className = 'error'; return; }
+  const v = d.verification || {};
+  note.textContent = (d.duplicate ? 'already in custody (same bytes)' : (v.ok ? 'kept and VERIFIED' : 'kept UNVERIFIED — ' + (v.why || ''))) + ' · ' + d.deposition_id; note.className = v.ok ? 'foot ok' : 'foot warn';
+  loadAll();
+}
+function renderDepositions() {
+  const el = document.getElementById('depositions');
+  if (!STATE.depositions.length) { el.innerHTML = '<div class="foot">Nothing in custody yet.</div>'; return; }
+  el.innerHTML = '<div class="scroll"><table><tr><th>deposition</th><th>instrument</th><th>object</th><th>signature</th><th>status</th><th>imported at</th><th>source-recorded at</th><th>doors</th></tr>' +
+    STATE.depositions.slice().reverse().map(d => `<tr data-dep="${esc(d.deposition_id)}">
+      <td><code>${esc(d.deposition_id)}</code><div class="foot">${d.bytes} bytes · sha256 ${esc(short(d.sha256, 14))}</div></td>
+      <td><span class="tag ${esc(d.producer)}">${esc((STATE.producers[d.producer] || {}).display || d.producer)}</span><div class="foot">${esc(d.connector_id)}</div></td>
+      <td>${esc(d.object_type)} <code>${esc(short(d.object_id, 22))}</code><div class="foot">${esc(d.payload_schema || '')}${d.producer_version ? ' · rev ' + esc(short(d.producer_version, 10)) : ''}</div></td>
+      <td>${d.signature_ok ? '<span class="ok">verified</span>' : '<span class="bad">NOT verified</span>'}<div class="foot">${d.signature_ok ? 'key ' + esc(short(d.trusted_key_id, 30)) : esc(d.why || '')}</div></td>
+      <td>${esc(d.status)}${d.prior_version_of ? '<div class="foot">new version of <code>' + esc(d.prior_version_of) + '</code> · supersession: ' + esc(d.supersession) + '</div>' : ''}${d.legacy ? '<div class="foot warn">legacy seal</div>' : ''}</td>
+      <td class="foot">${esc(d.received_at)}</td><td class="foot">${esc(d.source_recorded_at || '—')}</td>
+      <td><a href="/api/depositions/${esc(d.deposition_id)}/bytes" target="_blank">exact bytes</a> · <a href="#" onclick="reverify('${esc(d.deposition_id)}'); return false;">re-verify</a> · <a href="#" onclick="showDeposition('${esc(d.deposition_id)}'); return false;">record</a><div class="foot" data-vnote="${esc(d.deposition_id)}"></div></td></tr>`).join('') + '</table></div><div id="dep-detail"></div>';
+}
+async function reverify(id) {
+  const r = await post(`/api/depositions/${encodeURIComponent(id)}/verify`, {});
+  const n = document.querySelector(`[data-vnote="${id}"]`); if (n) { const v = r.d.verification || {}; n.textContent = (v.ok ? 're-verified under the current pinned keys' : 'does not verify now: ' + (v.why || '')) + (r.d.byte_identical ? ' · bytes identical to import' : ' · BYTES CHANGED'); n.className = 'foot ' + (v.ok ? 'ok' : 'bad'); }
+}
+async function showDeposition(id) {
+  const r = await api(`/api/depositions/${encodeURIComponent(id)}`); const el = document.getElementById('dep-detail'); if (!el) return;
+  const rep = r.d.representation, env = r.d.envelope || {};
+  const subj = rep && rep.subject ? rep.subject : {};
+  el.innerHTML = `<div class="item"><div class="k">record ${esc(id)}</div>
+    <div>producer <code>${esc(env.producer && env.producer.id)}</code> version <code>${esc(env.producer && env.producer.version)}</code> constitution <code>${esc(env.producer && env.producer.constitution_version)}</code></div>
+    <div>subject ${esc(subj.name || '')} <code>${esc(subj.ref || '')}</code>${rep && rep.producer === 'ethicalalt' ? ` · research depth <strong>${esc(subj.research_depth)}</strong> · concern level <strong>${esc(subj.concern_level)}</strong> <span class="foot">(${esc(subj.concern_attributed_to)}'s assessment)</span>` : ''}${rep && rep.legacy ? ' · <span class="warn">legacy seal</span>' : ''}</div>
+    <div class="foot">source times: ${((env.source_times) || []).map(t => esc(t.kind) + ' ' + esc(t.at) + ' (' + esc(t.basis) + ')').join(' · ') || 'none stated'}</div>
+    <div class="foot">gaps carried: ${rep ? rep.gaps.length : 0} · items: ${rep ? JSON.stringify(rep.counts) : 'no representation (unverified)'}</div>
+    ${rep && rep.producer === 'ethicalalt' ? '<div class="foot">' + ((rep.partial || []).length ? '<span class="warn">PARTIAL — ' + rep.partial.map(esc).join('; ') + '</span>' : 'EthicalAlt\'s own counts show nothing missing') + ' · a signature proves origin and integrity, never completeness</div>' : ''}
+    ${rep && rep.provenance_completeness ? '<div class="foot">provenance completeness (counts): ' + esc(JSON.stringify(rep.provenance_completeness).slice(0, 400)) + '</div>' : ''}
+    <div class="foot">vocabulary: ${rep ? Object.values(rep.vocabulary || {}).map(esc).join(' · ') : ''}</div></div>`;
+}
+function renderRooms() {
+  const el = document.getElementById('rooms');
+  el.innerHTML = STATE.rooms.length ? STATE.rooms.map(r => `<div class="item"><strong>${esc(r.title)}</strong> <code>${esc(r.room_id)}</code> · ${r.members.length} member(s) <button class="quiet" onclick="openRoom('${esc(r.room_id)}')">Open</button></div>`).join('') : '<div class="foot">No room yet.</div>';
+}
+async function createRoom() {
+  const t = document.getElementById('room-title').value.trim(), note = document.getElementById('room-note');
+  const r = await post('/api/investigations', { title: t });
+  if (r.d.error) { note.textContent = r.d.error; note.className = 'error'; return; }
+  note.textContent = 'created'; await loadAll(); openRoom(r.d.room.room_id);
+}
+async function openRoom(rid) {
+  const r = await api(`/api/investigations/${encodeURIComponent(rid)}`);
+  if (r.d.error) return;
+  STATE.room = r.d;
+  const card = document.getElementById('room-card'); card.hidden = false;
+  document.getElementById('room-title-line').textContent = r.d.title;
+  document.getElementById('room-foot').textContent = `${r.d.room_id} · ${r.d.depositions.length} deposition(s) · ${r.d.note}`;
+  const sel = document.getElementById('room-add-dep');
+  sel.innerHTML = STATE.depositions.map(d => `<option value="${esc(d.deposition_id)}">${esc((STATE.producers[d.producer] || {}).display || d.producer)} · ${esc(d.object_type)} ${esc(short(d.object_id, 24))} · ${d.signature_ok ? 'verified' : 'UNVERIFIED'}</option>`).join('');
+  document.getElementById('room-unverified').innerHTML = r.d.unverified.length ? '<div class="item"><div class="k">in the room but unverified — nothing from these is seated</div>' + r.d.unverified.map(u => `<div class="foot bad">${esc(u.deposition_id)} · ${esc(u.producer)} ${esc(u.object_id)} — ${esc(u.why)}</div>`).join('') + '</div>' : '';
+  document.getElementById('room-seats').innerHTML = r.d.seats.map(s => `<div class="seat ${esc(s.producer === '*' ? 'nikodemus' : s.producer)}"><div class="k">${esc(s.seat)} <span class="tag ${esc(s.producer === '*' ? 'nikodemus' : s.producer)}">${esc(s.producer === '*' ? 'each instrument' : ((STATE.producers[s.producer] || {}).display || s.producer))}</span> · ${s.items.length}</div>${s.items.length ? s.items.map(it => seatItem(s.kind, it)).join('') : '<div class="foot">' + (s.kind === 'document' ? 'no primary-source document admitted to this room' : 'nothing seated here') + '</div>'}</div>`).join('');
+  renderRelationships(r.d.relationships);
+  loadConvergence(rid);
+  card.scrollIntoView({ block: 'start' });
+  const url = new URL(location.href); url.searchParams.set('room', rid); history.replaceState(null, '', url.toString());
+}
+function stamp(it) {
+  return `<div class="foot">${it.producer ? '<span class="tag ' + esc(it.producer) + '">' + esc((STATE.producers[it.producer] || {}).display || it.producer) + '</span>' : ''}${it.ref ? '<code>' + esc(it.ref) + '</code>' : ''}${it.signature_ok === true ? ' · <span class="ok">signed</span>' : (it.signed === false ? ' · <span class="warn">unsigned attachment</span>' : '')}${it.status ? ' · ' + esc(it.status) : ''}${it.imported_at ? ' · imported ' + esc(it.imported_at) : ''}${it.source_recorded_at ? ' · source-recorded ' + esc(it.source_recorded_at) : ''}</div>`;
+}
+function seatItem(kind, it) {
+  if (kind === 'evidence' || kind === 'dispute') return `<div class="item"><strong>${esc(it.title)}</strong>${it.date ? ' · ' + esc(it.date) : ''}${it.epistemic_level ? ' · <strong>' + esc(it.epistemic_level) + '</strong> <span class="foot">(' + esc(it.epistemic_attributed_to) + ')</span>' : ''}${it.is_absence ? ' · <span class="warn">documented absence</span>' : ''}<div class="foot">${esc(it.entry_type)} · ${esc(it.source_name)}${it.source_url ? ' · <a href="' + esc(it.source_url) + '" target="_blank" rel="noopener">source</a>' : ''}${it.claim_status ? ' · claim ' + esc(it.claim_status) : ''}${it.matched_name ? ' · matched name ' + esc(it.matched_name) : ''}</div>${stamp(it)}</div>`;
+  if (kind === 'signal') return `<div class="item"><strong>${esc(it.signal_type)}</strong> · weight ${esc(it.weight)}${it.epistemic_level ? ' · ' + esc(it.epistemic_level) : ''}<div>${esc(it.description)}</div><div class="foot">${esc(it.attributed_to)} · engine ${esc(it.pattern_engine_version)} · supporting evidence: ${(it.evidence_ids || []).map(e => '<code>' + esc(short(e, 34)) + '</code>').join(' ') || 'none listed'}${it.confirmed ? ' · confirmed' : ''}${it.dismissed ? ' · dismissed' : ''}</div>${stamp(it)}</div>`;
+  if (kind === 'incident') return `<div class="item">${esc(it.description)}<div class="foot">${esc(it.date || 'no date')} (${esc(it.date_precision)}) · ${esc((it.categories || []).join(', '))} · ${esc(it.action_type)} (${esc(it.action_type_origin)})${it.outcome ? ' · ' + esc(it.outcome) : ''}${it.amount_usd != null ? ' · ' + esc(it.amount_usd) + ' ' + esc(it.currency) : ''}${it.jurisdiction ? ' · ' + esc(it.jurisdiction) : ''}${it.confidence ? ' · confidence <strong>' + esc(it.confidence) + '</strong> <span class="foot">(' + esc(it.confidence_attributed_to) + ')</span>' : ''}</div><div class="foot">sources: ${(it.sources || []).map(s => '<a href="' + esc(s.url) + '" target="_blank" rel="noopener">' + esc(s.label || s.domain) + '</a>' + (s.authority_tier ? ' (' + esc(s.authority_tier) + ')' : '')).join(' · ') || '<span class="warn">none recorded</span>'}</div>${stamp(it)}</div>`;
+  if (kind === 'allegation_response') return `<div class="item">${esc(it.summary || it.description)}<div class="foot">response: ${it.response_type != null ? '<strong>' + esc(it.response_label || ('Type ' + it.response_type)) + '</strong>' + (it.response_note ? ' — ' + esc(it.response_note) : '') : '<span class="warn">no documented response classification</span>'}</div>${stamp(it)}</div>`;
+  if (kind === 'gap') return `<div class="item"><strong>${esc(it.kind)}</strong>${it.detail || it.note ? ' — ' + esc(it.detail || it.note) : ''}${it.category ? ' · ' + esc(it.category) : ''}${stamp(it)}</div>`;
+  if (kind === 'ruling') return `<div class="item"><strong>${esc(it.state)}</strong> · <code>${esc(it.a)}</code> ↔ <code>${esc(it.b)}</code><div class="foot">${esc(it.basis)}</div></div>`;
+  if (kind === 'document') return `<div class="item">document <code>${esc(it.document_id)}</code> · ${esc(it.status)}</div>`;
+  return `<div class="item">${esc(JSON.stringify(it)).slice(0, 300)}</div>`;
+}
+function renderRelationships(rels) {
+  const el = document.getElementById('room-relationships');
+  if (!rels || !rels.length) { el.innerHTML = '<div class="foot">No relationship proposed. Press "Propose relationships" for exact name matches across this room\'s instruments — a proposal grants nothing.</div>'; return; }
+  el.innerHTML = rels.map(p => `<div class="item" data-proposal="${esc(p.proposal_id)}"><span class="tag">${esc(p.state)}</span> <code>${esc(p.a)}</code> ↔ <code>${esc(p.b)}</code>
+    <div class="foot">${esc(p.origin)} proposal: ${esc(p.basis)}</div>
+    ${p.state === 'proposed_same_entity' ? `<div class="row"><select data-kind="${esc(p.proposal_id)}" style="max-width:220px"><option value="declared_same_entity">the same entity</option><option value="affiliate_of">affiliate of</option><option value="parent_of">parent of</option><option value="political_committee_of">political committee of</option><option value="recipient_of">recipient of</option></select><button onclick="rule('${esc(p.proposal_id)}', null)">Declare</button><button class="reject" onclick="rule('${esc(p.proposal_id)}', 'rejected_match')">Reject</button><button class="unresolved" onclick="rule('${esc(p.proposal_id)}', 'unresolved')">Leave unresolved</button></div>` : '<div class="foot">ruled by the owner — a new proposal would be needed to change it</div>'}</div>`).join('');
+}
+async function rule(pid, state) {
+  const sel = document.querySelector(`select[data-kind="${pid}"]`);
+  const st = state || (sel ? sel.value : 'declared_same_entity');
+  const note = st === 'rejected_match' ? '' : (st === 'unresolved' ? '' : prompt('A note for the record (why you declare this):', '') || '');
+  const r = await post('/api/identity/rule', { proposal_id: pid, state: st, note });
+  if (r.d.error) { alert(r.d.error); return; }
+  openRoom(STATE.room.room_id);
+}
+async function proposeMechanically() {
+  const r = await post(`/api/investigations/${encodeURIComponent(STATE.room.room_id)}/propose`, {});
+  document.getElementById('room-foot').textContent = (r.d.count || 0) + ' proposal(s) from exact name matches — ' + (r.d.note || '');
+  openRoom(STATE.room.room_id);
+}
+async function addToRoom() {
+  const dep = document.getElementById('room-add-dep').value; if (!dep) return;
+  await post(`/api/investigations/${encodeURIComponent(STATE.room.room_id)}/add`, { deposition_id: dep });
+  await loadAll(); openRoom(STATE.room.room_id);
+}
+async function loadConvergence(rid) {
+  const r = await api(`/api/investigations/${encodeURIComponent(rid)}/convergence`); const el = document.getElementById('room-convergence'); const c = r.d;
+  if (!c || !c.links || !c.links.length) { el.innerHTML = `<div class="foot">${esc((c && c.note) || '')}</div>`; return; }
+  el.innerHTML = `<div class="foot">${esc(c.note)}</div>
+    <div class="item"><div class="k">declared links</div>${c.links.map(l => `<div><strong>${esc(l.state)}</strong> <code>${esc(l.a)}</code> ↔ <code>${esc(l.b)}</code> <span class="foot">${esc(l.basis)}</span></div>`).join('')}</div>
+    <div class="scroll"><table><tr><th>date</th><th>instrument</th><th>record</th><th>what</th><th>label (whose)</th><th>source</th></tr>${c.timeline.map(t => `<tr><td>${esc(t.date || '—')} <span class="foot">${esc(t.date_precision)}</span></td><td><span class="tag ${esc(t.producer)}">${esc((STATE.producers[t.producer] || {}).display || t.producer)}</span></td><td><code>${esc(short(t.record, 40))}</code></td><td>${esc(t.what)}</td><td>${esc(t.label)} <span class="foot">${esc(t.label_attributed_to)}</span></td><td>${t.source_url ? '<a href="' + esc(t.source_url) + '" target="_blank" rel="noopener">source</a>' : ''}</td></tr>`).join('')}</table></div>
+    <div class="item"><div class="k">within ${c.window_days} days of each other — mechanical intersections, not claims</div>${c.overlaps.length ? c.overlaps.map(o => `<div class="foot">${esc(o.sentence)}</div>`).join('') : '<div class="foot">no two dated records of the two instruments fall within the window</div>'}</div>
+    <div class="foot">records cited: ${c.records_cited.map(x => '<code>' + esc(short(x, 44)) + '</code>').join(' ')}</div>
+    <div class="foot warn">${esc(c.interpretation.note)} — not built</div>`;
+}
+document.addEventListener('DOMContentLoaded', async () => {
+  const params = new URLSearchParams(location.search);
+  await loadAll();
+  if (params.get('import')) { document.getElementById('imp-object').value = params.get('import'); document.getElementById('imp-note').textContent = 'carried from the chooser — press Fetch to import; nothing has been fetched'; }
+  if (params.get('locate')) { document.getElementById('loc-query').value = params.get('locate'); const p = params.get('producer'); const sel = document.getElementById('imp-connector'); const c = STATE.connectors.find(x => x.enabled && x.producer === p); if (c) sel.value = c.connector_id; document.getElementById('loc-note').textContent = 'carried from the chooser — press Locate; nothing has been asked yet'; }
+  if (params.get('new')) { document.getElementById('room-title').value = params.get('new'); document.getElementById('room-note').textContent = 'carried from the chooser — press Create'; }
+  if (params.get('room')) openRoom(params.get('room'));
+});
+</script>
+</div>
+</body>
+</html>

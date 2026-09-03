@@ -79,6 +79,7 @@ import notify  # noqa: E402
 import keeper  # noqa: E402  (the Book's narrator — summoned only, never scheduled)
 import recovery  # noqa: E402  (the Recovery Review — block 103; reads the queue, appends rulings)
 import speech  # noqa: E402  (Speak to Nikodemus — block 106; the transcription adapter, local only)
+import federation  # noqa: E402  (connected instruments — block 107; Open Case and EthicalAlt behind the membrane, manual pull only)
 from wordicon_corpus.objects import Judgment  # noqa: E402
 
 WEBAPP_DIR = REPO_ROOT / "webapp"
@@ -1357,6 +1358,299 @@ def api_speak_keep_transcript():
 
 
 # ---------------------------------------------------------------------------
+# Connected instruments (block 107; docs/adr-federation.md). Open Case and
+# EthicalAlt stay outside the membrane; these routes are the controlled
+# tissue: a registry with pinned keys and credential REFERENCES, fetches
+# that reach only a configured origin on the owner's press, packages held
+# byte for byte and verified against the pinned key by the producer's own
+# method, an Investigation Room with seats kept apart, relationship
+# proposals the owner alone can turn into declarations, and a mechanical
+# convergence after a declaration. No model on any route here; nothing
+# polls; nothing runs on paint. Behind the pairing gate like everything.
+
+@app.route("/investigation")
+def investigation_page():
+    """The Investigation Room and the connectors — one bounded surface,
+    zero model calls. Behind the gate like all."""
+    page = (pathlib.Path(WEBAPP_DIR) / "investigation.html").read_text(encoding="utf-8")
+    return Response(page.replace("__BRAND_NAME__", BRAND["name"]), mimetype="text/html")
+
+
+@app.route("/api/federation/status", methods=["GET"])
+def api_federation_status():
+    return jsonify(federation.status())
+
+
+@app.route("/api/federation/recognize", methods=["POST"])
+def api_federation_recognize():
+    """Does a pasted URL belong to a configured connector? A reading only —
+    nothing is fetched by recognizing."""
+    data = request.get_json(force=True) or {}
+    hit = federation.recognize_url(str(data.get("url") or ""))
+    return jsonify({"recognized": bool(hit), "match": hit,
+                    "note": "recognition never fetches; an import is a separate press and reaches only the connector's configured origin"})
+
+
+@app.route("/api/connectors", methods=["GET"])
+def api_connectors():
+    return jsonify({"connectors": federation.load_connectors(include_disabled=True), "producers": federation.status()["producers"],
+                    "libraries": federation.verification_available()})
+
+
+@app.route("/api/connectors", methods=["POST"])
+def api_connectors_register():
+    data = request.get_json(force=True) or {}
+    try:
+        row = federation.register_connector(str(data.get("connector_id") or ""), str(data.get("producer") or ""), str(data.get("base_url") or ""),
+                                            display=str(data.get("display") or ""), credential_ref=str(data.get("credential_ref") or ""),
+                                            dev_loopback=bool(data.get("dev_loopback")))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"registered": True, "connector": federation.get_connector(row["connector_id"])})
+
+
+@app.route("/api/connectors/<cid>/enabled", methods=["POST"])
+def api_connector_enabled(cid):
+    data = request.get_json(force=True) or {}
+    try:
+        federation.set_enabled(cid, bool(data.get("enabled", True)))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    return jsonify({"connector": federation.get_connector(cid)})
+
+
+@app.route("/api/connectors/<cid>/keys", methods=["POST"])
+def api_connector_pin_key(cid):
+    """Pin a trusted public key — the owner's out-of-band act. The key id is
+    computed from the key here; a package can never supply it."""
+    data = request.get_json(force=True) or {}
+    try:
+        row = federation.pin_key(cid, str(data.get("public_key_b64") or ""), label=str(data.get("label") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"pinned": True, "key_id": row["key_id"], "connector": federation.get_connector(cid)})
+
+
+@app.route("/api/connectors/<cid>/keys/unpin", methods=["POST"])
+def api_connector_unpin_key(cid):
+    data = request.get_json(force=True) or {}
+    federation.unpin_key(cid, str(data.get("key_id") or ""))
+    return jsonify({"connector": federation.get_connector(cid)})
+
+
+@app.route("/api/connectors/<cid>/check", methods=["POST"])
+def api_connector_check(cid):
+    """An explicit reachability check — the owner's press, never a timer.
+    Reads the producer's listing; imports nothing; a failure here changes
+    nothing about what is already in custody."""
+    c = federation.get_connector(cid)
+    if not c:
+        return jsonify({"error": "no such connector"}), 404
+    res = federation.locate(c, "")
+    return jsonify({"ok": bool(res.get("ok")), "outcome": res.get("outcome", "reachable" if res.get("ok") else ""), "detail": res.get("detail", ""),
+                    "count": res.get("count"), "connector": federation.get_connector(cid)})
+
+
+@app.route("/api/connectors/<cid>/locate", methods=["POST"])
+def api_connector_locate(cid):
+    c = federation.get_connector(cid)
+    if not c:
+        return jsonify({"error": "no such connector"}), 404
+    data = request.get_json(force=True) or {}
+    return jsonify(federation.locate(c, str(data.get("query") or "")))
+
+
+@app.route("/api/connectors/<cid>/import", methods=["POST"])
+def api_connector_import(cid):
+    """Import one object by id — or by a pasted URL that recognition maps to
+    an id on THIS connector. The fetch goes to the configured origin only."""
+    c = federation.get_connector(cid)
+    if not c:
+        return jsonify({"error": "no such connector"}), 404
+    data = request.get_json(force=True) or {}
+    oid = str(data.get("object_id") or "").strip()
+    if not oid and data.get("url"):
+        hit = federation.recognize_url(str(data.get("url")))
+        if not hit or hit["connector_id"] != cid:
+            return jsonify({"error": "that URL does not belong to this connector's configured origin — nothing was fetched", "recognized": bool(hit)}), 400
+        oid = hit["object_id"]
+    if not oid:
+        return jsonify({"error": "name an object id or a URL of this connector"}), 400
+    res = federation.import_from_connector(c, oid)
+    status = 200 if res.get("ok") else 502
+    if not res.get("ok") and res.get("outcome") in ("bad_id", "not_configured", "disabled", "origin_refused", "credential_unavailable"):
+        status = 400
+    return jsonify({**res, "connector": federation.get_connector(cid)}), status
+
+
+@app.route("/api/connectors/<cid>/import-package", methods=["POST"])
+def api_connector_import_package(cid):
+    """A package already in hand (a file the producer gave you, a fixture)
+    — the raw JSON body, byte for byte, through the same chokepoint and
+    the same pinned keys. Nothing is fetched."""
+    c = federation.get_connector(cid)
+    if not c:
+        return jsonify({"error": "no such connector"}), 404
+    # the block-106b body discipline, reused: type, length and deadline are
+    # refused before a byte is read; the read is bounded and never whole
+    base = (request.content_type or "").lower().split(";", 1)[0].strip()
+    if base not in ("application/json", "text/json", "application/octet-stream"):
+        return jsonify({"error": "send the package as the raw JSON body (application/json) — nothing was read"}), 415
+    declared = request.content_length
+    if declared is None:
+        return jsonify({"error": "the package must arrive with its length (Content-Length)"}), 411
+    if declared <= 0:
+        return jsonify({"error": "no package arrived"}), 400
+    if declared > federation.FETCH_MAX_BYTES:
+        return jsonify({"error": "the package is over the size cap"}), 413
+    sock, old_timeout = request.environ.get("werkzeug.socket"), None
+    if sock is not None:
+        try:
+            old_timeout = sock.gettimeout(); sock.settimeout(SPEAK_BODY_TIMEOUT_S)
+        except OSError:
+            sock = None
+    try:
+        body = speech.read_bounded(request.stream, declared, federation.FETCH_MAX_BYTES, SPEAK_BODY_TIMEOUT_S)
+    except speech.BodyTooLarge:
+        return jsonify({"error": "the package is over the size cap"}), 413
+    except speech.BodyTimeout:
+        return jsonify({"error": "the package did not arrive within the deadline"}), 408
+    except (speech.BodyShort, OSError, ValueError):
+        return jsonify({"error": "the package arrived shorter than declared — nothing was imported"}), 400
+    finally:
+        if sock is not None:
+            try:
+                sock.settimeout(old_timeout)
+            except OSError:
+                pass
+    try:
+        res = federation.import_package(c, body, how="package")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, **res, "connector": federation.get_connector(cid)})
+
+
+@app.route("/api/depositions", methods=["GET"])
+def api_depositions():
+    cid = request.args.get("connector", "")
+    rows = [federation._deposition_summary(d) for d in federation.load_depositions(cid)]
+    return jsonify({"depositions": rows, "count": len(rows)})
+
+
+@app.route("/api/depositions/<dep_id>", methods=["GET"])
+def api_deposition(dep_id):
+    d = federation.get_deposition(dep_id)
+    if not d:
+        return jsonify({"error": "no such deposition"}), 404
+    raw = federation.deposition_bytes(d)
+    try:
+        env = json.loads(raw.decode("utf-8")) if raw else None
+    except (ValueError, UnicodeDecodeError):
+        env = None
+    return jsonify({"deposition": federation._deposition_summary(d), "record": d, "representation": federation.deposition_representation(d),
+                    "envelope": env, "bytes": len(raw),
+                    "note": "the record and its derived representation; the exact bytes are behind /bytes and are what verification was run on"})
+
+
+@app.route("/api/depositions/<dep_id>/bytes", methods=["GET"])
+def api_deposition_bytes(dep_id):
+    d = federation.get_deposition(dep_id)
+    if not d:
+        return jsonify({"error": "no such deposition"}), 404
+    raw = federation.deposition_bytes(d)
+    return Response(raw, mimetype="application/json", headers={"Content-Disposition": f"inline; filename=\"{dep_id}.deposition.json\"", "X-Deposition-Sha256": d.get("sha256", "")})
+
+
+@app.route("/api/depositions/<dep_id>/verify", methods=["POST"])
+def api_deposition_verify(dep_id):
+    """Re-verify the stored bytes against the connector's CURRENT pinned
+    keys. Reads; writes nothing; the stored verification stays as it was
+    recorded at import."""
+    d = federation.get_deposition(dep_id)
+    if not d:
+        return jsonify({"error": "no such deposition"}), 404
+    c = federation.get_connector(d["connector_id"]) or {}
+    raw = federation.deposition_bytes(d)
+    try:
+        env = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return jsonify({"verification": {"ok": False, "why": "the stored bytes are not a JSON object"}})
+    v = federation.verify_envelope(env, c.get("trusted_keys", []))
+    return jsonify({"verification": v, "sha256": hashlib.sha256(raw).hexdigest(), "byte_identical": hashlib.sha256(raw).hexdigest() == d.get("sha256"),
+                    "recorded_at_import": d.get("verification")})
+
+
+@app.route("/api/investigations", methods=["GET"])
+def api_investigations():
+    return jsonify({"rooms": federation.load_rooms()})
+
+
+@app.route("/api/investigations", methods=["POST"])
+def api_investigations_create():
+    data = request.get_json(force=True) or {}
+    try:
+        room = federation.create_room(str(data.get("title") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"room": room})
+
+
+@app.route("/api/investigations/<rid>", methods=["GET"])
+def api_investigation(rid):
+    try:
+        return jsonify(federation.room_state(rid))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
+
+@app.route("/api/investigations/<rid>/add", methods=["POST"])
+def api_investigation_add(rid):
+    data = request.get_json(force=True) or {}
+    try:
+        federation.add_to_room(rid, deposition_id=str(data.get("deposition_id") or ""), document_id=str(data.get("document_id") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(federation.room_state(rid))
+
+
+@app.route("/api/investigations/<rid>/propose", methods=["POST"])
+def api_investigation_propose(rid):
+    """The one mechanical proposer: exact name matches across the room's
+    instruments, proposed — never linked. The owner's press."""
+    try:
+        made = federation.propose_mechanically(rid)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    return jsonify({"proposed": made, "count": len(made), "note": "proposals grant nothing — names are not identities; declare, reject, or leave each unresolved"})
+
+
+@app.route("/api/investigations/<rid>/convergence", methods=["GET"])
+def api_investigation_convergence(rid):
+    try:
+        return jsonify(federation.convergence(rid))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+
+
+@app.route("/api/identity/proposals", methods=["GET"])
+def api_identity_proposals():
+    rows = [{**p, "state": federation.relationship_state(p["proposal_id"])} for p in federation.load_proposals()]
+    return jsonify({"proposals": rows, "rulings": federation.load_rulings()})
+
+
+@app.route("/api/identity/rule", methods=["POST"])
+def api_identity_rule():
+    """The owner's ruling on a proposal: declared (a relationship kind),
+    rejected, or unresolved. Nothing else can declare."""
+    data = request.get_json(force=True) or {}
+    try:
+        row = federation.rule_relationship(str(data.get("proposal_id") or ""), str(data.get("state") or ""), note=str(data.get("note") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ruled": True, "ruling": row, "state": federation.relationship_state(row["proposal_id"])})
+
+
+# ---------------------------------------------------------------------------
 # The destination chooser (block 105; items 42, 50, 53). Zero-model, reads
 # nothing but the words it is handed, writes nothing: the shape of the
 # words and the destinations it offers, with one highlighted. Nothing runs
@@ -1368,7 +1662,9 @@ def api_destinations():
     text = str(data.get("text") or "")
     if not text.strip():
         return jsonify({"error": "no words to read"}), 400
-    return jsonify(cli.suggest_destinations(text[:20000], provenance=str(data.get("provenance") or "typed")))
+    conns = [{"producer": c.get("producer"), "origin": c.get("origin"), "connector_id": c.get("connector_id"), "enabled": c.get("enabled", True),
+              "url_patterns": federation.PRODUCERS.get(c.get("producer"), {}).get("url_patterns", ())} for c in federation.load_connectors()]
+    return jsonify(cli.suggest_destinations(text[:20000], provenance=str(data.get("provenance") or "typed"), connectors=conns))   # block 107: the registry is read here, never by the suggester
 
 
 @app.route("/api/questions", methods=["GET"])

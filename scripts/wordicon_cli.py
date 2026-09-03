@@ -1830,9 +1830,22 @@ DESTINATIONS = (
     {"id": "owner_facts", "label": "Save owner-declared facts", "built": False,
      "sub": "an Owner Card you can edit and erase",
      "why_unbuilt": "the Owner Card needs its privacy contract before a line of it exists"},
+    # connected instruments (block 107): destinations that reach a configured
+    # producer on the owner's press — never on typing; "available" says
+    # whether such a connector is configured
+    {"id": "import_open_case", "label": "Import the signed Open Case record", "built": True, "producer": "open_case",
+     "sub": "fetched from your configured Open Case, verified against the key you pinned, kept byte for byte"},
+    {"id": "import_ethicalalt", "label": "Import the signed EthicalAlt profile", "built": True, "producer": "ethicalalt",
+     "sub": "fetched from your configured EthicalAlt, verified against the key you pinned, kept byte for byte"},
+    {"id": "look_ethicalalt", "label": "Look in EthicalAlt", "built": True, "producer": "ethicalalt",
+     "sub": "EthicalAlt's own profile list, on your press — nothing is investigated"},
+    {"id": "search_open_case", "label": "Search Open Case's cases", "built": True, "producer": "open_case",
+     "sub": "Open Case's own case list, on your press — nothing is investigated"},
+    {"id": "investigation_room", "label": "Create an Investigation Room", "built": True,
+     "sub": "one bounded surface where your instruments' records sit in separate seats"},
 )
 DESTINATION_IDS = tuple(d["id"] for d in DESTINATIONS)
-SHAPES = ("question", "identity", "word", "phrase", "passage", "statement")
+SHAPES = ("question", "identity", "word", "phrase", "passage", "statement", "url")
 # which destinations are offered for which shape (item 50's two lists,
 # plus report 42's; Develop is always offered — the owner may still
 # choose concept analysis deliberately — but is highlighted only where
@@ -1840,13 +1853,15 @@ SHAPES = ("question", "identity", "word", "phrase", "passage", "statement")
 _SHAPE_OFFERS = {
     "question": ("research", "search", "develop", "room", "write", "question"),
     "identity": ("name_study", "portrait", "owner_facts", "write", "search", "develop"),
-    "word": ("develop", "search", "write", "question"),
-    "phrase": ("develop", "search", "room", "write", "question"),
+    "word": ("develop", "search", "write", "question", "look_ethicalalt", "search_open_case", "investigation_room"),
+    "phrase": ("develop", "search", "room", "write", "question", "look_ethicalalt", "search_open_case", "investigation_room"),
     "passage": ("develop", "write", "room", "search"),
     "statement": ("develop", "search", "room", "write", "question"),
+    "url": ("import_open_case", "import_ethicalalt", "question", "write", "search"),
 }
 _SHAPE_SUGGESTS = {"question": "research", "identity": "name_study", "word": "develop",
-                   "phrase": "develop", "passage": "develop", "statement": "develop"}
+                   "phrase": "develop", "passage": "develop", "statement": "develop", "url": "question"}
+_URL_RX = re.compile(r"^https?://[^\s]+$", re.I)
 _QUESTION_OPENERS = re.compile(
     r"^(who|what|when|where|why|how|which|whom|whose|is|are|was|were|do|does|did|can|could|would|should|"
     r"will|shall|may|might|have|has|had)\b|^(i would like to know|i'd like to know|i want to know|i wonder|"
@@ -1873,6 +1888,9 @@ def input_shape(text: str) -> dict:
     segs = [x.strip() for x in re.split(r"[,\n;.]+", t) if x.strip()]
     n_sentences = len([x for x in re.split(r"[.!?]+", t) if x.strip()])
     signals = []
+    if _URL_RX.match(t):
+        signals.append("a single web address")
+        return {"shape": "url", "signals": signals}
     first_line = t.split("\n", 1)[0].strip()
     has_date = bool(_DATE_RX.search(t))
     has_time = bool(_TIME_RX.search(t))
@@ -1902,25 +1920,64 @@ def input_shape(text: str) -> dict:
     return {"shape": "statement", "signals": signals}
 
 
-def suggest_destinations(text: str, provenance: str = "typed") -> dict:
+def _connector_match(text: str, connectors) -> "dict | None":
+    """Does a URL belong to one of the connectors the caller handed in
+    ({producer, origin, connector_id, url_patterns})? Pure: the registry
+    is read by the route and passed here; this reads the words only."""
+    t = (text or "").strip()
+    if not _URL_RX.match(t):
+        return None
+    m = re.match(r"^(https?://[^/?#]+)(/[^?#]*)?", t, re.I)
+    if not m:
+        return None
+    origin, path = m.group(1).lower(), m.group(2) or "/"
+    for c in connectors or ():
+        if str(c.get("origin", "")).lower() != origin:
+            continue
+        for pat in c.get("url_patterns") or ():
+            mm = re.search(pat, path)
+            if mm:
+                return {"connector_id": c.get("connector_id", ""), "producer": c.get("producer", ""), "object_id": mm.group(1)}
+    return None
+
+
+def suggest_destinations(text: str, provenance: str = "typed", connectors=None) -> dict:
     """What the chooser shows: every destination the shape offers, each
     saying whether it is built, with exactly one highlighted. Provenance
     is carried beside the words and never branches: the same sentence
-    typed or spoken receives the same destinations, by construction."""
+    typed or spoken receives the same destinations, by construction.
+    `connectors` (block 107) is the caller's list of configured producers
+    — {producer, origin, connector_id, url_patterns} — so a destination
+    that reaches a producer can say whether one is configured, and a URL
+    that belongs to one can be read as such; this function reads no file."""
     if provenance not in INPUT_PROVENANCE:
         provenance = "unstated"
     sh = input_shape(text)
     offered = _SHAPE_OFFERS[sh["shape"]]
     suggested = _SHAPE_SUGGESTS[sh["shape"]]
     by_id = {d["id"]: d for d in DESTINATIONS}
+    configured = {str(c.get("producer")) for c in (connectors or ()) if c.get("enabled", True)}
+    match = _connector_match(text, connectors) if sh["shape"] == "url" else None
+    if match and match["producer"] in ("open_case", "ethicalalt"):
+        suggested = "import_" + match["producer"]
+        sh["signals"].append(f"the address of a configured {by_id[suggested]['label'].split('signed ')[-1].split(' record')[0].split(' profile')[0]} connector")
     rows = []
     for did in offered:
         d = dict(by_id[did])
         d["suggested"] = did == suggested
+        prod = d.get("producer")
+        if prod:
+            d["available"] = prod in configured
+            if not d["available"]:
+                d["why_unavailable"] = f"no {'Open Case' if prod == 'open_case' else 'EthicalAlt'} connector is configured — About & proof → Connected instruments"
+            if did.startswith("import_") and (not match or match["producer"] != prod):
+                continue            # an import is offered only for the address of its own producer
+        if did.startswith("import_") and match:
+            d["match"] = match
         rows.append(d)
     return {"shape": sh["shape"], "signals": sh["signals"], "suggested": suggested,
             "suggested_built": bool(by_id[suggested]["built"]), "provenance": provenance,
-            "destinations": rows,
+            "destinations": rows, "connector_match": match,
             "note": "the highlight is a reading of the words' shape, not a choice — nothing runs until you choose"}
 
 

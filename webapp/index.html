@@ -733,6 +733,8 @@
         <button id="encounter-toggle" hidden style="margin-left:8px;font-size:11.5px;padding:2px 9px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;cursor:pointer" onclick="toggleEncounterRecording()">Turn on</button>
         <span class="muted" id="encounter-note"></span>
         <div class="muted" id="encounter-explain" style="margin-top:4px">Off by default, and while off nothing is written — not a row, not a file. When on, the record keeps <em>ids and event types only</em> — which entry was surfaced, opened, selected, reused, cited, sprouted or refracted from, revised, linked, exported — never any text. Turning it on or off is itself recorded, so the record shows exactly when observation began and ended. Raw log: <a href="/api/encounters">/api/encounters</a>.</div></div>
+      <div id="about-instruments" class="foot" style="margin:-6px 0 12px">Connected instruments: <span id="instruments-status">not read yet</span>
+        <div class="muted" id="instruments-explain" style="margin-top:4px">Open Case and EthicalAlt stay sovereign — their own databases, code, vocabularies and signing keys. Nikodemus pulls one signed package at a time when you press, verifies it under a key you pinned here out of band, and keeps the exact bytes. Credentials are named by reference (<code>env:NAME</code>) and never stored. No polling, no refresh, no background comparison. The registry, the depositions and the Investigation Rooms are at <a href="/investigation">/investigation</a>.</div></div>
       <p class="body">Bring <span data-brand>Nikodemus</span> a feeling with no name and it forges you concept readings
       worth arguing with — the idea's anatomy under a plain working title. Bring it a book and the
       book stays a book — byte-intact, mechanically read, every sentence an anchor you can hold a
@@ -788,6 +790,17 @@
       the draft lives in this browser until you send it. Search my record is exact text in your own record, never
       the web; research beyond the record is a separate door, not built yet. How the words arrived — typed, attached,
       later spoken — travels beside them and changes nothing about where they may go.</p>
+      <p class="body"><strong>Nikodemus can hold what your other instruments produce.</strong> Open Case and EthicalAlt
+      are connected as instruments, not absorbed: each keeps its database, its code, its interface, its vocabulary and its
+      signing key. What crosses is a deposition — the exact bytes a producer signed, pulled one object at a time when you
+      press, verified under a public key you pinned here out of band, kept whole with its content hash. A verified
+      deposition is testimony by a named witness, never a Nikodemus finding: an Open Case label stays Open Case's, an
+      EthicalAlt concern level stays EthicalAlt's, an allegation stays paired with its response, a documented gap stays a
+      gap, and an instrument that cannot be reached is a failure with its class — never “nothing found”. Names are not
+      identities: a match between two instruments' records is proposed by exact name and declared, rejected or left
+      unresolved by you alone; a timeline across both appears only after your declaration. Nothing is polled, nothing
+      refreshes itself, and reading here never makes an instrument act. Paste a case or profile address into the box and
+      the chooser offers the import; the Investigation Room is at <a href="/investigation">/investigation</a>.</p>
       <p class="body"><strong>The first minute:</strong> type into the box below — a feeling you don't
       have a word for, a word you're curious about, a handful of loose words, or a whole passage — choose
       <em>Develop the idea</em>, and press <em>Run it</em>. Cards come back; open them, argue with them, rule on
@@ -1496,10 +1509,25 @@ async function fetchSpeechModel() {
   } catch (e) { if (note) note.textContent = 'could not reach the server.'; }
   loadSpeakStatus();
 }
+// Connected instruments in About & proof (block 107): the registry as it
+// stands — read from local state, never fetched from a producer.
+async function loadInstrumentsStatus() {
+  const st = document.getElementById('instruments-status');
+  if (!st) return;
+  try {
+    const d = await (await fetch('/api/federation/status')).json();
+    const cs = d.connectors || [];
+    const parts = cs.map(c => `${c.display || c.connector_id} (${c.producer}${c.enabled ? '' : ', disabled'}${(c.trusted_keys || []).length ? ', ' + c.trusted_keys.length + ' key' + (c.trusted_keys.length === 1 ? '' : 's') + ' pinned' : ', no key pinned'}${c.credential_ref ? ', credential ' + c.credential_ref : ''})`);
+    const libs = d.libraries || {};
+    const missing = Object.keys(libs).filter(k => !libs[k]);
+    st.textContent = (cs.length ? parts.join(' · ') : 'none registered') + ` · ${d.depositions || 0} deposition(s) · ${d.rooms || 0} room(s) · ${d.rulings || 0} identity ruling(s) · ${d.automation || 'manual pull only'}` + (missing.length ? ' · VERIFICATION LIBRARIES MISSING: ' + missing.join(', ') + ' (pip install -r requirements.txt)' : '');
+  } catch (e) { st.textContent = 'could not be read'; }
+}
 async function loadConfig() {
   loadEpoch();
   loadEncounterSwitch();
   loadSpeakStatus();
+  loadInstrumentsStatus();
   const el = document.getElementById('about-provider');
   if (!el) return;
   try {
@@ -1971,23 +1999,40 @@ function renderDestinations() {
   const row = document.getElementById('destination-row'), d = DEST.data;
   if (!row || !d) return;
   row.hidden = false;
-  const reading = {question: 'a question', identity: 'a name with a date and a place', word: 'a single word', phrase: 'a short phrase', passage: 'a passage', statement: 'a statement'}[d.shape] || d.shape;
+  const reading = {question: 'a question', identity: 'a name with a date and a place', word: 'a single word', phrase: 'a short phrase', passage: 'a passage', statement: 'a statement', url: 'a web address'}[d.shape] || d.shape;
   document.getElementById('destination-reading').innerHTML = `Reads as <strong>${escapeHtml(reading)}</strong> (${escapeHtml((d.signals || []).join(', '))}) — arrived <em>${escapeHtml(d.provenance)}</em>. Where should it go? <span class="muted">Nothing runs until you choose.</span>`;
   document.getElementById('destination-chips').innerHTML = (d.destinations || []).map(x => {
-    const cls = 'dest' + (x.suggested ? ' suggested' : '') + (x.built ? '' : ' unbuilt') + (DEST.chosen === x.id ? ' chosen' : '');
-    const title = x.built ? (x.suggested ? 'highlighted from the words\' shape — still your choice' : '') : (x.why_unbuilt || 'not built yet');
-    return `<button class="${cls}" data-dest="${escapeHtml(x.id)}" ${x.built ? '' : 'disabled aria-disabled="true"'} title="${escapeHtml(title)}" onclick="chooseDestination('${escapeJs(x.id)}')">${escapeHtml(x.label)}${x.suggested ? ' <span class="muted" style="font-size:10.5px">· suggested</span>' : ''}<span class="dest-sub">${escapeHtml(x.sub || '')}</span>${x.built ? '' : '<span class="dest-status">not built — ' + escapeHtml(x.why_unbuilt || '') + '</span>'}</button>`;
+    // block 107: a destination that reaches a producer is a door only when such a connector is configured — otherwise dashed and inert, like an unbuilt one
+    const usable = x.built && x.available !== false;
+    const cls = 'dest' + (x.suggested ? ' suggested' : '') + (usable ? '' : ' unbuilt') + (DEST.chosen === x.id ? ' chosen' : '');
+    const title = usable ? (x.suggested ? 'highlighted from the words\' shape — still your choice' : '') : (x.why_unavailable || x.why_unbuilt || 'not built yet');
+    const status = usable ? '' : (x.built ? '<span class="dest-status">not configured — ' + escapeHtml(x.why_unavailable || '') + '</span>' : '<span class="dest-status">not built — ' + escapeHtml(x.why_unbuilt || '') + '</span>');
+    return `<button class="${cls}" data-dest="${escapeHtml(x.id)}" ${usable ? '' : 'disabled aria-disabled="true"'} title="${escapeHtml(title)}" onclick="chooseDestination('${escapeJs(x.id)}')">${escapeHtml(x.label)}${x.suggested ? ' <span class="muted" style="font-size:10.5px">· suggested</span>' : ''}<span class="dest-sub">${escapeHtml(x.sub || '')}</span>${status}</button>`;
   }).join('');
   document.getElementById('destination-note').textContent = d.suggested_built ? '' : 'The highlighted destination is not built yet; the others are real doors.';
 }
 async function chooseDestination(id) {
   const d = DEST.data; if (!d) return;
   const x = (d.destinations || []).find(y => y.id === id);
-  if (!x || !x.built) return;   // an unbuilt destination is a label, not a door
+  if (!x || !x.built || x.available === false) return;   // an unbuilt or unconfigured destination is a label, not a door
   DEST.chosen = id; renderDestinations();
   const dev = document.getElementById('develop-controls');
   dev.hidden = id !== 'develop';
   if (id === 'develop') { updateGestureChooser(); return; }
+  // block 107: the connected instruments — each opens the Investigation page with the words carried in the address; nothing is fetched until a press there
+  if (id === 'import_open_case' || id === 'import_ethicalalt') {
+    const m = x.match || d.connector_match || {};
+    location.href = '/investigation?import=' + encodeURIComponent(DEST.text.trim()) + '&connector=' + encodeURIComponent(m.connector_id || '') + '&object=' + encodeURIComponent(m.object_id || '');
+    return;
+  }
+  if (id === 'look_ethicalalt' || id === 'search_open_case') {
+    location.href = '/investigation?locate=' + encodeURIComponent(DEST.text.trim()) + '&producer=' + (id === 'look_ethicalalt' ? 'ethicalalt' : 'open_case');
+    return;
+  }
+  if (id === 'investigation_room') {
+    location.href = '/investigation?new=' + encodeURIComponent(DEST.text.trim().slice(0, 160));
+    return;
+  }
   if (id === 'write') { openCompose(); return; }
   if (id === 'search') {
     await ensureLibrary(); await toggleLibraryOpen();
@@ -7042,7 +7087,8 @@ function renderRooms() {
   const works = (WORKS_LIST || []).map(w => `<div class="rule-row"><span class="k">Work Room</span><span>${escapeHtml(w.title || w.work_id)}</span><span class="act"><a onclick="enterWork('${escapeJs(w.work_id)}')">Enter</a></span></div>`);
   const rooms = (HOME.continue || []).filter(c => c.kind === 'room').map(c => `<div class="rule-row"><span class="k">Clinic room</span><span>${escapeHtml(c.title)} — ${c.seats_filled} of ${c.seats_total} seats</span><span class="act"><a href="${escapeHtml(c.open.href)}">Enter</a></span></div>`);
   area.innerHTML = (rooms.concat(works).join('') || '<div class="empty" style="padding:8px 0">No rooms yet.</div>')
-    + `<div class="rule-row"><span class="k">The Clinic</span><span>Institutional sources by seat — policy, guidance, label, study, manufacturer — never blended.</span><span class="act"><a href="/clinic">Open the Clinic</a></span></div>`;
+    + `<div class="rule-row"><span class="k">The Clinic</span><span>Institutional sources by seat — policy, guidance, label, study, manufacturer — never blended.</span><span class="act"><a href="/clinic">Open the Clinic</a></span></div>`
+    + `<div class="rule-row"><span class="k">Investigation Room</span><span>What Open Case and EthicalAlt deposed — seats kept apart by instrument, relationships you rule on, one timeline after you declare.</span><span class="act"><a href="/investigation">Open the instruments</a></span></div>`;
 }
 // Unresolved (block 104): cases the owner ruled "not enough survives".
 // Not due — he ruled — and never lost: counted, named on hover, with the
