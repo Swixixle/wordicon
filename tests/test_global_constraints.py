@@ -7483,7 +7483,12 @@ console.log(out.join('\\n'));
     # chain is explicit — artifact, representation, owner correction — and
     # every Tier 1 sentence names which of them it actually checked.
     import shutil as _sh2, tempfile as _tf2
-    _up = Path(_tf2.mkdtemp(prefix="wordicon_intake_"))
+    # .resolve() matters: on macOS mkdtemp returns /var/folders/... and /var is a
+    # symlink to /private/var, so the containment check below compared a resolved
+    # blob path against an unresolved root and failed on the owner's machine every
+    # run while passing on Linux. Resolving both sides keeps the check strict and
+    # makes it mean the same thing on both platforms.
+    _up = Path(_tf2.mkdtemp(prefix="wordicon_intake_")).resolve()
     _real = (cli.LOCAL_STATE, cli.ARTIFACTS_DIR, cli.REPRESENTATIONS_LOG)
     cli.ARTIFACTS_DIR, cli.REPRESENTATIONS_LOG = _up / "artifacts", _up / "reps.jsonl"
     try:
@@ -15537,12 +15542,22 @@ console.log(out.join('\\n'));
     # add to. This notices the day that happens, names the file, and does it
     # before the exhaust has had four days to pile up.
     _state_after = _real_state_snapshot()
+    # The guard measures the store, not the writer: it cannot tell "the suite wrote"
+    # from "the owner wrote while the suite ran". Twice now it has caught the owner's
+    # own concurrent run — a receipt, a result and a few edge rows carrying his
+    # material, not the suite's fixtures. The check stays exactly this strict; the
+    # message now says what to look at before believing it.
+    _WHO = ("— the suite runs against a scratch store, so this is either a path the "
+            "redirect list forgot, or the owner's own server or CLI writing while the "
+            "suite ran. Open the named file: rows carrying the suite's fixtures "
+            "(Refusenik Posture, Threshold Grief, ZZ Probe, Exemplar) are the suite's; "
+            "rows carrying the owner's own material are his, and the run is clean")
     for _f, _size in sorted(_state_after.items()):
         if _f not in _state_before:
-            failures.append(f"the test suite created {_f!r} in the owner's real store")
+            failures.append(f"the owner's real store gained {_f!r} during the run {_WHO}")
         elif _size != _state_before[_f]:
-            failures.append(f"the test suite wrote into the owner's real {_f!r} "
-                            f"({_state_before[_f]} -> {_size} bytes)")
+            failures.append(f"the owner's real {_f!r} changed during the run "
+                            f"({_state_before[_f]} -> {_size} bytes) {_WHO}")
     _shutil.rmtree(_SCRATCH, ignore_errors=True)
 
     if failures:
