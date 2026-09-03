@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wordicon.local/schemas/deposition.schema.json",
+  "title": "Deposition envelope (nikodemus.deposition.v1) — the outer custody shape around a producer's signed package; the producer's native schema lives inside payload unchanged",
+  "type": "object",
+  "required": ["schema", "producer", "object", "payload_media_type", "payload_sha256", "payload", "signature"],
+  "properties": {
+    "schema": { "const": "nikodemus.deposition.v1" },
+    "producer": {
+      "type": "object", "required": ["id", "version"],
+      "properties": {
+        "id": { "type": "string", "enum": ["open_case", "ethicalalt"] },
+        "version": { "type": "string", "description": "the producer application's revision (a git sha or a version string; 'unknown' when it cannot say)" },
+        "constitution_version": { "type": "string", "description": "the producer's declared constitution / methodology version or hash" }
+      }
+    },
+    "object": {
+      "type": "object", "required": ["type", "id"],
+      "properties": { "type": { "type": "string", "enum": ["case_seal", "profile_export"] }, "id": { "type": "string", "minLength": 1 } }
+    },
+    "recorded_at": { "type": ["string", "null"], "description": "when the producer says the content was produced (a sealing or research time) — the producer's clock; Nikodemus records its own received_at beside it" },
+    "source_times": { "type": "array", "items": { "type": "object", "required": ["kind", "at", "basis"], "properties": { "kind": { "type": "string" }, "at": { "type": "string" }, "basis": { "type": "string", "enum": ["source_stated", "owner_stated", "system_observed"] } } } },
+    "subject_refs": { "type": "array", "items": { "type": "object", "required": ["ns", "id"], "properties": { "ns": { "type": "string" }, "id": { "type": "string" }, "label": { "type": "string" } } } },
+    "payload_media_type": { "const": "application/json" },
+    "payload_canonicalization": { "const": "RFC8785" },
+    "payload_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "hex sha256 over the RFC 8785 canonical form of payload" },
+    "payload": { "type": ["object", "null"], "description": "the producer's native signed payload, unchanged; null only for a legacy seal whose content the producer cannot reproduce" },
+    "attachments": { "type": "object", "description": "producer material NOT covered by the signature, labeled signed:false", "properties": { "signed": { "const": false } } },
+    "seal": { "type": "object" },
+    "legacy": { "type": "object", "properties": { "self_contained": { "const": false }, "verifiable_from_export": { "const": false }, "note": { "type": "string" } } },
+    "gaps": { "type": "array", "items": { "type": "object", "required": ["kind"], "properties": { "kind": { "type": "string" } } } },
+    "signature": {
+      "type": "object", "required": ["algorithm", "method", "canonicalization", "trusted_key_id", "value"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "method": { "type": "string", "enum": ["open_case.seal.v1", "ethicalalt.export.v2"], "description": "open_case.seal.v1: Ed25519 over utf8(hex(sha256(jcs(payload)))); ethicalalt.export.v2: Ed25519 over jcs(payload)" },
+        "canonicalization": { "const": "RFC8785" },
+        "signed_bytes": { "type": "string" },
+        "trusted_key_id": { "type": "string", "pattern": "^ed25519:sha256:[0-9a-f]{64}$", "description": "sha256 over the raw 32-byte Ed25519 public key — a fingerprint the owner pins on the connector out of band; never a key" },
+        "value": { "type": "string", "minLength": 1 },
+        "note": { "type": "string" }
+      },
+      "not": { "required": ["public_key"] }
+    }
+  },
+  "not": { "required": ["public_key"] }
+}

@@ -1,0 +1,20 @@
+{
+ "producer": "open_case",
+ "version": "4dc17090feb9915204070e9fdd65fcc0d2813867",
+ "items": [
+  {
+   "id": "0f1e2d3c-4b5a-4697-8877-665544332211",
+   "slug": "exemplar-holdings-procurement",
+   "title": "Exemplar Holdings \u2014 municipal procurement and lobbying",
+   "subject_name": "Exemplar Holdings",
+   "subject_type": "organization",
+   "sealed": true,
+   "self_contained": true,
+   "schema_version": "open-case-full-4",
+   "last_signed_at": "2026-05-04T14:12:00Z",
+   "is_public": false
+  }
+ ],
+ "count": 1,
+ "note": "a listing only; nothing was viewed, sealed, or investigated by this read"
+}
