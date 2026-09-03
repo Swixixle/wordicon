@@ -315,24 +315,26 @@
    "id": "sensory",
    "kind": "organ",
    "name": "SENSORY TISSUE",
-   "tag": "documents · media · source doors",
+   "tag": "documents · media · source doors · speech (Mac)",
    "status": "shipped",
    "seed": 3,
-   "does": "Admits the outside world: files you own, transcripts you supply, doors that open searches. Admission never means truth.",
-   "contributes": "Original material, byte-intact, with retrieval metadata and declared access status.",
-   "constrained_by": "The pairing gate. The document gate (identifiers, never clinical prose). Doors open only — nothing is imported by opening one. No platform is touched; no speech recognition.",
+   "does": "Admits the outside world: files you own, transcripts you supply, doors that open searches — and, since block 106, your own voice: press to record, stop visibly, correct what was heard, send it where you choose. Admission never means truth; capture is not interpretation.",
+   "contributes": "Original material, byte-intact, with retrieval metadata and declared access status. A transcript with the local engine's name, model hash and vocabulary hint on it; the recording itself only if you keep it.",
+   "constrained_by": "The pairing gate. The document gate (identifiers, never clinical prose). Doors open only — nothing is imported by opening one. No platform is touched. Speech is transcribed on this machine by a local engine that names itself; audio never leaves the machine and is never stored unless kept; nothing records before your press. No conversation mode, no spoken replies, no camera, no screen — unbuilt, each its own ruling.",
    "fails": "Mistaking a door for evidence. A recollection rendered as a passage. A refused file silently mangled instead of refused out loud.",
    "witness": {
     "routes": [
      "/api/library/ingest",
      "/api/media/ingest",
-     "/api/works/external"
+     "/api/works/external",
+     "/api/speak/transcribe"
     ],
     "modules": [
-     "scripts/library.py"
+     "scripts/library.py",
+     "scripts/speech.py"
     ],
     "tests": [
-     "blocks 84, 86, 87"
+     "blocks 84, 86, 87, 106"
     ]
    },
    "pos": {

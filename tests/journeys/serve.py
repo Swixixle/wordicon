@@ -36,6 +36,8 @@ def _poisoned(*a, **k):
 
 
 server.server_gateway = _poisoned
+import speech  # noqa: E402
+speech.ENGINE = speech.MockEngine()   # block 106: the journeys transcribe with the mock, offline, deterministic
 DIR.mkdir(parents=True, exist_ok=True)
 (DIR / "token").write_text(gate.issue_session("journeys")["token"])
 (DIR / "cookie").write_text(gate.SESSION_COOKIE)

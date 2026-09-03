@@ -76,6 +76,7 @@ import vault  # noqa: E402  (encrypted backup — the corpus-writers lock lives 
 import notify  # noqa: E402
 import keeper  # noqa: E402  (the Book's narrator — summoned only, never scheduled)
 import recovery  # noqa: E402  (the Recovery Review — block 103; reads the queue, appends rulings)
+import speech  # noqa: E402  (Speak to Nikodemus — block 106; the transcription adapter, local only)
 from wordicon_corpus.objects import Judgment  # noqa: E402
 
 WEBAPP_DIR = REPO_ROOT / "webapp"
@@ -1122,6 +1123,153 @@ def api_recovery_rule():
 
 
 # ---------------------------------------------------------------------------
+# Speak to Nikodemus (block 106; items 53, 55; docs/adr-speak.md). The
+# microphone's server side: a raw audio body in, a transcript with the
+# engine's identity out. Never multipart (Werkzeug spools those to disk
+# above 500 KB — proven in the spike); never a file; never the language
+# model; never the network except the one visible model fetch. Nothing
+# below writes to the record: the transcript becomes a record only when
+# the owner sends it somewhere, and the audio only when he keeps it.
+
+def _speech_engine():
+    if speech.ENGINE is None and speech.engine_installed():
+        try:
+            speech.ENGINE = speech.FasterWhisperEngine()
+        except Exception:  # noqa: BLE001 — reported by status(), never masked by a mock
+            speech.ENGINE = None
+    return speech.ENGINE
+
+
+@app.route("/api/speak/status", methods=["GET"])
+def api_speak_status():
+    _speech_engine()
+    out = speech.status()
+    out["names"] = {"control": "Speak to Nikodemus", "narration": "Read aloud", "session": "Conversation (not built)"}
+    out["phone"] = "on a phone over plain HTTP the microphone is unavailable by browser policy; the trusted-LAN-HTTPS block comes first"
+    return jsonify(out)
+
+
+@app.route("/api/speak/vocabulary", methods=["GET"])
+def api_speak_vocabulary():
+    h = speech.current_hint()
+    return jsonify({"declared": speech.load_declared_vocabulary(), "hint": {k: v for k, v in h.items() if k != "hint"},
+                    "note": "the words the engine is told to expect: the visible name, then yours, then the shelf's titles newest first, to the cap; recorded on every transcript as count, sources and hash"})
+
+
+@app.route("/api/speak/vocabulary", methods=["POST"])
+def api_speak_vocabulary_set():
+    """The owner's declared words — coinages not on the shelf, the
+    acronyms of his work. Written only here, by him."""
+    d = request.get_json(force=True) or {}
+    words = d.get("words")
+    if isinstance(words, str):
+        words = [w for w in __import__("re").split(r"[,\n]+", words)]
+    if not isinstance(words, list):
+        return jsonify({"error": "words must be a list, or a comma- or line-separated string"}), 400
+    out = speech.set_declared_vocabulary([str(w) for w in words])
+    h = speech.current_hint()
+    return jsonify({"saved": True, **out, "hint": {k: v for k, v in h.items() if k != "hint"}})
+
+
+@app.route("/api/speak/model/fetch", methods=["POST"])
+def api_speak_model_fetch():
+    if not speech.engine_installed():
+        return jsonify({"error": "the transcription engine is not installed on this machine — " + speech.status()["install_hint"]}), 503
+    try:
+        out = speech.fetch_model(speech.DEFAULT_MODEL)
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": "the model could not be fetched: " + str(e)[:200]}), 502
+    _speech_engine()
+    return jsonify({"fetched": True, **out})
+
+
+def _audio_body():
+    """The raw body, or a refusal. Multipart is refused outright rather
+    than parsed: the form parser would spool the audio to disk."""
+    ctype = (request.content_type or "").lower()
+    if ctype.startswith("multipart/form-data") or ctype.startswith("application/x-www-form-urlencoded"):
+        return None, (jsonify({"error": "send the recording as the raw request body with its audio type — a form upload would be spooled to disk"}), 415)
+    if request.content_length and request.content_length > speech.MAX_AUDIO_BYTES:
+        return None, (jsonify({"error": f"the recording is over the cap ({speech.MAX_AUDIO_BYTES} bytes)"}), 413)
+    data = request.get_data(cache=False)
+    if len(data) > speech.MAX_AUDIO_BYTES:
+        return None, (jsonify({"error": "the recording is over the cap"}), 413)
+    return data, None
+
+
+@app.route("/api/speak/transcribe", methods=["POST"])
+def api_speak_transcribe():
+    data, refusal = _audio_body()
+    if refusal:
+        return refusal
+    if _speech_engine() is None:
+        return jsonify({"error": "the transcription engine is not installed on this machine — " + speech.status()["install_hint"]}), 503
+    try:
+        out = speech.transcribe_bytes(data, request.content_type or "")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 503
+    except Exception as e:  # noqa: BLE001 — a decoder failure is reported, the audio stays in the page's memory
+        return jsonify({"error": "the recording could not be transcribed: " + str(e)[:200]}), 422
+    out["recorded"] = False
+    out["note"] = "nothing was written — the transcript is yours to correct, discard, keep, or send"
+    return jsonify(out)
+
+
+@app.route("/api/speak/keep", methods=["POST"])
+def api_speak_keep():
+    """Keep recording — the one act that stores audio: byte-intact, through
+    the Media wing's own ingest, as the owner's recording."""
+    data, refusal = _audio_body()
+    if refusal:
+        return refusal
+    base = (request.content_type or "").split(";", 1)[0].strip().lower()
+    ext = {"audio/webm": ".weba", "audio/mp4": ".m4a", "audio/ogg": ".ogg", "audio/wav": ".wav", "audio/x-wav": ".wav", "audio/mpeg": ".mp3"}.get(base)
+    if not ext or not data:
+        return jsonify({"error": "the body must be the recording, with its audio type"}), 400
+    stamp = _now_iso().replace(":", "").replace("-", "")
+    try:
+        rec = library.ingest_media(data, filename=f"speak-{stamp}{ext}", source="Speak to Nikodemus",
+                                   title=f"Spoken {_now_iso()}")
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"kept": True, **rec})
+
+
+@app.route("/api/speak/keep/transcript", methods=["POST"])
+def api_speak_keep_transcript():
+    """The kept recording's transcripts: the machine's version, time-
+    anchored, with the engine's identity; and, when the owner edited the
+    words, a second version of origin owner-corrected beside it — one cue,
+    because the correction was made on the whole text."""
+    d = request.get_json(force=True) or {}
+    media_id = str(d.get("media_id") or "")
+    machine = d.get("machine") or {}
+    segments = machine.get("segments") or []
+    engine = machine.get("engine") or {}
+    if not media_id or not segments:
+        return jsonify({"error": "media_id and the machine transcript's segments are required"}), 400
+    out = {"media_id": media_id}
+    try:
+        vtt = speech.to_vtt(segments)
+        out["machine"] = library.add_transcript(media_id, vtt.encode("utf-8"), filename="speak-machine.vtt",
+                                                origin="locally generated", source="Speak to Nikodemus",
+                                                engine=cli.speech_record({**engine, "external": False}, "spoken"))
+        edited = str(d.get("edited_text") or "").strip()
+        machine_text = " ".join((s.get("text") or "").strip() for s in segments if (s.get("text") or "").strip())
+        if edited and edited != machine_text:
+            end = max(float(s.get("end") or 0) for s in segments)
+            vtt2 = speech.to_vtt([{"start": 0.0, "end": end, "text": edited}])
+            out["corrected"] = library.add_transcript(media_id, vtt2.encode("utf-8"), filename="speak-corrected.vtt",
+                                                      origin="owner-corrected", source="Speak to Nikodemus — the owner's edit",
+                                                      engine={"corrects": out["machine"].get("transcript_id", ""), "note": "one cue: the correction was made on the whole text"})
+    except ValueError as e:
+        return jsonify({"error": str(e), **out}), 400
+    return jsonify({"kept": True, **out})
+
+
+# ---------------------------------------------------------------------------
 # The destination chooser (block 105; items 42, 50, 53). Zero-model, reads
 # nothing but the words it is handed, writes nothing: the shape of the
 # words and the destinations it offers, with one highlighted. Nothing runs
@@ -1147,7 +1295,7 @@ def api_question_save():
     data = request.get_json(force=True) or {}
     try:
         row = cli.record_open_question(str(data.get("text") or ""), provenance=str(data.get("provenance") or "typed"),
-                                       shape=str(data.get("shape") or ""))
+                                       shape=str(data.get("shape") or ""), speech=data.get("speech"))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"saved": True, "question": row})
@@ -2139,7 +2287,8 @@ def api_create_job():
     # highlighted ride on the input row — recorded, never inferred
     cli.record_input(job_id, mode, input_text, parent_trace_id or "", provenance=_prov,
                      destination=str(data.get("destination") or "")[:32], shape=str(data.get("shape") or "")[:16],
-                     suggested=str(data.get("suggested") or "")[:32])
+                     suggested=str(data.get("suggested") or "")[:32],
+                     speech=data.get("speech"))   # block 106: the transcription's identity rides only with provenance spoken
     thread = threading.Thread(target=_run_job, args=(job_id, mode, input_text), daemon=True)
     thread.start()
     return jsonify({"job_id": job_id, "status": "queued"})

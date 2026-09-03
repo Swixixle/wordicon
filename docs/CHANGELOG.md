@@ -1,5 +1,30 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.3.6 — Speak to Nikodemus, Mac-local (the first doorway that is not a keyboard)
+
+Block 106 (`docs/adr-speak.md`). A recording instrument beside the
+attachment doorway: press to record (the microphone opens only on the
+press), stop visibly, a local engine transcribes, the transcript lands
+in the box editable, and the edited box goes to the destination chooser
+with provenance `spoken` and the transcription's identity beside it —
+engine, version, model and its file hash, compute type, the vocabulary
+hint's count and hash (the shelf's own accepted titles, read at call
+time, recorded because they bias), `external: false`, the machine's own
+text and whether the owner edited it. The engine is faster-whisper
+(MIT) with base.en int8, decoding from memory; the model is fetched
+once by a visible button in About & proof, never by transcribing. The
+routes take the recording as a raw body, capped, and refuse multipart
+(which Werkzeug spools to disk). Transcribing writes nothing; Discard
+leaves nothing; a failure holds the audio in the page and offers Retry
+/ Download / Discard; Keep recording stores it byte-intact through the
+Media wing with the machine transcript as a time-anchored version and
+the owner's correction as a second one. On a page that is not a secure
+context (the phone over HTTP) the control says so and names the
+trusted-LAN-HTTPS block. `requirements-speech.txt` is optional; an
+absent engine is reported, never mocked. Names ruled: Read aloud (item
+49's control), Speak to Nikodemus, Conversation. The anatomy's Sensory
+Tissue now says what is built. No Conversation, TTS, or vision.
+
 ## v1.3.5 — the destination chooser (the intent layer, fixed once)
 
 Block 105 (`docs/adr-nikodemus.md`, amendment). Words brought into Home

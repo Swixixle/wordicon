@@ -1,0 +1,8 @@
+# Speak to Nikodemus (block 106): the local transcription engine. Optional —
+# the rest of the tool runs without it; About & proof says when it is absent.
+# faster-whisper (MIT) pulls CTranslate2 (MIT), PyAV (BSD-3, decoders
+# bundled — no ffmpeg binary), onnxruntime (MIT), huggingface_hub (Apache-2.0),
+# tokenizers. The model (Systran/faster-whisper-base.en, MIT, ~148 MB) is
+# fetched once by a visible action in About & proof, into the Hugging Face
+# cache outside local_state; never automatically.
+faster-whisper==1.2.1

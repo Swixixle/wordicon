@@ -1947,7 +1947,7 @@ def _question_rows() -> "list[dict]":
     return out
 
 
-def record_open_question(text: str, provenance: str = "typed", shape: str = "") -> dict:
+def record_open_question(text: str, provenance: str = "typed", shape: str = "", speech=None) -> dict:
     """Keep a question exactly as it arrived. Append-only; nothing reads it
     back into any lane — it waits."""
     text = (text or "").strip()
@@ -1958,6 +1958,9 @@ def record_open_question(text: str, provenance: str = "typed", shape: str = "") 
     row = {"object_type": "open_question", "question_id": "q_" + uuid.uuid4().hex[:12],
            "text": text[:4000], "provenance": provenance, "shape": shape or input_shape(text)["shape"],
            "status": "open", "at": _now(), "epoch": current_epoch()}
+    sp = speech_record(speech, provenance)
+    if sp:
+        row["speech"] = sp
     LOCAL_STATE.mkdir(exist_ok=True)
     with OPEN_QUESTIONS_LOG.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -1996,9 +1999,28 @@ def load_open_questions(all_statuses: bool = False) -> "list[dict]":
     return rows if all_statuses else [r for r in rows if r.get("status") == "open"]
 
 
+SPEECH_RECORD_KEYS = ("name", "version", "model", "model_sha", "compute_type", "vocabulary_count",
+                      "vocabulary_sha", "vocabulary_sources", "external", "machine_text", "edited", "mime", "duration_s")
+
+
+def speech_record(speech, provenance: str) -> dict:
+    """The transcription's identity as it may ride on a record (block 106):
+    only with provenance spoken, only the declared keys, the machine's
+    own text kept beside the owner's edit so a correction is never
+    mistaken for what the engine heard. Anything else is dropped."""
+    if provenance != "spoken" or not isinstance(speech, dict):
+        return {}
+    out = {k: speech[k] for k in SPEECH_RECORD_KEYS if k in speech}
+    if "external" in out:
+        out["external"] = bool(out["external"])
+    if "edited" in out:
+        out["edited"] = bool(out["edited"])
+    return out
+
+
 def record_input(job_id: str, mode: str, text: str, parent: str = "",
                  provenance: str = "unstated", destination: str = "",
-                 shape: str = "", suggested: str = "") -> None:
+                 shape: str = "", suggested: str = "", speech=None) -> None:
     """Append-only, best-effort, and deliberately dumb: no schema to
     validate, no gateway to reach, nothing that can refuse. This runs
     before any model is contacted, so it must not be able to fail the
@@ -2028,6 +2050,9 @@ def record_input(job_id: str, mode: str, text: str, parent: str = "",
                 row["destination"] = destination
                 row["shape"] = shape if shape in SHAPES else ""
                 row["suggested"] = suggested if suggested in DESTINATION_IDS else ""
+            sp = speech_record(speech, provenance)
+            if sp:
+                row["speech"] = sp
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     except Exception:
         pass

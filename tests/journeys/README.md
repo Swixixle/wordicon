@@ -21,7 +21,13 @@ scratch store before and after it and fails if a byte changed),
 `home.js`, `anatomy.js`, `chooser.js` (block 105: the cats sentence and
 an invented name read by the destination chooser, nothing run by typing,
 a question kept verbatim, Run it reached only through Develop the idea)
-and `encounter.js` (the switch turned on and off
+`speak.js` (block 106, hashed like `quiet.js`: with a fake microphone
+the instrument is pressed, listens, is stopped, transcribes with the
+mock engine, is discarded, and survives a reload mid-listen with
+nothing recording — none of it writes), `speakkeep.js` (Keep recording
+into Media with the engine on the transcript version; an edited spoken
+transcript sent as an open question with its identity), and
+`encounter.js` (the switch turned on and off
 from About & proof with each flip recorded, one `owner_opened` row by
 id, and an unresolved Recovery Review case found on Home and reopened).
 Every check prints one line. A failing check saves a

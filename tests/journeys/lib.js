@@ -31,7 +31,9 @@ const ok = (cond, msg) => {
 };
 
 async function launch() {
-  const opts = {};
+  // block 106: a fake microphone (a tone) and an auto-granted permission, so
+  // the Speak journey can press, record, stop and transcribe with no device
+  const opts = { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] };
   if (process.env.JOURNEY_CHROME) opts.executablePath = process.env.JOURNEY_CHROME;
   return chromium.launch(opts);
 }

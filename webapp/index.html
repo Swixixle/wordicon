@@ -474,9 +474,16 @@
     <div class="band-head"><div class="section-label">Bring something in</div><span class="more">an idea, a passage, a document, a recording, a source</span></div>
     <div style="position:relative">
       <textarea id="input-text" placeholder="a word, a feeling, a handful of words, or a whole passage…" oninput="toggleClearBtn();rememberInput()"></textarea>
-      <div id="intake-row" style="display:flex;align-items:center;gap:10px;margin-top:6px">
+      <div id="intake-row" style="display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap">
         <button class="go-btn" id="clip-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px"
                 onclick="document.getElementById('file-in').click()">📎 attach a file</button>
+        <!-- Speak to Nikodemus (block 106): a small recording instrument, not
+             a listening assistant. Nothing records before this press; the
+             second press stops it visibly; the transcript lands in the box
+             above, editable, and goes where the owner sends it. -->
+        <button class="go-btn" id="speak-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px"
+                onclick="speakPress()" aria-live="off">🎙 Speak to Nikodemus</button>
+        <span id="speak-state" class="note" data-state="ready" style="margin:0;font-size:12px">Ready</span>
         <button class="go-btn" id="compose-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px"
                 onclick="openCompose()">⤢ full page</button>
                 <button class="go-btn" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);width:auto;padding:6px 12px;font-size:13px"
@@ -487,6 +494,20 @@
                onchange="uploadFile(this.files[0])">
       </div>
       <div id="source-card"></div>
+      <div id="speak-review" hidden style="margin-top:8px;border:1px solid var(--border);border-radius:10px;padding:9px 11px;background:var(--panel-2)">
+        <div class="section-label" style="margin-top:0">Review what Nikodemus heard</div>
+        <div id="speak-heard" class="body" style="font-size:13px;margin:4px 0"></div>
+        <div id="speak-engine" class="foot"></div>
+        <audio id="speak-audio" controls preload="none" style="width:100%;margin:6px 0;display:none"></audio>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <button class="go-btn" id="speak-continue" style="width:auto;padding:6px 12px;font-size:13px" onclick="speakContinue()">Continue — choose where it goes</button>
+          <button class="go-btn" id="speak-retry" style="width:auto;padding:6px 12px;font-size:13px;background:var(--panel);color:var(--text);border:1px solid var(--border)" onclick="speakRetry()">Retry transcription</button>
+          <button class="go-btn" id="speak-keep" style="width:auto;padding:6px 12px;font-size:13px;background:var(--panel);color:var(--text);border:1px solid var(--border)" onclick="speakKeep()">Keep recording</button>
+          <a id="speak-download" class="go-btn" style="width:auto;padding:6px 12px;font-size:13px;background:var(--panel);color:var(--text);border:1px solid var(--border);display:none;text-decoration:none" download="recording">Download</a>
+          <button class="go-btn" id="speak-discard" style="width:auto;padding:6px 12px;font-size:13px;background:var(--panel);color:var(--muted);border:1px solid var(--border)" onclick="speakDiscard()">Discard</button>
+        </div>
+        <div id="speak-note" class="foot" style="margin-top:6px"></div>
+      </div>
       <button id="clear-input-btn" onclick="clearInput()" title="Clear the input"
         style="display:none;position:absolute;top:6px;right:6px;background:var(--panel-2);color:var(--muted);border:1px solid var(--border);border-radius:6px;font-size:12px;padding:3px 9px;cursor:pointer">✕ clear</button>
     </div>
@@ -697,6 +718,14 @@
       <div id="about-epoch" class="foot" style="margin:-6px 0 12px">Epoch: <span id="about-epoch-name">not read yet</span> <span id="about-epoch-when" class="muted"></span>
         <button id="epoch-begin" hidden style="margin-left:8px;font-size:11.5px;padding:2px 9px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;cursor:pointer" onclick="beginOrdinaryUse()">Begin ordinary use</button>
         <span class="muted" id="epoch-note"></span></div>
+      <div id="about-speak" class="foot" style="margin:-6px 0 12px">Speak to Nikodemus: <span id="speak-status">not read yet</span>
+        <button id="speak-fetch" hidden style="margin-left:8px;font-size:11.5px;padding:2px 9px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;cursor:pointer" onclick="fetchSpeechModel()">Fetch the model (once)</button>
+        <span class="muted" id="speak-fetch-note"></span>
+        <div class="muted" id="speak-explain" style="margin-top:4px">A recording instrument, not a listening assistant: nothing records before you press the microphone, you stop it yourself, the transcript lands in the box editable, and the words go only where you send them. Audio never leaves this machine — the engine runs here, and the recording is kept only if you choose Keep recording. The one network act is fetching the model, once, by that button. <span id="speak-browser"></span>
+        <div style="margin-top:6px"><label for="speak-vocab">Words Nikodemus must hear right — yours: coinages not on the shelf, the acronyms of your work. The engine is told these first, then the shelf's titles, and every transcript records the count and hash of what it was told, because it biases what is heard.</label>
+          <textarea id="speak-vocab" placeholder="one per line, or comma-separated" style="width:100%;min-height:44px;margin-top:4px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-size:12.5px;font-family:inherit"></textarea>
+          <button id="speak-vocab-save" style="margin-top:4px;font-size:11.5px;padding:2px 9px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;cursor:pointer" onclick="saveSpeechVocabulary()">Save these words</button>
+          <span class="muted" id="speak-vocab-note"></span></div></div></div>
       <div id="about-encounter" class="foot" style="margin:-6px 0 12px">Encounter recording: <strong id="encounter-state">not read yet</strong>
         <button id="encounter-toggle" hidden style="margin-left:8px;font-size:11.5px;padding:2px 9px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;cursor:pointer" onclick="toggleEncounterRecording()">Turn on</button>
         <span class="muted" id="encounter-note"></span>
@@ -738,6 +767,13 @@
       receipt like any other run. Encounter recording is off until you turn it on in this panel; while off nothing is
       written, and the flip itself is recorded. A recovery case ruled “not enough survives” stays findable and can be
       reopened by a later ruling that cites it.</p>
+      <p class="body"><strong>Nikodemus may hear what you deliberately say to it.</strong> Press the microphone and it
+      listens; press again and it stops; what it heard appears in the box for you to correct before it goes anywhere;
+      the recording stays in this page's memory and is kept only if you choose to keep it. Capture is not
+      interpretation, and interpretation is not memory until you keep it. The engine runs on this machine and
+      names itself and its model on every transcript; the vocabulary it is primed with is your own shelf, and that
+      priming is recorded because it biases what is heard. No conversation mode, no spoken replies, no camera —
+      each of those is its own ruling.</p>
       <p class="body"><strong>Words go where you send them.</strong> Once something is in the box, a row of
       destinations appears — Research outside Nikodemus, Search my record, Develop the idea, Start a Room, Write
       from this, Save as an open question, and for a name with a date, Study the name and the rest. The record reads
@@ -1398,9 +1434,50 @@ function noteEncounter(type, subject, object, via) {
   fetch('/api/encounter', {method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({type, subject, object: object || '', via: via || ''})}).catch(() => {});
 }
+// Speak to Nikodemus in About & proof (block 106): the engine, the model
+// and whether it is here, the hash, and this browser's own report — read,
+// never fetched, except by the one visible button.
+async function loadSpeakStatus() {
+  const st = document.getElementById('speak-status'), btn = document.getElementById('speak-fetch'), br = document.getElementById('speak-browser');
+  if (!st) return;
+  try {
+    const d = await (await fetch('/api/speak/status')).json();
+    st.textContent = !d.installed ? 'engine not installed on this machine — ' + (d.install_hint || '')
+      : `${d.engine} ${d.engine_version || ''} · model ${d.model} ${d.model_present ? (d.model_bytes ? '(' + Math.round(d.model_bytes / 1e6) + ' MB, ' + d.model_sha + ')' : '(present)') : '— not fetched yet'} · ${d.compute_type} · external: never · vocabulary hint: ${(d.vocabulary || {}).count || 0} of your titles`;
+    if (btn) btn.hidden = !(d.installed && !d.model_present && !d.mock);
+    const ta = document.getElementById('speak-vocab');
+    if (ta && document.activeElement !== ta) ta.value = (d.declared_vocabulary || []).join('\n');
+    const vn = document.getElementById('speak-vocab-note');
+    if (vn && d.vocabulary) vn.textContent = `told: ${d.vocabulary.count || 0} words (${d.vocabulary.brand || 0} name, ${d.vocabulary.declared || 0} yours, ${d.vocabulary.shelf || 0} shelf titles) · ${d.vocabulary.sha || ''}`;
+  } catch (e) { st.textContent = 'could not be read'; }
+  if (br) {
+    const fmt = (typeof MediaRecorder !== 'undefined') ? ['audio/webm;codecs=opus', 'audio/mp4'].filter(t => { try { return MediaRecorder.isTypeSupported(t); } catch (e) { return false; } }) : [];
+    br.textContent = 'This browser: ' + (window.isSecureContext ? 'secure page' : 'NOT a secure page — the microphone is unavailable here') + ' · ' + (navigator.mediaDevices ? 'microphone API present' : 'no microphone API') + (fmt.length ? ' · records ' + fmt.join(', ') : ' · no recorder');
+  }
+}
+async function saveSpeechVocabulary() {
+  const ta = document.getElementById('speak-vocab'), note = document.getElementById('speak-vocab-note');
+  if (!ta) return;
+  try {
+    const d = await (await fetch('/api/speak/vocabulary', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({words: ta.value})})).json();
+    if (note) note.textContent = d.error ? d.error : `saved ${d.count} word(s) · told: ${(d.hint || {}).count || 0} · ${(d.hint || {}).sha || ''}`;
+  } catch (e) { if (note) note.textContent = 'could not reach the server.'; }
+  loadSpeakStatus();
+}
+async function fetchSpeechModel() {
+  const note = document.getElementById('speak-fetch-note');
+  if (!confirm('Fetch the transcription model now? This is the one network act on the speech path: about 150 MB from Hugging Face, once, into a cache outside your record.')) return;
+  if (note) note.textContent = 'fetching…';
+  try {
+    const d = await (await fetch('/api/speak/model/fetch', {method: 'POST'})).json();
+    if (note) note.textContent = d.error ? d.error : `fetched ${Math.round((d.bytes || 0) / 1e6)} MB in ${d.seconds}s (${d.sha})`;
+  } catch (e) { if (note) note.textContent = 'could not reach the server.'; }
+  loadSpeakStatus();
+}
 async function loadConfig() {
   loadEpoch();
   loadEncounterSwitch();
+  loadSpeakStatus();
   const el = document.getElementById('about-provider');
   if (!el) return;
   try {
@@ -1598,6 +1675,7 @@ function clearInput() {
   const box = document.getElementById('input-text');
   box.value = '';
   toggleClearBtn();
+  if (SPEAK.active) speakForget();   // block 106: clearing the box lets the spoken attempt go
   scheduleDestinations();
   box.focus();
 }
@@ -1648,6 +1726,171 @@ function gestureDefineRun() {
   submitRun('auto', combined);
 }
 
+// ---- Speak to Nikodemus (block 106) ---------------------------------------
+// A recording instrument: nothing records before the press; the second
+// press stops it visibly; the audio lives in this page's memory and
+// nowhere else until the owner chooses Keep recording; the transcript is
+// what the local engine heard, put in the box above and editable; the
+// edited box — never an invisible alternate — goes to the destination
+// chooser with provenance spoken. A reload forgets the audio (there is
+// nothing to restart) and keeps only the draft the box already kept.
+let SPEAK = {state: 'ready', rec: null, stream: null, chunks: [], blob: null, mime: '', result: null, active: false, url: '', kept: null};
+const SPEAK_STATES = {ready: 'Ready', listening: 'Listening — press again to stop', transcribing: 'Transcribing on this machine…',
+                      review: 'Review what Nikodemus heard', sent: 'Sent', discarded: 'Discarded', failed: 'Failed'};
+function speakSetState(state, msg) {
+  SPEAK.state = state;
+  const el = document.getElementById('speak-state'), btn = document.getElementById('speak-btn');
+  if (el) { el.dataset.state = state; el.textContent = msg || SPEAK_STATES[state] || state; el.style.color = state === 'failed' ? 'var(--bad)' : (state === 'listening' ? 'var(--accent)' : ''); }
+  if (btn) btn.textContent = state === 'listening' ? '⏹ Stop' : '🎙 Speak to Nikodemus';
+}
+function speakSupported() {
+  return !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia && typeof MediaRecorder !== 'undefined');
+}
+function speakUnavailableMessage() {
+  return 'Speaking needs a secure page. On this Mac open http://127.0.0.1:8420; on the phone it waits for the trusted-LAN-HTTPS block.';
+}
+function speakInit() {
+  const btn = document.getElementById('speak-btn'), st = document.getElementById('speak-state');
+  if (!btn || !st) return;
+  if (!speakSupported()) { btn.disabled = true; st.dataset.state = 'unavailable'; st.textContent = speakUnavailableMessage(); }
+}
+function speakRecorderMime() {
+  return ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(t => { try { return MediaRecorder.isTypeSupported(t); } catch (e) { return false; } }) || '';
+}
+async function speakPress() {
+  if (SPEAK.state === 'listening') { speakStop(); return; }
+  if (SPEAK.state === 'transcribing') return;
+  if (!speakSupported()) { speakInit(); return; }
+  let st;
+  try { st = await (await fetch('/api/speak/status')).json(); } catch (e) { speakSetState('failed', 'could not reach the server'); return; }
+  if (!st.installed) { speakSetState('failed', 'the transcriber is not installed on this machine — ' + (st.install_hint || '')); return; }
+  if (!st.model_present) { speakSetState('failed', 'the model is not on this machine yet — fetch it once in About & proof'); return; }
+  // the microphone opens only here, on the press — never on load, never on a timer
+  try { SPEAK.stream = await navigator.mediaDevices.getUserMedia({audio: true}); }
+  catch (e) { speakSetState('failed', 'the microphone was not granted (' + (e && e.name) + ')'); return; }
+  speakForget();
+  const mime = speakRecorderMime();
+  try { SPEAK.rec = new MediaRecorder(SPEAK.stream, mime ? {mimeType: mime} : {}); }
+  catch (e) { speakSetState('failed', 'this browser cannot record audio (' + (e && e.name) + ')'); SPEAK.stream.getTracks().forEach(t => t.stop()); return; }
+  SPEAK.chunks = []; SPEAK.mime = SPEAK.rec.mimeType || mime || 'audio/webm';
+  SPEAK.rec.ondataavailable = e => { if (e.data && e.data.size) SPEAK.chunks.push(e.data); };
+  SPEAK.rec.onstop = speakTranscribe;
+  SPEAK.rec.start(250);
+  speakSetState('listening');
+}
+function speakStop() {
+  if (SPEAK.rec && SPEAK.rec.state !== 'inactive') SPEAK.rec.stop();
+  if (SPEAK.stream) { SPEAK.stream.getTracks().forEach(t => t.stop()); SPEAK.stream = null; }
+}
+function speakForget() {
+  if (SPEAK.url) { try { URL.revokeObjectURL(SPEAK.url); } catch (e) {} }
+  SPEAK.blob = null; SPEAK.chunks = []; SPEAK.result = null; SPEAK.url = ''; SPEAK.kept = null; SPEAK.active = false;
+  const a = document.getElementById('speak-audio'); if (a) { a.removeAttribute('src'); a.style.display = 'none'; }
+  const rv = document.getElementById('speak-review'); if (rv) rv.hidden = true;
+}
+async function speakTranscribe() {
+  SPEAK.blob = new Blob(SPEAK.chunks, {type: SPEAK.mime || 'audio/webm'});
+  SPEAK.chunks = [];
+  if (!SPEAK.blob.size) { speakSetState('failed', 'nothing was recorded'); return; }
+  speakSetState('transcribing');
+  await speakSend();
+}
+async function speakSend() {
+  let d;
+  try {
+    const r = await fetch('/api/speak/transcribe', {method: 'POST', headers: {'Content-Type': SPEAK.blob.type || 'audio/webm'}, body: SPEAK.blob});
+    d = await r.json();
+  } catch (e) { speakFailed('could not reach the server — the recording is still here, in this page only'); return; }
+  if (d.error) { speakFailed(d.error); return; }
+  SPEAK.result = d; SPEAK.active = true;
+  const box = document.getElementById('input-text');
+  box.value = d.text || '';
+  toggleClearBtn(); rememberInput(); updateGestureChooser(); scheduleDestinations();
+  speakShowReview();
+  speakSetState('review', 'Review what Nikodemus heard — correct it in the box, then choose where it goes');
+}
+function speakFailed(msg) {
+  speakSetState('failed', msg);
+  const rv = document.getElementById('speak-review'), note = document.getElementById('speak-note');
+  if (rv) rv.hidden = false;
+  document.getElementById('speak-heard').textContent = '(no transcript — the recording is held in this page\'s memory only; retry, download it, or discard it)';
+  document.getElementById('speak-engine').textContent = '';
+  speakAudioElement();
+  const dl = document.getElementById('speak-download'); if (dl && SPEAK.url) { dl.href = SPEAK.url; dl.style.display = ''; dl.download = 'recording' + (SPEAK.mime.includes('mp4') ? '.m4a' : '.webm'); }
+  document.getElementById('speak-keep').style.display = 'none';
+  document.getElementById('speak-continue').style.display = 'none';
+  if (note) note.textContent = 'Nothing was written anywhere.';
+}
+function speakAudioElement() {
+  const a = document.getElementById('speak-audio');
+  if (!a || !SPEAK.blob) return;
+  if (!SPEAK.url) SPEAK.url = URL.createObjectURL(SPEAK.blob);
+  a.src = SPEAK.url; a.style.display = '';
+}
+function speakShowReview() {
+  const rv = document.getElementById('speak-review'), d = SPEAK.result || {};
+  if (!rv) return;
+  rv.hidden = false;
+  document.getElementById('speak-heard').textContent = d.text ? '“' + d.text + '”' : '(nothing heard)';
+  const e = d.engine || {};
+  document.getElementById('speak-engine').textContent = `heard by ${e.name || '?'} ${e.version || ''} · model ${e.model || '?'}${e.model_sha ? ' ' + e.model_sha : ''} · ${e.compute_type || ''} · vocabulary hint: ${e.vocabulary_count || 0} of your titles · audio never left this machine · ${d.duration_s || 0}s in ${d.elapsed_s || 0}s`;
+  speakAudioElement();
+  document.getElementById('speak-download').style.display = 'none';
+  document.getElementById('speak-keep').style.display = SPEAK.blob ? '' : 'none';
+  document.getElementById('speak-continue').style.display = '';
+  document.getElementById('speak-note').textContent = 'The box above is the transcript — correct it there. Nothing has been written: the recording is in this page\'s memory only, and the words go nowhere until you choose a destination.';
+}
+function speakContinue() {
+  const box = document.getElementById('input-text');
+  if (box) { box.focus(); box.scrollIntoView({block: 'center'}); }
+  scheduleDestinations();
+}
+async function speakRetry() {
+  if (!SPEAK.blob) { speakSetState('failed', 'there is no recording to retry'); return; }
+  speakSetState('transcribing'); await speakSend();
+}
+function speakDiscard() {
+  const box = document.getElementById('input-text');
+  if (box && SPEAK.result && box.value.trim()) { box.value = ''; toggleClearBtn(); rememberInput(); updateGestureChooser(); }
+  if (box && !SPEAK.result && SPEAK.state === 'failed') { /* a failed recording never reached the box */ }
+  speakForget();
+  scheduleDestinations();
+  speakSetState('discarded', 'Discarded — nothing was written');
+  setTimeout(() => { if (SPEAK.state === 'discarded') speakSetState('ready'); }, 2500);
+}
+function speechBlock() {
+  if (!SPEAK.active || !SPEAK.result) return undefined;
+  const e = SPEAK.result.engine || {}, box = document.getElementById('input-text');
+  const now = (box ? box.value : '').trim(), heard = (SPEAK.result.text || '').trim();
+  return {name: e.name, version: e.version, model: e.model, model_sha: e.model_sha, compute_type: e.compute_type,
+          vocabulary_count: e.vocabulary_count, vocabulary_sha: e.vocabulary_sha, external: false,
+          machine_text: heard, edited: now !== heard, mime: SPEAK.result.mime || SPEAK.mime, duration_s: SPEAK.result.duration_s};
+}
+async function speakKeep() {
+  if (!SPEAK.blob || !SPEAK.result) { document.getElementById('speak-note').textContent = 'there is no recording to keep'; return; }
+  if (!confirm('Keep this recording? It is stored byte-intact in your Media, with the transcript as a version — and your correction as a second version if you edited it.')) return;
+  const note = document.getElementById('speak-note');
+  try {
+    const r = await fetch('/api/speak/keep', {method: 'POST', headers: {'Content-Type': SPEAK.blob.type || 'audio/webm'}, body: SPEAK.blob});
+    const k = await r.json();
+    if (k.error) { note.textContent = 'not kept: ' + k.error; return; }
+    const box = document.getElementById('input-text');
+    const r2 = await fetch('/api/speak/keep/transcript', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({media_id: k.media_id, machine: {segments: SPEAK.result.segments || [], engine: SPEAK.result.engine || {}}, edited_text: box ? box.value : ''})});
+    const t = await r2.json();
+    SPEAK.kept = {media_id: k.media_id, transcript: t};
+    note.textContent = 'kept as ' + k.media_id + (t.corrected ? ' with the machine transcript and your correction as two versions' : ' with the machine transcript as a version') + ' — in Media.';
+    document.getElementById('speak-keep').disabled = true;
+    loadMedia();
+  } catch (e) { note.textContent = 'could not reach the server to keep it.'; }
+}
+function speakMarkSent() {
+  if (!SPEAK.active) return;
+  SPEAK.active = false;
+  speakSetState('sent', 'Sent — the words went where you chose, with provenance spoken');
+  setTimeout(() => { if (SPEAK.state === 'sent') speakSetState('ready'); }, 4000);
+}
+
 // ---- the destination chooser (block 105) ----------------------------
 // The words' shape is read on the server, mechanically (no model), and
 // one destination is highlighted; nothing runs until a destination is
@@ -1658,7 +1901,8 @@ let DEST = {text: '', provenance: 'typed', data: null, chosen: '', timer: null};
 function intakeWords() {
   const typed = document.getElementById('input-text').value.trim();
   const fromFile = (ATTACHED && ATTACHED.representation && ATTACHED.representation.text) || '';
-  return {text: typed || fromFile, provenance: typed ? 'typed' : (fromFile ? 'attached' : 'typed')};
+  // block 106: words that arrived by the microphone stay spoken through their edit — until discarded, cleared, or sent
+  return {text: typed || fromFile, provenance: typed ? (SPEAK.active ? 'spoken' : 'typed') : (fromFile ? 'attached' : 'typed')};
 }
 function scheduleDestinations() {
   clearTimeout(DEST.timer);
@@ -1724,9 +1968,10 @@ async function chooseDestination(id) {
   }
   if (id === 'question') {
     try {
-      const r = await fetch('/api/questions', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text: DEST.text, provenance: DEST.provenance, shape: d.shape})});
+      const r = await fetch('/api/questions', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({text: DEST.text, provenance: DEST.provenance, shape: d.shape, speech: DEST.provenance === 'spoken' ? speechBlock() : undefined})});
       const qd = await r.json();
       if (qd.error) { pageNote('the question was not saved: ' + qd.error); return; }
+      speakMarkSent();
       pageNote('kept as an open question, verbatim — in the Library under Open questions. Nothing ran.');
       HOME = null; loadHome(); loadOpenQuestions();
     } catch (e) { pageNote('could not reach the server to keep the question.'); }
@@ -1762,7 +2007,8 @@ async function submitRun(submitMode, text, fromArtifact, gesture) {
       body: JSON.stringify({mode: submitMode, input_text: text,
                             gesture: gesture || undefined,
                             from_artifact: fromArtifact || '',
-                            provenance: fromArtifact ? 'attached' : 'typed',
+                            provenance: fromArtifact ? 'attached' : (SPEAK.active ? 'spoken' : 'typed'),   // block 106: spoken stays spoken
+                            speech: (!fromArtifact && SPEAK.active) ? speechBlock() : undefined,
                             // block 105: the door chosen and what the chooser had highlighted
                             destination: DEST.chosen || undefined,
                             shape: (DEST.data && DEST.data.shape) || undefined,
@@ -1775,6 +2021,7 @@ async function submitRun(submitMode, text, fromArtifact, gesture) {
       return;
     }
     lastSubmission = {mode: submitMode, input_text: text};
+    speakMarkSent();
     seenAttempts = [];
     roundCount = 1;
     localStorage.setItem(ACTIVE_JOB_KEY, d.job_id);
@@ -6859,6 +7106,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('input-text').addEventListener('input', () => { if (HOME) renderContinue(); });
   document.getElementById('input-text').addEventListener('input', scheduleDestinations);   // block 105: the chooser reads, never runs
   loadOpenQuestions();
+  speakInit();   // block 106: says plainly when the page cannot hold a microphone; opens nothing
   updateGestureChooser();
   loadVaultStrip();
   setInterval(loadVaultStrip, 60000);

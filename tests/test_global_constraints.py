@@ -13427,7 +13427,7 @@ console.log(out.join('\\n'));
         _srv_jobs = _srv103[_srv103.index("def api_create_job("):_srv103.index("def api_get_job(")]
         if 'provenance=_prov' not in _srv_jobs or '"unstated"' not in _srv_jobs or '("typed", "attached", "spoken", "door")' not in _srv_jobs:   # ledger (block 105): spoken joins the page-claimable provenances
             _f103("job creation does not record input provenance honestly")
-        if "provenance: fromArtifact ? 'attached' : 'typed'" not in _idx103:
+        if "provenance: fromArtifact ? 'attached' : (SPEAK.active ? 'spoken' : 'typed')" not in _idx103:   # ledger (block 106): spoken joins the page's claims
             _f103("the page does not say how the words arrived")
         if 'INPUT_PROVENANCE = ("typed", "attached", "spoken", "door", "connector", "unstated")' not in _srv_cli or '"provenance": provenance' not in _srv_cli:   # ledger (block 105): spoken added before the microphone exists
             _f103("record_input does not carry the provenance type")
@@ -14177,6 +14177,303 @@ console.log(out.join('\\n'));
                   "Research outside\nNikodemus", "makes no model call and\nwrites nothing to the record"):
         if _need not in _adr105:
             _f105(f"the ADR amendment does not say {_need!r}")
+
+    # ================= block 106: Speak to Nikodemus (Mac-local) ==========
+    # The first doorway that is not a keyboard (items 53, 55; docs/adr-
+    # speak.md). Nothing records before the press; the transcript is the
+    # local engine's, put in the box editable, and goes where the owner
+    # sends it with provenance spoken and the engine's identity beside it;
+    # transcribing writes nothing; the audio is kept only by Keep
+    # recording; multipart is refused (it spools to disk); no external
+    # provider exists on the path; the phone says plainly it cannot.
+    import json as _json106
+    import hashlib as _hl106
+    import importlib as _il106
+    _speech = _il106.import_module("speech")
+    _root106 = Path(cli.__file__).parent.parent
+    _srv106 = (_root106 / "server.py").read_text(encoding="utf-8")
+    _idx106 = (_root106 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _spk106 = (_root106 / "scripts" / "speech.py").read_text(encoding="utf-8")
+    _lib106 = (_root106 / "scripts" / "library.py").read_text(encoding="utf-8")
+    _anat106 = (_root106 / "webapp" / "anatomy.html").read_text(encoding="utf-8")
+
+    def _f106(msg):
+        failures.append(f"106: {msg}")
+
+    def _digest106(root):
+        h = _hl106.sha256()
+        for p in sorted(Path(root).rglob("*")):
+            if p.is_file():
+                h.update(str(p.relative_to(root)).encode()); h.update(b"\0"); h.update(p.read_bytes()); h.update(b"\0")
+        return h.hexdigest()
+
+    # ---- (1) the adapter: the mock engine, the vocabulary hint, the record ----
+    _speech.ENGINE = _speech.MockEngine()
+    _vh = _speech.vocabulary_hint(["Common Ground", "ZZ Title One", "", "zz title one", "ZZ Title Two"], declared=["AARC", "aarc", "PEEP"], brand=["Nikodemus"])
+    if _vh.get("count") != 6 or _vh.get("brand") != 1 or _vh.get("declared") != 2 or _vh.get("shelf") != 3 or not _vh["hint"].startswith("Words in use here: Nikodemus, AARC, PEEP, ") \
+            or not _vh["hint"].endswith(".") or _vh["hint"].lower().count("zz title one") != 1 or not _vh.get("sha"):
+        _f106(f"the vocabulary hint is not the name, then the owner's words, then the shelf, framed, deduped and hashed: {_vh}")
+    if _speech.brand_words() != [server.BRAND["name"]]:
+        _f106("the hint's first word is not the visible name from config/brand.json")
+    _long = _speech.vocabulary_hint([f"Title Number {i}" for i in range(400)], declared=["Owner Word"], brand=["Nikodemus"])
+    if len(_long["hint"]) > _speech.VOCAB_CHAR_CAP + len(_speech.HINT_FRAME) + 2 or _long["count"] >= 400 or "Title Number 399" not in _long["hint"] or "Owner Word" not in _long["hint"]:
+        _f106("the hint is not capped, or the cap drops the owner's words or keeps the oldest titles rather than the newest")
+    if _speech.vocabulary_path().exists():
+        _speech.vocabulary_path().unlink()
+    if _speech.load_declared_vocabulary() != []:
+        _f106("a declared vocabulary appeared from nowhere")
+    _audio = b"RIFFfake" + b"\0" * 200 + b"NIKODEMUS-TEST:Open the parrot box and read me the definition.\n" + b"\0" * 5000
+    _tr = _speech.transcribe_bytes(_audio, "audio/webm;codecs=opus")
+    _eng = _tr.get("engine") or {}
+    if _tr.get("text") != "Open the parrot box and read me the definition." or _tr.get("mime") != "audio/webm" or not _tr.get("segments") \
+            or _eng.get("name") != "mock" or _eng.get("external") is not False or "vocabulary_count" not in _eng or "vocabulary_sha" not in _eng or _eng.get("model") != "mock":
+        _f106(f"the transcript does not carry the engine's identity and the hint: {_tr}")
+    for _bad_audio, _bad_mime, _why in ((b"", "audio/webm", "empty"), (b"x" * 10, "text/plain", "not audio"), (b"x" * (_speech.MAX_AUDIO_BYTES + 1), "audio/webm", "over the cap")):
+        try:
+            _speech.transcribe_bytes(_bad_audio, _bad_mime)
+            _f106(f"the adapter took {_why}")
+        except ValueError:
+            pass
+    _saved_engine = _speech.ENGINE
+    _speech.ENGINE = None
+    try:
+        _speech.transcribe_bytes(_audio, "audio/webm")
+        _f106("with no engine installed the adapter still transcribed (a silent mock?)")
+    except RuntimeError:
+        pass
+    _speech.ENGINE = _saved_engine
+    _st = _speech.status()
+    if _st.get("external") is not False or _st.get("mock") is not True or not _st.get("installed") or _st.get("model_present") is not True or "vocabulary" not in _st:
+        _f106(f"status does not say what the doorway is: {_st}")
+    _vtt = _speech.to_vtt([{"start": 0, "end": 1.5, "text": "one"}, {"start": 1.5, "end": 3.25, "text": "two"}])
+    if not _vtt.startswith("WEBVTT") or "00:00:01.500 --> 00:00:03.250" not in _vtt:
+        _f106("the machine transcript is not a time-anchored WebVTT")
+    # the adapter's own discipline: no file written, no temp file, no network, no language model, no fallback to the mock
+    # the one write in the module is the owner's declared vocabulary, by his own action; the transcription path itself writes nothing
+    _spk_path = _spk106[:_spk106.index("def set_declared_vocabulary")] + _spk106[_spk106.index("def vocabulary_hint"):]
+    for _bad in ("tempfile", "open(", "write_bytes", "write_text", "NamedTemporary", "requests.", "urllib", "socket", "Gateway", "gateway.complete", "= MockEngine()"):
+        if _bad in _spk_path:
+            _f106(f"speech.py's transcription path reaches for {_bad!r}")
+    if _spk106.count("write_text") != 1 or "vocabulary_path().write_text" not in _spk106:
+        _f106("speech.py writes somewhere other than the owner's vocabulary file")
+    if "local_files_only=True" not in _spk106 or "decode_audio(io.BytesIO(audio))" not in _spk106 or "def fetch_model" not in _spk106:
+        _f106("the engine may fetch on its own, or decodes from a file")
+    if "speech.ENGINE = speech.MockEngine()" in _srv106 or "MockEngine" in _srv106:
+        _f106("the server can install the mock engine")
+    if "speech.ENGINE = speech.FasterWhisperEngine()" not in _srv106 or "speech.ENGINE = None" not in _srv106:
+        _f106("the server does not install the real engine or report its absence")
+
+    # ---- (2) the routes: raw bytes only, paired only, writing nothing ----
+    _oldgw106 = server.server_gateway
+    server.server_gateway = lambda: (_ for _ in ()).throw(RuntimeError("106: the doorway must never construct the gateway"))
+    _speech.ENGINE = _speech.MockEngine()
+    # earlier blocks' probe jobs may still be writing their receipts in the background — let them finish before the store is hashed
+    import time as _time106
+    for _ in range(300):
+        with server.JOBS_LOCK:
+            _busy = [j for j in server.JOBS.values() if j.get("status") not in ("complete", "failed")]
+        if not _busy:
+            break
+        _time106.sleep(0.1)
+    try:
+        with server.app.test_client() as _c106:
+            _paired(_c106)
+            _dg0 = _digest106(cli.LOCAL_STATE)
+            _s = _c106.get("/api/speak/status").get_json() or {}
+            if _s.get("external") is not False or (_s.get("names") or {}).get("control") != "Speak to Nikodemus" or (_s.get("names") or {}).get("narration") != "Read aloud" \
+                    or "Conversation" not in (_s.get("names") or {}).get("session", "") or "trusted-LAN-HTTPS" not in (_s.get("phone") or ""):
+                _f106(f"status does not carry the ruled names and the phone's honest message: {_s.get('names')} {_s.get('phone')}")
+            _r = _c106.post("/api/speak/transcribe", data=_audio, content_type="audio/webm;codecs=opus")
+            _d = _r.get_json() or {}
+            if _r.status_code != 200 or _d.get("text") != "Open the parrot box and read me the definition." or _d.get("recorded") is not False or (_d.get("engine") or {}).get("external") is not False:
+                _f106(f"the transcribe route did not return the transcript with recorded false: {_r.status_code} {_d.get('error')}")
+            if _digest106(cli.LOCAL_STATE) != _dg0:
+                _f106("transcribing wrote to the store")
+            _r = _c106.post("/api/speak/transcribe", data={"audio": (__import__("io").BytesIO(_audio), "a.webm")}, content_type="multipart/form-data")
+            if _r.status_code != 415:
+                _f106(f"a multipart upload was not refused outright: {_r.status_code}")
+            _r = _c106.post("/api/speak/transcribe", data=b"x" * 100, content_type="text/plain")
+            if _r.status_code != 400:
+                _f106(f"a non-audio body was transcribed: {_r.status_code}")
+            _r = _c106.post("/api/speak/transcribe", data=b"", content_type="audio/webm")
+            if _r.status_code != 400:
+                _f106("an empty body was transcribed")
+            _cap_saved = _speech.MAX_AUDIO_BYTES
+            _speech.MAX_AUDIO_BYTES = 1000
+            try:
+                _r = _c106.post("/api/speak/transcribe", data=_audio, content_type="audio/webm")
+                if _r.status_code != 413:
+                    _f106(f"an over-cap body was not refused: {_r.status_code}")
+            finally:
+                _speech.MAX_AUDIO_BYTES = _cap_saved
+            if _digest106(cli.LOCAL_STATE) != _dg0:
+                _f106("the refusals wrote to the store")
+            # the owner's declared words: written only by him, told first, recorded on the transcript
+            _r = _c106.post("/api/speak/vocabulary", json={"words": "AARC, PEEP\nFiO2, aarc"}).get_json() or {}
+            if not _r.get("saved") or _r.get("words") != ["AARC", "PEEP", "FiO2"] or (_r.get("hint") or {}).get("declared") != 3 or (_r.get("hint") or {}).get("brand") != 1:
+                _f106(f"the declared vocabulary was not saved as given: {_r}")
+            if _c106.post("/api/speak/vocabulary", json={"words": 5}).status_code != 400:
+                _f106("a non-list vocabulary was accepted")
+            _g = _c106.get("/api/speak/vocabulary").get_json() or {}
+            if _g.get("declared") != ["AARC", "PEEP", "FiO2"] or (_g.get("hint") or {}).get("declared") != 3:
+                _f106("the declared vocabulary does not read back")
+            _d2 = _c106.post("/api/speak/transcribe", data=_audio, content_type="audio/webm").get_json() or {}
+            if ((_d2.get("engine") or {}).get("vocabulary_sources") or {}).get("declared") != 3 or (_d2.get("engine") or {}).get("vocabulary_count", 0) < 4:
+                _f106(f"the transcript does not record what the engine was told: {(_d2.get('engine') or {}).get('vocabulary_sources')}")
+            _dg0 = _digest106(cli.LOCAL_STATE)   # the vocabulary file is the owner's deliberate write; everything after it must write nothing
+            for _path, _kw in (("/api/speak/transcribe", {"data": _audio, "content_type": "audio/webm"}), ("/api/speak/keep", {"data": _audio, "content_type": "audio/webm"}),
+                               ("/api/speak/model/fetch", {})):
+                _un = server.app.test_client().post(_path, **_kw)
+                if _un.status_code == 200:
+                    _f106(f"{_path} answers an unpaired visitor")
+            _un = server.app.test_client().get("/api/speak/status")
+            if _un.status_code == 200 and "engine" in (_un.get_json() or {}):
+                _f106("/api/speak/status answers an unpaired visitor")
+            # no engine installed on this machine: reported, never mocked
+            _speech.ENGINE = None
+            _saved_installed = _speech.engine_installed
+            _speech.engine_installed = lambda: False
+            try:
+                _r = _c106.post("/api/speak/transcribe", data=_audio, content_type="audio/webm")
+                _s2 = _c106.get("/api/speak/status").get_json() or {}
+                if _r.status_code != 503 or "not installed" not in (_r.get_json() or {}).get("error", "") or _s2.get("installed") is not False or "pip install" not in (_s2.get("install_hint") or ""):
+                    _f106(f"an absent engine is not reported as absent: {_r.status_code} {_s2.get('installed')}")
+                _r = _c106.post("/api/speak/model/fetch")
+                if _r.status_code != 503:
+                    _f106("the model fetch ran with no engine installed")
+            finally:
+                _speech.engine_installed = _saved_installed
+                _speech.ENGINE = _speech.MockEngine()
+            if _digest106(cli.LOCAL_STATE) != _dg0:
+                _f106("the absent-engine path wrote to the store")
+            # ---- (3) sending: the edited box, provenance spoken, the engine's identity on the record ----
+            _sp = {"name": "mock", "version": "mock-1", "model": "mock", "model_sha": "", "compute_type": "none", "vocabulary_count": 2, "vocabulary_sha": "abcd",
+                   "external": False, "machine_text": "Open the parrot box and read me the definition.", "edited": True, "mime": "audio/webm", "duration_s": 3.1, "secret_extra": "x"}
+            _dest_t = _c106.post("/api/destinations", json={"text": "Open the Parrot Box and read me the definition.", "provenance": "typed"}).get_json() or {}
+            _dest_s = _c106.post("/api/destinations", json={"text": "Open the Parrot Box and read me the definition.", "provenance": "spoken"}).get_json() or {}
+            if {k: v for k, v in _dest_t.items() if k != "provenance"} != {k: v for k, v in _dest_s.items() if k != "provenance"}:
+                _f106("a spoken sentence receives different destinations from its typed twin")
+            _r = _c106.post("/api/questions", json={"text": "Open the Parrot Box and read me the definition.", "provenance": "spoken", "shape": "statement", "speech": _sp}).get_json() or {}
+            _q = _r.get("question") or {}
+            if _q.get("provenance") != "spoken" or (_q.get("speech") or {}).get("machine_text") != _sp["machine_text"] or (_q.get("speech") or {}).get("edited") is not True \
+                    or "secret_extra" in (_q.get("speech") or {}) or (_q.get("speech") or {}).get("external") is not False:
+                _f106(f"a spoken open question does not carry the engine's identity honestly: {_q.get('speech')}")
+            _r = _c106.post("/api/questions", json={"text": "typed words with a speech block", "provenance": "typed", "speech": _sp}).get_json() or {}
+            if "speech" in (_r.get("question") or {}):
+                _f106("a speech block rode on typed words")
+    finally:
+        server.server_gateway = _oldgw106
+    server.server_gateway = lambda: cli.MockGateway()
+    try:
+        with server.app.test_client() as _c106:
+            _paired(_c106)
+            _c106.post("/api/jobs", json={"mode": "forge", "input_text": "ZZ spoken probe 106", "provenance": "spoken", "destination": "develop", "speech": _sp})
+            _c106.post("/api/jobs", json={"mode": "forge", "input_text": "ZZ spoken probe 106b", "provenance": "typed", "speech": _sp})
+    finally:
+        server.server_gateway = _oldgw106
+    _rows = [_json106.loads(l) for l in cli.INPUTS_LOG.read_text(encoding="utf-8").splitlines() if '"ZZ spoken probe 106' in l]
+    _a = next((r for r in _rows if r.get("text") == "ZZ spoken probe 106"), {}); _b = next((r for r in _rows if r.get("text") == "ZZ spoken probe 106b"), {})
+    if _a.get("provenance") != "spoken" or (_a.get("speech") or {}).get("name") != "mock" or (_a.get("speech") or {}).get("edited") is not True or "secret_extra" in (_a.get("speech") or {}) \
+            or _a.get("destination") != "develop":
+        _f106(f"the input row of a spoken run does not carry the transcription's identity: {_a}")
+    if "speech" in _b:
+        _f106("the transcription's identity rode on a typed row")
+    # ---- (4) Keep recording: byte-intact media, two transcript versions, the engine on the machine's ----
+    server.server_gateway = lambda: (_ for _ in ()).throw(RuntimeError("106: keep must never construct the gateway"))
+    try:
+        with server.app.test_client() as _c106:
+            _paired(_c106)
+            _blobs_before = sorted(p.name for p in (Path(cli.LOCAL_STATE) / "library" / "blobs").glob("*")) if (Path(cli.LOCAL_STATE) / "library" / "blobs").exists() else []
+            _r = _c106.post("/api/speak/keep", data=_audio, content_type="audio/webm")
+            _k = _r.get_json() or {}
+            if _r.status_code != 200 or not _k.get("kept") or not str(_k.get("media_id", "")).startswith("media_") or _k.get("kind") != "audio":
+                _f106(f"Keep recording did not store the recording as the owner's audio: {_r.status_code} {_k}")
+            _blob = Path(cli.LOCAL_STATE) / "library" / "blobs" / _hl106.sha256(_audio).hexdigest()
+            if not _blob.exists() or _blob.read_bytes() != _audio:
+                _f106("the kept recording is not byte-identical")
+            _r = _c106.post("/api/speak/keep/transcript", json={"media_id": _k["media_id"], "machine": {"segments": _tr["segments"], "engine": _tr["engine"]},
+                                                              "edited_text": "Open the Parrot Box and read me the definition."})
+            _t = _r.get_json() or {}
+            if _r.status_code != 200 or not (_t.get("machine") or {}).get("transcript_id") or not (_t.get("corrected") or {}).get("transcript_id") \
+                    or (_t.get("machine") or {}).get("origin") != "locally generated" or (_t.get("corrected") or {}).get("origin") != "owner-corrected":
+                _f106(f"the kept transcript is not two versions with declared origins: {_r.status_code} {_t}")
+            _media_rows = [r for r in server.library._read_media_rows() if r.get("type") == "transcript" and r.get("media_id") == _k["media_id"]]
+            _mrow = next((r for r in _media_rows if r.get("origin") == "locally generated"), {})
+            _crow = next((r for r in _media_rows if r.get("origin") == "owner-corrected"), {})
+            if (_mrow.get("engine") or {}).get("name") != "mock" or (_mrow.get("engine") or {}).get("external") is not False or (_crow.get("engine") or {}).get("corrects") != _mrow.get("transcript_id"):
+                _f106(f"the transcript versions do not name the engine, or the correction does not cite the machine's: {_mrow.get('engine')} {_crow.get('engine')}")
+            _r = _c106.post("/api/speak/keep/transcript", json={"media_id": _k["media_id"], "machine": {"segments": _tr["segments"], "engine": _tr["engine"]},
+                                                              "edited_text": _tr["text"]})
+            if (_r.get_json() or {}).get("corrected"):
+                _f106("an unedited transcript produced a correction version")
+            _r = _c106.post("/api/speak/keep", data={"audio": (__import__("io").BytesIO(_audio), "a.webm")}, content_type="multipart/form-data")
+            if _r.status_code != 415:
+                _f106("Keep accepted a multipart upload")
+    finally:
+        server.server_gateway = _oldgw106
+    # ---- (5) the routes' source: raw body only, never request.files, never a file of their own ----
+    _spk_srv = _srv106[_srv106.index("# Speak to Nikodemus (block 106"):_srv106.index("# The destination chooser (block 105")]
+    for _bad in ("request.files", "request.form", "tempfile", "NamedTemporary", "write_bytes", "open(", "server_gateway", "Gateway(", ".complete(", "snapshot_download"):
+        if _bad in _spk_srv:
+            _f106(f"the speak routes reach for {_bad!r}")
+    for _need in ("request.get_data(cache=False)", 'startswith("multipart/form-data")', "), 415", "speech.MAX_AUDIO_BYTES", 'out["recorded"] = False',
+                  "library.ingest_media(data, filename=", 'origin="locally generated"', 'origin="owner-corrected"', "speech.to_vtt("):
+        if _need not in _spk_srv:
+            _f106(f"the speak routes lost {_need!r}")
+    if 'speech=data.get("speech")' not in _srv106 or "def speech_record" not in (_root106 / "scripts" / "wordicon_cli.py").read_text(encoding="utf-8"):
+        _f106("the jobs route or the questions route does not carry the speech block through speech_record")
+    if '".weba": "audio"' not in _lib106 or 'engine: "dict | None" = None' not in _lib106:
+        _f106("the Media wing does not take an audio-only WebM, or a transcript version cannot name its engine")
+    # ---- (6) the page: the instrument, its states, its discipline ----
+    _js106 = _idx106[_idx106.index("// ---- Speak to Nikodemus (block 106)"):_idx106.index("// ---- the destination chooser (block 105)")]
+    for _need in ("async function speakPress()", "navigator.mediaDevices.getUserMedia({audio: true})", "new MediaRecorder(", "SPEAK.rec.onstop = speakTranscribe",
+                  "function speakStop()", "getTracks().forEach(t => t.stop())", "fetch('/api/speak/transcribe', {method: 'POST', headers: {'Content-Type': SPEAK.blob.type || 'audio/webm'}, body: SPEAK.blob})",
+                  "box.value = d.text || '';", "function speakDiscard()", "function speakFailed(msg)", "async function speakRetry()", "async function speakKeep()",
+                  "if (!confirm('Keep this recording?", "fetch('/api/speak/keep', {method: 'POST', headers: {'Content-Type': SPEAK.blob.type || 'audio/webm'}, body: SPEAK.blob})",
+                  "function speechBlock()", "edited: now !== heard", "external: false", "machine_text: heard", "function speakUnavailableMessage()",
+                  "Speaking needs a secure page. On this Mac open http://127.0.0.1:8420; on the phone it waits for the trusted-LAN-HTTPS block.",
+                  "URL.revokeObjectURL(SPEAK.url)", "const SPEAK_STATES = {ready:", "review: 'Review what Nikodemus heard'", "sent: 'Sent'", "discarded: 'Discarded'", "failed: 'Failed'"):
+        if _need not in _js106:
+            _f106(f"the page's instrument lost {_need[:50]!r}")
+    if _js106.count("getUserMedia(") != 1 or _js106.count("new MediaRecorder(") != 1 or "FormData" in _js106 or "/api/jobs" in _js106 or "submitRun(" in _js106 \
+            or "localStorage" in _js106 or "autoplay" in _js106 or "setInterval" in _js106:
+        _f106("the microphone is opened from more than one place, or the instrument runs, stores, or listens on its own")
+    if "speakInit();   // block 106" not in _idx106:
+        _f106("the instrument does not say on load when the page cannot hold a microphone")
+    _dom = _idx106[_idx106.index("document.addEventListener('DOMContentLoaded'"):]
+    if "speakPress()" in _dom[:_dom.index("});")]:
+        _f106("the page presses the microphone on load")
+    for _need in ('id="speak-btn"', 'onclick="speakPress()"', '🎙 Speak to Nikodemus', 'id="speak-state" class="note" data-state="ready"', '<div id="speak-review" hidden',
+                  "Review what Nikodemus heard", 'id="speak-continue"', 'id="speak-retry"', 'id="speak-keep"', 'id="speak-download"', 'id="speak-discard"', '<audio id="speak-audio" controls preload="none"',
+                  'id="about-speak"', 'id="speak-fetch" hidden', "async function fetchSpeechModel()", 'id="speak-vocab"', "async function saveSpeechVocabulary()", "fetch('/api/speak/vocabulary'",
+                  "Words Nikodemus must hear right", "the one network act on the speech path", "Nikodemus may hear what you deliberately say to it.",
+                  "Capture is not\n      interpretation, and interpretation is not memory until you keep it.", "No conversation mode, no spoken replies, no camera",
+                  "return {text: typed || fromFile, provenance: typed ? (SPEAK.active ? 'spoken' : 'typed')", "speech: (!fromArtifact && SPEAK.active) ? speechBlock() : undefined"):
+        if _need not in _idx106:
+            _f106(f"the page lost {_need[:50]!r}")
+    if _idx106.count("speakPress()") != 2 or _idx106.count('id="speak-btn"') != 1:
+        _f106("the press handler is wired from more than the one button")
+    # ---- (7) the anatomy, the docs, the optional requirements ----
+    _sens = _anat106[_anat106.index('"id": "sensory"'):_anat106.index('"id": "sensory"') + 2600]
+    if "No platform is touched; no speech recognition." in _anat106 or "speech (Mac)" not in _sens or "scripts/speech.py" not in _sens or "No conversation mode, no spoken replies, no camera, no screen" not in _sens \
+            or "/api/speak/transcribe" not in _sens or "capture is not interpretation" not in _sens:
+        _f106("the anatomy's Sensory Tissue does not say what is built and what is not")
+    _adr = _root106 / "docs" / "adr-speak.md"
+    if not _adr.exists():
+        _f106("docs/adr-speak.md is missing")
+    else:
+        _adr_t = _adr.read_text(encoding="utf-8")
+        for _need in ("capture is not interpretation", "Read aloud", "Speak to Nikodemus", "Conversation", "trusted-LAN-HTTPS", "initial_prompt", "415", "recorded: false", "locally generated", "owner-corrected", "local_files_only"):
+            if _need not in _adr_t:
+                _f106(f"the ADR does not say {_need!r}")
+    if "v1.3.6" not in (_root106 / "docs" / "CHANGELOG.md").read_text(encoding="utf-8"):
+        _f106("the changelog has no v1.3.6")
+    _req = _root106 / "requirements-speech.txt"
+    if not _req.exists() or "faster-whisper==1.2.1" not in _req.read_text(encoding="utf-8") or "faster-whisper" in (_root106 / "requirements.txt").read_text(encoding="utf-8"):
+        _f106("the engine is not an optional, pinned requirement of its own")
+    if "'--use-fake-device-for-media-stream'" not in (_root106 / "tests" / "journeys" / "lib.js").read_text(encoding="utf-8") or "speech.ENGINE = speech.MockEngine()" not in (_root106 / "tests" / "journeys" / "serve.py").read_text(encoding="utf-8"):
+        _f106("the journeys cannot record with a fake microphone against the mock engine")
+    _speech.ENGINE = None
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

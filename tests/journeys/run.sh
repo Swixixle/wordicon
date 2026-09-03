@@ -47,17 +47,17 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser encounter; do
+for j in quiet home anatomy chooser speak speakkeep encounter; do
   echo "== journey: $j"
-  if [ "$j" = quiet ]; then before=$(digest); fi
+  if [ "$j" = quiet ] || [ "$j" = speak ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
   rc=$?
   cat "$JOURNEY_OUT/$j.log"
   if [ $rc -ne 0 ]; then echo "== $j: FAILED (exit $rc)"; status=1; fi
   if ! grep -q "^JOURNEY $j OK" "$JOURNEY_OUT/$j.log"; then echo "== $j: did not reach its final line — not a pass"; status=1; fi
-  if [ "$j" = quiet ]; then
+  if [ "$j" = quiet ] || [ "$j" = speak ]; then
     after=$(digest)
-    if [ -z "$before" ] || [ "$before" != "$after" ]; then echo "== quiet: the store changed while browsing with recording off ($before -> $after)"; status=1; else echo "ok   quiet: the store is byte-identical after browsing ($before)"; fi
+    if [ -z "$before" ] || [ "$before" != "$after" ]; then echo "== $j: the store changed during a journey that must write nothing ($before -> $after)"; status=1; else echo "ok   $j: the store is byte-identical ($before)"; fi
   fi
 done
 # the writing-room identity checks must have run (a journey that skipped them is not a pass)
@@ -73,9 +73,15 @@ done
 for need in "nothing was posted to /api/jobs by typing" "Research is highlighted and unbuilt" "the question is kept verbatim with its arrival" "choosing Develop reveals Run it" "a lone word highlights Develop without choosing it"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/chooser.log" || { echo "== chooser: missing check: $need"; status=1; }
 done
+for need in "the press opens the microphone and Listening is visible" "stopping closes the microphone and reaches Review" "Discard clears the box, the review and the audio" "after a reload the instrument is Ready and nothing is recording"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/speak.log" || { echo "== speak: missing check: $need"; status=1; }
+done
+for need in "Keep recording stores it and says so" "the open question arrived spoken, edited"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/speakkeep.log" || { echo "== speakkeep: missing check: $need"; status=1; }
+done
 for need in "the switch is on and the flip is the first row" "opening the bridged entry recorded one owner_opened row" "turning off is a confirmed action and the second recorded flip" "Home paints the quiet Unresolved line" "the reopened ruling is recorded, on the shelf, citing the unresolved ruling"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/encounter.log" || { echo "== encounter: missing check: $need"; status=1; }
 done
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/encounter.log | awk '{s+=$2} END {print s+0}')
+total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log | awk '{s+=$2} END {print s+0}')
 echo "== journeys: $total checks, exit $status"
 exit $status

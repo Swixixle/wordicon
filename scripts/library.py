@@ -1230,10 +1230,12 @@ def works_for_subject() -> dict:
 TRANSCRIPT_PARSER_REV = 1
 MEDIA_EXTS = {".mp3": "audio", ".m4a": "audio", ".wav": "audio",
               ".ogg": "audio", ".oga": "audio", ".flac": "audio",
+              ".weba": "audio",   # block 106: an audio-only WebM, as a browser's recorder makes it
               ".mp4": "video", ".m4v": "video", ".webm": "video",
               ".mov": "video"}
 MEDIA_MIME = {".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav",
               ".ogg": "audio/ogg", ".oga": "audio/ogg", ".flac": "audio/flac",
+              ".weba": "audio/webm",   # block 106
               ".mp4": "video/mp4", ".m4v": "video/mp4", ".webm": "video/webm",
               ".mov": "video/quicktime"}
 TRANSCRIPT_ORIGINS = ("publisher-supplied", "platform captions",
@@ -1428,7 +1430,7 @@ def parse_transcript(text: str, fmt: str):
 
 
 def add_transcript(media_id: str, data: bytes, filename: str = "",
-                    origin: str = "", source: str = "") -> dict:
+                    origin: str = "", source: str = "", engine: "dict | None" = None) -> dict:
     """A transcript version: byte-intact original, deterministic derived
     segments, origin DECLARED by you from a bounded vocabulary. A new
     upload — including your own correction — is a new version beside the
@@ -1476,17 +1478,23 @@ def add_transcript(media_id: str, data: bytes, filename: str = "",
                 "parser_rev": TRANSCRIPT_PARSER_REV,
                 "segments": segments, "findings": findings,
                 "created_at": _now()}
+        row = {"type": "transcript",
+               "transcript_id": transcript_id,
+               "media_id": media_id, "blob_id": blob_id,
+               "format": fmt, "origin": origin,
+               "source": (source or filename or "(unstated)")[:500],
+               "filename": filename[:300],
+               "n_segments": len(segments),
+               "last_end": segments[-1]["end"],
+               "parser_rev": TRANSCRIPT_PARSER_REV,
+               "findings": findings, "created_at": _now()}
+        # block 106: a transcript a local engine produced names the engine
+        # and its settings; an owner correction names the machine version
+        # it corrects. Recorded as given, never inferred.
+        if isinstance(engine, dict) and engine:
+            tdoc["engine"] = dict(engine); row["engine"] = dict(engine)
         tpath.write_text(json.dumps(tdoc, indent=1))
-        _append_media_row({"type": "transcript",
-                            "transcript_id": transcript_id,
-                            "media_id": media_id, "blob_id": blob_id,
-                            "format": fmt, "origin": origin,
-                            "source": (source or filename or "(unstated)")[:500],
-                            "filename": filename[:300],
-                            "n_segments": len(segments),
-                            "last_end": segments[-1]["end"],
-                            "parser_rev": TRANSCRIPT_PARSER_REV,
-                            "findings": findings, "created_at": _now()})
+        _append_media_row(row)
     else:
         tdoc = json.loads(tpath.read_text())
     return {"transcript_id": transcript_id, "reused": reused,
@@ -1509,7 +1517,7 @@ def load_media() -> dict:
                 {k: r.get(k) for k in ("transcript_id", "origin", "format",
                                         "n_segments", "last_end",
                                         "parser_rev", "findings", "source",
-                                        "created_at")})
+                                        "created_at", "engine")})   # engine: block 106, when a version names one
     return out
 
 
