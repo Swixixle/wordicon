@@ -591,6 +591,13 @@ def verify_envelope(env: dict, trusted_keys: "list[dict]") -> dict:
                 "method": method, "key_id": kid, "legacy": True}
     try:
         digest = payload_sha256(payload)
+    except UnicodeEncodeError as e:
+        # A lone surrogate: the producer's JSON escaped broken UTF-16 that no
+        # UTF-8 verifier can encode. Name it — it is a defect in the producer's
+        # stored text, not a tampered package, and the two read alike otherwise.
+        return {"ok": False, "why": f"the payload contains text that is not valid Unicode ({e.reason}) — it cannot be canonicalized, "
+                                    "so it cannot be verified anywhere; ask the producer to repair the field and export again",
+                "method": method, "key_id": kid, "not_unicode": True}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "why": f"the payload cannot be canonicalized: {e}", "method": method, "key_id": kid}
     if digest != env["payload_sha256"]:

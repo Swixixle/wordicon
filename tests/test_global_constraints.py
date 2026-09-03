@@ -14999,6 +14999,9 @@ console.log(out.join('\\n'));
     for _bad, _why in ((("oc", "open_case", "http://example.com"), "a deployed http origin"),
                        (("oc", "open_case", "http://127.0.0.1:9/x", "", "env:X", False), "loopback http without the development flag"),
                        (("oc", "open_case", _base107, "", "open_case_" + "7" * 64, True), "a credential value where a reference belongs"),
+                       (("oc", "open_case", _base107, "", "sk-live-abc123", True), "a SHORT credential-shaped value (the length guard alone would let it through)"),
+                       (("oc", "open_case", _base107, "", "OPEN_CASE_API_KEY", True), "a bare name that is not a reference"),
+                       (("oc", "open_case", _base107, "", "env:lowercase_name", True), "a reference that is not an environment name"),
                        (("Bad Id", "open_case", _base107, "", "", True), "a bad connector id"),
                        (("oc", "nope", _base107, "", "", True), "an unknown producer")):
         try:
@@ -15067,6 +15070,19 @@ console.log(out.join('\\n'));
         _d = _fed.get_deposition(_r["deposition_id"])
         if not _d or _fed.deposition_bytes(_d) != _body or _fed._deposition_status(_d) != "unverified":
             _f107(f"{_name}: the bytes were not kept in custody as unverified")
+    # a lone surrogate: the producer's canonicalizer now refuses to sign one, and a package carrying one
+    # (from an older producer, or hand-made) fails by name rather than reading as tampering. Found by the
+    # block-107 canonicalizer audit: 6,000 random values agreed byte for byte with Python's jcs; this was
+    # the only divergence, and it fails closed on both sides.
+    _surr_env = _json107.loads(_json107.dumps(_ea_env))
+    _surr_env["payload"]["profile"]["brand_name"] = "Exemplar " + chr(0xD800) + "Holdings"
+    _surr = _json107.dumps(_surr_env, ensure_ascii=True).encode("utf-8")
+    _r = _fed.import_package(_fed.get_connector("ea"), _surr, how="package")
+    if _r["verification"].get("ok") or "not valid Unicode" not in _r["verification"].get("why", "") or not _r["verification"].get("not_unicode"):
+        _f107(f"a payload carrying a lone surrogate did not fail by name: {_r['verification'].get('why')!r}")
+    if _fed._deposition_status(_fed.get_deposition(_r["deposition_id"])) != "unverified" or _r["representation"]:
+        _f107("a payload that cannot be canonicalized was not kept in custody as unverified")
+
     # a key smuggled inside the package — even one that signs the package correctly — is ignored
     from cryptography.hazmat.primitives.asymmetric import ed25519 as _ed107
     from cryptography.hazmat.primitives import serialization as _ser107
@@ -15200,6 +15216,11 @@ console.log(out.join('\\n'));
         _f107("an id that is not the producer's shape was sent")
     if _fed.fetch_json(_ea_c, "http://evil.example/x").get("outcome") != "origin_refused" or _fed.fetch_json(_ea_c, "/../x").get("outcome") != "origin_refused":
         _f107("the fetcher left the configured origin")
+    # the registry is a file the owner owns: a row whose base_url and recorded origin disagree
+    # (hand-edited, or written by an older version) must not become a fetch to the new host
+    _tampered_c = {**_ea_c, "base_url": "http://127.0.0.1:9/elsewhere"}
+    if _fed.fetch_json(_tampered_c, "/api/profiles/index").get("outcome") != "origin_refused":
+        _f107("a connector whose base_url disagrees with its recorded origin still fetched")
     if _fed.recognize_url("https://evil.example/api/profiles/exemplar-holdings") is not None:
         _f107("a foreign origin was recognized")
     _hit = _fed.recognize_url(_base107 + "/profile/exemplar-holdings?tab=1")
@@ -15241,6 +15262,25 @@ console.log(out.join('\\n'));
     for _tok in ("gateway", "_gw", "MockGateway", "complete("):
         if _tok in _fed_srv:
             _f107(f"a federation route touches the model ({_tok!r})")
+    # the package route reads a raw body: the block-106b discipline must hold here too —
+    # type, declared length and deadline refused BEFORE a byte is read, then a bounded read
+    _pkg_fn = _fed_srv[_fed_srv.index("def api_connector_import_package"):_fed_srv.index("@app.route(\"/api/depositions\"")]
+    if "request.get_data" in _pkg_fn or "request.data" in _pkg_fn or "speech.read_bounded" not in _pkg_fn \
+            or _pkg_fn.index("request.content_length") > _pkg_fn.index("speech.read_bounded") \
+            or _pkg_fn.index("request.content_type") > _pkg_fn.index("speech.read_bounded") \
+            or _pkg_fn.index("SPEAK_BODY_TIMEOUT_S") > _pkg_fn.index("speech.read_bounded"):
+        _f107("the package route reads the body whole, or does not refuse by type, length and deadline before reading")
+    with server.app.test_client() as _cb107:
+        _paired(_cb107)
+        _u = "/api/connectors/ea/import-package"
+        if _cb107.post(_u, data=b"{}", content_type="text/plain").status_code != 415:
+            _f107("the package route read a body that was not JSON")
+        if _cb107.post(_u, data=b"{}", content_type="application/json",
+                       environ_overrides={"CONTENT_LENGTH": str(_fed.FETCH_MAX_BYTES + 1)}).status_code != 413:
+            _f107("the package route accepted a declared length over the cap")
+        if _cb107.post(_u, data=b"", content_type="application/json").status_code not in (400, 411):
+            _f107("the package route accepted a body of no declared length")
+
     _page_inv = (_root107 / "webapp" / "investigation.html").read_text(encoding="utf-8")
     for _tok in ("anthropic", "gateway", 'src="http', "WebSocket", "setInterval", "EventSource"):
         if _tok in _page_inv:
