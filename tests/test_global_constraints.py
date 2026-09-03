@@ -8705,7 +8705,11 @@ console.log(out.join('\\n'));
          "is gone"),
         ("wordicon_work_open", "the open room is not remembered across "
          "reloads"),
-        ("No edition of this work is in Documents yet. Wordicon currently "
+        # ledger (the naming pass): this sentence used to hard-code "Wordicon".
+        # The visible name now comes from the brand source like every other
+        # visible name, so the pin holds the two halves AND the brand call
+        # between them — a hard-coded name here would fail this again.
+        ("No edition of this work is in Documents yet. ${brand()} currently "
          "holds accounts and paraphrases about the work, not the work's "
          "words.", "the honest no-edition state lost its exact sentence"),
         ("editions are never blended", "the never-blend line is gone"),
@@ -15668,6 +15672,137 @@ console.log(out.join('\\n'));
         _fS1("the ruling total counts something other than the items it can open")
     if not all(b.get("blocked_because") for b in _nodoor["blocked"]):
         _fS1("a blocked ruling does not name what is missing")
+
+    # ========= the naming pass, and the constitution in movements =========
+    # Two things the 2 September rename left unfinished, and one thing the
+    # owner asked for.
+    #
+    # (a) The ruling made the VISIBLE name Nikodemus and deliberately left the
+    #     technical names alone. Static markup already carried data-brand — but
+    #     the sentences the page ASSEMBLES at run time still said the dead name
+    #     in string literals, and so did the iOS home-screen label. A name that
+    #     lives in a dozen literals is not one source, and the next rename would
+    #     miss them in exactly the way this one did. They now call brand(),
+    #     which reads the same config/brand.json every other surface reads.
+    # (b) The What-is-Nikodemus panel is a ruled constitution, and its sections
+    #     stood in the order they were BUILT, which is nobody's reading order.
+    #     They now stand in five named movements. The danger in a reorder is
+    #     silent loss, so this holds the WHOLE sequence — every movement and
+    #     every section under it, in order — rather than checking that each
+    #     heading exists somewhere. And the README tells the same five, because
+    #     two constitutions that disagree about the order are one constitution
+    #     and one stale document.
+    import json as _jsonN
+    _rootN = Path(cli.__file__).parent.parent
+    _idxN = (_rootN / "webapp" / "index.html").read_text(encoding="utf-8")
+    _brandN = _jsonN.loads((_rootN / "config" / "brand.json").read_text(encoding="utf-8"))
+
+    def _fN(msg):
+        failures.append("naming/constitution: " + msg)
+
+    # ---- (a) one source for the visible name --------------------------
+    if "const brand = () => (window.BRAND && window.BRAND.name) || 'Nikodemus'" not in _idxN:
+        _fN("the page has no single accessor for the visible name in the strings it builds")
+    if f'<meta name="apple-mobile-web-app-title" content="{_brandN["name"]}">' not in _idxN:
+        _fN("the installed app's home-screen label is not the ruled name")
+    # Exactly three capital-W mentions survive, and each is one the ruling keeps:
+    # a wire header (technical, never rewritten) and the two provenance mentions
+    # About is required to carry. A fourth means a sentence hard-coded it again.
+    _keptN = ("X-Wordicon-Manifest", "formerly Wordicon", "data-history>Wordicon")
+    _capsN = [" ".join(_idxN[max(0, m.start() - 26):m.start() + 26].split())
+              for m in _re.finditer("Wordicon", _idxN)]
+    for _c in _capsN:
+        if not any(_k in _c for _k in _keptN):
+            _fN(f"a sentence the page shows still hard-codes the dead name: …{_c}…")
+    if len(_capsN) != len(_keptN):
+        _fN(f"the dead name appears {len(_capsN)} times in the page where the ruling "
+            f"leaves exactly {len(_keptN)} (one wire header, two provenance mentions)")
+
+    # ---- (b) the constitution reads in movements ----------------------
+    _pSN = _idxN.index('<details class="card" id="about-panel"')
+    _panelN = _idxN[_pSN:_idxN.index("</main>", _pSN)]
+    _MOVEMENTS = [
+        ("Bringing things in", [
+            "Bringing something — where examination starts",
+            "Documents — where things enter",
+            "Media — where listening enters"]),
+        ("Where the work happens", [
+            "What comes back",
+            "The room — where writing happens",
+            "The Work Room — a change of scale",
+            "The Clinic — where authorities stay separate",
+            "The Bench — working on a word you already kept"]),
+        ("What accumulates", [
+            "The Library — where kept things live",
+            "The sources",
+            "The Map — where things connect"]),
+        ("What holds it", [
+            "The Vault — restoration, not regeneration",
+            "The Keeper — custody of the narration, not authority over the record"]),
+        ("What it will not claim", [
+            "Whether any of this beats a plain prompt"]),
+    ]
+    _patN = _re.compile(r'<div class="about-movement">\s*([^<\n]+)'
+                        r'|<div class="section-label">([^<]+)</div>')
+    _haveN = [("movement", m.group(1).strip()) if m.group(1) is not None
+              else ("section", m.group(2).strip())
+              for m in _patN.finditer(_panelN)]
+    _wantN = []
+    for _mvN, _secsN in _MOVEMENTS:
+        _wantN.append(("movement", _mvN))
+        _wantN += [("section", _s) for _s in _secsN]
+    if _haveN != _wantN:
+        _extraN = [x for x in _haveN if x not in _wantN]
+        _goneN = [x for x in _wantN if x not in _haveN]
+        _fN("the constitution's movements and sections are not the ruled sequence"
+            + (f"; unexpected {_extraN}" if _extraN else "")
+            + (f"; missing {_goneN}" if _goneN else "")
+            + ("; same members, wrong order" if not _extraN and not _goneN else ""))
+    if _panelN.count('<span class="why">') != len(_MOVEMENTS):
+        _fN("a movement carries no one-line reason — the order has to argue for itself, "
+            "not merely be imposed")
+    if ".about-movement {" not in _idxN or ".about-movement .why {" not in _idxN:
+        _fN("the movement heading has no style of its own — it would read as one more section label")
+    # the sections that are <details> rather than labels, in their movements
+    for _subN, _afterN in (("The four buttons on a card", "What comes back"),
+                           ("What is checked in code rather than asked of the model", "What comes back"),
+                           ("The coinage lab, when you do want a coin", "The Bench — working on a word"),
+                           ("What it does not do", "What it will not claim")):
+        if _subN + "</summary>" not in _panelN:
+            _fN(f"a nested part of the constitution was lost in the reorder ({_subN!r})")
+        elif _panelN.index(_subN + "</summary>") < _panelN.index(_afterN):
+            _fN(f"{_subN!r} drifted out of the movement it belongs to")
+
+    # ---- the README is the same constitution, or it is a stale document ----
+    _rdN = (_rootN / "README.md").read_text(encoding="utf-8")
+    if not _rdN.startswith("# " + _brandN["name"] + "\n"):
+        _fN("the README still opens under a name that is not the ruled one")
+    if _brandN["formerly"] not in _rdN or _brandN["adr"].split("/")[-1] not in _rdN:
+        _fN("the README dropped the provenance the naming law requires "
+            "(the former name and the ruling that changed it)")
+    _capsRN = [" ".join(_rdN[max(0, m.start() - 30):m.start() + 30].split())
+               for m in _re.finditer("Wordicon", _rdN)]
+    for _c in _capsRN:
+        if "Formerly **Wordicon**" not in _c:
+            _fN(f"the README still calls the tool by the dead name: …{_c}…")
+    # not "each name appears somewhere" — the ORDER is the thing that was ruled,
+    # and a name can survive in the machine map while the section that explains
+    # it is renamed or gone. This reads the sequence out of "What is in it".
+    try:
+        _wiN = _rdN[_rdN.index("## What is in it"):_rdN.index("## What it looks like")]
+    except ValueError:
+        _wiN = ""
+        _fN("the README has no 'What is in it' section — the movements have nowhere to stand")
+    _rdSeqN = [_m.group(1) for _m in _re.finditer(r"\*\*([A-Z][^*]+?)\.\*\*", _wiN)]
+    if _rdSeqN != [_m for _m, _ in _MOVEMENTS]:
+        _fN(f"the README's movements are not the panel's, in order: have {_rdSeqN}, "
+            f"want {[_m for _m, _ in _MOVEMENTS]}")
+    for _wingN in ("scripts/clinic.py", "scripts/speech.py", "scripts/federation.py",
+                   "scripts/recovery.py", "scripts/keeper.py", "scripts/vault.py",
+                   "scripts/shelf_projection.py", "webapp/anatomy.html",
+                   "webapp/clinic.html", "webapp/recovery.html", "webapp/investigation.html"):
+        if _wingN not in _rdN:
+            _fN(f"the README's map of the machine has no {_wingN} — a wing that ships is described")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

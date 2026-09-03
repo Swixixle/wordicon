@@ -1743,7 +1743,7 @@ document.getElementById('thesis-foot').textContent = DATA.thesis_foot;
 document.getElementById('custody').textContent = 'as of ' + DATA.as_of + ' · commit __COMMIT__';
 
 function goBack() {
-  // Back returns to the exact Wordicon state the visitor left: the front
+  // Back returns to the exact Nikodemus state the visitor left: the front
   // page keeps its own state, so history is enough; a direct visit falls
   // back to the front door.
   if (history.length > 1 && document.referrer && document.referrer.indexOf(location.host) !== -1) history.back();

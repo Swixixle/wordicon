@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Wordicon — The Bench</title>
+<title>Nikodemus — The Bench</title>
 <meta name="theme-color" content="#11161d">
 <style>
   /* Links: the ruled palette (measured >=8.4:1 on these surfaces),
@@ -123,7 +123,7 @@
 
 <header>
   <h1>The Bench</h1>
-  <a href="/">← back to <span data-brand>Wordicon</span></a>
+  <a href="/">← back to <span data-brand>Nikodemus</span></a>
   <span class="muted" style="margin-left:auto;font-size:11.5px" id="hdr-note">prototype</span>
 </header>
 
@@ -156,7 +156,11 @@ const METHODS = [
   ['suffix', 'Add an ending'],
   ['prefix', 'Add a beginning'],
   ['classical', 'Use Greek or Latin roots'],
-  ['let Wordicon choose', 'Let Wordicon choose'],
+  // The value is a wire term already written into stored records and into
+  // wordicon_cli.py's method floors; renaming it would rewrite history, so it
+  // stays exactly as it is. The label is a visible name and is filled in from
+  // the brand source when the list is built.
+  ['let Wordicon choose', 'Let __BRAND__ choose'],
 ];
 
 // A failed request and a failing server are different facts and must not
@@ -390,7 +394,7 @@ function constructionHtml(k) {
   return `<div class="card">
     <div class="label">Construction <span class="tag proposed">not recorded — these are guesses</span></div>
     <p class="body muted" style="font-size:13px">Your run never wrote down what this was built
-      from, so <span data-brand>Wordicon</span> is reading the spelling backwards. A word invented last week has no
+      from, so <span data-brand>Nikodemus</span> is reading the spelling backwards. A word invented last week has no
       history to look up. Pick the one you meant, or none of them.</p>
     ${(k.readings || []).map(r => `<p class="body">· ${esc(r)}</p>`).join('') ||
       '<p class="body muted">No reading offered.</p>'}
@@ -520,7 +524,7 @@ function renderBench() {
       ${materialsHtml || '<p class="body muted">None offered.</p>'}
       <div class="label" style="margin-top:12px">Method</div>
       <select id="method-select" onchange="METHOD=this.value;refreshBuildBtn()">
-        ${METHODS.map(([v, l]) => `<option value="${v}"${v === 'blend' ? ' selected' : ''}>${l}</option>`).join('')}
+        ${METHODS.map(([v, l]) => `<option value="${v}"${v === 'blend' ? ' selected' : ''}>${l.replace('__BRAND__', (window.BRAND && window.BRAND.name) || 'Nikodemus')}</option>`).join('')}
       </select>
       <p class="foot" style="margin:9px 0">Pick as many materials as you want, then build.
         Past two or three stems a coin usually gets long and strange — that is a result, not a
