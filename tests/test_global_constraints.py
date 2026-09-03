@@ -14936,7 +14936,17 @@ console.log(out.join('\\n'));
 
     _libs = _fed.verification_available()
     if not (_libs.get("jcs") and _libs.get("cryptography")):
-        _f107(f"the verification libraries are not installed (requirements.txt): {_libs}")
+        # Without them nothing below can canonicalize or verify, and the block
+        # would crash on the first hasher call with a traceback instead of a
+        # named failure. Stop here and say what to install: an unrunnable block
+        # is a failure, but it should read like one.
+        _missing = ", ".join(sorted(k for k, v in _libs.items() if not v))
+        _f107(f"the verification libraries are not installed ({_missing}) — block 107 cannot run. "
+              f"Install them into the interpreter running this suite: python3 -m pip install -r requirements.txt")
+        print("FAIL")
+        for f in failures:
+            print(" -", f)
+        return 1
     _req107 = (_root107 / "requirements.txt").read_text(encoding="utf-8")
     if "cryptography" not in _req107 or "jcs" not in _req107:
         _f107("requirements.txt does not carry the verification libraries")
