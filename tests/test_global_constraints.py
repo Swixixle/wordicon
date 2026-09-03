@@ -15950,6 +15950,31 @@ console.log(out.join('\\n'));
         if "sc.scrollTop = PLACE_RETURN" not in _closeS2:
             _fS2("coming back from a place does not return Home to where it was")
 
+        # ---- the constitution says what the shell did -------------------------
+        # Standing law (found after block 95's drift, pinned by block 97): a wing
+        # that ships amends the What-is-Nikodemus panel in the same block, with
+        # pins. Slice 2 changed how the whole thing MOVES, so the panel has to
+        # say so — including the part that is easy to overstate, that the words
+        # always came back and it is the caret, the undo history, the scroll and
+        # the layout that did not.
+        _panS2 = _idxS2[_idxS2.index('id="about-panel"'):_idxS2.index("</main>", _idxS2.index('id="about-panel"'))]
+        _flatS2 = " ".join(_panS2.split())
+        for _sayS2, _whyS2 in (
+                ("Walking somewhere else no longer disturbs the room",
+                 "the panel does not say the shell stopped replacing the page"),
+                ("open inside this page</strong> rather than replacing it",
+                 "the panel does not say a place opens inside the page"),
+                ("undo history",
+                 "the panel does not name the undo history among what survives"),
+                ("Before, the words came back from this browser&#8217;s own store and everything else was gone".replace("&#8217;", "'"),
+                 "the panel overstates the repair — the words always came back; the rest did not"),
+                ("still answers on its own address if you open it directly",
+                 "the panel does not say the old addresses still work"),
+                ("Two take the whole window on purpose",
+                 "the panel does not name the two ruled standalone documents")):
+            if _sayS2 not in _flatS2:
+                _fS2(_whyS2)
+
         # ---- the journey that proves what source cannot -----------------------
         _shellS2 = _rootS2 / "tests" / "journeys" / "shell.js"
         if not _shellS2.exists():
