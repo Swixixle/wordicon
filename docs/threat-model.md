@@ -76,9 +76,35 @@ single-owner machine.
 the owner's mail provider. Accepted; content-bearing mail should stay
 summary-thin.
 
+**A connected instrument, or someone pretending to be one (block 107).**
+The federation adds one outbound reader — the connector fetcher — and one
+inbound door — the deposition import — and both are chokepoints. Outbound:
+a request goes only to a registered connector's configured origin plus the
+producer's contract path with an explicit object id; a pasted URL is
+recognized, never fetched; deployed origins must be HTTPS and plain HTTP is
+allowed only on loopback for a connector declared as a development endpoint;
+redirects are refused (a producer that answers 3xx is a failure by name, so
+the reader can never be steered to another host); the body is bounded at 8 MB
+and must be JSON; a 15-second deadline applies; nothing from the corpus rides
+along (the suite pins the request shape at the fetcher). Inbound: a package
+verifies only under a public key the owner pinned on the connector out of
+band — a key inside a package is ignored, so a forged package cannot carry
+its own trust; the payload must hash to its declared sha256, the signature
+must verify by the producer's declared method, and the envelope must name the
+object the signed payload carries. A failed verification is not discarded:
+the bytes stay in custody marked unverified and seat nothing. Credentials
+never enter the record: the registry stores a reference (`env:NAME`), the
+value is read from the environment at request time, stored errors are
+scrubbed of anything credential-shaped, and the suite greps `local_state`,
+pages, fixtures and logs for key material. Residual, stated plainly: a
+compromised producer with a valid key can sign a lie — verification proves
+who signed, never that it is so, which is why a deposition is testimony by a
+named witness and not a finding; and a paired device can register a
+connector, which is the same trust the pairing gate already extends.
+
 ## 4. What is explicitly not addressed yet
 
-Encrypted transport (HTTPS/overlay). Multi-user anything — this is one owner's tool;
+Encrypted transport (HTTPS/overlay) for Nikodemus's own pages (a connector to a deployed producer is HTTPS already). Multi-user anything — this is one owner's tool;
 the moment a second user exists, most assumptions here expire. OS-level
 compromise of the Mac itself — a keylogger or root malware defeats every
 boundary above, and no application design changes that.

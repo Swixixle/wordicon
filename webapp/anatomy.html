@@ -26,7 +26,7 @@
     --bg: #11161d; --panel: #181f29; --panel-2: #1f2833; --border: #2a3441;
     --text: #e7ecf3; --muted: #8b98a9; --accent: #78aaff;
     --feeds: #8CC8FF; --challenges: #9EE6B8; --constrained: #FFB07A; --preserves: #D9B3FF;
-    --memory: #FFE08A; --owner: #ff9aa2; --unbuilt: #7b8797; --witness: #9EE6B8;
+    --memory: #FFE08A; --owner: #ff9aa2; --unbuilt: #7b8797; --witness: #9EE6B8; --instrument: #8CC8FF;
   }
   html, body { margin: 0; background: var(--bg); color: var(--text);
     font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
@@ -69,6 +69,8 @@
   .organ.witness .organ-shape { fill: rgba(158, 230, 184, 0.06); stroke: var(--witness); stroke-dasharray: 3 4; }
   .organ.is-dim .organ-shape, .organ.is-dim .room-cell { opacity: .38; }   /* dim the fill and outline — never the text */
   .organ.world .organ-shape { fill: rgba(158, 230, 184, 0.06); stroke: var(--witness); stroke-dasharray: 3 4; }
+  .organ.instrument .organ-shape { fill: rgba(140, 200, 255, 0.05); stroke: var(--instrument); stroke-width: 1.5; }   /* outside the membrane, built: solid, its own colour */
+  .organ.instrument .organ-title { fill: var(--instrument); }
   .organ-title { fill: var(--text); font-size: 13px; font-weight: 600; text-anchor: middle; letter-spacing: .02em; }
   .organ-sub { fill: var(--muted); font-size: 11px; text-anchor: middle; }
   .organ.unbuilt .organ-sub.status { fill: var(--unbuilt); font-weight: 700; letter-spacing: .08em; }
@@ -162,7 +164,7 @@
 
 <script id="anatomy-data" type="application/json">
 {
- "as_of": "2026-09-02",
+ "as_of": "2026-09-03",
  "title": "The Functional Anatomy of __BRAND_NAME__",
  "subtitle": "Owner-actuated and inactive until summoned · specialized by function · unified by owner judgment",
  "thesis": "Separation of function under unified owner authority. Rooms can present conflicting material. Friction can criticize. Tests can detect violated laws. None can overrule the owner.",
@@ -201,7 +203,7 @@
     "tall": [
      380,
      32,
-     330,
+     300,
      54
     ],
     "wide": [
@@ -227,6 +229,48 @@
     ],
     "tests": [
      "blocks 86, 89"
+    ]
+   }
+  },
+  {
+   "id": "instruments",
+   "kind": "instrument",
+   "name": "CONNECTED INSTRUMENTS",
+   "tag": "Open Case · EthicalAlt — signed, pulled",
+   "status": "read side shipped · block 107",
+   "seed": 16,
+   "does": "Your other applications, kept sovereign: Open Case with its public-record adapters and pattern engine; EthicalAlt with its profiles and research method. Each keeps its database, its repository, its interface, its vocabulary and its signing key. Nikodemus pulls a signed package for one named object when you press, and never otherwise.",
+   "contributes": "Depositions — the exact bytes a producer handed over, verified under the key you pinned out of band, kept whole with their content hash, their source-native ids and labels (an Open Case VERIFIED stays Open Case's; an EthicalAlt concern level stays EthicalAlt's), their documented gaps, and their allegation paired with its response. Testimony by a named witness, never a Nikodemus finding.",
+   "constrained_by": "Federation, not merger: no shared database, no shared engine, no universal score. A key inside a package is ignored; a package that does not verify stays in custody as unverified and seats nothing. Names are not identities: records of two instruments are linked only by an explicit relationship the owner ruled. No polling, no refresh, no background comparison; reading here never causes an instrument to act.",
+   "fails": "An unavailable instrument rendered as “nothing found”. A name match treated as identity. A producer's label re-scored into a Nikodemus label. A pasted URL fetched instead of the configured origin.",
+   "witness": {
+    "routes": [
+     "/investigation",
+     "/api/connectors",
+     "/api/connectors/<id>/import",
+     "/api/depositions/<id>/bytes",
+     "/api/depositions/<id>/verify"
+    ],
+    "modules": [
+     "scripts/federation.py",
+     "schemas/deposition.schema.json"
+    ],
+    "tests": [
+     "block 107 — golden packages from both producers' real signing code"
+    ]
+   },
+   "pos": {
+    "tall": [
+     118,
+     56,
+     200,
+     72
+    ],
+    "wide": [
+     430,
+     52,
+     230,
+     72
     ]
    }
   },
@@ -278,7 +322,7 @@
    "tag": "accept · reject · revise · declare",
    "status": "the only final authority",
    "seed": 2,
-   "does": "Accepts, rejects, revises, or leaves unresolved. Declares roads, families, supersession, relations. Attests, cancels, rules.",
+   "does": "Accepts, rejects, revises, or leaves unresolved. Declares roads, families, supersession, relations — and, between instruments, whether two names are one entity (block 107): a match is proposed, only the owner declares, rejects or leaves it unresolved. Attests, cancels, rules.",
    "contributes": "Rulings — the only thing that settles anything. Changes of mind are kept, never overwritten.",
    "constrained_by": "The constitution binds the owner's own citations to the same evidence boundary. A ruling is visible, dated, and revisable — never silent.",
    "fails": "Not ruling: proposals that wait forever. Ruling by accident: a click that was not a decision. The tool is built so neither happens quietly.",
@@ -287,13 +331,14 @@
      "/api/judge",
      "/api/library/support/rule",
      "/api/clinic/disagree/rule",
-     "/api/keeper/rule"
+     "/api/keeper/rule",
+     "/api/identity/rule"
     ],
     "modules": [
      "server.py"
     ],
     "tests": [
-     "blocks 75, 85, 95"
+     "blocks 75, 85, 95, 107"
     ]
    },
    "pos": {
@@ -318,23 +363,26 @@
    "tag": "documents · media · source doors · speech (Mac)",
    "status": "shipped",
    "seed": 3,
-   "does": "Admits the outside world: files you own, transcripts you supply, doors that open searches — and, since block 106, your own voice: press to record, stop visibly, correct what was heard, send it where you choose. Admission never means truth; capture is not interpretation.",
+   "does": "Admits the outside world: files you own, transcripts you supply, doors that open searches — and, since block 106, your own voice: press to record, stop visibly, correct what was heard, send it where you choose. Since block 107, what your own instruments produce: a signed package from Open Case or EthicalAlt, pulled one object at a time on your press through a connector you registered, verified under a key you pinned. Admission never means truth; capture is not interpretation; verification says who signed, never that it is so.",
    "contributes": "Original material, byte-intact, with retrieval metadata and declared access status. A transcript with the local engine's name, model hash and the content-addressed manifest of the words it was told (name, your declared words, what was open, your pinned titles, then the shelf — never newest first); the recording itself only if you keep it.",
-   "constrained_by": "The pairing gate. The document gate (identifiers, never clinical prose). Doors open only — nothing is imported by opening one. No platform is touched. Speech is transcribed on this machine by a local engine that names itself; audio never leaves the machine and is never stored unless kept; nothing records before your press. No conversation mode, no spoken replies, no camera, no screen — unbuilt, each its own ruling.",
+   "constrained_by": "The pairing gate. The document gate (identifiers, never clinical prose). Doors open only — nothing is imported by opening one. No platform is touched. Speech is transcribed on this machine by a local engine that names itself; audio never leaves the machine and is never stored unless kept; nothing records before your press. No conversation mode, no spoken replies, no camera, no screen — unbuilt, each its own ruling. A connector reaches only its configured origin and the producer's contract path, never a pasted URL; carries nothing from the corpus; stores a credential reference, never a value; refuses redirects, oversize bodies and non-JSON; and a producer that cannot be reached is a failure with its class, never “nothing found”.",
    "fails": "Mistaking a door for evidence. A recollection rendered as a passage. A refused file silently mangled instead of refused out loud.",
    "witness": {
     "routes": [
      "/api/library/ingest",
      "/api/media/ingest",
      "/api/works/external",
-     "/api/speak/transcribe"
+     "/api/speak/transcribe",
+     "/api/connectors/<id>/import",
+     "/api/connectors/<id>/import-package"
     ],
     "modules": [
      "scripts/library.py",
-     "scripts/speech.py"
+     "scripts/speech.py",
+     "scripts/federation.py"
     ],
     "tests": [
-     "blocks 84, 86, 87, 106"
+     "blocks 84, 86, 87, 106, 107"
     ]
    },
    "pos": {
@@ -449,7 +497,7 @@
     "study",
     "claim"
    ],
-   "does": "Keeps policy, guidance, studies, manufacturer claims, and interpretations separate — each source speaking in its own institutional voice, by seat, never blended.",
+   "does": "Keeps policy, guidance, studies, manufacturer claims, and interpretations separate — each source speaking in its own institutional voice, by seat, never blended. The Investigation Room (block 107) seats what your instruments deposed — Open Case evidence, Open Case signals, EthicalAlt incidents, statements and responses, disputes, documented gaps, your rulings — apart by instrument and by kind, each item under its producer's own label, never blended into one score.",
    "contributes": "Side-by-side exact passages by role and status; honest absence: “No admitted source of this role is present.”",
    "constrained_by": "Code computes coverage, absence, status, and placement. Disagreement exists only as a model proposal or an owner ruling. Questions about a particular patient are refused at the door; nothing about a question is ever kept. Never clinical decision support.",
    "fails": "A room that answers as one voice. A retired source answering as current because nobody declared its retirement. A room used before shadow-mode use has shown it saves anyone anything.",
@@ -457,14 +505,17 @@
     "routes": [
      "/clinic",
      "/api/clinic/*",
-     "/api/works/room/<id>"
+     "/api/works/room/<id>",
+     "/investigation",
+     "/api/investigations/*"
     ],
     "modules": [
      "scripts/clinic.py",
-     "scripts/library.py"
+     "scripts/library.py",
+     "scripts/federation.py"
     ],
     "tests": [
-     "blocks 86, 95, 96"
+     "blocks 86, 95, 96, 107"
     ]
    },
    "pos": {
@@ -746,6 +797,39 @@
    }
   },
   {
+   "id": "instrument_commands",
+   "kind": "unbuilt",
+   "name": "INSTRUMENT COMMANDS",
+   "tag": "investigate · refresh · snapshot · more",
+   "status": "UNBUILT TISSUE",
+   "seed": 17,
+   "does": "Future: explicit commands toward an instrument — run an investigation, refresh a case's adapters, take a snapshot, refresh a profile, run deep research, generate a receipt — each an envelope naming the connector, the capability, the explicit subject, minimal arguments, the owner's invocation event and an idempotency key; each returning a status, an external id, a resulting deposition or an error class.",
+   "contributes": "Nothing yet. It does not exist. The read side (Connected Instruments) exists without it.",
+   "constrained_by": "Would be invoked by the owner only, one command at a time, through the connector's chokepoint, with no unrelated context; never scheduled, never triggered by reading.",
+   "fails": "Being mistaken for something that exists. It has no controls and no route.",
+   "witness": {
+    "routes": [],
+    "modules": [],
+    "tests": [
+     "none — unbuilt"
+    ]
+   },
+   "pos": {
+    "tall": [
+     655,
+     56,
+     200,
+     72
+    ],
+    "wide": [
+     1175,
+     300,
+     180,
+     96
+    ]
+   }
+  },
+  {
    "id": "witness",
    "kind": "witness",
    "name": "EXTERNAL WITNESS",
@@ -787,6 +871,28 @@
    "label": "",
    "tall": {},
    "wide": {}
+  },
+  {
+   "from": "instruments",
+   "to": "sensory",
+   "class": "feeds",
+   "label": "signed packages, on your press",
+   "tall": {
+    "via": [
+     150,
+     120
+    ]
+   },
+   "wide": {
+    "via": [
+     300,
+     110
+    ],
+    "label_at": [
+     392,
+     112
+    ]
+   }
   },
   {
    "from": "sensory",
@@ -1443,6 +1549,35 @@
      276
     ]
    }
+  },
+  {
+   "from": "owner",
+   "to": "instrument_commands",
+   "class": "feeds",
+   "label": "explicit invocation, one at a time",
+   "future": true,
+   "tall": {
+    "via": [
+     752,
+     290
+    ],
+    "label_at": [
+     763,
+     200
+    ],
+    "rotate": -80
+   },
+   "wide": {
+    "via": [
+     990,
+     330
+    ],
+    "label_at": [
+     990,
+     312
+    ],
+    "rotate": -14
+   }
   }
  ],
  "stories": [
@@ -1771,7 +1906,7 @@ function selectNode(id) {
     return;
   }
   const n = NODES[id], w = n.witness || {};
-  d.innerHTML = `<div class="section-label">${esc(n.kind === 'unbuilt' ? 'Unbuilt tissue — it does not exist' : (n.kind === 'witness' || n.kind === 'world') ? 'Outside the membrane' : n.kind === 'center' ? 'Central tissue' : 'Organ')}</div>
+  d.innerHTML = `<div class="section-label">${esc(n.kind === 'unbuilt' ? 'Unbuilt tissue — it does not exist' : (n.kind === 'witness' || n.kind === 'world') ? 'Outside the membrane' : n.kind === 'instrument' ? 'Outside the membrane — a connected instrument, sovereign' : n.kind === 'center' ? 'Central tissue' : 'Organ')}</div>
     <p style="margin:0 0 2px"><strong>${esc(n.name)}</strong><br><span class="muted">${esc(n.tag)} · ${esc(n.status)}</span></p>
     ${n.on_organ ? `<p class="law">${esc(n.on_organ)}</p>` : ''}
     <dl class="fields" style="margin:0">

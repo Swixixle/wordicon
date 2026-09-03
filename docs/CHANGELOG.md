@@ -1,5 +1,39 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.4.0 — connected instruments (block 107: Open Case and EthicalAlt as a federation)
+
+Block 107 (`docs/adr-federation.md`, `docs/connectors.md`,
+`schemas/deposition.schema.json`, `scripts/federation.py`, `/investigation`).
+Open Case and EthicalAlt are connected as sovereign instruments, not merged:
+each keeps its database, code, interface, vocabulary and signing key. The
+boundary is a versioned evidence-export contract — `nikodemus.deposition.v1`,
+a transport-and-custody envelope around the producer's native payload — that
+each producer signs (Open Case: its stored seal, `open_case.seal.v1`, never
+re-signed on read; EthicalAlt: a new v2 export, `ethicalalt.export.v2`, over
+RFC 8785 canonical bytes) and Nikodemus verifies under a public key the owner
+pinned on the connector out of band; a key inside a package is ignored. The
+exact bytes go into the Library's blob store by content hash with a
+deposition row and a derived representation; the same bytes twice are an
+import event; different bytes for the same object are a new version linked
+to the prior with `supersession: unknown`. Source-native labels, ids, gaps
+and the allegation/response pairing survive unchanged; an unreachable
+producer is a failure with its class, never "nothing found". The registry
+is appended events with credential references (`env:NAME`) only. One
+Investigation Room seats depositions apart by instrument and kind; the one
+proposer is an exact name match; only the owner declares, rejects or leaves
+unresolved; convergence (a two-instrument timeline and 90-day overlaps in a
+mechanical sentence) appears only after a declaration. The chooser reads a
+single web address as a shape and offers the matching import when a
+connector is configured — dashed when not. Manual pull only: no polling, no
+refresh, no background comparison, no model on any path. The anatomy gains
+Connected Instruments outside the membrane and Instrument Commands as unbuilt
+tissue; About & proof gains the registry line and the constitution paragraph.
+Open Case gains `GET /api/v1/cases/{id}/export` and `/cases/exportable`
+(authenticated, side-effect-free, tested); EthicalAlt gains
+`GET /api/profiles/:slug/export/v2` and `/export-key` with a hand-written
+RFC 8785 canonicalizer and an offline test. Deferred and shown as unbuilt:
+every command toward a producer.
+
 ## v1.3.7 — the ear, governed (block 106b: the reviewer's rulings on Speak)
 
 Block 106b (`docs/adr-speak.md`, amendment). "Newest 39" is rejected as
