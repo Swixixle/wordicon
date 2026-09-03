@@ -34,7 +34,7 @@ const CATS = 'I would like to know about the historical superstitions involving 
   const s2 = await state();
   ok(s2.st === 'review' && !s2.recording && s2.tracks === 0 && !s2.review, 'stopping closes the microphone and reaches Review what Nikodemus heard: ' + JSON.stringify([s2.st, s2.recording, s2.tracks]));
   ok(s2.box === CATS && s2.heard.includes(CATS), 'what the engine heard is in the box, editable, and shown for review');
-  ok(/heard by mock mock-1/.test(s2.engine) && /audio never left this machine/.test(s2.engine) && /vocabulary hint/.test(s2.engine), 'the engine names itself and its settings: ' + s2.engine.slice(0, 100));
+  ok(/heard by mock mock-1/.test(s2.engine) && /audio never left this machine/.test(s2.engine) && /told \d+ words \(name \d+, yours \d+, open now \d+, pinned \d+, shelf \d+\)/.test(s2.engine) && /manifest [0-9a-f]{12}/.test(s2.engine), 'the engine names itself, the ear\'s composition and the manifest: ' + s2.engine.slice(0, 160));
   ok(s2.audio.startsWith('blob:'), 'replay comes from the page\'s own memory (a blob URL), not a stored file');
   ok(posts.filter(p => p !== 'POST /api/speak/transcribe' && p !== 'POST /api/destinations').length === 0 && posts.filter(p => p === 'POST /api/speak/transcribe').length === 1, 'one transcription was posted and nothing else: ' + JSON.stringify(posts));
   await page.waitForTimeout(600);
@@ -42,8 +42,10 @@ const CATS = 'I would like to know about the historical superstitions involving 
   ok(/arrived spoken/.test(dest.reading) && dest.chips === 'research*!,search,develop,room,write,question' && dest.dev, 'the spoken sentence receives the typed sentence\'s destinations, arrived spoken, nothing run: ' + dest.chips);
   // editing keeps it spoken
   await page.fill('#input-text', CATS + ' Correct the transcript.'); await page.dispatchEvent('#input-text', 'input'); await page.waitForTimeout(700);
-  const edited = await page.evaluate(() => ({ reading: document.getElementById('destination-reading').textContent.replace(/\s+/g, ' '), block: (typeof speechBlock === 'function') ? speechBlock() : null }));
+  const edited = await page.evaluate(() => ({ reading: document.getElementById('destination-reading').textContent.replace(/\s+/g, ' '), block: (typeof speechBlock === 'function') ? speechBlock() : null, heard: document.getElementById('speak-heard').textContent }));
   ok(/arrived spoken/.test(edited.reading) && edited.block && edited.block.edited === true && edited.block.machine_text === CATS && edited.block.external === false, 'an edited transcript stays spoken and records that it was edited beside what the machine heard');
+  ok(edited.heard.includes(CATS) && !edited.heard.includes('Correct the transcript'), 'what the engine heard stays visible, unchanged by the correction (block 106b)');
+  ok(edited.block && /^[0-9a-f]{64}$/.test(edited.block.hint_manifest || '') && edited.block.hint && edited.block.hint.manifest_sha === edited.block.hint_manifest && Array.isArray(edited.block.hint.terms), 'the speech block cites the hint manifest it was told, and carries it');
   // discard leaves nothing
   await page.click('#speak-discard'); await page.waitForTimeout(400);
   const s3 = await state();

@@ -73,10 +73,10 @@ done
 for need in "nothing was posted to /api/jobs by typing" "Research is highlighted and unbuilt" "the question is kept verbatim with its arrival" "choosing Develop reveals Run it" "a lone word highlights Develop without choosing it"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/chooser.log" || { echo "== chooser: missing check: $need"; status=1; }
 done
-for need in "the press opens the microphone and Listening is visible" "stopping closes the microphone and reaches Review" "Discard clears the box, the review and the audio" "after a reload the instrument is Ready and nothing is recording"; do
+for need in "the press opens the microphone and Listening is visible" "stopping closes the microphone and reaches Review" "Discard clears the box, the review and the audio" "after a reload the instrument is Ready and nothing is recording" "what the engine heard stays visible, unchanged by the correction" "the speech block cites the hint manifest it was told"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/speak.log" || { echo "== speak: missing check: $need"; status=1; }
 done
-for need in "Keep recording stores it and says so" "the open question arrived spoken, edited"; do
+for need in "Keep recording stores it and says so" "the open question arrived spoken, edited" "the question cites a manifest that reads back" "the kept transcript cites the same manifest"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/speakkeep.log" || { echo "== speakkeep: missing check: $need"; status=1; }
 done
 for need in "the switch is on and the flip is the first row" "opening the bridged entry recorded one owner_opened row" "turning off is a confirmed action and the second recorded flip" "Home paints the quiet Unresolved line" "the reopened ruling is recorded, on the shelf, citing the unresolved ruling"; do

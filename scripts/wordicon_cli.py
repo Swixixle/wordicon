@@ -2000,7 +2000,8 @@ def load_open_questions(all_statuses: bool = False) -> "list[dict]":
 
 
 SPEECH_RECORD_KEYS = ("name", "version", "model", "model_sha", "compute_type", "vocabulary_count",
-                      "vocabulary_sha", "vocabulary_sources", "external", "machine_text", "edited", "mime", "duration_s")
+                      "vocabulary_sha", "vocabulary_sources", "hint_manifest", "hint_rev",   # hint_manifest: block 106b — the content-addressed list the engine was told
+                      "external", "machine_text", "edited", "mime", "duration_s")
 
 
 def speech_record(speech, provenance: str) -> dict:

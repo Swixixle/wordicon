@@ -14216,10 +14216,15 @@ console.log(out.join('\\n'));
     if _speech.brand_words() != [server.BRAND["name"]]:
         _f106("the hint's first word is not the visible name from config/brand.json")
     _long = _speech.vocabulary_hint([f"Title Number {i}" for i in range(400)], declared=["Owner Word"], brand=["Nikodemus"])
-    if len(_long["hint"]) > _speech.VOCAB_CHAR_CAP + len(_speech.HINT_FRAME) + 2 or _long["count"] >= 400 or "Title Number 399" not in _long["hint"] or "Owner Word" not in _long["hint"]:
-        _f106("the hint is not capped, or the cap drops the owner's words or keeps the oldest titles rather than the newest")
-    if _speech.vocabulary_path().exists():
-        _speech.vocabulary_path().unlink()
+    # ledger (block 106b): "newest first" was rejected by the reviewer — newness says nothing about how a word is heard.
+    # The fallback is deterministic and named; the owner's words survive the cap; what did not fit is listed.
+    if len(_long["hint"]) > _speech.VOCAB_CHAR_CAP + len(_speech.HINT_FRAME) + 2 or _long["count"] >= 400 or "Owner Word" not in _long["hint"] \
+            or _long.get("fallback_rule") != "alphabetical" or not _long.get("dropped") \
+            or _speech.vocabulary_hint([f"Title Number {i}" for i in range(400)], declared=["Owner Word"], brand=["Nikodemus"])["manifest_sha"] != _long["manifest_sha"]:
+        _f106("the hint is not capped, drops the owner's words, or its fallback is not deterministic and named")
+    for _vp in (_speech.vocabulary_path(), _speech.vocabulary_events_path()):   # ledger (block 106b): the events log beside the projection
+        if _vp.exists():
+            _vp.unlink()
     if _speech.load_declared_vocabulary() != []:
         _f106("a declared vocabulary appeared from nowhere")
     _audio = b"RIFFfake" + b"\0" * 200 + b"NIKODEMUS-TEST:Open the parrot box and read me the definition.\n" + b"\0" * 5000
@@ -14248,14 +14253,13 @@ console.log(out.join('\\n'));
     _vtt = _speech.to_vtt([{"start": 0, "end": 1.5, "text": "one"}, {"start": 1.5, "end": 3.25, "text": "two"}])
     if not _vtt.startswith("WEBVTT") or "00:00:01.500 --> 00:00:03.250" not in _vtt:
         _f106("the machine transcript is not a time-anchored WebVTT")
-    # the adapter's own discipline: no file written, no temp file, no network, no language model, no fallback to the mock
-    # the one write in the module is the owner's declared vocabulary, by his own action; the transcription path itself writes nothing
-    _spk_path = _spk106[:_spk106.index("def set_declared_vocabulary")] + _spk106[_spk106.index("def vocabulary_hint"):]
-    for _bad in ("tempfile", "open(", "write_bytes", "write_text", "NamedTemporary", "requests.", "urllib", "socket", "Gateway", "gateway.complete", "= MockEngine()"):
-        if _bad in _spk_path:
-            _f106(f"speech.py's transcription path reaches for {_bad!r}")
-    if _spk106.count("write_text") != 1 or "vocabulary_path().write_text" not in _spk106:
-        _f106("speech.py writes somewhere other than the owner's vocabulary file")
+    # the adapter's own discipline: no temp file, no network, no language model, no fallback to the mock
+    # ledger (block 106b): the module now has three writers — the events log, the projection, the hint manifest —
+    # each reached only by an owner action; block 106b pins that set by AST and proves the transcription path
+    # reaches none of them (the positional text scan of block 106 could not survive the module's growth)
+    for _bad in ("tempfile", "NamedTemporary", "requests.", "urllib", "socket", "Gateway", "gateway.complete", "= MockEngine()"):
+        if _bad in _spk106:
+            _f106(f"speech.py reaches for {_bad!r}")
     if "local_files_only=True" not in _spk106 or "decode_audio(io.BytesIO(audio))" not in _spk106 or "def fetch_model" not in _spk106:
         _f106("the engine may fetch on its own, or decodes from a file")
     if "speech.ENGINE = speech.MockEngine()" in _srv106 or "MockEngine" in _srv106:
@@ -14293,10 +14297,10 @@ console.log(out.join('\\n'));
             if _r.status_code != 415:
                 _f106(f"a multipart upload was not refused outright: {_r.status_code}")
             _r = _c106.post("/api/speak/transcribe", data=b"x" * 100, content_type="text/plain")
-            if _r.status_code != 400:
+            if _r.status_code != 415:   # ledger (block 106b): the type is refused before a byte is read — 415, not a 400 after reading
                 _f106(f"a non-audio body was transcribed: {_r.status_code}")
             _r = _c106.post("/api/speak/transcribe", data=b"", content_type="audio/webm")
-            if _r.status_code != 400:
+            if _r.status_code not in (400, 411):   # ledger (block 106b): a body without a declared length is refused unread (411); a declared empty one, 400
                 _f106("an empty body was transcribed")
             _cap_saved = _speech.MAX_AUDIO_BYTES
             _speech.MAX_AUDIO_BYTES = 1000
@@ -14310,7 +14314,8 @@ console.log(out.join('\\n'));
                 _f106("the refusals wrote to the store")
             # the owner's declared words: written only by him, told first, recorded on the transcript
             _r = _c106.post("/api/speak/vocabulary", json={"words": "AARC, PEEP\nFiO2, aarc"}).get_json() or {}
-            if not _r.get("saved") or _r.get("words") != ["AARC", "PEEP", "FiO2"] or (_r.get("hint") or {}).get("declared") != 3 or (_r.get("hint") or {}).get("brand") != 1:
+            # ledger (block 106b): the words come back under "declared", as events appended — never a file rewritten
+            if not _r.get("saved") or (_r.get("declared") or {}).get("words") != ["AARC", "PEEP", "FiO2"] or (_r.get("hint") or {}).get("declared") != 3 or (_r.get("hint") or {}).get("brand") != 1:
                 _f106(f"the declared vocabulary was not saved as given: {_r}")
             if _c106.post("/api/speak/vocabulary", json={"words": 5}).status_code != 400:
                 _f106("a non-list vocabulary was accepted")
@@ -14391,18 +14396,18 @@ console.log(out.join('\\n'));
             _blob = Path(cli.LOCAL_STATE) / "library" / "blobs" / _hl106.sha256(_audio).hexdigest()
             if not _blob.exists() or _blob.read_bytes() != _audio:
                 _f106("the kept recording is not byte-identical")
-            _r = _c106.post("/api/speak/keep/transcript", json={"media_id": _k["media_id"], "machine": {"segments": _tr["segments"], "engine": _tr["engine"]},
+            _r = _c106.post("/api/speak/keep/transcript", json={"media_id": _k.get("media_id", ""), "machine": {"segments": _tr["segments"], "engine": _tr["engine"]},
                                                               "edited_text": "Open the Parrot Box and read me the definition."})
             _t = _r.get_json() or {}
             if _r.status_code != 200 or not (_t.get("machine") or {}).get("transcript_id") or not (_t.get("corrected") or {}).get("transcript_id") \
                     or (_t.get("machine") or {}).get("origin") != "locally generated" or (_t.get("corrected") or {}).get("origin") != "owner-corrected":
                 _f106(f"the kept transcript is not two versions with declared origins: {_r.status_code} {_t}")
-            _media_rows = [r for r in server.library._read_media_rows() if r.get("type") == "transcript" and r.get("media_id") == _k["media_id"]]
+            _media_rows = [r for r in server.library._read_media_rows() if r.get("type") == "transcript" and r.get("media_id") == _k.get("media_id", "")]
             _mrow = next((r for r in _media_rows if r.get("origin") == "locally generated"), {})
             _crow = next((r for r in _media_rows if r.get("origin") == "owner-corrected"), {})
             if (_mrow.get("engine") or {}).get("name") != "mock" or (_mrow.get("engine") or {}).get("external") is not False or (_crow.get("engine") or {}).get("corrects") != _mrow.get("transcript_id"):
                 _f106(f"the transcript versions do not name the engine, or the correction does not cite the machine's: {_mrow.get('engine')} {_crow.get('engine')}")
-            _r = _c106.post("/api/speak/keep/transcript", json={"media_id": _k["media_id"], "machine": {"segments": _tr["segments"], "engine": _tr["engine"]},
+            _r = _c106.post("/api/speak/keep/transcript", json={"media_id": _k.get("media_id", ""), "machine": {"segments": _tr["segments"], "engine": _tr["engine"]},
                                                               "edited_text": _tr["text"]})
             if (_r.get_json() or {}).get("corrected"):
                 _f106("an unedited transcript produced a correction version")
@@ -14416,18 +14421,18 @@ console.log(out.join('\\n'));
     for _bad in ("request.files", "request.form", "tempfile", "NamedTemporary", "write_bytes", "open(", "server_gateway", "Gateway(", ".complete(", "snapshot_download"):
         if _bad in _spk_srv:
             _f106(f"the speak routes reach for {_bad!r}")
-    for _need in ("request.get_data(cache=False)", 'startswith("multipart/form-data")', "), 415", "speech.MAX_AUDIO_BYTES", 'out["recorded"] = False',
+    for _need in ("speech.read_bounded(request.stream, declared, speech.MAX_AUDIO_BYTES, SPEAK_BODY_TIMEOUT_S)", 'startswith("multipart/form-data")', "), 415", "speech.MAX_AUDIO_BYTES", 'out["recorded"] = False',   # ledger (block 106b): the bounded read replaced get_data
                   "library.ingest_media(data, filename=", 'origin="locally generated"', 'origin="owner-corrected"', "speech.to_vtt("):
         if _need not in _spk_srv:
             _f106(f"the speak routes lost {_need!r}")
-    if 'speech=data.get("speech")' not in _srv106 or "def speech_record" not in (_root106 / "scripts" / "wordicon_cli.py").read_text(encoding="utf-8"):
+    if 'speech=_speech_cited(data.get("speech"))' not in _srv106 or "def speech_record" not in (_root106 / "scripts" / "wordicon_cli.py").read_text(encoding="utf-8"):   # ledger (block 106b): the block cites its manifest on the way in
         _f106("the jobs route or the questions route does not carry the speech block through speech_record")
     if '".weba": "audio"' not in _lib106 or 'engine: "dict | None" = None' not in _lib106:
         _f106("the Media wing does not take an audio-only WebM, or a transcript version cannot name its engine")
     # ---- (6) the page: the instrument, its states, its discipline ----
     _js106 = _idx106[_idx106.index("// ---- Speak to Nikodemus (block 106)"):_idx106.index("// ---- the destination chooser (block 105)")]
     for _need in ("async function speakPress()", "navigator.mediaDevices.getUserMedia({audio: true})", "new MediaRecorder(", "SPEAK.rec.onstop = speakTranscribe",
-                  "function speakStop()", "getTracks().forEach(t => t.stop())", "fetch('/api/speak/transcribe', {method: 'POST', headers: {'Content-Type': SPEAK.blob.type || 'audio/webm'}, body: SPEAK.blob})",
+                  "function speakStop()", "getTracks().forEach(t => t.stop())", "fetch('/api/speak/transcribe' + speakQuery(), {method: 'POST', headers: {'Content-Type': SPEAK.blob.type || 'audio/webm'}, body: SPEAK.blob})",   # ledger (block 106b): the open context rides as ids in the query
                   "box.value = d.text || '';", "function speakDiscard()", "function speakFailed(msg)", "async function speakRetry()", "async function speakKeep()",
                   "if (!confirm('Keep this recording?", "fetch('/api/speak/keep', {method: 'POST', headers: {'Content-Type': SPEAK.blob.type || 'audio/webm'}, body: SPEAK.blob})",
                   "function speechBlock()", "edited: now !== heard", "external: false", "machine_text: heard", "function speakUnavailableMessage()",
@@ -14474,6 +14479,412 @@ console.log(out.join('\\n'));
     if "'--use-fake-device-for-media-stream'" not in (_root106 / "tests" / "journeys" / "lib.js").read_text(encoding="utf-8") or "speech.ENGINE = speech.MockEngine()" not in (_root106 / "tests" / "journeys" / "serve.py").read_text(encoding="utf-8"):
         _f106("the journeys cannot record with a fake microphone against the mock engine")
     _speech.ENGINE = None
+
+    # ================= block 106b: the ear, governed (the reviewer's rulings on Speak) ==========
+    # Newest-first is rejected as the vocabulary rule. The order of
+    # standing: the visible name and the owner's declared words; the names
+    # of what is open; the shelf titles he pinned; then the shelf as space
+    # remains, deterministically. Every transcript cites a content-
+    # addressed manifest of the exact terms and their sources — a count
+    # and a hash cannot reconstruct why the engine heard a word one way.
+    # The declared words are appended events, never a file rewritten. The
+    # model's fetch is recorded: source, revision, file hashes, license.
+    # The raw-body route refuses by type, length and deadline before it
+    # reads a byte, and never reads past the cap. And the correction law
+    # is pinned on a specimen: what the engine heard stays visible, the
+    # owner's edit is what is sent, the record never claims the engine
+    # heard the correction, and editing retrains nothing.
+    import ast as _ast106b
+    import io as _io106b
+    import os as _os106b
+    import time as _time106b
+
+    def _f106b(msg):
+        failures.append(f"106b: {msg}")
+
+    _speech.ENGINE = _speech.MockEngine()
+    _speech.HINT_CACHE.clear()
+    # ---- (1) the tiers, the order, the determinism, the sources ----
+    _cnt = lambda t: sum(1 for ch in t if ch.isupper() or ch.isdigit()) + 1   # a stand-in tokenizer: acronyms and coinages count as many pieces
+    _shelf = [{"term": "Common Ground", "id": "c_common"}, {"term": "AARC Guideline Tempo", "id": "c_aarc"}, {"term": "Aardvark Method", "id": "c_aard"}, {"term": "Zebra Logic", "id": "c_zebra"}]
+    _h = _speech.vocabulary_hint(_shelf, declared=["FiO2", "Ehlersian Labial Mitters"], brand=["Nikodemus"],
+                                 context=[{"term": "Room One", "source": "context:room:room_x"}], pinned=[{"concept_id": "c_zebra", "term": "Zebra Logic"}], token_count=_cnt)
+    _order = [t["term"] for t in _h["terms"]]
+    if _order != ["Nikodemus", "FiO2", "Ehlersian Labial Mitters", "Room One", "Zebra Logic", "AARC Guideline Tempo", "Common Ground", "Aardvark Method"]:
+        _f106b(f"the ear's order is not name, declared, open context, pinned, then the shelf by rarity: {_order}")
+    if [t["tier"] for t in _h["terms"]] != ["brand", "declared", "declared", "context", "pinned", "shelf", "shelf", "shelf"] or _h["fallback_rule"] != "tokenizer_rarity" \
+            or _h["terms"][4]["source"] != "pinned:c_zebra" or _h["terms"][3]["source"] != "context:room:room_x" or _h["terms"][5]["source"] != "shelf:c_aarc" or _h["terms"][0]["source"] != "brand:config/brand.json":
+        _f106b(f"the manifest does not name each term's tier and source: {_h['terms']}")
+    if _h["rev"] != "hint-2" or _h["kind"] != "speech_hint" or _h["cap"] != _speech.VOCAB_CHAR_CAP or not _h["hint"].startswith("Words in use here: Nikodemus, FiO2, ") \
+            or len(_h["manifest_sha"]) != 64 or not _speech.manifest_verifies(_json106.loads(_json106.dumps(_h))):
+        _f106b("the manifest is not content-addressed, versioned and framed")
+    _h2 = _speech.vocabulary_hint(_shelf, declared=["FiO2", "Ehlersian Labial Mitters"], brand=["Nikodemus"],
+                                  context=[{"term": "Room One", "source": "context:room:room_x"}], pinned=[{"concept_id": "c_zebra", "term": "Zebra Logic"}], token_count=_cnt)
+    if _h2["manifest_sha"] != _h["manifest_sha"]:
+        _f106b("the same words in the same standing do not give the same manifest")
+    _h3 = _speech.vocabulary_hint(list(reversed(_shelf)), declared=[], brand=["Nikodemus"])
+    if [t["term"] for t in _h3["terms"]][1:] != ["AARC Guideline Tempo", "Aardvark Method", "Common Ground", "Zebra Logic"] or _h3["fallback_rule"] != "alphabetical":
+        _f106b(f"without the engine's tokenizer the fallback is not alphabetical and named, or shelf order leaks in: {[t['term'] for t in _h3['terms']]}")
+    _tight = _speech.vocabulary_hint(_shelf, declared=["Owner Word"], brand=["Nikodemus"], pinned=[{"concept_id": "c_zebra", "term": "Zebra Logic"}], cap=40)
+    if [t["term"] for t in _tight["terms"]] != ["Nikodemus", "Owner Word", "Zebra Logic"] or not _tight["dropped"] or _tight["dropped"][0]["tier"] != "shelf":
+        _f106b(f"under a tight cap the owner's standing does not hold, or what did not fit is unlisted: {_tight['terms']} {_tight['dropped']}")
+    if _speech.rarity("AARC", _cnt) <= _speech.rarity("Common Ground", _cnt):
+        _f106b("rarity does not rank an acronym above ordinary words")
+    # the cap is in the engine's tokens when they can be counted: Whisper keeps the LAST 223, so an overfull hint loses its
+    # front — the owner's own words. Found on the real shelf (715 chars of coinages = 251 tokens; "Nikodemus" fell off).
+    _wc = lambda t: len(t.replace(",", " ").split())   # a stand-in tokenizer: one token per word
+    _tok = _speech.vocabulary_hint([{"term": f"Shelf Title Number {i}", "id": f"c{i}"} for i in range(60)], declared=["Owner Word One", "Owner Word Two"], brand=["Nikodemus"],
+                                   token_count=_wc, token_cap=30)
+    if _tok["tokens"] is None or _tok["tokens"] > 30 or _tok["token_cap"] != 30 or _tok["declared"] != 2 or _tok["brand"] != 1 or _tok["shelf"] >= 60 \
+            or _wc(_tok["hint"]) != _tok["tokens"] or not any(d.get("reason") == "cap" and d["tier"] == "shelf" for d in _tok["dropped"]):
+        _f106b(f"the hint is not capped in the engine's tokens with the owner's words kept and the shelf's listed as dropped: tokens {_tok['tokens']} {_tok['declared']} {_tok['shelf']} {_tok['dropped'][:2]}")
+    _ceil = _speech.vocabulary_hint([{"term": "A B C D E F G H I J K L M N", "id": "c_long"}, {"term": "Short One", "id": "c_short"}], declared=["W X Y Z Q R S T U V A B C D E"], brand=["Nikodemus"], token_count=_wc, term_ceiling=12)
+    if [t["term"] for t in _ceil["terms"]] != ["Nikodemus", "W X Y Z Q R S T U V A B C D E", "Short One"] or not any(d.get("reason") == "term ceiling" and d["term"].startswith("A B C") for d in _ceil["dropped"]):
+        _f106b(f"a shelf title over the per-term ceiling is not left out and listed, or the owner's long word was: {_ceil['terms']} {_ceil['dropped']}")
+    if _speech.vocabulary_hint(_shelf, brand=["Nikodemus"])["tokens"] is not None:
+        _f106b("tokens are claimed with nothing to count them")
+    if _speech.token_counter() is not None:
+        _f106b("the mock engine offered a tokenizer")
+    # ---- (2) the owner's words as events: appended, folded, projected — never rewritten ----
+    for _vp in (_speech.vocabulary_path(), _speech.vocabulary_events_path()):
+        if _vp.exists():
+            _vp.unlink()
+    _r1 = _speech.set_declared_vocabulary(["AARC", "PEEP", "aarc", "FiO2"])
+    _log1 = _speech.vocabulary_events_path().read_bytes()
+    _r2 = _speech.set_declared_vocabulary(["AARC", "FiO2", "Ehlersian Labial Mitters"])
+    _log2 = _speech.vocabulary_events_path().read_bytes()
+    _ev = _speech.load_vocabulary_events()
+    if _r1["words"] != ["AARC", "PEEP", "FiO2"] or len(_r1["events_appended"]) != 3 or _r2["words"] != ["AARC", "FiO2", "Ehlersian Labial Mitters"] \
+            or [e["kind"] for e in _ev] != ["declare", "declare", "declare", "declare", "undeclare"] or [e["term"] for e in _ev][-2:] != ["Ehlersian Labial Mitters", "PEEP"] \
+            or not _log2.startswith(_log1) or any(not e.get("id", "").startswith("spv_") or not e.get("at") or e.get("by") != "owner" for e in _ev):
+        _f106b(f"the declared words are not appended events folded in order: {_r1} {_r2} {[(e['kind'], e['term']) for e in _ev]}")
+    _proj = _json106.loads(_speech.vocabulary_path().read_text(encoding="utf-8"))
+    if _proj.get("words") != ["AARC", "FiO2", "Ehlersian Labial Mitters"] or _proj.get("events") != 5 or "events are the record" not in _proj.get("note", ""):
+        _f106b(f"the projection is not rebuilt from the events and labeled as a projection: {_proj}")
+    # a legacy block-106 file (rewritten in place) is migrated into events by the owner's next save, not silently
+    for _vp in (_speech.vocabulary_path(), _speech.vocabulary_events_path()):
+        _vp.unlink()
+    _speech.vocabulary_path().write_text(_json106.dumps({"words": ["Old Word"], "by": "owner", "at": "2026-09-03T00:00:00+00:00"}), encoding="utf-8")
+    if _speech.load_declared_vocabulary() != ["Old Word"]:
+        _f106b("a block-106 vocabulary file is not read until migrated")
+    _r3 = _speech.set_declared_vocabulary(["Old Word", "New Word"])
+    _ev = _speech.load_vocabulary_events()
+    if _r3["words"] != ["Old Word", "New Word"] or [(e["kind"], e["term"]) for e in _ev] != [("declare", "Old Word"), ("declare", "New Word")] or "migrated" not in _ev[0].get("note", ""):
+        _f106b(f"the legacy file was not migrated into events by the owner's save: {[(e['kind'], e['term'], e.get('note')) for e in _ev]}")
+    # pinned shelf titles: by exact title, kept by id, unknown refused by name
+    _entries = _speech.shelf_entries()
+    if not _entries:
+        _f106b("no shelf entries in the scratch store to pin against")
+    else:
+        _e0 = _entries[0]
+        _rp = _speech.set_pinned_vocabulary([_e0["term"].upper(), "ZZ Not A Shelf Title 106b"])
+        if _rp["pinned"] != [{"concept_id": _e0["id"], "term": _e0["term"]}] or _rp["unknown"] != ["ZZ Not A Shelf Title 106b"] or len(_rp["events_appended"]) != 1:
+            _f106b(f"pinning is not by exact title, kept by id, with the unknown refused by name: {_rp}")
+        _rp2 = _speech.set_pinned_vocabulary([])
+        if _rp2["pinned"] != [] or [e["kind"] for e in _speech.load_vocabulary_events()][-2:] != ["pin", "unpin"]:
+            _f106b("unpinning is not an appended event")
+    # ---- (3) what is open: names from the record by id, never from the request ----
+    _mrec = server.library.ingest_media(b"\x1a\x45\xdf\xa3" + b"\0" * 400, filename="probe106b.weba", source="suite", title="ZZ Probe Recording 106b")
+    _wrec = server.library.create_work("ZZ Probe Work 106b", creator_display="suite")
+    _rrec = server.clinic.create_room("ZZ Probe Room 106b")
+    _ctx = _speech.context_terms({"media": _mrec["media_id"], "work": _wrec["work_id"], "room": _rrec["room_id"], "concept": "", "artifact": "art_nope",
+                                  "title": "Injected Name", "extra": "Injected Too"})
+    if [c["term"] for c in _ctx] != ["ZZ Probe Room 106b", "ZZ Probe Recording 106b", "ZZ Probe Work 106b"] \
+            or [c["source"] for c in _ctx] != [f"context:room:{_rrec['room_id']}", f"context:media:{_mrec['media_id']}", f"context:work:{_wrec['work_id']}"]:
+        _f106b(f"the open context is not resolved from the record by id: {_ctx}")
+    if _speech.context_terms({"media": "media_nope", "work": "../../etc", "room": "x y"}) != [] or _speech.context_terms("not a dict") != []:
+        _f106b("an id that is not in the record, or not an id, yielded a name")
+    if _entries:
+        _cc = _speech.context_terms({"concept": _entries[0]["id"]})
+        if _cc != [{"term": _entries[0]["term"], "source": f"context:concept:{_entries[0]['id']}"}]:
+            _f106b(f"an open concept is not resolved to its shelf title: {_cc}")
+    # ---- (4) the manifest through the routes: cited on the way in, written once, verified ----
+    _oldgw106b = server.server_gateway
+    server.server_gateway = lambda: (_ for _ in ()).throw(RuntimeError("106b: the doorway must never construct the gateway"))
+    for _ in range(300):
+        with server.JOBS_LOCK:
+            _busy = [j for j in server.JOBS.values() if j.get("status") not in ("complete", "failed")]
+        if not _busy:
+            break
+        _time106b.sleep(0.1)
+    _hint_dir = Path(cli.LOCAL_STATE) / "speech_hints"
+    try:
+        with server.app.test_client() as _c:
+            _paired(_c)
+            _speech.HINT_CACHE.clear()
+
+            def _files106b(root):
+                return {str(p.relative_to(root)): _hl106.sha256(p.read_bytes()).hexdigest()[:10] for p in sorted(Path(root).rglob("*")) if p.is_file()}
+            _fs0 = _files106b(cli.LOCAL_STATE)
+            _dg0 = _digest106(cli.LOCAL_STATE)
+            _parrot = b"RIFFfake" + b"\0" * 100 + b"NIKODEMUS-TEST:No, I said Parrot Box, not Parrot Box.\n" + b"\0" * 3000
+            _r = _c.post(f"/api/speak/transcribe?media={_mrec['media_id']}&room={_rrec['room_id']}&title=Injected", data=_parrot, content_type="audio/webm")
+            _d = _r.get_json() or {}
+            _e = _d.get("engine") or {"hint_manifest": "none"}
+            _m = _d.get("hint") or {"terms": [], "hint": "", "manifest_sha": ""}   # tolerant: a refused transcription fails by name below, not by a crash
+            if _r.status_code != 200 or _d.get("text") != "No, I said Parrot Box, not Parrot Box." or len(_e.get("hint_manifest", "")) != 64 or _e.get("hint_rev") != "hint-2" \
+                    or _m.get("manifest_sha") != _e.get("hint_manifest") or (_e.get("vocabulary_sources") or {}).get("context") != 2 \
+                    or [t["term"] for t in _m.get("terms", []) if t["tier"] == "context"] != ["ZZ Probe Room 106b", "ZZ Probe Recording 106b"] \
+                    or any("Injected" in t["term"] for t in _m.get("terms", [])):
+                _f106b(f"the transcript does not cite a manifest naming what was open, by id: {_e} {[t['term'] for t in _m.get('terms', [])]}")
+            if _digest106(cli.LOCAL_STATE) != _dg0 or (_hint_dir / f"{_e.get('hint_manifest', 'none')}.json").exists():
+                _fs1 = _files106b(cli.LOCAL_STATE)
+                _f106b(f"transcribing wrote the manifest (or anything) to the store: {sorted(set(_fs1.items()) ^ set(_fs0.items()))[:6]}")
+            # the correction specimen: the machine heard the title twice; the owner corrects the second to what he said
+            _sp = {**_e, "machine_text": _d.get("text", ""), "edited": True, "mime": "audio/webm", "duration_s": _d.get("duration_s"), "hint": _m}
+            _log_before = _speech.vocabulary_events_path().read_bytes()
+            _rq = _c.post("/api/questions", json={"text": "No. I said Parrot Box, not parrot books.", "provenance": "spoken", "shape": "statement", "speech": _sp}).get_json() or {}
+            _q = _rq.get("question") or {}
+            _qs = _q.get("speech") or {}
+            _mp = _hint_dir / f"{_e.get('hint_manifest', 'none')}.json"
+            if _q.get("text") != "No. I said Parrot Box, not parrot books." or _qs.get("machine_text") != "No, I said Parrot Box, not Parrot Box." or _qs.get("edited") is not True \
+                    or _qs.get("hint_manifest") != _e.get("hint_manifest", "none") or "hint" in _qs or not _mp.exists():
+                _f106b(f"sending did not keep the owner's words, the machine's text beside them, and the manifest cited and written: {_q}")
+            else:
+                _on_disk = _json106.loads(_mp.read_text(encoding="utf-8"))
+                if not _speech.manifest_verifies(_on_disk) or _on_disk["manifest_sha"] != _e.get("hint_manifest", "none") or _on_disk["hint"] != _m["hint"] \
+                        or [t["term"] for t in _on_disk["terms"]] != [t["term"] for t in _m["terms"]]:
+                    _f106b("the manifest on disk is not the one the engine was told, content-addressed")
+                _rg = _c.get(f"/api/speak/hints/{_e.get('hint_manifest', 'none')}")
+                if _rg.status_code != 200 or (_rg.get_json() or {}).get("manifest_sha") != _e.get("hint_manifest", "none"):
+                    _f106b("a cited manifest cannot be read back")
+            if _c.get("/api/speak/hints/" + "0" * 64).status_code != 404 or _c.get("/api/speak/hints/zz").status_code != 404:
+                _f106b("an unknown manifest sha does not 404")
+            if _speech.vocabulary_events_path().read_bytes() != _log_before:
+                _f106b("editing a transcript retrained the ear (a vocabulary event was appended)")
+            _mtime = _mp.stat().st_mtime_ns if _mp.exists() else 0
+            _c.post("/api/questions", json={"text": "No. I said Parrot Box, not parrot books — again.", "provenance": "spoken", "shape": "statement", "speech": _sp})
+            if _mp.exists() and _mp.stat().st_mtime_ns != _mtime:
+                _f106b("a second citation rewrote the manifest")
+            # the server's copy gone (a restart): the page's copy is taken only when it hashes to the sha it claims
+            _speech.HINT_CACHE.clear()
+            _bad = _json106.loads(_json106.dumps(_m)); _bad["terms"] = _bad["terms"][:1]; _bad["manifest_sha"] = "1" * 64
+            _rq = _c.post("/api/questions", json={"text": "tampered manifest probe 106b", "provenance": "spoken", "shape": "statement",
+                                                  "speech": {**_sp, "hint_manifest": "1" * 64, "hint": _bad}}).get_json() or {}
+            if ((_rq.get("question") or {}).get("speech") or {}).get("hint_manifest") != "" or (_hint_dir / ("1" * 64 + ".json")).exists():
+                _f106b("a manifest that does not hash to its name was written or cited")
+            _speech.HINT_CACHE.clear()
+            _fresh = _speech.vocabulary_hint(_shelf, declared=["Only In The Page"], brand=["Nikodemus"])
+            _rq = _c.post("/api/questions", json={"text": "page-carried manifest probe 106b", "provenance": "spoken", "shape": "statement",
+                                                  "speech": {**_sp, "hint_manifest": _fresh["manifest_sha"], "hint": _json106.loads(_json106.dumps(_fresh))}}).get_json() or {}
+            if ((_rq.get("question") or {}).get("speech") or {}).get("hint_manifest") != _fresh["manifest_sha"] or not (_hint_dir / f"{_fresh['manifest_sha']}.json").exists():
+                _f106b("a page-carried manifest that verifies was not accepted after the server's copy was gone")
+            # typed words: no manifest, no speech block
+            _rq = _c.post("/api/questions", json={"text": "typed probe 106b", "provenance": "typed", "speech": _sp}).get_json() or {}
+            if "speech" in (_rq.get("question") or {}):
+                _f106b("a manifest rode on typed words")
+            # ---- (5) Keep: the machine's version is the machine's, the correction is the owner's, both cite the manifest ----
+            _rk = _c.post("/api/speak/keep", data=_parrot, content_type="audio/webm").get_json() or {}
+            _rt = _c.post("/api/speak/keep/transcript", json={"media_id": _rk.get("media_id", ""), "machine": {"segments": _d.get("segments", []), "engine": _e, "hint": _m},
+                                                          "edited_text": "No. I said Parrot Box, not parrot books."}).get_json() or {}
+            _rows = [r for r in server.library._read_media_rows() if r.get("type") == "transcript" and r.get("media_id") == _rk.get("media_id")]
+            _mrow = next((r for r in _rows if r.get("origin") == "locally generated"), {})
+            _crow = next((r for r in _rows if r.get("origin") == "owner-corrected"), {})
+            if not _rt.get("kept") or (_mrow.get("engine") or {}).get("hint_manifest") != _e.get("hint_manifest", "none") or (_crow.get("engine") or {}).get("corrects") != _mrow.get("transcript_id"):
+                _f106b(f"the kept versions do not cite the manifest and the correction the machine's version: {_mrow.get('engine')} {_crow.get('engine')}")
+            _blobs = Path(cli.LOCAL_STATE) / "library" / "blobs"
+            _texts = {p.name: p.read_bytes() for p in _blobs.glob("*")} if _blobs.exists() else {}
+            _machine_vtt = [b for b in _texts.values() if b.startswith(b"WEBVTT") and b"not Parrot Box." in b]
+            _owner_vtt = [b for b in _texts.values() if b.startswith(b"WEBVTT") and b"not parrot books." in b]
+            if not _machine_vtt or not _owner_vtt or any(b"parrot books" in b for b in _machine_vtt) or any(b"not Parrot Box." in b for b in _owner_vtt):
+                _f106b("the machine's version carries the correction, or the owner's version carries the machine's words")
+            if _speech.vocabulary_events_path().read_bytes() != _log_before:
+                _f106b("keeping a corrected transcript retrained the ear")
+            # ---- (6) the model's record: source, revision, file hashes, license — on the owner's fetch, never on a read ----
+            _hf_before = _os106b.environ.get("HF_HOME")
+            _hf = Path(cli.LOCAL_STATE) / "hf_probe_106b"
+            _snap = _hf / "hub" / "models--Systran--faster-whisper-base.en" / "snapshots" / "0123456789abcdef0123456789abcdef01234567"
+            _snap.mkdir(parents=True, exist_ok=True)
+            (_snap / "model.bin").write_bytes(b"not weights, a probe")
+            (_snap / "config.json").write_text("{}", encoding="utf-8")
+            (_snap / "README.md").write_text("---\nlanguage:\n- en\nlicense: mit\n---\n# probe card\n", encoding="utf-8")
+            _os106b.environ["HF_HOME"] = str(_hf)
+            _speech._MODEL_CACHE.clear(); _speech._TOKENIZER.clear()
+            _saved_installed = _speech.engine_installed
+            _speech.engine_installed = lambda: True
+            _saved_engine = _speech.ENGINE
+            try:
+                _dgm = _digest106(cli.LOCAL_STATE)
+                _ident = _speech.model_identity("base.en")
+                _st = _c.get("/api/speak/status").get_json() or {}
+                if _ident.get("revision") != "0123456789abcdef0123456789abcdef01234567" or _ident.get("license") != "mit" or _ident.get("source") != "https://huggingface.co/Systran/faster-whisper-base.en" \
+                        or _st.get("model_revision") != _ident["revision"] or _st.get("model_license") != "mit" or _st.get("model_record") != "":
+                    _f106b(f"the model's identity is not read from the cache, or a record was claimed before the owner made one: {_ident} {_st.get('model_record')!r}")
+                if _digest106(cli.LOCAL_STATE) != _dgm:
+                    _f106b("reading the model's identity wrote to the store")
+                import types as _types106b
+                _saved_hub = sys.modules.get("huggingface_hub")
+                _fake_hub = _types106b.SimpleNamespace(snapshot_download=lambda **kw: (_ for _ in ()).throw(RuntimeError("106b: a cached model must not be fetched again")))
+                sys.modules["huggingface_hub"] = _fake_hub
+                _rf = _c.post("/api/speak/model/fetch")
+                _jf = _rf.get_json() or {}
+                _recs = _speech.model_records("base.en")
+                if _rf.status_code != 200 or _jf.get("fetched") is not False or not _jf.get("recorded", "").startswith("spm_") or _jf.get("license") != "mit" \
+                        or len(_recs) != 1 or _recs[0].get("kind") != "observed" or _recs[0].get("revision") != "0123456789abcdef0123456789abcdef01234567" \
+                        or _recs[0].get("source") != "https://huggingface.co/Systran/faster-whisper-base.en" or _recs[0].get("license") != "mit" \
+                        or sorted(f["name"] for f in _recs[0].get("files", [])) != ["README.md", "config.json", "model.bin"] \
+                        or any(len(f.get("sha256", "")) != 64 for f in _recs[0]["files"]) or _recs[0].get("sha") != _speech.model_fingerprint("base.en") or _recs[0].get("by") != "owner":
+                    _f106b(f"the owner's fetch of a cached model did not record source, revision, every file's hash and the license without the network: {_rf.status_code} {_jf} {_recs}")
+                _st = _c.get("/api/speak/status").get_json() or {}
+                if not _recs or _st.get("model_record") != _recs[0].get("id"):
+                    _f106b("status does not show the model's record")
+                _rf2 = _c.post("/api/speak/model/fetch").get_json() or {}
+                if len(_speech.model_records("base.en")) != 1 or _rf2.get("recorded") != _recs[0].get("id"):
+                    _f106b("a second press recorded the same model twice")
+                (_snap / "model.bin").write_bytes(b"replaced weights")
+                _speech._MODEL_CACHE.clear()
+                if _speech.model_record("base.en") is not None:
+                    _f106b("a replaced cache is still treated as recorded (the record must be keyed by the file hash)")
+            finally:
+                if _saved_hub is not None:
+                    sys.modules["huggingface_hub"] = _saved_hub
+                else:
+                    sys.modules.pop("huggingface_hub", None)
+                _speech.engine_installed = _saved_installed
+                _speech.ENGINE = _saved_engine
+                if _hf_before is None:
+                    _os106b.environ.pop("HF_HOME", None)
+                else:
+                    _os106b.environ["HF_HOME"] = _hf_before
+                _speech._MODEL_CACHE.clear(); _speech._TOKENIZER.clear()
+            if _speech.model_snapshot("base.en") is not None and str(_speech.model_snapshot("base.en")).startswith(str(Path(cli.LOCAL_STATE))):
+                _f106b("the model cache resolves inside local_state")
+            # ---- (7) the body: refused by type, length and deadline before a byte is read; never read past the cap ----
+            class _Fake:
+                def tell(self):
+                    return 0
+
+                def seek(self, *a):
+                    return 0
+
+            class _Raising(_Fake):
+                def read(self, n=-1):
+                    raise AssertionError("106b: the body was read before the refusal")
+
+            class _Endless(_Fake):
+                def read(self, n=-1):
+                    return b"\0" * max(1, n if n > 0 else 65536)
+
+            class _Trickle(_Fake):
+                def read(self, n=-1):
+                    _time106b.sleep(0.02); return b"\0"
+            _declared = lambda n: {"environ_overrides": {"CONTENT_LENGTH": str(n)}}
+            for _ct, _code in (("text/plain", 415), ("application/json", 415), ("multipart/form-data; boundary=x", 415)):
+                _rr = _c.post("/api/speak/transcribe", input_stream=_Raising(), content_type=_ct, **_declared(1000))
+                if _rr.status_code != _code:
+                    _f106b(f"a {_ct} body was not refused unread with {_code}: {_rr.status_code}")
+            _rr = _c.post("/api/speak/transcribe", input_stream=_Raising(), content_type="audio/webm", **_declared(_speech.MAX_AUDIO_BYTES + 1))
+            if _rr.status_code != 413:
+                _f106b(f"a body declared over the cap was not refused unread: {_rr.status_code}")
+            _rr = _c.post("/api/speak/transcribe", input_stream=_Raising(), content_type="audio/webm", environ_overrides={"CONTENT_LENGTH": ""})
+            if _rr.status_code not in (400, 411):   # the WSGI layer reads an empty header as 0 (400); an absent one is None (411); neither reads a byte
+                _f106b(f"a body of undeclared length was read: {_rr.status_code}")
+            _rr = server.app.test_client().post("/api/speak/transcribe", input_stream=_Raising(), content_type="audio/webm", **_declared(1000))
+            if _rr.status_code != 401:
+                _f106b(f"an unpaired caller's body was read before the gate answered: {_rr.status_code}")
+            _saved_to = server.SPEAK_BODY_TIMEOUT_S
+            server.SPEAK_BODY_TIMEOUT_S = 0.05
+            try:
+                _rr = _c.post("/api/speak/transcribe", input_stream=_Trickle(), content_type="audio/webm", **_declared(1000))
+            finally:
+                server.SPEAK_BODY_TIMEOUT_S = _saved_to
+            if _rr.status_code != 408:
+                _f106b(f"a body that trickles past the deadline was not dropped: {_rr.status_code}")
+            _rr = _c.post("/api/speak/transcribe", input_stream=_io106b.BytesIO(b"\0" * 50), content_type="audio/webm", **_declared(1000))
+            if _rr.status_code != 400:
+                _f106b(f"a body shorter than declared was transcribed: {_rr.status_code}")
+            for _bad_body in (_Raising, _Endless, _Trickle):
+                _rr = _c.post("/api/speak/keep", input_stream=_bad_body(), content_type="text/plain", **_declared(1000))
+                if _rr.status_code != 415:
+                    _f106b("Keep does not share the body's discipline")
+            # the WSGI layer already stops a body at its declared length; the reader's own cap is the defense when it does not
+            try:
+                _speech.read_bounded(_Endless(), 100, cap=200)
+                _f106b("read_bounded read past the cap when the stream ran past its declared length")
+            except _speech.BodyTooLarge:
+                pass
+            try:
+                _speech.read_bounded(_io106b.BytesIO(b"a" * 300), 300, cap=200)
+                _f106b("read_bounded read a body declared over the cap")
+            except _speech.BodyTooLarge:
+                pass
+            if _speech.read_bounded(_io106b.BytesIO(b"a" * 200), 200, cap=200) != b"a" * 200:
+                _f106b("read_bounded refuses a body exactly at the cap")
+    finally:
+        server.server_gateway = _oldgw106b
+        _speech.HINT_CACHE.clear()
+    # ---- (8) the adapter's writers, by AST: three, each an owner's act; the transcription path reaches none ----
+    _tree = _ast106b.parse(_spk106b := (_root106 / "scripts" / "speech.py").read_text(encoding="utf-8"))
+    _fns = {n.name: n for n in _tree.body if isinstance(n, _ast106b.FunctionDef)}
+    _writers = set()
+    for _name, _fn in _fns.items():
+        for _node in _ast106b.walk(_fn):
+            if isinstance(_node, _ast106b.Call):
+                _callee = _node.func
+                _attr = _callee.attr if isinstance(_callee, _ast106b.Attribute) else (_callee.id if isinstance(_callee, _ast106b.Name) else "")
+                if _attr in ("open", "write_text", "write_bytes", "unlink", "mkdir", "rmtree", "NamedTemporaryFile", "mkstemp", "urlopen", "get", "post", "request"):
+                    if _attr in ("get", "post", "request") and not (isinstance(_callee, _ast106b.Attribute) and isinstance(_callee.value, _ast106b.Name) and _callee.value.id in ("requests", "httpx", "urllib")):
+                        continue
+                    _writers.add(_name)
+    if _writers != {"_append_row", "_write_projection", "persist_hint_manifest"}:
+        _f106b(f"speech.py's writers are not exactly the events log, the projection and the manifest: {sorted(_writers)}")
+
+    def _calls(fn_name, seen=None):
+        seen = seen if seen is not None else set()
+        for _node in _ast106b.walk(_fns.get(fn_name, _ast106b.Pass())):
+            if isinstance(_node, _ast106b.Call) and isinstance(_node.func, _ast106b.Name) and _node.func.id in _fns and _node.func.id not in seen:
+                seen.add(_node.func.id); _calls(_node.func.id, seen)
+        return seen
+    _reach = _calls("transcribe_bytes") | _calls("status") | _calls("current_hint") | _calls("read_bounded") | _calls("model_identity")
+    if _reach & _writers:
+        _f106b(f"the transcription or reading path reaches a writer: {sorted(_reach & _writers)}")
+    for _need in ("def read_bounded", "raise BodyTooLarge", "raise BodyTimeout", "raise BodyShort", "def manifest_verifies", "def persist_hint_manifest", "def record_model",
+                  'k == "declare"', 'k == "undeclare"', 'k == "pin"', 'k == "unpin"', "def shelf_fallback_order", '"tokenizer_rarity"', '"alphabetical"', "def context_terms"):
+        if _need not in _spk106b:
+            _f106b(f"speech.py lost {_need!r}")
+    if "reversed(" in _spk106b[_spk106b.index("def shelf_fallback_order"):_spk106b.index("def vocabulary_hint")] or "st_mtime" in _spk106b[_spk106b.index("def shelf_fallback_order"):_spk106b.index("def vocabulary_hint")]:
+        _f106b("newest-first crept back into the fallback")
+    # ---- (9) the routes' and the page's discipline, and the docs ----
+    _srv106b = (_root106 / "server.py").read_text(encoding="utf-8")
+    _spk_srv_b = _srv106b[_srv106b.index("# Speak to Nikodemus (block 106"):_srv106b.index("# The destination chooser (block 105")]
+    _body_fn = _spk_srv_b[_spk_srv_b.index("def _audio_body"):_spk_srv_b.index("def _speak_context")]
+    if _body_fn.index("speech.ACCEPTED_MIMES") > _body_fn.index("speech.read_bounded") or _body_fn.index("request.content_length") > _body_fn.index("speech.read_bounded") \
+            or _body_fn.index("sock.settimeout(SPEAK_BODY_TIMEOUT_S)") > _body_fn.index("speech.read_bounded") or "request.get_data" in _spk_srv_b or "request.data" in _spk_srv_b:
+        _f106b("the route does not refuse by type, length and deadline before it reads, or reads the body whole")
+    for _need in ('speech=_speech_cited(data.get("speech"))', "def _speech_cited", "speech.persist_hint_manifest(", '@app.route("/api/speak/hints/<sha>"', "speech.set_pinned_vocabulary(", "speech.set_declared_vocabulary("):
+        if _need not in _srv106b:
+            _f106b(f"the server lost {_need!r}")
+    if _srv106b.count("speech.persist_hint_manifest(") != 1 or _srv106b.count("_speech_cited(") != 4:
+        _f106b("the manifest is cited from more or fewer than the three record-entering routes through the one chokepoint")
+    _idx106b = (_root106 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _js106b = _idx106b[_idx106b.index("// ---- Speak to Nikodemus (block 106)"):_idx106b.index("// ---- the destination chooser (block 105)")]
+    if _js106b.count("document.getElementById('speak-heard').textContent =") != 2 or "document.getElementById('speak-heard').textContent = d.text ?" not in _js106b \
+            or "box.value" in _js106b[_js106b.index("function speakShowReview"):_js106b.index("function speakContinue")]:
+        _f106b("what the engine heard is painted from somewhere other than the transcription — a correction could overwrite it")
+    if "/api/speak/vocabulary" in _js106b or "savePinnedVocabulary" in _js106b or "saveSpeechVocabulary" in _js106b:
+        _f106b("the instrument can reach the ear's settings — editing must not retrain anything")
+    for _need in ("function speakContext()", "function speakQuery()", "hint_manifest: e.hint_manifest", "hint: SPEAK.result.hint", "open now ${vs.context || 0}", "manifest ${(e.hint_manifest || '').slice(0, 12)",
+                  "hint: SPEAK.result.hint || null"):
+        if _need not in _js106b:
+            _f106b(f"the page lost {_need!r}")
+    for _need in ('id="speak-pinned"', "async function savePinnedVocabulary()", "Shelf titles to keep in its ear", "Record the model's identity", "revision ' + d.model_revision.slice(0, 12)",
+                  "NOT RECORDED yet", "Saving appends events; nothing is rewritten.", "What the engine heard stays visible beside your correction; your correction is what is sent;",
+                  "the record never claims the engine heard the correction."):
+        if _need not in _idx106b:
+            _f106b(f"About & proof lost {_need!r}")
+    _adr_b = (_root106 / "docs" / "adr-speak.md").read_text(encoding="utf-8")
+    for _need in ("Amendment (block 106b)", "not newness", "manifest", "content-addressed", "appended", "revision", "license", "before a byte", "never claims the engine heard the correction", "Teach this correction",
+                  "223", "front of the hint", "251 tokens"):
+        if _need not in _adr_b:
+            _f106b(f"the ADR amendment does not say {_need!r}")
+    if "v1.3.7" not in (_root106 / "docs" / "CHANGELOG.md").read_text(encoding="utf-8"):
+        _f106b("the changelog has no v1.3.7")
+    _anat_b = (_root106 / "webapp" / "anatomy.html").read_text(encoding="utf-8")
+    if "manifest" not in _anat_b[_anat_b.index('"id": "sensory"'):_anat_b.index('"id": "sensory"') + 3000]:
+        _f106b("the Sensory Tissue does not mention the manifest the transcript cites")
+    _srv_cli_b = (_root106 / "scripts" / "wordicon_cli.py").read_text(encoding="utf-8")
+    if '"hint_manifest", "hint_rev"' not in _srv_cli_b:
+        _f106b("the speech record does not carry the manifest's sha")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

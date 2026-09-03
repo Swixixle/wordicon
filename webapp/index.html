@@ -722,9 +722,12 @@
         <button id="speak-fetch" hidden style="margin-left:8px;font-size:11.5px;padding:2px 9px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;cursor:pointer" onclick="fetchSpeechModel()">Fetch the model (once)</button>
         <span class="muted" id="speak-fetch-note"></span>
         <div class="muted" id="speak-explain" style="margin-top:4px">A recording instrument, not a listening assistant: nothing records before you press the microphone, you stop it yourself, the transcript lands in the box editable, and the words go only where you send them. Audio never leaves this machine — the engine runs here, and the recording is kept only if you choose Keep recording. The one network act is fetching the model, once, by that button. <span id="speak-browser"></span>
-        <div style="margin-top:6px"><label for="speak-vocab">Words Nikodemus must hear right — yours: coinages not on the shelf, the acronyms of your work. The engine is told these first, then the shelf's titles, and every transcript records the count and hash of what it was told, because it biases what is heard.</label>
+        <div style="margin-top:6px"><label for="speak-vocab">Words Nikodemus must hear right — yours: coinages not on the shelf, the acronyms of your work. The engine is told, in order of standing: the name and these words; the names of what you have open; the shelf titles you pin below; then the shelf as space remains, in a fixed order that is not newness. Every transcript cites the exact list it was told and where each word came from, because the list biases what is heard. Saving appends events; nothing is rewritten.</label>
           <textarea id="speak-vocab" placeholder="one per line, or comma-separated" style="width:100%;min-height:44px;margin-top:4px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-size:12.5px;font-family:inherit"></textarea>
           <button id="speak-vocab-save" style="margin-top:4px;font-size:11.5px;padding:2px 9px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;cursor:pointer" onclick="saveSpeechVocabulary()">Save these words</button>
+          <label for="speak-pinned" style="display:block;margin-top:6px">Shelf titles to keep in its ear — pinned, by exact title; a title not on the shelf is refused by name.</label>
+          <textarea id="speak-pinned" placeholder="one shelf title per line" style="width:100%;min-height:36px;margin-top:4px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-size:12.5px;font-family:inherit"></textarea>
+          <button id="speak-pinned-save" style="margin-top:4px;font-size:11.5px;padding:2px 9px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;cursor:pointer" onclick="savePinnedVocabulary()">Pin these titles</button>
           <span class="muted" id="speak-vocab-note"></span></div></div></div>
       <div id="about-encounter" class="foot" style="margin:-6px 0 12px">Encounter recording: <strong id="encounter-state">not read yet</strong>
         <button id="encounter-toggle" hidden style="margin-left:8px;font-size:11.5px;padding:2px 9px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;cursor:pointer" onclick="toggleEncounterRecording()">Turn on</button>
@@ -771,8 +774,11 @@
       listens; press again and it stops; what it heard appears in the box for you to correct before it goes anywhere;
       the recording stays in this page's memory and is kept only if you choose to keep it. Capture is not
       interpretation, and interpretation is not memory until you keep it. The engine runs on this machine and
-      names itself and its model on every transcript; the vocabulary it is primed with is your own shelf, and that
-      priming is recorded because it biases what is heard. No conversation mode, no spoken replies, no camera —
+      names itself and its model on every transcript; the vocabulary it is primed with is your own — the name,
+      the words you declared, what you have open, the titles you pinned, then the shelf as space remains — and
+      every transcript cites the exact list it was told and where each word came from, because that list biases
+      what is heard. What the engine heard stays visible beside your correction; your correction is what is sent;
+      the record never claims the engine heard the correction. No conversation mode, no spoken replies, no camera —
       each of those is its own ruling.</p>
       <p class="body"><strong>Words go where you send them.</strong> Once something is in the box, a row of
       destinations appears — Research outside Nikodemus, Search my record, Develop the idea, Start a Room, Write
@@ -1442,13 +1448,16 @@ async function loadSpeakStatus() {
   if (!st) return;
   try {
     const d = await (await fetch('/api/speak/status')).json();
+    const v = d.vocabulary || {};
     st.textContent = !d.installed ? 'engine not installed on this machine — ' + (d.install_hint || '')
-      : `${d.engine} ${d.engine_version || ''} · model ${d.model} ${d.model_present ? (d.model_bytes ? '(' + Math.round(d.model_bytes / 1e6) + ' MB, ' + d.model_sha + ')' : '(present)') : '— not fetched yet'} · ${d.compute_type} · external: never · vocabulary hint: ${(d.vocabulary || {}).count || 0} of your titles`;
-    if (btn) btn.hidden = !(d.installed && !d.model_present && !d.mock);
+      : `${d.engine} ${d.engine_version || ''} · model ${d.model} ${d.model_present ? (d.model_bytes ? '(' + Math.round(d.model_bytes / 1e6) + ' MB, ' + d.model_sha + (d.model_revision ? ', revision ' + d.model_revision.slice(0, 12) : '') + (d.model_license ? ', license ' + d.model_license : '') + ')' : '(present)') : '— not fetched yet'}${d.model_present && !d.mock ? (d.model_record ? ' · recorded ' + d.model_record : ' · NOT RECORDED yet') : ''} · ${d.compute_type} · external: never · told ${v.count || 0} words`;
+    if (btn) { btn.hidden = !(d.installed && !d.mock && (!d.model_present || !d.model_record)); btn.textContent = d.model_present ? "Record the model's identity" : 'Fetch the model (once)'; }
     const ta = document.getElementById('speak-vocab');
     if (ta && document.activeElement !== ta) ta.value = (d.declared_vocabulary || []).join('\n');
+    const tp = document.getElementById('speak-pinned');
+    if (tp && document.activeElement !== tp) tp.value = (d.pinned_vocabulary || []).map(p => p.term).join('\n');
     const vn = document.getElementById('speak-vocab-note');
-    if (vn && d.vocabulary) vn.textContent = `told: ${d.vocabulary.count || 0} words (${d.vocabulary.brand || 0} name, ${d.vocabulary.declared || 0} yours, ${d.vocabulary.shelf || 0} shelf titles) · ${d.vocabulary.sha || ''}`;
+    if (vn && d.vocabulary) vn.textContent = `told: ${v.count || 0} words — name ${v.brand || 0}, yours ${v.declared || 0}, open now ${v.context || 0}, pinned ${v.pinned || 0}, shelf ${v.shelf || 0} (${v.fallback_rule || ''})${(v.dropped || []).length ? ' · ' + v.dropped.length + ' did not fit' : ''} · manifest ${(v.manifest_sha || '').slice(0, 12)} · ${d.vocabulary_events || 0} event(s)`;
   } catch (e) { st.textContent = 'could not be read'; }
   if (br) {
     const fmt = (typeof MediaRecorder !== 'undefined') ? ['audio/webm;codecs=opus', 'audio/mp4'].filter(t => { try { return MediaRecorder.isTypeSupported(t); } catch (e) { return false; } }) : [];
@@ -1460,17 +1469,30 @@ async function saveSpeechVocabulary() {
   if (!ta) return;
   try {
     const d = await (await fetch('/api/speak/vocabulary', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({words: ta.value})})).json();
-    if (note) note.textContent = d.error ? d.error : `saved ${d.count} word(s) · told: ${(d.hint || {}).count || 0} · ${(d.hint || {}).sha || ''}`;
+    const dec = d.declared || {};
+    if (note) note.textContent = d.error ? d.error : `${dec.count} word(s) declared · ${(dec.events_appended || []).length} event(s) appended · told: ${(d.hint || {}).count || 0}`;
+  } catch (e) { if (note) note.textContent = 'could not reach the server.'; }
+  loadSpeakStatus();
+}
+async function savePinnedVocabulary() {
+  const tp = document.getElementById('speak-pinned'), note = document.getElementById('speak-vocab-note');
+  if (!tp) return;
+  try {
+    const d = await (await fetch('/api/speak/vocabulary', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({pinned: tp.value})})).json();
+    const pin = d.pinned || {};
+    if (note) note.textContent = d.error ? d.error : `${pin.count} title(s) pinned · ${(pin.events_appended || []).length} event(s) appended` + ((pin.unknown || []).length ? ' · not on the shelf, so not pinned: ' + pin.unknown.join(', ') : '');
   } catch (e) { if (note) note.textContent = 'could not reach the server.'; }
   loadSpeakStatus();
 }
 async function fetchSpeechModel() {
-  const note = document.getElementById('speak-fetch-note');
-  if (!confirm('Fetch the transcription model now? This is the one network act on the speech path: about 150 MB from Hugging Face, once, into a cache outside your record.')) return;
+  const note = document.getElementById('speak-fetch-note'), btn = document.getElementById('speak-fetch');
+  const recordOnly = !!(btn && /^Record/.test(btn.textContent || ''));
+  if (!confirm(recordOnly ? 'Record the model already in the cache — its source, revision, every file\'s hash and its license — into your record? No network.'
+                          : 'Fetch the transcription model now? This is the one network act on the speech path: about 150 MB from Hugging Face, once, into a cache outside your record — and its source, revision, file hashes and license are recorded.')) return;
   if (note) note.textContent = 'fetching…';
   try {
     const d = await (await fetch('/api/speak/model/fetch', {method: 'POST'})).json();
-    if (note) note.textContent = d.error ? d.error : `fetched ${Math.round((d.bytes || 0) / 1e6)} MB in ${d.seconds}s (${d.sha})`;
+    if (note) note.textContent = d.error ? d.error : (d.fetched ? `fetched ${Math.round((d.bytes || 0) / 1e6)} MB in ${d.seconds}s (${d.sha}, revision ${(d.revision || '').slice(0, 12)}, license ${d.license}) — recorded as ${d.recorded}` : `already here — recorded as ${d.recorded} (${d.sha}, revision ${(d.revision || '').slice(0, 12)}, license ${d.license}); no network`);
   } catch (e) { if (note) note.textContent = 'could not reach the server.'; }
   loadSpeakStatus();
 }
@@ -1795,10 +1817,29 @@ async function speakTranscribe() {
   speakSetState('transcribing');
   await speakSend();
 }
+function speakContext() {
+  // what is open now, as ids only — the server resolves names from the record; nothing here names anything (block 106b)
+  const ctx = {};
+  try {
+    if (typeof MED !== 'undefined' && MED && MED.media_id) ctx.media = MED.media_id;
+    if (typeof WR_OPEN !== 'undefined' && WR_OPEN && WR_OPEN.work_id) ctx.work = WR_OPEN.work_id;
+    if (typeof ATTACHED !== 'undefined' && ATTACHED && ATTACHED.artifact && ATTACHED.artifact.artifact_id) ctx.artifact = ATTACHED.artifact.artifact_id;
+    if (typeof wordOpen !== 'undefined' && wordOpen && libraryData) {
+      const hits = (libraryData.lexicon || []).filter(x => (x.name || '') === wordOpen);
+      if (hits.length === 1) ctx.concept = hits[0].concept_id || hits[0].id || '';
+    }
+  } catch (e) {}
+  return ctx;
+}
+function speakQuery() {
+  const q = new URLSearchParams(); const ctx = speakContext();
+  Object.keys(ctx).forEach(k => { if (ctx[k]) q.set(k, ctx[k]); });
+  const qs = q.toString(); return qs ? '?' + qs : '';
+}
 async function speakSend() {
   let d;
   try {
-    const r = await fetch('/api/speak/transcribe', {method: 'POST', headers: {'Content-Type': SPEAK.blob.type || 'audio/webm'}, body: SPEAK.blob});
+    const r = await fetch('/api/speak/transcribe' + speakQuery(), {method: 'POST', headers: {'Content-Type': SPEAK.blob.type || 'audio/webm'}, body: SPEAK.blob});
     d = await r.json();
   } catch (e) { speakFailed('could not reach the server — the recording is still here, in this page only'); return; }
   if (d.error) { speakFailed(d.error); return; }
@@ -1831,9 +1872,10 @@ function speakShowReview() {
   const rv = document.getElementById('speak-review'), d = SPEAK.result || {};
   if (!rv) return;
   rv.hidden = false;
+  // the engine's own words, painted from the transcription only — never from the box: a correction below never rewrites what was heard (block 106b)
   document.getElementById('speak-heard').textContent = d.text ? '“' + d.text + '”' : '(nothing heard)';
-  const e = d.engine || {};
-  document.getElementById('speak-engine').textContent = `heard by ${e.name || '?'} ${e.version || ''} · model ${e.model || '?'}${e.model_sha ? ' ' + e.model_sha : ''} · ${e.compute_type || ''} · vocabulary hint: ${e.vocabulary_count || 0} of your titles · audio never left this machine · ${d.duration_s || 0}s in ${d.elapsed_s || 0}s`;
+  const e = d.engine || {}, vs = e.vocabulary_sources || {};
+  document.getElementById('speak-engine').textContent = `heard by ${e.name || '?'} ${e.version || ''} · model ${e.model || '?'}${e.model_sha ? ' ' + e.model_sha : ''} · ${e.compute_type || ''} · told ${e.vocabulary_count || 0} words (name ${vs.brand || 0}, yours ${vs.declared || 0}, open now ${vs.context || 0}, pinned ${vs.pinned || 0}, shelf ${vs.shelf || 0}) · manifest ${(e.hint_manifest || '').slice(0, 12) || 'none'} · audio never left this machine · ${d.duration_s || 0}s in ${d.elapsed_s || 0}s`;
   speakAudioElement();
   document.getElementById('speak-download').style.display = 'none';
   document.getElementById('speak-keep').style.display = SPEAK.blob ? '' : 'none';
@@ -1863,7 +1905,8 @@ function speechBlock() {
   const e = SPEAK.result.engine || {}, box = document.getElementById('input-text');
   const now = (box ? box.value : '').trim(), heard = (SPEAK.result.text || '').trim();
   return {name: e.name, version: e.version, model: e.model, model_sha: e.model_sha, compute_type: e.compute_type,
-          vocabulary_count: e.vocabulary_count, vocabulary_sha: e.vocabulary_sha, external: false,
+          vocabulary_count: e.vocabulary_count, vocabulary_sha: e.vocabulary_sha, vocabulary_sources: e.vocabulary_sources,
+          hint_manifest: e.hint_manifest, hint_rev: e.hint_rev, hint: SPEAK.result.hint, external: false,
           machine_text: heard, edited: now !== heard, mime: SPEAK.result.mime || SPEAK.mime, duration_s: SPEAK.result.duration_s};
 }
 async function speakKeep() {
@@ -1876,7 +1919,7 @@ async function speakKeep() {
     if (k.error) { note.textContent = 'not kept: ' + k.error; return; }
     const box = document.getElementById('input-text');
     const r2 = await fetch('/api/speak/keep/transcript', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({media_id: k.media_id, machine: {segments: SPEAK.result.segments || [], engine: SPEAK.result.engine || {}}, edited_text: box ? box.value : ''})});
+      body: JSON.stringify({media_id: k.media_id, machine: {segments: SPEAK.result.segments || [], engine: SPEAK.result.engine || {}, hint: SPEAK.result.hint || null}, edited_text: box ? box.value : ''})});
     const t = await r2.json();
     SPEAK.kept = {media_id: k.media_id, transcript: t};
     note.textContent = 'kept as ' + k.media_id + (t.corrected ? ' with the machine transcript and your correction as two versions' : ' with the machine transcript as a version') + ' — in Media.';

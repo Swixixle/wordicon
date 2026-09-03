@@ -1,5 +1,37 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.3.7 — the ear, governed (block 106b: the reviewer's rulings on Speak)
+
+Block 106b (`docs/adr-speak.md`, amendment). "Newest 39" is rejected as
+the vocabulary rule. The engine is told, in order of standing: the
+visible name and the words the owner declared it must hear right; the
+names of what he has open (a concept, a Room, a document, a work — by
+id, resolved from the record, never named by the request); the shelf
+titles he pinned for speech; then the shelf as space remains, in a
+deterministic order that is not newness (rarest first under the
+engine's own tokenizer, alphabetical when there is no model). The cap
+is 190 of the engine's tokens when they can be counted — Whisper keeps
+the last 223, and the real shelf's coinages had pushed the hint to 251,
+cutting the owner's own words off the front — with a per-title ceiling
+for the fallback. Every transcript cites a content-addressed hint manifest — the exact terms,
+each with its tier and source id, what did not fit, the rule, the model
+— written once at Send or Keep (never by transcribing) and readable
+back at `/api/speak/hints/<sha>`. The declared and pinned words are
+appended events (`speech_vocabulary_events.jsonl`); the projection is
+a plain file rebuilt from them; a block-106 file is migrated into
+events by the owner's next save. The model's fetch is recorded
+(`speech_models.jsonl`): source, revision, every file's hash, the
+composite hash the transcripts cite, and the license from the card in
+the snapshot; an already-cached model is recorded as observed without
+the network. The raw-body routes refuse by type, declared length and
+deadline before a byte is read, then read bounded — never past the cap,
+never past 30 seconds, never a body shorter than declared. The
+correction law is pinned on the parrot-books specimen: what the engine
+heard stays visible beside the owner's edit, the edit is what is sent,
+the record never claims the engine heard the correction, and editing
+retrains nothing. A later, optional "Teach this correction" is named
+and not built.
+
 ## v1.3.6 — Speak to Nikodemus, Mac-local (the first doorway that is not a keyboard)
 
 Block 106 (`docs/adr-speak.md`). A recording instrument beside the

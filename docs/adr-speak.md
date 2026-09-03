@@ -118,3 +118,92 @@ cannot restart listening; multipart is refused; the engine's identity
 and the vocabulary hint ride on the input row, the open question, and
 the kept transcript; the anatomy's Sensory Tissue says what is built
 and what is not.
+
+## Amendment (block 106b) — the ear, governed
+
+The reviewer provisionally accepted block 106 and ruled on the two
+questions report 55 raised, plus a security check. This amendment is
+those rulings, built.
+
+**The order of standing.** "Newest 39" is rejected as a permanent
+vocabulary rule: newness has nothing to do with pronunciation
+importance. The engine is told, in order: (1) the visible name and the
+words the owner declared it must hear right; (2) the names of what he
+has open — a concept, a Room, a document, a work, an attached artifact
+— sent by the page as ids only and resolved from the record, so a name
+never comes from the request; (3) the shelf titles he explicitly pinned
+for speech, by exact title, kept by the entry's id; (4) the shelf as
+space remains, in a deterministic order that is not newness: rarest
+first under the engine's own tokenizer (tokens per letter — a coinage
+or an acronym is many pieces, a familiar word is one), ties
+alphabetical, and plainly alphabetical when there is no model on the
+machine. The manifest names which rule ran.
+
+**The cap, in the engine's tokens.** Building this exposed a defect in
+block 106's cap: 700 characters was calibrated to ordinary titles, and
+Whisper keeps only the LAST 223 tokens of its prompt. Ordered by rarity,
+the real shelf's coinages filled 715 characters with 251 tokens, and the
+front of the hint — "Nikodemus" and the owner's declared words, the
+highest-standing tier — fell off while the hint looked whole: every
+habitat word was misheard again. So the cap is now 190 of the engine's
+own tokens when its tokenizer is on the machine to count them (the
+manifest records the count), characters only when nothing can count;
+and a shelf title costing more than 12 tokens (a gloss, a foreign
+script) is left out of the fallback and listed, while the owner's own
+tiers are never dropped for cost, only for the cap. With that, the real
+shelf's ear holds the name, the owner's words and about thirty of his
+rarest titles, and every habitat phrase transcribes exactly again.
+
+**The manifest.** A count and a hash cannot reconstruct why the engine
+heard a word one way, so every transcript cites a content-addressed
+hint manifest: the exact terms in the order told, each with its tier
+and its source id (`brand:config/brand.json`, `declared:owner`,
+`context:room:<id>`, `pinned:<id>`, `shelf:<id>`), what did not fit
+under the cap, the frame, the rule, and the model whose tokenizer
+ordered the fallback; its name is the sha256 of its own canonical
+body. Transcribing still writes nothing: the manifest is written once,
+under `local_state/speech_hints/`, at the moment the transcript enters
+the record — Send or Keep — from the server's own copy of the
+transcription, or from the page's copy only when it hashes to the sha
+it claims. A row never cites a manifest that is not on disk. It reads
+back at `/api/speak/hints/<sha>`.
+
+**Events, not a rewrite.** The declared words and the pinned titles are
+appended events — declare, undeclare, pin, unpin — with the owner's
+clock on each; the projection (`speech_vocabulary.json`) is a plain
+file rebuilt from them and says so. A block-106 file, which was
+rewritten in place, is migrated into events by the owner's next save,
+each migrated word noted as such.
+
+**The model, recorded.** The 148 MB fetch is acceptable provided its
+exact revision, hash, source and license are recorded. `fetch_model`
+now records what arrived (`speech_models.jsonl`): the source URL, the
+hub revision the snapshot is kept under, every file's size and sha256,
+the composite hash the transcripts cite, and the license as the model
+card in the snapshot states it (or "unstated in the cache", honestly);
+an already-cached model is recorded as observed, without the network.
+The cache itself stays outside `local_state` and the Vault, replaceable;
+a replaced cache reads as unrecorded, because the record is keyed by
+the file hash.
+
+**The body, before a byte.** "Doesn't spool to disk" must not become
+"will absorb unlimited RAM." Pairing is answered by the gate before any
+body is read; then the type must be audio (multipart and anything else
+refused with 415), the length must be declared (411) and within the
+hard cap (413), and a deadline is set on the socket — all before a byte
+is read into memory; then a bounded read that stops at the cap whatever
+the header claimed, drops a body that trickles past thirty seconds
+(408), and refuses one shorter than it declared (400).
+
+**The correction law, on a specimen.** The parrot-books result is a
+fixture now: where the owner says "not parrot books", the engine hears
+the shelf title he was contrasting against. Pinned: what the engine heard stays visible beside the
+owner's edit (the review line is painted from the transcription only,
+never from the box); the owner-edited transcript is what is sent; the
+record never claims the engine heard the correction (the machine's
+version carries the machine's words, the owner's version the owner's,
+each citing the manifest); and editing alone retrains nothing — the
+instrument cannot reach the ear's settings, and no vocabulary event is
+appended by a correction. A later, optional **Teach this correction**
+could add a pronunciation or phrase preference by a visible act; it is
+named here and not built.

@@ -36,6 +36,10 @@ const CATS = 'I would like to know about the historical superstitions involving 
   await page.click('#destination-chips .dest[data-dest="question"]'); await page.waitForTimeout(1200);
   const q = (await api('/api/questions')).open.find(x => x.text === CATS + ' And correct the transcript.');
   ok(q && q.provenance === 'spoken' && q.speech && q.speech.edited === true && q.speech.machine_text === CATS && q.speech.name === 'mock' && q.speech.external === false, 'the open question arrived spoken, edited, with the machine\'s text and the engine beside it: ' + JSON.stringify(q && q.speech));
+  const cited = q && q.speech && q.speech.hint_manifest;
+  const manifest = cited ? await page.evaluate(async sha => { const r = await fetch('/api/speak/hints/' + sha); return r.ok ? await r.json() : null; }, cited) : null;
+  ok(cited && manifest && manifest.manifest_sha === cited && manifest.terms.length >= 1 && manifest.terms[0].tier === 'brand' && manifest.terms.every(t => t.source) && !('hint' in q.speech), 'the question cites a manifest that reads back: the exact words the engine was told, each with its source (block 106b): ' + (manifest ? manifest.terms.map(t => t.term).join(', ').slice(0, 80) : 'none'));
+  ok(tv.length === 1 && tv[0].engine && tv[0].engine.hint_manifest === cited, 'the kept transcript cites the same manifest');
   const sent = await page.evaluate(() => document.getElementById('speak-state').dataset.state);
   ok(sent === 'sent', 'the instrument reads Sent: ' + sent);
   ok(!posts.some(p => /\/api\/jobs/.test(p)), 'nothing ran');

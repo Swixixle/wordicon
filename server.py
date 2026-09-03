@@ -26,6 +26,7 @@ import json
 import os
 import pathlib
 import re
+import socket
 import sys
 import threading
 import time
@@ -67,6 +68,7 @@ def _load_dotenv() -> None:
 _load_dotenv()
 
 from flask import Flask, Response, g, jsonify, redirect, request, send_from_directory  # noqa: E402
+from werkzeug.exceptions import ClientDisconnected  # noqa: E402  (block 106b: a body that ends before its declared length)
 
 import wordicon_cli as cli  # noqa: E402
 import library as library  # noqa: E402  (the Library wing — zero model calls)
@@ -1123,13 +1125,21 @@ def api_recovery_rule():
 
 
 # ---------------------------------------------------------------------------
-# Speak to Nikodemus (block 106; items 53, 55; docs/adr-speak.md). The
-# microphone's server side: a raw audio body in, a transcript with the
-# engine's identity out. Never multipart (Werkzeug spools those to disk
-# above 500 KB — proven in the spike); never a file; never the language
-# model; never the network except the one visible model fetch. Nothing
-# below writes to the record: the transcript becomes a record only when
-# the owner sends it somewhere, and the audio only when he keeps it.
+# Speak to Nikodemus (block 106, amended 106b; items 53, 55, 56;
+# docs/adr-speak.md). The microphone's server side: a raw audio body in,
+# a transcript with the engine's identity out — and the manifest of what
+# the engine was told. Never multipart (Werkzeug spools those to disk
+# above 500 KB — proven in the spike); never a file of its own; never the
+# language model; never the network except the one visible model fetch.
+# The body's discipline (106b): pairing first (the gate above, before a
+# byte is read), then the audio type, the declared length against the
+# hard cap and a deadline — all before the body is read into memory —
+# then a bounded read. Nothing below writes to the record: the transcript
+# becomes a record only when the owner sends it somewhere (and its hint
+# manifest is written, content-addressed, at that moment), the audio
+# only when he keeps it, the model's record only when he fetches it.
+
+SPEAK_BODY_TIMEOUT_S = speech.BODY_TIMEOUT_S
 
 def _speech_engine():
     if speech.ENGINE is None and speech.engine_installed():
@@ -1152,23 +1162,60 @@ def api_speak_status():
 @app.route("/api/speak/vocabulary", methods=["GET"])
 def api_speak_vocabulary():
     h = speech.current_hint()
-    return jsonify({"declared": speech.load_declared_vocabulary(), "hint": {k: v for k, v in h.items() if k != "hint"},
-                    "note": "the words the engine is told to expect: the visible name, then yours, then the shelf's titles newest first, to the cap; recorded on every transcript as count, sources and hash"})
+    st = speech.vocabulary_state()
+    return jsonify({"declared": st["words"], "pinned": st["pinned"], "events": st.get("events", 0), "hint": h,
+                    "order": list(speech.HINT_TIERS),
+                    "note": "the words the engine is told to expect, in order of standing: the visible name and the words you declared; "
+                            "the names of what you have open; the shelf titles you pinned; then the shelf as space remains, "
+                            "in a deterministic order that is not newness — every transcript cites the manifest of the exact list"})
+
+
+def _split_terms(v):
+    if isinstance(v, str):
+        return [w for w in re.split(r"[,\n]+", v)]
+    return v
 
 
 @app.route("/api/speak/vocabulary", methods=["POST"])
 def api_speak_vocabulary_set():
     """The owner's declared words — coinages not on the shelf, the
-    acronyms of his work. Written only here, by him."""
+    acronyms of his work — and the shelf titles he pins for speech.
+    Written only here, by him, as appended events; the projection file
+    is rebuilt from them."""
     d = request.get_json(force=True) or {}
-    words = d.get("words")
-    if isinstance(words, str):
-        words = [w for w in __import__("re").split(r"[,\n]+", words)]
-    if not isinstance(words, list):
-        return jsonify({"error": "words must be a list, or a comma- or line-separated string"}), 400
-    out = speech.set_declared_vocabulary([str(w) for w in words])
+    words = _split_terms(d.get("words")) if "words" in d else None
+    pinned = _split_terms(d.get("pinned")) if "pinned" in d else None
+    if words is None and pinned is None:
+        return jsonify({"error": "send words and/or pinned — a list, or a comma- or line-separated string"}), 400
+    if (words is not None and not isinstance(words, list)) or (pinned is not None and not isinstance(pinned, list)):
+        return jsonify({"error": "words and pinned must be lists, or comma- or line-separated strings"}), 400
+    out = {"saved": True}
+    if words is not None:
+        out["declared"] = speech.set_declared_vocabulary([str(w) for w in words])
+    if pinned is not None:
+        out["pinned"] = speech.set_pinned_vocabulary([str(w) for w in pinned])
     h = speech.current_hint()
-    return jsonify({"saved": True, **out, "hint": {k: v for k, v in h.items() if k != "hint"}})
+    return jsonify({**out, "hint": {k: v for k, v in h.items() if k not in ("hint", "terms")}})
+
+
+@app.route("/api/speak/hints/<sha>", methods=["GET"])
+def api_speak_hint(sha):
+    """A cited hint manifest, read back: the exact terms the engine was
+    told for a transcript, each with its tier and its source id."""
+    m = speech.load_hint_manifest(sha)
+    if m is None:
+        return jsonify({"error": "no hint manifest is recorded under that sha"}), 404
+    return jsonify(m)
+
+
+def _speech_cited(blk):
+    """block 106b: a speech block may cite its hint manifest only once the
+    manifest is on disk — written here, content-addressed, at the moment
+    the transcript enters the record; the page's copy is taken only when
+    it hashes to the sha it claims."""
+    if isinstance(blk, dict) and blk.get("hint_manifest"):
+        blk = {**blk, "hint_manifest": speech.persist_hint_manifest(blk)}
+    return blk
 
 
 @app.route("/api/speak/model/fetch", methods=["POST"])
@@ -1180,21 +1227,59 @@ def api_speak_model_fetch():
     except Exception as e:  # noqa: BLE001
         return jsonify({"error": "the model could not be fetched: " + str(e)[:200]}), 502
     _speech_engine()
-    return jsonify({"fetched": True, **out})
+    return jsonify({**out, "note": ("fetched once, and recorded: source, revision, file hashes, license" if out.get("fetched")
+                                     else "already in the cache — recorded as observed, without the network")})
 
 
 def _audio_body():
-    """The raw body, or a refusal. Multipart is refused outright rather
-    than parsed: the form parser would spool the audio to disk."""
+    """The raw body, or a refusal — in the reviewer's order (block 106b).
+    Pairing came first: the gate above answered an unpaired caller before
+    a byte of body was read. Then, still before reading: the type must be
+    audio (multipart is refused outright rather than parsed — the form
+    parser would spool the audio to disk), the length must be declared
+    and within the hard cap, and a deadline is set on the socket. Then a
+    bounded read: never past the cap whatever the header claimed, never
+    past the deadline, never a body shorter than it declared."""
     ctype = (request.content_type or "").lower()
+    base = ctype.split(";", 1)[0].strip()
     if ctype.startswith("multipart/form-data") or ctype.startswith("application/x-www-form-urlencoded"):
         return None, (jsonify({"error": "send the recording as the raw request body with its audio type — a form upload would be spooled to disk"}), 415)
-    if request.content_length and request.content_length > speech.MAX_AUDIO_BYTES:
+    if base not in speech.ACCEPTED_MIMES:
+        return None, (jsonify({"error": "the body must be audio (webm/opus, mp4/aac, ogg, wav, mpeg) — nothing was read"}), 415)
+    declared = request.content_length
+    if declared is None:
+        return None, (jsonify({"error": "the recording must arrive with its length (Content-Length) — a body of unknown length is not read"}), 411)
+    if declared <= 0:
+        return None, (jsonify({"error": "no audio arrived"}), 400)
+    if declared > speech.MAX_AUDIO_BYTES:
         return None, (jsonify({"error": f"the recording is over the cap ({speech.MAX_AUDIO_BYTES} bytes)"}), 413)
-    data = request.get_data(cache=False)
-    if len(data) > speech.MAX_AUDIO_BYTES:
+    sock, old_timeout = request.environ.get("werkzeug.socket"), None
+    if sock is not None:
+        try:
+            old_timeout = sock.gettimeout(); sock.settimeout(SPEAK_BODY_TIMEOUT_S)
+        except OSError:
+            sock = None
+    try:
+        data = speech.read_bounded(request.stream, declared, speech.MAX_AUDIO_BYTES, SPEAK_BODY_TIMEOUT_S)
+    except speech.BodyTooLarge:
         return None, (jsonify({"error": "the recording is over the cap"}), 413)
+    except (speech.BodyTimeout, socket.timeout, TimeoutError):
+        return None, (jsonify({"error": f"the recording did not arrive within {SPEAK_BODY_TIMEOUT_S} seconds — nothing was kept"}), 408)
+    except (speech.BodyShort, ClientDisconnected, OSError):
+        return None, (jsonify({"error": "the body ended before its declared length — nothing was kept"}), 400)
+    finally:
+        if sock is not None:
+            try:
+                sock.settimeout(old_timeout)
+            except OSError:
+                pass
     return data, None
+
+
+def _speak_context():
+    """What the owner has open, as ids only (query string); the adapter
+    resolves names from the record and takes none from the request."""
+    return {k: request.args.get(k, "") for k in speech.CONTEXT_KINDS if request.args.get(k)}
 
 
 @app.route("/api/speak/transcribe", methods=["POST"])
@@ -1205,7 +1290,7 @@ def api_speak_transcribe():
     if _speech_engine() is None:
         return jsonify({"error": "the transcription engine is not installed on this machine — " + speech.status()["install_hint"]}), 503
     try:
-        out = speech.transcribe_bytes(data, request.content_type or "")
+        out = speech.transcribe_bytes(data, request.content_type or "", _speak_context())
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except RuntimeError as e:
@@ -1248,6 +1333,8 @@ def api_speak_keep_transcript():
     machine = d.get("machine") or {}
     segments = machine.get("segments") or []
     engine = machine.get("engine") or {}
+    if isinstance(machine.get("hint"), dict):
+        engine = {**engine, "hint": machine["hint"]}
     if not media_id or not segments:
         return jsonify({"error": "media_id and the machine transcript's segments are required"}), 400
     out = {"media_id": media_id}
@@ -1255,7 +1342,7 @@ def api_speak_keep_transcript():
         vtt = speech.to_vtt(segments)
         out["machine"] = library.add_transcript(media_id, vtt.encode("utf-8"), filename="speak-machine.vtt",
                                                 origin="locally generated", source="Speak to Nikodemus",
-                                                engine=cli.speech_record({**engine, "external": False}, "spoken"))
+                                                engine=cli.speech_record({**_speech_cited(engine), "external": False}, "spoken"))
         edited = str(d.get("edited_text") or "").strip()
         machine_text = " ".join((s.get("text") or "").strip() for s in segments if (s.get("text") or "").strip())
         if edited and edited != machine_text:
@@ -1295,7 +1382,7 @@ def api_question_save():
     data = request.get_json(force=True) or {}
     try:
         row = cli.record_open_question(str(data.get("text") or ""), provenance=str(data.get("provenance") or "typed"),
-                                       shape=str(data.get("shape") or ""), speech=data.get("speech"))
+                                       shape=str(data.get("shape") or ""), speech=_speech_cited(data.get("speech")))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"saved": True, "question": row})
@@ -2288,7 +2375,7 @@ def api_create_job():
     cli.record_input(job_id, mode, input_text, parent_trace_id or "", provenance=_prov,
                      destination=str(data.get("destination") or "")[:32], shape=str(data.get("shape") or "")[:16],
                      suggested=str(data.get("suggested") or "")[:32],
-                     speech=data.get("speech"))   # block 106: the transcription's identity rides only with provenance spoken
+                     speech=_speech_cited(data.get("speech")))   # block 106: the transcription's identity rides only with provenance spoken
     thread = threading.Thread(target=_run_job, args=(job_id, mode, input_text), daemon=True)
     thread.start()
     return jsonify({"job_id": job_id, "status": "queued"})
