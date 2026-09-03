@@ -72,7 +72,7 @@ const IDENT = 'Rowan Ashby Pell, born 1985-04-11 at 3 p.m. in Duluth, Minnesota'
   await page.fill('#input-text', 'television'); await page.dispatchEvent('#input-text', 'input'); await page.waitForTimeout(900);
   const w = await page.evaluate(() => ({ dev: document.getElementById('develop-controls').hidden, chosen: !!document.querySelector('#destination-chips .dest.chosen'),
     chips: Array.from(document.querySelectorAll('#destination-chips .dest')).map(b => b.dataset.dest + (b.classList.contains('suggested') ? '*' : '')) }));
-  ok(w.dev && !w.chosen && w.chips.join(',') === 'develop*,search,write,question', 'a lone word highlights Develop without choosing it — Run it stays hidden: ' + w.chips.join(','));
+  ok(w.dev && !w.chosen && w.chips.join(',') === 'develop*,search,write,question,look_ethicalalt,search_open_case,investigation_room', 'a lone word highlights Develop without choosing it — Run it stays hidden: ' + w.chips.join(','));   // ledger (block 107): a word also offers the instrument doors
   ok(!posts.some(p => /\/api\/jobs/.test(p)), 'the highlighted built destination did not run');
   // clearing the box clears the row
   await page.fill('#input-text', ''); await page.dispatchEvent('#input-text', 'input'); await page.waitForTimeout(600);

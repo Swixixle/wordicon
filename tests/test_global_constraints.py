@@ -14027,8 +14027,11 @@ console.log(out.join('\\n'));
         _r = cli.suggest_destinations(_t)
         if _r.get("shape") != _shape or _r.get("suggested") != _sugg or not _r.get("signals"):
             _f105(f"{_t[:30]!r} reads as {_r.get('shape')}/{_r.get('suggested')}, not {_shape}/{_sugg}")
-    if set(cli.DESTINATION_IDS) != {"research", "search", "develop", "room", "write", "question", "name_study", "portrait", "owner_facts"} \
-            or {d["id"] for d in cli.DESTINATIONS if d["built"]} != {"search", "develop", "room", "write", "question"}:
+    # ledger (block 107): the instruments' five doors — two imports, a look, a search, the Investigation Room — built, each naming its producer
+    if set(cli.DESTINATION_IDS) != {"research", "search", "develop", "room", "write", "question", "name_study", "portrait", "owner_facts",
+                                    "import_open_case", "import_ethicalalt", "look_ethicalalt", "search_open_case", "investigation_room"} \
+            or {d["id"] for d in cli.DESTINATIONS if d["built"]} != {"search", "develop", "room", "write", "question",
+                                                                     "import_open_case", "import_ethicalalt", "look_ethicalalt", "search_open_case", "investigation_room"}:
         _f105(f"the destinations or their built flags changed: {cli.DESTINATION_IDS}")
     # typed and spoken: the same destinations, the provenance carried beside the words, never branching
     _st, _ss = cli.suggest_destinations(_cats, "typed"), cli.suggest_destinations(_cats, "spoken")
@@ -14147,7 +14150,8 @@ console.log(out.join('\\n'));
         _f105("the intake's order is not box → destination row → Develop's controls (Run it, Go deep, the gesture chooser) → doors")
     _js105 = _idx105[_idx105.index("// ---- the destination chooser (block 105)"):_idx105.index("async function runOperation(deep, explicitMode)")]
     for _need in ("async function refreshDestinations()", "fetch('/api/destinations'", "function renderDestinations()", "async function chooseDestination(id)",
-                  "if (!x || !x.built) return;", "disabled aria-disabled=\"true\"", "Nothing runs until you choose", "dev.hidden = id !== 'develop'",
+                  "if (!x || !x.built || x.available === false) return;",   # ledger (block 107): an unconfigured instrument door is a label too
+                  "disabled aria-disabled=\"true\"", "Nothing runs until you choose", "dev.hidden = id !== 'develop'",
                   "if (id === 'write') { openCompose(); return; }", "fetch('/api/clinic/rooms'", "fetch('/api/questions'", "renderLibrary(DEST.text)", "docSearch()",
                   "if (!confirm('Start a Clinic room"):
         if _need not in _js105:
@@ -14846,7 +14850,7 @@ console.log(out.join('\\n'));
         _f106b("newest-first crept back into the fallback")
     # ---- (9) the routes' and the page's discipline, and the docs ----
     _srv106b = (_root106 / "server.py").read_text(encoding="utf-8")
-    _spk_srv_b = _srv106b[_srv106b.index("# Speak to Nikodemus (block 106"):_srv106b.index("# The destination chooser (block 105")]
+    _spk_srv_b = _srv106b[_srv106b.index("# Speak to Nikodemus (block 106"):_srv106b.index("# Connected instruments (block 107")]   # ledger (block 107): the instruments' routes sit between Speak and the chooser and reuse this discipline
     _body_fn = _spk_srv_b[_spk_srv_b.index("def _audio_body"):_spk_srv_b.index("def _speak_context")]
     if _body_fn.index("speech.ACCEPTED_MIMES") > _body_fn.index("speech.read_bounded") or _body_fn.index("request.content_length") > _body_fn.index("speech.read_bounded") \
             or _body_fn.index("sock.settimeout(SPEAK_BODY_TIMEOUT_S)") > _body_fn.index("speech.read_bounded") or "request.get_data" in _spk_srv_b or "request.data" in _spk_srv_b:
@@ -14885,6 +14889,608 @@ console.log(out.join('\\n'));
     _srv_cli_b = (_root106 / "scripts" / "wordicon_cli.py").read_text(encoding="utf-8")
     if '"hint_manifest", "hint_rev"' not in _srv_cli_b:
         _f106b("the speech record does not carry the manifest's sha")
+
+    # ================= block 107: connected instruments — Open Case and EthicalAlt as a federation ==========
+    # The reviewer's build brief (backlog item 60). Two sovereign
+    # applications connected by a versioned, signed evidence-export
+    # contract — never merged. What this block proves, by name: the golden
+    # packages from both producers' real signing code verify under keys the
+    # owner pinned out of band; a wrong key, a changed byte, a replaced
+    # signature, a key smuggled inside a package, an unknown schema, a
+    # producer or object mismatch each fail by name and leave the bytes in
+    # custody unverified; the same bytes twice are one deposition; changed
+    # bytes are a new linked version with supersession unknown; the fetcher
+    # never leaves a configured origin, refuses redirects, bounds bodies,
+    # refuses HTML and non-JSON, and reports a timeout, a 5xx and a missing
+    # credential as failures — never as "nothing found"; the producer's own
+    # labels, gaps, the allegation/response pairing and legacy standing
+    # survive import unchanged; two same-named entities stay two; nothing
+    # declares an identity but the owner; a rejection or an unresolved
+    # match converges nothing; the original bytes come back byte-identical;
+    # no model is on any path; nothing from the corpus rides in a request;
+    # no credential reaches the store, a page, a fixture or a log; reading
+    # works with the producer offline; the gate holds; the chooser reads a
+    # web address as a shape; and the anatomy, About & proof, the ADR and
+    # the changelog say so.
+    import base64 as _b64107
+    import hashlib as _hl107
+    import http.server as _hs107
+    import importlib as _il107
+    import json as _json107
+    import os as _os107
+    import re as _re107
+    import socket as _sock107
+    import threading as _thr107
+    import time as _time107
+    _fed = _il107.import_module("federation")
+    _root107 = Path(cli.__file__).parent.parent
+    _fx107 = _root107 / "tests" / "fixtures" / "federation"
+
+    def _f107(msg):
+        failures.append(f"107: {msg}")
+
+    _libs = _fed.verification_available()
+    if not (_libs.get("jcs") and _libs.get("cryptography")):
+        _f107(f"the verification libraries are not installed (requirements.txt): {_libs}")
+    _req107 = (_root107 / "requirements.txt").read_text(encoding="utf-8")
+    if "cryptography" not in _req107 or "jcs" not in _req107:
+        _f107("requirements.txt does not carry the verification libraries")
+    _oc_bytes = (_fx107 / "open_case.exemplar.deposition.json").read_bytes()
+    _ea_bytes = (_fx107 / "ethicalalt.exemplar.deposition.json").read_bytes()
+    _lg_bytes = (_fx107 / "ethicalalt.legacy.deposition.json").read_bytes()
+    _oc_pub = (_fx107 / "open_case.fixture.pub.b64").read_text().strip()
+    _ea_pub = (_fx107 / "ethicalalt.fixture.pub.b64").read_text().strip()
+    _oc_env = _json107.loads(_oc_bytes)
+    _ea_env = _json107.loads(_ea_bytes)
+    _OC_ID = _oc_env["object"]["id"]
+    _EA_ID = _ea_env["object"]["id"]
+
+    # ---- a mock producer on loopback: the fixtures, plus the failure shapes a real host produces ----
+    class _Producer107(_hs107.BaseHTTPRequestHandler):
+        seen = []
+        def log_message(self, *a):  # noqa: D401
+            pass
+        def _send(self, code, body, ctype="application/json", extra=None):
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            for k, v in (extra or {}).items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(body)
+        def do_GET(self):  # noqa: N802
+            _Producer107.seen.append({"path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()}})
+            p = self.path.split("?")[0]
+            if p == f"/api/v1/cases/{_OC_ID}/export":
+                if self.headers.get("Authorization") != "Bearer " + _os107.environ.get("NIK_TEST_OPEN_CASE_KEY", "~"):
+                    return self._send(401, b'{"detail":"unauthorized"}')
+                return self._send(200, _oc_bytes)
+            if p == "/api/v1/cases/exportable":
+                return self._send(200, (_fx107 / "open_case.exportable.json").read_bytes())
+            if p == f"/api/profiles/{_EA_ID}/export/v2":
+                return self._send(200, _ea_bytes)
+            if p == "/api/profiles/exemplar-legacy-co/export/v2":
+                return self._send(200, _lg_bytes)
+            if p == "/api/profiles/index":
+                return self._send(200, b'{"items":[{"slug":"exemplar-holdings","brand_name":"Exemplar Holdings"}]}')
+            if p == "/api/profiles/redirect-me/export/v2":
+                return self._send(302, b"", extra={"Location": "http://127.0.0.1:1/elsewhere"})
+            if p == "/api/profiles/big-body/export/v2":
+                return self._send(200, b'{"pad":"' + b"x" * (_fed.FETCH_MAX_BYTES + 10) + b'"}')
+            if p == "/api/profiles/html-page/export/v2":
+                return self._send(200, b"<html><body>Sign in</body></html>", ctype="text/html")
+            if p == "/api/profiles/not-json/export/v2":
+                return self._send(200, b"{not json", ctype="application/json")
+            if p == "/api/profiles/gateway-502/export/v2":
+                return self._send(502, b"<html><body>502 Bad Gateway</body></html>", ctype="text/html")
+            if p == "/api/profiles/server-boom/export/v2":
+                return self._send(500, b'{"error":"boom"}')
+            if p == "/api/profiles/slow-slow/export/v2":
+                _time107.sleep(3)
+                return self._send(200, _ea_bytes)
+            return self._send(404, b'{"detail":"not found"}')
+    _srv107 = _hs107.ThreadingHTTPServer(("127.0.0.1", 0), _Producer107)
+    _port107 = _srv107.server_address[1]
+    _thr107.Thread(target=_srv107.serve_forever, daemon=True).start()
+    _base107 = f"http://127.0.0.1:{_port107}"
+    _os107.environ["NIK_TEST_OPEN_CASE_KEY"] = "open_case_" + "7" * 64     # a credential-shaped value, present only in the environment
+
+    # ---- (1) the registry: origins, references, keys ----
+    for _bad, _why in ((("oc", "open_case", "http://example.com"), "a deployed http origin"),
+                       (("oc", "open_case", "http://127.0.0.1:9/x", "", "env:X", False), "loopback http without the development flag"),
+                       (("oc", "open_case", _base107, "", "open_case_" + "7" * 64, True), "a credential value where a reference belongs"),
+                       (("Bad Id", "open_case", _base107, "", "", True), "a bad connector id"),
+                       (("oc", "nope", _base107, "", "", True), "an unknown producer")):
+        try:
+            _fed.register_connector(*_bad)
+            _f107(f"the registry accepted {_why}")
+        except ValueError:
+            pass
+    _fed.register_connector("oc", "open_case", _base107, display="Open Case (dev)", credential_ref="env:NIK_TEST_OPEN_CASE_KEY", dev_loopback=True)
+    _fed.register_connector("ea", "ethicalalt", _base107, display="EthicalAlt (dev)", dev_loopback=True)
+    _cs = {c["connector_id"]: c for c in _fed.load_connectors()}
+    if set(_cs) != {"oc", "ea"} or _cs["oc"]["credential_ref"] != "env:NIK_TEST_OPEN_CASE_KEY" or not _cs["oc"]["credential_configured"] \
+            or _cs["oc"]["status"] != "never tried" or _cs["oc"]["capabilities"]["mutating"] or _cs["oc"]["commands_mutating"]:
+        _f107(f"the registry projection is wrong: {_cs}")
+    if "7" * 20 in _fed.connectors_log().read_text(encoding="utf-8"):
+        _f107("a credential value reached the registry")
+    _kid_oc = _fed.pin_key("oc", _oc_pub, label="fixture")["key_id"]
+    _kid_ea = _fed.pin_key("ea", _ea_pub, label="fixture")["key_id"]
+    if _kid_oc != _oc_env["signature"]["trusted_key_id"] or _kid_ea != _ea_env["signature"]["trusted_key_id"] or not _kid_oc.startswith("ed25519:sha256:"):
+        _f107("the key fingerprint computed here differs from the one the producers computed")
+    if _fed.key_id_from_spki_b64(_oc_pub) != _kid_oc:
+        _f107("key_id_from_spki_b64 disagrees with pin_key")
+
+    # ---- (2) the golden packages verify; failures fail by name and stay in custody ----
+    _r_oc = _fed.import_package(_fed.get_connector("oc"), _oc_bytes, how="package")
+    _r_ea = _fed.import_package(_fed.get_connector("ea"), _ea_bytes, how="package")
+    if not (_r_oc["verification"]["ok"] and _r_ea["verification"]["ok"] and _r_oc["representation"] and _r_ea["representation"]):
+        _f107(f"the golden packages do not verify under the pinned keys: {_r_oc['verification']} {_r_ea['verification']}")
+    if _r_oc["verification"]["method"] != "open_case.seal.v1" or _r_ea["verification"]["method"] != "ethicalalt.export.v2":
+        _f107("the two signing methods are not recorded as the producers' own")
+    _dep_oc = _fed.get_deposition(_r_oc["deposition_id"]); _dep_ea = _fed.get_deposition(_r_ea["deposition_id"])
+    if _fed.deposition_bytes(_dep_oc) != _oc_bytes or _fed.deposition_bytes(_dep_ea) != _ea_bytes:
+        _f107("the bytes in custody are not the bytes received")
+    if _dep_oc["sha256"] != _hl107.sha256(_oc_bytes).hexdigest() or not (_fed.blobs_dir() / _dep_oc["sha256"]).exists():
+        _f107("custody is not by content hash in the Library's blob store")
+    if _dep_oc["source_recorded_at"] != _oc_env["recorded_at"] or not _dep_oc["received_at"] or _dep_oc["received_at"] == _dep_oc["source_recorded_at"] \
+            or [t.get("basis") for t in _dep_oc["source_times"]] != ["source_stated"] * len(_dep_oc["source_times"]) or not _dep_oc["source_times"]:
+        _f107("the producer's own times are not kept apart from the time received, marked source_stated")
+
+    def _mut107(env, fn):
+        e = _json107.loads(_json107.dumps(env))
+        fn(e)
+        return _json107.dumps(e, ensure_ascii=False).encode("utf-8")
+    def _set(path, value):
+        def fn(e):
+            cur = e
+            for k in path[:-1]:
+                cur = cur[k]
+            cur[path[-1]] = value
+        return fn
+    _cases = [
+        ("a changed byte in the payload", _mut107(_ea_env, _set(("payload", "profile", "overall_concern_level"), "clean")), "payload_sha256 does not match"),
+        ("a replaced signature", _mut107(_ea_env, _set(("signature", "value"), "ed25519:" + "A" * 86)), "does not verify"),
+        ("a forged hash to match a changed payload", _mut107(_ea_env, lambda e: (e["payload"]["profile"].__setitem__("overall_concern_level", "clean"),
+                                                                                   e.__setitem__("payload_sha256", _fed.payload_sha256(e["payload"])))), "does not verify"),
+        ("a key named that is not pinned", _mut107(_ea_env, _set(("signature", "trusted_key_id"), "ed25519:sha256:" + "0" * 64)), "not pinned"),
+        ("an unknown envelope schema", _mut107(_ea_env, _set(("schema",), "nikodemus.deposition.v9")), "schema"),
+        ("an unknown signing method", _mut107(_ea_env, _set(("signature", "method"), "ethicalalt.export.v1")), "signature block"),
+        ("an object id that differs from the signed payload", _mut107(_ea_env, _set(("object", "id"), "another-slug")), "names object"),
+        ("an unknown object type", _mut107(_ea_env, _set(("object", "type"), "receipt")), "object"),
+    ]
+    for _name, _body, _needle in _cases:
+        _r = _fed.import_package(_fed.get_connector("ea"), _body, how="package")
+        _v = _r["verification"]
+        if _v.get("ok") or _needle.lower() not in _v.get("why", "").lower() or _r["representation"]:
+            _f107(f"{_name} did not fail by name ({_v.get('why')!r}) or derived a representation")
+        _d = _fed.get_deposition(_r["deposition_id"])
+        if not _d or _fed.deposition_bytes(_d) != _body or _fed._deposition_status(_d) != "unverified":
+            _f107(f"{_name}: the bytes were not kept in custody as unverified")
+    # a key smuggled inside the package — even one that signs the package correctly — is ignored
+    from cryptography.hazmat.primitives.asymmetric import ed25519 as _ed107
+    from cryptography.hazmat.primitives import serialization as _ser107
+    _attacker = _ed107.Ed25519PrivateKey.generate()
+    _attacker_pub = _b64107.b64encode(_attacker.public_key().public_bytes(_ser107.Encoding.DER, _ser107.PublicFormat.SubjectPublicKeyInfo)).decode()
+    def _resign_ea(e, key):
+        e["payload_sha256"] = _fed.payload_sha256(e["payload"])
+        e["signature"]["value"] = "ed25519:" + _b64107.urlsafe_b64encode(key.sign(_fed.canonical_json(e["payload"]))).decode().rstrip("=")
+        e["signature"]["trusted_key_id"] = _fed.key_id_from_spki_b64(_b64107.b64encode(key.public_key().public_bytes(_ser107.Encoding.DER, _ser107.PublicFormat.SubjectPublicKeyInfo)).decode())
+    _smug = _mut107(_ea_env, lambda e: (e["payload"]["profile"].__setitem__("overall_concern_level", "clean"), _resign_ea(e, _attacker),
+                                          e["signature"].__setitem__("public_key", _attacker_pub), e.__setitem__("public_key", _attacker_pub)))
+    _r = _fed.import_package(_fed.get_connector("ea"), _smug, how="package")
+    if _r["verification"].get("ok") or "not pinned" not in _r["verification"].get("why", ""):
+        _f107(f"a package carrying its own (correct) key verified: {_r['verification']}")
+    # the same package into the other producer's connector fails by name
+    _r = _fed.import_package(_fed.get_connector("oc"), _mut107(_ea_env, lambda e: None), how="package")
+    if _r["verification"].get("ok") or "producer" not in _r["verification"].get("why", ""):
+        _f107(f"an EthicalAlt package imported into the Open Case connector did not fail by name: {_r['verification']}")
+    # a legacy Open Case seal (no embedded payload) is held as legacy, never manufactured into a modern package
+    _legacy_oc = _mut107(_oc_env, lambda e: (e.__setitem__("payload", None), e.__setitem__("legacy", {"self_contained": False, "note": "pre-2026-04-02 seal: no embedded payload"})))
+    _r = _fed.import_package(_fed.get_connector("oc"), _legacy_oc, how="package")
+    _d = _fed.get_deposition(_r["deposition_id"])
+    if _r["verification"].get("ok") or not _r["verification"].get("legacy") or not _d.get("legacy") or _fed._deposition_status(_d) != "legacy" or _r["representation"]:
+        _f107(f"a legacy seal is not held as legacy: {_r}")
+    # a thin EthicalAlt profile stays visibly partial
+    _r_lg = _fed.import_package(_fed.get_connector("ea"), _lg_bytes, how="package")
+    _rep_lg = _fed.deposition_representation(_fed.get_deposition(_r_lg["deposition_id"]))
+    if not _r_lg["verification"]["ok"] or not _rep_lg or _rep_lg["subject"]["research_depth"] != "legacy" or not any("legacy" in r for r in _rep_lg["partial"]) \
+            or "no_deep_research" not in [g.get("kind") for g in _rep_lg["gaps"]]:
+        _f107(f"a legacy profile was promoted past legacy: {_rep_lg and (_rep_lg['subject'], _rep_lg['partial'])}")
+    # the same bytes again: an import event, nothing else; a wrong key pinned later changes nothing already recorded
+    _n_before = len(_fed.load_depositions())
+    _r_dup = _fed.import_package(_fed.get_connector("ea"), _ea_bytes, how="package")
+    if not _r_dup["duplicate"] or _r_dup["deposition_id"] != _r_ea["deposition_id"] or len(_fed.load_depositions()) != _n_before \
+            or [r for r in _fed.load_depositions(include_events=True) if r.get("kind") == "import_event"][-1].get("duplicate_of") != _r_ea["deposition_id"]:
+        _f107("the same bytes twice were not one deposition plus an import event")
+    # different bytes for the same object: a new version linked to the prior, supersession unknown
+    _scratch_key = _ed107.Ed25519PrivateKey.generate()
+    _scratch_pub = _b64107.b64encode(_scratch_key.public_key().public_bytes(_ser107.Encoding.DER, _ser107.PublicFormat.SubjectPublicKeyInfo)).decode()
+    _fed.pin_key("ea", _scratch_pub, label="scratch — a second key the owner pinned")
+    _v2 = _mut107(_ea_env, lambda e: (e["payload"]["profile"].__setitem__("updated_at", "2026-06-01T00:00:00.000Z"), _resign_ea(e, _scratch_key)))
+    if any(d.get("prior_version_of") for d in _fed.load_depositions() if not (d.get("verification") or {}).get("ok")):
+        _f107("an unverified package was linked into a version chain — it makes no claim, not even to be a version")
+    if _fed._deposition_status(_fed.get_deposition(_r_ea["deposition_id"])) != "current":
+        _f107("unverified packages for the same object cast 'superseded?' over the verified deposition")
+    _r_v2 = _fed.import_package(_fed.get_connector("ea"), _v2, how="package")
+    _d_v2 = _fed.get_deposition(_r_v2["deposition_id"])
+    if not _r_v2["verification"]["ok"] or _r_v2["prior_version_of"] != _r_ea["deposition_id"] or _r_v2["supersession"] != "unknown" \
+            or _fed._deposition_status(_fed.get_deposition(_r_ea["deposition_id"])) != "superseded?" or _fed._deposition_status(_d_v2) != "current":
+        _f107(f"changed bytes for the same object are not a new linked version with supersession unknown: {_r_v2}")
+    # unpinning retires the key: the same package no longer verifies on re-verification, and the stored row is untouched
+    _scratch_kid = _fed.key_id_from_spki_b64(_scratch_pub)
+    _fed.unpin_key("ea", _scratch_kid)
+    _rv = _fed.verify_envelope(_json107.loads(_v2), _fed.get_connector("ea")["trusted_keys"])
+    if _rv["ok"] or "not pinned" not in _rv["why"] or _fed.get_deposition(_r_v2["deposition_id"])["verification"]["ok"] is not True:
+        _f107("unpinning a key did not retire it for re-verification, or rewrote a stored row")
+    if any(t["key_id"] == _scratch_kid for t in _fed.get_connector("ea")["trusted_keys"]):
+        _f107("an unpinned key is still pinned")
+
+    # ---- (3) the producer's words survive: labels, gaps, states, the pairing ----
+    _rep_oc = _fed.deposition_representation(_dep_oc); _rep_ea = _fed.deposition_representation(_dep_ea)
+    _ev = [i for i in _rep_oc["items"] if i["kind"] == "evidence"]
+    if sorted(i["epistemic_level"] for i in _ev) != ["ALLEGED", "CONTEXTUAL", "CONTEXTUAL"] or any(i["epistemic_attributed_to"] != "Open Case's classifier" for i in _ev):
+        _f107(f"Open Case's labels were re-scored or unattributed: {[(i['epistemic_level'], i['epistemic_attributed_to']) for i in _ev]}")
+    _abs = [i for i in _ev if i["is_absence"]]
+    if len(_abs) != 1 or _abs[0]["epistemic_level"] != "ALLEGED":
+        _f107("the documented absence (which Open Case's classifier labels ALLEGED) was not preserved as recorded")
+    _sc = {i["source_name"]: i["status"] for i in _rep_oc["items"] if i["kind"] == "source_check"}
+    if _sc != {"courtlistener": "search_failed", "indy_procurement": "searched_with_evidence", "fec": "searched_empty", "lda": "searched_with_evidence"}:
+        _f107(f"searched-with-evidence, searched-empty and search-failed collapsed: {_sc}")
+    _gk = sorted(g.get("kind") for g in _rep_oc["gaps"])
+    if _gk != ["gap_documented", "gap_documented", "search_failed", "source_unavailable"]:
+        _f107(f"Open Case's gaps did not survive as gaps: {_gk}")
+    _sig = [i for i in _rep_oc["items"] if i["kind"] == "signal"]
+    if len(_sig) != 1 or _sig[0]["signal_type"] != "contract_proximity" or "not a Nikodemus finding" not in _sig[0]["attributed_to"] or _sig[0]["signed"] \
+            or _sig[0]["pattern_engine_version"] != "2.7":
+        _f107(f"the Open Case signal is not attributed to its engine as a signal: {_sig}")
+    if _rep_oc["sealed_at"] != _oc_env["recorded_at"] or _rep_oc["subject"]["ref"] != f"open_case:case:{_OC_ID}":
+        _f107(f"the Open Case representation lost the seal time or the namespaced id: {_rep_oc['sealed_at']} {_rep_oc['subject']}")
+    if any(not i["stable_ref"].startswith("open_case:evidence_hash:") or len(i["stable_ref"]) < 30 for i in _ev):
+        _f107("the run-stable evidence_hash is not carried beside the run-bound evidence id")
+    _inc = [i for i in _rep_ea["items"] if i["kind"] == "incident"]
+    if len(_inc) != 4 or sorted(i["date_precision"] for i in _inc) != ["day", "day", "month", "none"] or any(i["confidence_attributed_to"] != "EthicalAlt" for i in _inc):
+        _f107(f"EthicalAlt's incidents lost their date precision or attribution: {[(i['date'], i['date_precision']) for i in _inc]}")
+    if _rep_ea["subject"]["concern_level"] != "moderate" or _rep_ea["subject"]["concern_attributed_to"] != "EthicalAlt" \
+            or _rep_ea["partial"] != ["1 of 4 incidents without a direct source URL", "1 category(ies) capped — EthicalAlt found more than it exported", "2 of 4 incidents without a full date"]:
+        _f107(f"EthicalAlt's concern level was re-scored or unattributed, or its partial provenance is not stated as EthicalAlt's own counts: {_rep_ea['subject']} {_rep_ea['partial']}")
+    _al = [i for i in _rep_ea["items"] if i["kind"] == "allegation_response"]
+    if len(_al) != 1 or _al[0]["response_type"] != 3 or "Type 3" not in _al[0]["response_label"] or not _al[0]["summary"]:
+        _f107(f"the allegation is not paired with its documented response: {_al}")
+    if sorted(g.get("kind") for g in _rep_ea["gaps"]) != ["category_capped", "date_missing", "missing_source_url", "researcher_gap", "researcher_gap"]:
+        _f107(f"EthicalAlt's gaps were dropped or duplicated: {sorted(g.get('kind') for g in _rep_ea['gaps'])}")
+    _srcs = [s for i in _inc for s in i["sources"]]
+    if not _srcs or any(s.get("title") is not None or s.get("publisher") is not None or s.get("date") is not None for s in _srcs):
+        _f107("a source title, publisher or date was invented where EthicalAlt records none")
+    if "universal" in _json107.dumps(_rep_oc).lower() + _json107.dumps(_rep_ea).lower() or "score" in _json107.dumps(_rep_ea).lower():
+        _f107("a universal score crept into a representation")
+
+    # ---- (4) the fetcher: configured origins only, bounded, classified — never "nothing found" ----
+    _ea_c = _fed.get_connector("ea"); _oc_c = _fed.get_connector("oc")
+    _Producer107.seen.clear()
+    _r = _fed.import_from_connector(_ea_c, _EA_ID)
+    if not _r["ok"] or not _r["duplicate"] or _r["deposition_id"] != _r_ea["deposition_id"]:
+        _f107(f"a fetched golden package is not the same deposition as the pasted one: {_r}")
+    _req = _Producer107.seen[-1]
+    if _req["path"] != f"/api/profiles/{_EA_ID}/export/v2" or "authorization" in _req["headers"] or "cookie" in _req["headers"] \
+            or set(_req["headers"]) - {"accept", "user-agent", "host", "connection", "accept-encoding"}:
+        _f107(f"the request carried more than the contract path and the object id: {_req}")
+    _Producer107.seen.clear()
+    _r = _fed.import_from_connector(_oc_c, _OC_ID)
+    if not _r["ok"] or not _r["duplicate"]:
+        _f107(f"the Open Case fetch with the credential did not land: {_r}")
+    _req = _Producer107.seen[-1]
+    if _req["headers"].get("authorization") != "Bearer open_case_" + "7" * 64 or _req["path"] != f"/api/v1/cases/{_OC_ID}/export":
+        _f107("the credential was not read from the environment at request time, or the path is not the contract's")
+    for _oid, _want in (("redirect-me", "redirect_refused"), ("big-body", "oversized"), ("html-page", "html_error_page"), ("not-json", "not_json"),
+                        ("gateway-502", "html_error_page"), ("server-boom", "http_5xx"), ("missing-one", "http_404")):
+        _r = _fed.import_from_connector(_ea_c, _oid)
+        if _r.get("ok") or _r.get("outcome") != _want or "nothing found" in _json107.dumps(_r).lower() or not _r.get("detail"):
+            _f107(f"{_oid}: expected {_want}, got {_r}")
+        if _fed.load_connectors(include_disabled=True) and _fed.get_connector("ea")["status"] != f"last attempt failed: {_want}":
+            _f107(f"{_oid}: the connector status does not name the failure")
+    _fed.FETCH_TIMEOUT_S, _saved_to = 1, _fed.FETCH_TIMEOUT_S
+    try:
+        _r = _fed.import_from_connector(_ea_c, "slow-slow")
+    finally:
+        _fed.FETCH_TIMEOUT_S = _saved_to
+    if _r.get("ok") or _r.get("outcome") != "timeout":
+        _f107(f"a producer that does not answer is not a timeout: {_r}")
+    if _fed.import_from_connector(_ea_c, "../etc/passwd").get("outcome") != "bad_id" or _fed.import_from_connector(_oc_c, "not-a-uuid").get("outcome") != "bad_id":
+        _f107("an id that is not the producer's shape was sent")
+    if _fed.fetch_json(_ea_c, "http://evil.example/x").get("outcome") != "origin_refused" or _fed.fetch_json(_ea_c, "/../x").get("outcome") != "origin_refused":
+        _f107("the fetcher left the configured origin")
+    if _fed.recognize_url("https://evil.example/api/profiles/exemplar-holdings") is not None:
+        _f107("a foreign origin was recognized")
+    _hit = _fed.recognize_url(_base107 + "/profile/exemplar-holdings?tab=1")
+    if not _hit or _hit["connector_id"] != "ea" or _hit["object_id"] != "exemplar-holdings":
+        _f107(f"a URL of the configured origin was not recognized by the producer's path shape: {_hit}")
+    _os107.environ.pop("NIK_TEST_OPEN_CASE_KEY")
+    _r = _fed.import_from_connector(_oc_c, _OC_ID)
+    if _r.get("ok") or _r.get("outcome") != "credential_unavailable" or "NIK_TEST_OPEN_CASE_KEY" not in _r.get("detail", ""):
+        _f107(f"a missing credential is not named as the failure: {_r}")
+    _os107.environ["NIK_TEST_OPEN_CASE_KEY"] = "open_case_" + "7" * 64
+    _fed.set_enabled("ea", False)
+    if _fed.import_from_connector(_fed.get_connector("ea"), _EA_ID).get("outcome") != "disabled" or _fed.recognize_url(_base107 + "/profile/x") is not None:
+        _f107("a disabled connector still fetches or recognizes")
+    _fed.set_enabled("ea", True)
+    _loc = _fed.locate(_fed.get_connector("oc"), "exemplar")
+    if not _loc["ok"] or _loc["count"] != 1 or _loc["items"][0]["id"] != _OC_ID or "nothing was imported" not in _loc["note"]:
+        _f107(f"locate did not return the producer's own list unchanged: {_loc}")
+    # attempts are recorded without bodies or credentials; every failure class is one the vocabulary names
+    _att = _fed._rows(_fed.attempts_log())
+    _att_txt = _json107.dumps(_att)
+    if "7" * 20 in _att_txt or "Bearer" in _att_txt or "<html" in _att_txt.lower() or "Sign in" in _att_txt:
+        _f107("a body or a credential reached the attempts log")
+    for _a in _att:
+        if not _a.get("ok") and _a.get("outcome") not in _fed.FETCH_FAILURES:
+            _f107(f"an attempt failed with an outcome outside the vocabulary: {_a.get('outcome')}")
+    if _fed._scrub("Bearer open_case_" + "7" * 64 + " and sk-ant-" + "a" * 40) != "[redacted] and [redacted]":
+        _f107(f"the scrubber lets a credential shape through: {_fed._scrub('Bearer open_case_' + '7' * 64)!r}")
+
+    # ---- (5) nothing from the corpus rides in a request; no model on any path ----
+    _fsrc = (_root107 / "scripts" / "federation.py").read_text(encoding="utf-8")
+    for _tok in ("gateway", "anthropic", "MockGateway", ".complete(", "openai", "ollama", "load_accepted", "accepted_concepts", "judgments", "keeper", "library.search"):
+        if _tok.lower() in _fsrc.lower():
+            _f107(f"federation.py touches {_tok!r}")
+    _fetch_src = _ins96.getsource(_fed.fetch_json)
+    if "cli." in _fetch_src or "library" in _fetch_src or "data=" in _fetch_src or 'method="GET"' not in _fetch_src:
+        _f107("the fetcher reads the record, sends a body, or is not GET-only")
+    _fed_srv = _srv_src107 = (_root107 / "server.py").read_text(encoding="utf-8")
+    _fed_srv = _fed_srv[_fed_srv.index("Connected instruments (block 107"):_fed_srv.index("# The destination chooser (block 105")]
+    for _tok in ("gateway", "_gw", "MockGateway", "complete("):
+        if _tok in _fed_srv:
+            _f107(f"a federation route touches the model ({_tok!r})")
+    _page_inv = (_root107 / "webapp" / "investigation.html").read_text(encoding="utf-8")
+    for _tok in ("anthropic", "gateway", 'src="http', "WebSocket", "setInterval", "EventSource"):
+        if _tok in _page_inv:
+            _f107(f"the investigation page reaches out or loops: {_tok!r}")
+    _boot_inv = _page_inv[_page_inv.index("document.addEventListener('DOMContentLoaded'"):]
+    for _tok in ("importObject(", "locateObjects(", "importPackage(", "checkConnector(", "proposeMechanically("):
+        if _tok in _boot_inv:
+            _f107(f"the investigation page runs {_tok} on load — a query parameter must only pre-fill")
+
+    # ---- (6) the room: seats apart, names are not identities, nothing converges without the owner ----
+    _room = _fed.create_room("Exemplar Holdings — instruments side by side")
+    _fed.add_to_room(_room["room_id"], deposition_id=_dep_oc["deposition_id"])
+    _fed.add_to_room(_room["room_id"], deposition_id=_dep_ea["deposition_id"])
+    _fed.add_to_room(_room["room_id"], deposition_id=_r_lg["deposition_id"])
+    _unv = next(d for d in _fed.load_depositions() if not (d.get("verification") or {}).get("ok") and not d.get("legacy"))
+    _fed.add_to_room(_room["room_id"], deposition_id=_unv["deposition_id"])   # an unverified one
+    _st = _fed.room_state(_room["room_id"])
+    _seat = {s["kind"]: len(s["items"]) for s in _st["seats"]}
+    if _seat != {"evidence": 3, "signal": 1, "incident": 4, "document": 0, "allegation_response": 1, "dispute": 0, "gap": 10, "ruling": 0}:
+        _f107(f"the seats are not filled apart by kind: {_seat}")
+    if len(_st["unverified"]) != 1 or not _st["unverified"][0]["why"] or _st["unverified"][0]["status"] != "unverified":
+        _f107(f"an unverified package is not listed apart with its reason: {_st['unverified']}")
+    for _s in _st["seats"]:
+        for _it in _s["items"]:
+            if _it.get("producer") not in ("open_case", "ethicalalt", "nikodemus") or ("deposition_id" not in _it and _s["kind"] not in ("document", "ruling")):
+                _f107(f"a seat item does not name its instrument and deposition: {_s['kind']} {_it}")
+    if _st["relationships"] or _st["declared"] or _fed.convergence(_room["room_id"])["timeline"]:
+        _f107("something was related or converged before any proposal or ruling")
+    _props = _fed.propose_mechanically(_room["room_id"])
+    if len(_props) != 3 or {p["relation"] for p in _props} != {"proposed_same_entity"} or {p["origin"] for p in _props} != {"mechanical"} \
+            or any("names are not identities" not in p["basis"] for p in _props):
+        _f107(f"the mechanical proposer did not propose the three exact name matches, by name: {[(p['a'], p['b']) for p in _props]}")
+    if _fed.propose_mechanically(_room["room_id"]) != _props or len(_fed.load_proposals()) != 3:
+        _f107("proposing twice duplicated proposals")
+    if _fed.declared_links(_room["room_id"]) or _fed.convergence(_room["room_id"])["timeline"] or _fed.room_state(_room["room_id"])["declared"]:
+        _f107("a proposal alone declared something")
+    for _bad_by in ("model", "mechanical", "friction"):
+        try:
+            _fed.rule_relationship(_props[0]["proposal_id"], "declared_same_entity", by=_bad_by)
+            _f107(f"{_bad_by} was allowed to rule on identity")
+        except ValueError:
+            pass
+    try:
+        _fed.rule_relationship(_props[0]["proposal_id"], "probably_same")
+        _f107("a ruling state outside the vocabulary was accepted")
+    except ValueError:
+        pass
+    _subject_prop = next(p for p in _props if p["b"].startswith("open_case:case:") or p["a"].startswith("open_case:case:"))
+    _ev_props = [p for p in _props if p is not _subject_prop]
+    _fed.rule_relationship(_ev_props[0]["proposal_id"], "rejected_match", note="a name only")
+    _fed.rule_relationship(_ev_props[1]["proposal_id"], "unresolved", note="not enough to say")
+    _cv = _fed.convergence(_room["room_id"])
+    if _cv["timeline"] or _cv["overlaps"] or _cv["links"] or "nothing converges" not in _cv["note"]:
+        _f107(f"a rejection or an unresolved match converged: {_cv}")
+    _st = _fed.room_state(_room["room_id"])
+    if {r["state"] for r in _st["relationships"]} != {"proposed_same_entity", "rejected_match", "unresolved"} or _st["declared"] \
+            or len([i for s in _st["seats"] if s["kind"] == "ruling" for i in s["items"]]) != 2:
+        _f107(f"the rulings are not shown as rulings, apart from the declaration: {[r['state'] for r in _st['relationships']]}")
+    _fed.rule_relationship(_subject_prop["proposal_id"], "declared_same_entity", note="the owner declares")
+    _cv = _fed.convergence(_room["room_id"])
+    if len(_cv["links"]) != 1 or _cv["links"][0]["state"] != "declared_same_entity" or len(_cv["timeline"]) != 7 or len(_cv["overlaps"]) != 2 \
+            or _cv["interpretation"]["built"] is not False or _cv["window_days"] != 90:
+        _f107(f"after the owner's declaration the convergence is not the two instruments' dated records and the in-window pairs: {len(_cv['timeline'])} {len(_cv['overlaps'])}")
+    if [t["date"] for t in _cv["timeline"] if t["date"]] != sorted(t["date"] for t in _cv["timeline"] if t["date"]) or _cv["timeline"][-1]["date"] != "":
+        _f107("the timeline is not in date order with the undated last")
+    for _t in _cv["timeline"]:
+        if _t["producer"] not in ("open_case", "ethicalalt") or not _t["record"].startswith(_t["producer"] + ":") or not _t["deposition_id"] or not _t["label_attributed_to"]:
+            _f107(f"a timeline row does not cite its instrument, record and label owner: {_t}")
+    for _o in _cv["overlaps"]:
+        if _o["days_apart"] > 90 or "not a claim of relation" not in _o["sentence"] or "caus" in _o["sentence"].lower().replace("because", ""):
+            _f107(f"an overlap sentence claims more than a mechanical intersection: {_o}")
+    # a change of mind is kept, never overwritten: the latest ruling wins, the earlier one stays in the log
+    _fed.rule_relationship(_subject_prop["proposal_id"], "unresolved", note="on reflection")
+    if _fed.relationship_state(_subject_prop["proposal_id"]) != "unresolved" or _fed.convergence(_room["room_id"])["timeline"] \
+            or len([r for r in _fed.load_rulings() if r["proposal_id"] == _subject_prop["proposal_id"]]) != 2:
+        _f107("re-ruling did not supersede visibly, or convergence survived the withdrawal")
+    _fed.rule_relationship(_subject_prop["proposal_id"], "declared_same_entity", note="declared again")
+    # same-named entities in different instruments are two until declared: a second Open Case case with the same subject name
+    if len({p["a"] for p in _fed.load_proposals()} | {p["b"] for p in _fed.load_proposals()}) != 4:
+        _f107("the proposer collapsed same-named records into fewer identities than there are records")
+    # the clock discipline (item 58): a row whose recorded_at precedes the log's last is labeled, never silently taken
+    _saved_now = cli._now
+    try:
+        cli._now = lambda: "2020-01-01T00:00:00+00:00"
+        _row = _fed._append(_fed.rooms_log(), {"kind": "probe", "room_id": "none"})
+    finally:
+        cli._now = _saved_now
+    if not _row.get("clock_regression") or not _row["clock_regression"].get("previous_recorded_at"):
+        _f107("a clock regression was taken silently")
+    if any(r.get("kind") == "probe" for r in _fed.load_rooms()):
+        _f107("a probe row became a room")
+
+    # ---- (7) offline reading: the producer gone, custody and the room still answer ----
+    _srv107.shutdown(); _srv107.server_close()
+    _r = _fed.import_from_connector(_ea_c, _EA_ID)
+    if _r.get("ok") or _r.get("outcome") != "dns_or_connection" or "nothing was imported" not in _r.get("detail", ""):
+        _f107(f"a producer that is gone is not a connection failure by name: {_r}")
+    _st = _fed.room_state(_room["room_id"])
+    if len(_st["depositions"]) != 4 or {s["kind"]: len(s["items"]) for s in _st["seats"]}["evidence"] != 3 or not _fed.convergence(_room["room_id"])["timeline"] \
+            or not _fed.verify_envelope(_json107.loads(_fed.deposition_bytes(_dep_ea)), _fed.get_connector("ea")["trusted_keys"])["ok"]:
+        _f107("with the producer offline, custody, the room or re-verification stopped answering")
+
+    # ---- (8) the routes: the gate, the doors, the bytes door, no credential in any page ----
+    with server.app.test_client() as _c107:
+        for _path in ("/investigation", "/api/connectors", "/api/depositions", "/api/investigations", "/api/federation/status"):
+            _r = _c107.get(_path)
+            if _r.status_code not in (302, 401) or (_r.status_code == 302 and not _r.headers.get("Location", "").endswith("/pair")):
+                _f107(f"unpaired {_path} answered {_r.status_code}")
+        if _c107.post("/api/connectors", json={"connector_id": "x"}).status_code not in (302, 401, 403):
+            _f107("an unpaired POST registered a connector")
+        if "/investigation" in server._GATE_PUBLIC:
+            _f107("/investigation was made public")
+        _paired(_c107)
+        _body = _c107.get("/investigation").get_data(as_text=True)
+        if "__BRAND_NAME__" in _body or "Nikodemus" not in _body or "7" * 20 in _body:
+            _f107("the investigation page is not served stamped, or carries a credential")
+        _r = _c107.post("/api/connectors", json={"connector_id": "oc2", "producer": "open_case", "base_url": "https://open-case.example", "credential_ref": "open_case_" + "8" * 64})
+        if _r.status_code != 400 or "reference" not in _r.get_json().get("error", ""):
+            _f107("the route accepted a credential value")
+        _r = _c107.get("/api/connectors").get_json()
+        if "7" * 20 in _json107.dumps(_r) or any("public_key_b64" not in t for c in _r["connectors"] for t in c["trusted_keys"]):
+            _f107("the connector listing carries a credential, or hides the pinned public keys")
+        _r = _c107.get(f"/api/depositions/{_dep_oc['deposition_id']}/bytes")
+        if _r.status_code != 200 or _r.get_data() != _oc_bytes or _r.headers.get("X-Deposition-Sha256") != _dep_oc["sha256"]:
+            _f107("the exact-bytes door does not return the bytes received, with their hash")
+        _r = _c107.post(f"/api/depositions/{_dep_oc['deposition_id']}/verify").get_json()
+        if not _r["verification"]["ok"] or not _r["byte_identical"]:
+            _f107(f"re-verification of the stored bytes failed: {_r}")
+        _r = _c107.get(f"/api/depositions/{_dep_oc['deposition_id']}").get_json()
+        if _r["deposition"]["status"] != "current" or not _r["representation"] or _r["record"]["how"] != "package":
+            _f107("the deposition door does not show the record, its status and its representation")
+        _r = _c107.post(f"/api/connectors/ea/import", json={"url": "https://evil.example/profile/exemplar-holdings"})
+        if _r.status_code != 400 or "nothing was fetched" not in _r.get_json().get("error", ""):
+            _f107("a foreign URL was fetched through the route")
+        _r = _c107.post("/api/identity/rule", json={"proposal_id": _props[0]["proposal_id"], "state": "declared_same_entity", "by": "model"})
+        if _r.status_code != 200 or _fed.load_rulings()[-1]["by"] != "owner":
+            _f107("a ruling through the route is not recorded as the owner's (the route is the owner's press, whatever the body says)")
+        _r = _c107.post("/api/identity/rule", json={"proposal_id": _props[0]["proposal_id"], "state": "maybe"})
+        if _r.status_code != 400:
+            _f107("an invalid ruling state passed the route")
+        _r = _c107.get(f"/api/investigations/{_room['room_id']}/convergence").get_json()
+        if len(_r["timeline"]) != 7:
+            _f107("the convergence route disagrees with the module")
+        _r = _c107.post("/api/federation/recognize", json={"url": _base107 + "/cases/" + _OC_ID}).get_json()
+        if not _r["recognized"] or _r["match"]["connector_id"] != "oc" or "never fetches" not in _r["note"]:
+            _f107(f"recognition through the route: {_r}")
+        _r = _c107.post("/api/destinations", json={"text": _base107 + "/cases/" + _OC_ID}).get_json()
+        if _r["shape"] != "url" or _r["suggested"] != "import_open_case" or not _r["connector_match"] \
+                or [d["id"] for d in _r["destinations"] if d["id"].startswith("import_")] != ["import_open_case"] \
+                or not next(d for d in _r["destinations"] if d["id"] == "import_open_case")["available"]:
+            _f107(f"the chooser does not read a configured instrument's address as its import: {_r['shape']} {_r['suggested']} {[d['id'] for d in _r['destinations']]}")
+        _r = _c107.post("/api/destinations", json={"text": "Exemplar Holdings"}).get_json()
+        _ids = {d["id"]: d for d in _r["destinations"]}
+        if "look_ethicalalt" not in _ids or "search_open_case" not in _ids or "investigation_room" not in _ids or not _ids["look_ethicalalt"]["available"] \
+                or _r["suggested"] == "look_ethicalalt":
+            _f107(f"a name does not offer the instrument doors as available (and not suggested): {list(_ids)} {_r['suggested']}")
+    # the same chooser with no connector configured: the doors are offered, dashed, with the reason; a URL is a shape, never fetched
+    _r = cli.suggest_destinations("https://open-case.example/cases/" + _OC_ID, connectors=[])
+    if _r["shape"] != "url" or _r["suggested"] != "question" or any(d["id"].startswith("import_") for d in _r["destinations"]) or _r["connector_match"]:
+        _f107(f"an address with no connector configured was read as an import: {_r['suggested']} {[d['id'] for d in _r['destinations']]}")
+    _r = cli.suggest_destinations("Exemplar Holdings", connectors=[])
+    _ids = {d["id"]: d for d in _r["destinations"]}
+    if _ids["look_ethicalalt"]["available"] is not False or "connector is configured" not in _ids["look_ethicalalt"]["why_unavailable"] \
+            or _ids["search_open_case"]["available"] is not False or _ids["investigation_room"].get("available", True) is not True:
+        _f107(f"unconfigured instrument doors are not dashed with the reason: {_ids['look_ethicalalt']}")
+    if cli.input_shape("http://example.com/x")["shape"] != "url" or cli.input_shape("see http://example.com/x and more")["shape"] == "url" \
+            or "url" not in cli.SHAPES:
+        _f107("a single web address is not its own shape, or a sentence with a link is")
+    if not any(t in _ins96.getsource(cli.suggest_destinations) for t in ("this function reads no file",)) or "open(" in _ins96.getsource(cli.suggest_destinations):
+        _f107("the chooser reads a file")
+
+    # ---- (9) no credential anywhere in the store, the fixtures, the logs ----
+    _needle = "7" * 30
+    for _p in _SCRATCH.rglob("*"):
+        if _p.is_file() and _needle in _p.read_text(encoding="utf-8", errors="replace"):
+            _f107(f"a credential value reached {_p.relative_to(_SCRATCH)}")
+    for _p in _fx107.iterdir():
+        _t = _p.read_text(encoding="utf-8", errors="replace")
+        if "PRIVATE KEY" in _t or _re107.search(r"priv(ate)?[_.]?key", _t, _re107.I) and _p.suffix != ".md":
+            _f107(f"a fixture carries private key material: {_p.name}")
+    if (_root107 / "tests" / "fixtures" / "federation" / "open_case.fixture.priv.b64").exists() or list((_root107 / "tests").rglob("*.priv.b64")) or list((_root107 / "scripts").rglob("*.priv*")):
+        _f107("a private fixture key is in the repository")
+    _sch = _json107.loads((_root107 / "schemas" / "deposition.schema.json").read_text(encoding="utf-8"))
+    try:
+        import jsonschema as _js107
+        for _env in (_oc_env, _ea_env, _json107.loads(_lg_bytes)):
+            _js107.validate(_env, _sch)
+        try:
+            _js107.validate({**_ea_env, "schema": "other"}, _sch)
+            _f107("the schema accepts an unknown envelope schema")
+        except _js107.ValidationError:
+            pass
+    except ImportError:
+        if _sch.get("$id") is None or "signature" not in _sch.get("required", []):
+            _f107("the deposition schema is not the contract (jsonschema not installed to validate)")
+
+    # ---- (10) the words: the ADR, the how-to, About & proof, the anatomy, the changelog ----
+    _adr = (_root107 / "docs" / "adr-federation.md").read_text(encoding="utf-8")
+    for _need in ("federation, not a merger", "borrow one, never unify six", "Names are not identities", "never an empty result", "pinned", "out of band",
+                  "ignored", "supersession", "unknown", "env:NAME", "Manual pull", "no polling", "legacy", "Deferred", "commands"):
+        if _need.lower() not in _adr.lower():
+            _f107(f"the ADR does not say {_need!r}")
+    _how = (_root107 / "docs" / "connectors.md").read_text(encoding="utf-8")
+    for _need in ("env:OPEN_CASE_API_KEY", "out of band", "fingerprint", "Exact bytes", "Re-verify", "never shown as", "credential_unavailable", "origin_refused"):
+        if _need not in _how:
+            _f107(f"the how-to does not say {_need!r}")
+    _idx107 = (_root107 / "webapp" / "index.html").read_text(encoding="utf-8")
+    for _need in ("Nikodemus can hold what your other instruments produce.", 'id="about-instruments"', "async function loadInstrumentsStatus()",
+                  "loadInstrumentsStatus();", 'href="/investigation"', "Open the instruments", "never “nothing found”", "declared, rejected or left",
+                  "unresolved by you alone"):
+        if _need not in _idx107:
+            _f107(f"About & proof or Home lost {_need!r}")
+    if _idx107.count('href="/investigation"') < 3:
+        _f107("the Investigation Room has fewer doors than the constitution, the status line and the Rooms place")
+    _tm = (_root107 / "docs" / "threat-model.md").read_text(encoding="utf-8")
+    for _need in ("block 107", "redirects are refused", "8 MB", "15-second", "env:NAME", "who signed, never that it is so"):
+        if _need not in _tm:
+            _f107(f"the threat model does not say {_need!r}")
+    if "v1.4.0" not in (_root107 / "docs" / "CHANGELOG.md").read_text(encoding="utf-8"):
+        _f107("the changelog has no v1.4.0")
+    _anat = (_root107 / "webapp" / "anatomy.html").read_text(encoding="utf-8")
+    _am = _re107.search(r'<script id="anatomy-data" type="application/json">\s*(.*?)\s*</script>', _anat, _re107.S)
+    _ad = _json107.loads(_am.group(1)) if _am else {}
+    _an = {n["id"]: n for n in _ad.get("nodes", [])}
+    _ins = _an.get("instruments", {}); _cmd = _an.get("instrument_commands", {})
+    if _ins.get("kind") != "instrument" or "Open Case" not in _ins.get("tag", "") or "EthicalAlt" not in _ins.get("tag", "") or "scripts/federation.py" not in (_ins.get("witness") or {}).get("modules", []):
+        _f107("the anatomy has no Connected Instruments organ witnessed by federation.py")
+    _wl = (_ad.get("layouts") or {}).get("wide", {}); _mb = _wl.get("membrane", {})
+    _ipos = (_ins.get("pos") or {}).get("wide", [0, 0, 0, 0]); _cpos = (_cmd.get("pos") or {}).get("wide", [0, 0, 0, 0])
+    def _outside(pos):
+        x, y, w, h = pos
+        return (x + w / 2 <= _mb.get("x", 0)) or (x - w / 2 >= _mb.get("x", 0) + _mb.get("w", 0)) or (y + h / 2 <= _mb.get("y", 0)) or (y - h / 2 >= _mb.get("y", 0) + _mb.get("h", 0))
+    if not _outside(_ipos) or not _outside(_cpos):
+        _f107("the instruments or their commands sit inside the private membrane")
+    if _cmd.get("kind") != "unbuilt" or _cmd.get("status") != "UNBUILT TISSUE" or (_cmd.get("witness") or {}).get("routes"):
+        _f107("the instrument commands are not drawn as unbuilt tissue without a route")
+    _ae = _ad.get("edges", [])
+    if not any(e["from"] == "instruments" and e["to"] == "sensory" and e["class"] == "feeds" and not e.get("future") for e in _ae):
+        _f107("the instruments do not feed the Sensory Tissue")
+    if not any(e["from"] == "owner" and e["to"] == "instrument_commands" and e.get("future") for e in _ae):
+        _f107("the command tissue is not reached from the Owner as a future pathway")
+    if any(e["from"] == "instruments" and e["to"] in ("memory", "owner") for e in _ae) or any(e["to"] == "instruments" and e["from"] not in ("owner",) for e in _ae):
+        _f107("an instrument has an arrow into Memory or the Owner, or is fed by an organ")
+    if ".organ.instrument .organ-shape" not in _anat or "connected instrument" not in _anat:
+        _f107("the instrument kind is not styled or labeled in the anatomy")
+    for _org, _need in (("sensory", "block 107"), ("rooms", "Investigation Room"), ("owner", "only the owner declares")):
+        if _need not in _json107.dumps(_an.get(_org, {})):
+            _f107(f"the {_org} organ does not mention {_need!r}")
+    if len(_ad.get("relationship_classes", [])) != 4:
+        _f107("the anatomy gained a fifth relationship class")
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

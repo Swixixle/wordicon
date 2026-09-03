@@ -37,7 +37,7 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
     const cl = await paired({ viewport: { width: 1280, height: 800 }, colorScheme: scheme });
     const pl = await cl.newPage(); await pl.goto(BASE + '/anatomy'); await pl.waitForTimeout(300);
     const fp = await pl.evaluate(() => { const r = id => document.querySelector(`.organ[data-id="${id}"]`).getBoundingClientRect(); const v = b => b.top >= 0 && b.bottom <= innerHeight; return { m: v(r('memory')), o: v(r('owner')), w: v(r('witness')), dim: document.querySelectorAll('.organ.is-dim').length, layout: LAYOUT, bg: getComputedStyle(document.body).backgroundColor, shapes: document.querySelectorAll('.organ').length }; });
-    ok(fp.m && fp.o && fp.w && fp.dim === 0 && fp.layout === 'wide' && fp.shapes === 15, `${scheme} scheme, 1280x800 first paint: memory/owner/witness on screen, nothing dimmed, 15 organs (${JSON.stringify(fp)})`);
+    ok(fp.m && fp.o && fp.w && fp.dim === 0 && fp.layout === 'wide' && fp.shapes === 17, `${scheme} scheme, 1280x800 first paint: memory/owner/witness on screen, nothing dimmed, 17 organs (${JSON.stringify(fp)})`);   // ledger (block 107): Connected Instruments and Instrument Commands joined the outside
     if (scheme === 'light') ok(fp.bg === 'rgb(17, 22, 29)', 'the page paints its own ground in light mode (' + fp.bg + ')');
     await cl.close();
   }

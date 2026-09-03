@@ -38,8 +38,24 @@ def _poisoned(*a, **k):
 server.server_gateway = _poisoned
 import speech  # noqa: E402
 speech.ENGINE = speech.MockEngine()   # block 106: the journeys transcribe with the mock, offline, deterministic
+# block 107: the mock producers on their own loopback port, and two development
+# connectors registered in the scratch state with the fixtures' public keys
+# pinned. The Open Case credential lives only in this process's environment,
+# named by reference on the connector. The journey imports on its own press;
+# nothing here fetches.
+import mock_producer  # noqa: E402
+import federation  # noqa: E402
+_producer, PRODUCER_PORT = mock_producer.start(int(os.environ.get("JOURNEY_PRODUCER_PORT", "0")))
+os.environ[mock_producer.OC_KEY_ENV] = "open_case_" + "j" * 64
+_pbase = f"http://127.0.0.1:{PRODUCER_PORT}"
+federation.register_connector("open-case-dev", "open_case", _pbase, display="Open Case (scratch)",
+                              credential_ref="env:" + mock_producer.OC_KEY_ENV, dev_loopback=True, by="journeys")
+federation.register_connector("ethicalalt-dev", "ethicalalt", _pbase, display="EthicalAlt (scratch)", dev_loopback=True, by="journeys")
+federation.pin_key("open-case-dev", (mock_producer.FIXTURES / "open_case.fixture.pub.b64").read_text().strip(), label="fixture key", by="journeys")
+federation.pin_key("ethicalalt-dev", (mock_producer.FIXTURES / "ethicalalt.fixture.pub.b64").read_text().strip(), label="fixture key", by="journeys")
 DIR.mkdir(parents=True, exist_ok=True)
+(DIR / "producer_port").write_text(str(PRODUCER_PORT))
 (DIR / "token").write_text(gate.issue_session("journeys")["token"])
 (DIR / "cookie").write_text(gate.SESSION_COOKIE)
-print(f"journey server: state={STATE} port={PORT} gateway=poisoned key=absent", flush=True)
+print(f"journey server: state={STATE} port={PORT} gateway=poisoned key=absent producers=127.0.0.1:{PRODUCER_PORT}", flush=True)
 server.app.run(host="127.0.0.1", port=PORT, debug=False, threaded=True)
