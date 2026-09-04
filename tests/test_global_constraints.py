@@ -16433,12 +16433,26 @@ console.log(out.join('\\n'));
                                 ("'cancelling spent nothing at all: '", "nothing proves cancelling spends nothing"),
                                 ("'one press starts exactly one run, with no second form: '", "nothing proves one press is one run"),
                                 ("'the room has NOT split while the run is still going: '", "nothing proves the split waits for the answer"),
-                                ("'clicking it runs nothing: '", "nothing proves the expansion fires nothing")):
+                                ("'clicking it runs nothing: '", "nothing proves the expansion fires nothing"),
+                                # exact, and the same sentence run.sh greps for: a battery that runs
+                                # only the suite cannot see run.sh's guards, and this one walked past
+                                # a looser needle once already
+                                ("'it renders as this page\\'s unbuilt door \u2014 dashed, inert, naming its own reason \u2014 not as a '",
+                                 "nothing proves the expansion RENDERS as unbuilt rather than as a broken button")):
                 if _need not in _j2:
                     _fP2(_why + f" ({_need})")
             _run2 = (_rootP2 / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
             if _re.search(r"^for j in .*\bdeep\b", _run2, _re.M) is None:
                 _fP2("the deep journey exists but is not in the list run.sh runs")
+            # The two halves have to hold each other up. The suite can prove the
+            # sentence is IN deep.js; only run.sh can prove it was PRINTED, because
+            # run.sh greps the log the run actually produced. So the suite pins that
+            # run.sh still demands it — otherwise deleting one guard quietly retires
+            # the other, and the door goes back to looking broken with nothing failing.
+            if "it renders as this page's unbuilt door" not in _run2:
+                _fP2("run.sh no longer requires the unbuilt-door check to have PRINTED, "
+                     "so the suite's source pin is the only thing left and nothing "
+                     "proves the check ran")
     _pass2()
 
     # ---- did any of this land in the owner's real store? -------------
