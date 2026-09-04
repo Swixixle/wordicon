@@ -2847,19 +2847,24 @@ function expansionCard(d) {
   const groups = (d.groups || []).filter(g => g.result && (g.result.candidates || []).length);
   if (!groups.length) return '';
   const n = groups.length * 3;
+  // Rendered in the page's own unbuilt-door idiom — the same dashed .dest.unbuilt
+  // with a NOT BUILT line that the destination chooser uses — rather than as a
+  // greyed-out primary button. A disabled button reads as broken; a dashed door
+  // that names its own state reads as a decision not yet taken, which is what
+  // this is. The reviewer was right that the first version failed that test.
   return `<div class="card" id="deep-expansion" style="margin-top:10px">
     <div class="section-label" style="margin-top:0">And the rest</div>
     <p class="body">Run <strong>archetype</strong>, <strong>sprout</strong> and <strong>refract</strong>
       on every component — <strong>${groups.length} component${groups.length === 1 ? '' : 's'} × 3 instruments
       = up to ${n} more model calls.</strong> Counted from the components that came back, not estimated.</p>
-    <p class="body muted" style="font-size:12.5px">Not built yet, and deliberately: firing three
-      instruments across every component is its own machinery, and one of the three is
-      <strong>sprout</strong> — the stage that has never once in fifty-eight runs come back empty. It
-      belongs behind a decision, not behind a button that already exists. Each candidate below still
-      carries its own ⤷ Sprout, ⇄ Refract and archetype, one at a time, chosen.</p>
-    <button class="go-btn" disabled aria-disabled="true"
-      style="background:var(--panel-2);color:var(--muted);border:1px dashed var(--border)">
-      Run all three on every component — up to ${n} model calls · not built yet</button>
+    <button class="dest unbuilt" id="deep-expansion-door" disabled aria-disabled="true"
+      style="min-width:0;width:100%">Run all three on every component
+      <span class="dest-sub">up to ${n} model calls, on ${groups.length} component${groups.length === 1 ? '' : 's'}</span>
+      <span class="dest-status">not built — fanning three instruments across every component is its
+      own machinery, and one of the three is sprout, which has never once in fifty-eight runs come
+      back empty</span></button>
+    <p class="body muted" style="font-size:12.5px;margin-top:8px">Each candidate below still carries
+      its own ⤷ Sprout, ⇄ Refract and archetype, one at a time, chosen.</p>
   </div>`;
 }
 

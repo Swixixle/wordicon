@@ -16279,9 +16279,22 @@ console.log(out.join('\\n'));
             _fP2("Cmd+Shift+T is bound again — that is Reopen Last Closed Tab in Safari and in "
                  "Chrome, a browser-chrome binding a page cannot cancel, so every press would "
                  "also open a stray tab")
-        # ...and the reason is written down where the next person will read it
+        # ...and the reason is written down where the next person will read it,
+        # in the source AND as a deviation record, because a chord that differs
+        # from the one ruled is a deviation and has to be findable as one
         if "Reopen Last Closed Tab" not in _idxP2:
             _fP2("nothing says why the paragraph chord is not the one that was asked for")
+        _devP2 = _rootP2 / "docs" / "adr-shortcut-deviation.md"
+        if not _devP2.exists():
+            _fP2("the shortcut deviation has no record — the chord that shipped is not the chord "
+                 "that was ruled, and that has to be findable")
+        else:
+            _dv = _devP2.read_text(encoding="utf-8")
+            for _need, _why in (("Reopen Last Closed Tab", "the deviation record does not name the conflict"),
+                                ("Not proved here", "the deviation record does not admit what this environment could not measure"),
+                                ("behind **Aa**", "the deviation record does not name the visible alternative")):
+                if _need not in _dv:
+                    _fP2(_why)
 
         # ---- a keystroke opens a question; it does not spend --------------
         # found by the battery: slicing on a long literal meant a mutation that
@@ -16374,9 +16387,17 @@ console.log(out.join('\\n'));
             _fP2("the expansion's count is not taken from the components that actually came back")
         if "groups.length * 3" not in _exp:
             _fP2("the expansion does not price three instruments per component")
-        if "disabled aria-disabled=\"true\"" not in _exp or "not built yet" not in _exp:
-            _fP2("the expansion is a live button — nothing in that second stage may run, least of "
-                 "all by itself")
+        # It must read as an unbuilt DOOR, not as a broken button. The page has
+        # one idiom for this already — the destination chooser's dashed
+        # .dest.unbuilt with a NOT BUILT line naming the reason — and the first
+        # version of this card used a greyed-out primary button instead, which
+        # reads as a failure rather than as a decision not yet taken.
+        if 'class="dest unbuilt"' not in _exp or "dest-status" not in _exp:
+            _fP2("the expansion does not use the page's own unbuilt-door rendering — a disabled "
+                 "primary button reads as broken rather than as unbuilt")
+        if "disabled aria-disabled=\"true\"" not in _exp or "not built —" not in _exp:
+            _fP2("the expansion is a live button, or does not say it is unbuilt and why — nothing "
+                 "in that second stage may run, least of all by itself")
         for _bad in ("submitRun", "fetch(", "onclick=\"run"):
             if _bad in _exp:
                 _fP2(f"the expansion can fire ({_bad})")

@@ -169,8 +169,19 @@ function deepResult() {
   });
   ok(exp && /3 components × 3 instruments = up to 9 more model calls/.test(exp.text),
     'the expansion is counted from the components that actually came back: ' + (exp ? exp.text.slice(0, 120) : 'missing'));
-  ok(exp.disabled && exp.aria === 'true' && /not built yet/.test(exp.text),
+  const doorLook = await page.evaluate(() => {
+    const b = document.getElementById('deep-expansion-door');
+    if (!b) return null;
+    const cs = getComputedStyle(b);
+    return { cls: b.className, border: cs.borderTopStyle, cursor: cs.cursor,
+             status: (b.querySelector('.dest-status') || {}).textContent || '' };
+  });
+  ok(exp.disabled && exp.aria === 'true' && /not built —/.test(exp.text),
     'and it is a door with its price on it, not a button that fires nine calls');
+  ok(doorLook && /\bunbuilt\b/.test(doorLook.cls) && doorLook.border === 'dashed'
+     && doorLook.cursor === 'not-allowed' && /sprout/.test(doorLook.status),
+    'it renders as this page\'s unbuilt door — dashed, inert, naming its own reason — not as a '
+    + 'greyed-out button that reads as broken: ' + JSON.stringify(doorLook));
   const afterExp = posts.length;
   await page.evaluate(() => { const b = document.querySelector('#deep-expansion button'); b.click(); });
   await page.waitForTimeout(400);
