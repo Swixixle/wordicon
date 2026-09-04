@@ -13423,6 +13423,11 @@ console.log(out.join('\\n'));
                 or (_new[0].get("cites") or {}).get("judgment_id") != "jdg_cli_candidate_r103a" \
                 or (_new[0].get("cites") or {}).get("receipt_id") != "rcpt_trace_cli_r103a" or _new[0].get("reason") != "kept, defined by me":
             _f103(f"the Accept judgment does not carry its clock, epoch, origin, identity and citations: {_new}")
+        # The ruling's own clock, taken from the row that was just proved to
+        # carry it. The card below is compared against THIS — not against a
+        # month written into the test — so the check stays true in October, in
+        # 2027, and under any timezone.
+        _accept_ruled_at = (_new[0] if _new else {}).get("ruled_at") or ""
         _acc_after = _json103.loads(cli.ACCEPTED_CONCEPTS_PATH.read_text())
         _entry = next((e for e in _acc_after if e.get("concept_id") == _cid), None)
         if not _entry or _entry.get("definition") != "a standing army's stillness, read as a policy" or not str(_entry.get("id", "")).startswith("acc2_"):
@@ -13499,11 +13504,45 @@ console.log(out.join('\\n'));
         _mint_src = _mint_src[_mint_src.index("def _mint_concept_id("):_mint_src.index("def rule(")]
         if "uuid.uuid4()" not in _mint_src or "hashlib" in _mint_src or "title" in _mint_src.replace("unrelated to any title", ""):
             _f103("the concept identity is not minted from randomness alone")
-        # the accepted concept is a Continue card by its minted id, dated by the ruling's clock
-        _cards = [c for c in (_h.get("continue") or []) if c.get("kind") == "concept"]
-        _mine = next((c for c in _cards if c.get("id") == _cid), None)
-        if not _mine or (_mine.get("shelf") or {}).get("via") != "concept_id" or not (_mine.get("when") or "").startswith("2026-09"):
-            _f103(f"the recovered concept is not a Continue card by its id, dated by its ruling: {_mine and (_mine.get('shelf'), _mine.get('when'))}")
+        # The accepted concept is a Continue card by its minted id, dated by
+        # the ruling's own clock.
+        #
+        # THIS CHECK USED TO BE FLAKY, and the cause was the check rather than
+        # the code. It read `/api/home`, whose `continue` list is the TOP EIGHT
+        # cards by time, built from at most six concepts. Seven concept cards
+        # compete for those six slots in this state (block 94's twin, block
+        # 99's pair, and this block's four rulings), so which one falls off is
+        # decided by wall-clock ordering. The four rulings here are issued in a
+        # few milliseconds and therefore almost always share one second, which
+        # left them tied and kept this one at the front of its group. When the
+        # run happened to straddle a second tick between the Accept and the
+        # three rulings after it, the Accept became a second older than its
+        # siblings, dropped below the fixtures that carry MICROSECONDS — and a
+        # microsecond stamp sorts above a whole-second one, because these are
+        # compared as strings and '.' outranks '+' — and fell off the six. The
+        # card was never missing; it was ranked seventh.
+        #
+        # Forced by inserting a one-second pause between the Accept and the
+        # rulings that follow it, which reproduces the failure every time.
+        #
+        # So the assertion is made where the claim actually lives: the card
+        # BUILDER, uncapped. Whether Home has room to show it today is a
+        # question about how many other things the owner ruled on this
+        # afternoon, and was never what this block is about.
+        _all103, _ = server._home_concepts(limit=10_000)
+        _mine = next((c for c in _all103 if c.get("id") == _cid), None)
+        if not _mine or _mine.get("kind") != "concept":
+            _f103(f"the recovered concept is not a Continue card by its minted id: "
+                  f"{[c.get('id') for c in _all103]}")
+        elif (_mine.get("shelf") or {}).get("via") != "concept_id":
+            _f103(f"the recovered concept's card does not reach the shelf by its id: {_mine.get('shelf')}")
+        elif not _accept_ruled_at or _mine.get("when") != _accept_ruled_at:
+            _f103(f"the card is not dated by its ruling's own clock: card says "
+                  f"{_mine.get('when')!r}, the ruling says {_accept_ruled_at!r}")
+        # and the endpoint still paints — the top-eight view is allowed to be
+        # full, but it may not be broken
+        if not isinstance(_h.get("continue"), list) or _h.get("continue_total") is None:
+            _f103(f"/api/home did not return a Continue list at all: {list(_h)[:8]}")
         # the epoch endpoint and the visible owner action; the declaration file untouched by reads
         _e = _c103.get("/api/epoch").get_json() or {}
         if _e.get("epoch") != "development_and_calibration" or len(_e.get("declarations") or []) != 1:
@@ -16753,6 +16792,57 @@ console.log(out.join('\\n'));
                                 "the brief's own words, that Settle predates its name, that Ink "
                                 "is licensed only DURING arrival, and what was not measured")
     _pass109d()
+
+    # ---- block 110: this file's own two failures ---------------------------
+    #
+    # Block 103 carried both kinds of bad test at once and they are pinned here
+    # so neither can come back quietly.
+    #
+    # The FLAKE was the check, not the code: it asserted through `/api/home`,
+    # whose Continue list is the top eight cards by time over at most six
+    # concepts, and seven concepts compete for those six in that state. The
+    # card was never missing — it was ranked seventh whenever the four rulings
+    # straddled a second tick. The assertion now runs against the card builder,
+    # uncapped, which is where the claim actually lives.
+    #
+    # The DATE BOMB was `startswith("2026-09")` — an assertion against the
+    # month the suite happened to be written in, which would have gone red on
+    # 1 October whatever the code did. The card is now compared to the ruling's
+    # own recorded clock, so it is true in any month, year or timezone.
+    def _pass110():
+        _self = _pathlib.Path(__file__).read_text(encoding="utf-8")
+        i = _self.index("# THIS CHECK USED TO BE FLAKY")
+        _region = _self[i:i + 4000]
+        if "server._home_concepts(limit=10_000)" not in _region:
+            failures.append("110: block 103's card check reads the capped Continue view again. "
+                            "That view holds six concepts out of the seven this state builds, so "
+                            "which one falls off is decided by which second the rulings landed in "
+                            "— the flake, exactly as it was")
+        if '_mine.get("when") != _accept_ruled_at' not in _region:
+            failures.append("110: block 103 no longer compares the card's date to the ruling's own "
+                            "recorded clock, which is the only comparison that stays true past "
+                            "this month")
+        if _re.search(r'startswith\("20\d\d-\d\d"\)', _region):
+            failures.append("110: a wall-clock month literal is back in block 103's card check. "
+                            "An assertion that a timestamp begins with THIS month is a test that "
+                            "turns red on the first of the next one")
+        # and nowhere else in this file may an assertion be pinned to the
+        # month the suite is running in. Fixture dates written INTO fixtures
+        # are fine and are how the clock is meant to be fixed; it is comparing
+        # a live value to today's month that is the defect.
+        # Code only. A comment is allowed to name the defect it removed, and
+        # scanning prose for it is how this guard first went off at itself.
+        _mon = _datetime110.now(_tz110.utc).strftime("%Y-%m")
+        for _ln, _line in enumerate(_self.splitlines(), 1):
+            if _line.lstrip().startswith("#"):
+                continue
+            _m = _re.search(r'startswith\("(20\d\d-\d\d)', _line)
+            if _m and _m.group(1) == _mon:
+                failures.append(f"110: line {_ln} asserts a timestamp startswith {_m.group(1)!r}, "
+                                "which is the month this suite is running in — it will pass today "
+                                "and fail on the first of next month for no reason at all")
+    from datetime import datetime as _datetime110, timezone as _tz110
+    _pass110()
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

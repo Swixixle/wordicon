@@ -1,5 +1,52 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.4.4 — two defects in the suite itself
+
+Neither of these was in the application. Both were in the file that is
+supposed to be able to prove the application, which makes them worse than
+their size.
+
+**The flake, and it was the test.** Block 103 asserted that a recovered
+concept appears as a Continue card by reading `/api/home`, whose `continue`
+list is the top eight cards by time, built from at most six concepts. Seven
+concept cards compete for those six slots in that fixture state — block 94's
+twin, block 99's pair, and block 103's own four rulings. All four rulings are
+issued within a few milliseconds and therefore normally share one wall-clock
+second, which left them tied and kept the Accept at the head of its group.
+When a run happened to straddle a second tick between the Accept and the three
+rulings after it, the Accept became a second older than its siblings, dropped
+below the fixtures that carry microseconds — a microsecond stamp sorts above a
+whole-second one, because these are compared as strings and `.` outranks `+` —
+and fell off the six. The card was never missing; it was ranked seventh.
+Reproduced deterministically by inserting a one-second pause between the
+Accept and the rulings that follow it. The assertion now runs against the card
+builder, uncapped, which is where the claim actually lives; whether Home has
+room to show the card today is a question about how much else was ruled on
+that afternoon and was never what the block was about. No retries, no sleeps,
+and nothing weakened: the check is strictly more specific than it was.
+
+**The date bomb.** The same check asserted `startswith("2026-09")` — the month
+the block was written in. It would have gone red on 1 October whatever the
+code did. The card is now compared to the ruling's own recorded clock, taken
+from the judgment row the block has already proved carries one, so the
+assertion is true in any month, year or timezone; it also narrowed from a
+thirty-day window to a single value. A sweep of the rest of the file found no
+other assertion pinned to a live clock — the other fourteen date literals are
+fixture inputs, which is the fixed-clock pattern this repair moves toward.
+
+**Block 110** pins both: block 103's card check must read the builder rather
+than the capped view, must compare to the ruling's own clock, and no line of
+this file may assert that a timestamp begins with the month the suite is
+currently running in. All four guards were verified by mutation, including one
+that plants a live month literal and confirms the guard finds it by line
+number.
+
+Recorded but not repaired, because it is runtime behaviour and outside this
+cleanup: Home compares ISO timestamps of mixed precision as strings, so a
+record written with microseconds always outranks one written with whole
+seconds inside the same second. It changes only the order of same-second
+cards, and no manual check depends on it.
+
 ## v1.4.3 — the four defects the owner's manual pass found
 
 The manual writing-room pass did not pass. Four defects, all in work that had
