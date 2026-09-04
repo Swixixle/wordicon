@@ -153,6 +153,47 @@ const DRAFT = [
   await page.evaluate(d => { const ta = document.getElementById('compose-text'); ta.value = d; ta.dispatchEvent(new Event('input')); }, DRAFT);
   await page.waitForTimeout(800);
 
+  // ---- 1c. the picture is never the thing you touch --------------------
+  // The animated copy must be inert: no pointer, no accessibility, no
+  // selection. Two of the three come from the parent and one did not, so this
+  // measures the BEHAVIOUR rather than trusting the cascade.
+  // a repaint leaves the ink as plain text with no spans at all, so type a
+  // few characters first — the copies only exist while something is arriving
+  await page.click('#compose-text');
+  await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.setSelectionRange(ta.value.length, ta.value.length); });
+  await page.keyboard.type(' still', { delay: 0 });
+  const contained = await page.evaluate(() => {
+    const ink = document.getElementById('ink');
+    const g = document.querySelector('#ink .g.landing') || document.querySelector('#ink .g');
+    if (!g) return { none: true };
+    const cs = getComputedStyle(g), bf = getComputedStyle(g, '::before');
+    const r = g.getBoundingClientRect();
+    const under = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return { aria: ink.getAttribute('aria-hidden'),
+             pointer: [cs.pointerEvents, bf.pointerEvents],
+             select: [cs.userSelect || cs.webkitUserSelect, bf.userSelect || bf.webkitUserSelect],
+             hit: under ? (under.id || under.tagName) : null };
+  });
+  ok(contained.aria === 'true' && contained.pointer.every(v => v === 'none') && contained.select.every(v => v === 'none'),
+    'the picture and its animated copies are hidden from the reader, the pointer and the selection: ' + JSON.stringify(contained));
+  ok(contained.hit === 'compose-text',
+    'the pointer over a drawn letter reaches the writing, not the picture: ' + JSON.stringify(contained.hit));
+  // the draft exists to be selected exactly ONCE, and it is the real one
+  const selCount = await page.evaluate(() => {
+    document.getElementById('compose-text').blur();
+    const sel = window.getSelection(); sel.removeAllRanges();
+    const rg = document.createRange(); rg.selectNodeContents(document.body); sel.addRange(rg);
+    const s = sel.toString(); sel.removeAllRanges();
+    return (s.match(/The refusenik posture/g) || []).length;
+  });
+  ok(selCount === 0, 'selecting the whole page does not pick up the picture\'s copy of the draft: ' + selCount);
+  await page.click('#compose-text');
+  await page.keyboard.press('ControlOrMeta+a');
+  const selected = await page.evaluate(() => { const ta = document.getElementById('compose-text'); return { text: ta.value.substring(ta.selectionStart, ta.selectionEnd), whole: ta.value }; });
+  ok(selected.text === selected.whole && (selected.text.match(/The refusenik posture/g) || []).length === 1,
+    'selecting in the room returns the draft exactly once: ' + selected.text.length + ' of ' + selected.whole.length + ' characters');
+  await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.setSelectionRange(0, 0); ta.focus(); });
+
   // ---- 2. arrows across wrapped lines, and back ------------------------
   await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.focus(); ta.setSelectionRange(40, 40); });
   const down = []; for (let i = 0; i < 4; i++) { await page.keyboard.press('ArrowDown'); down.push(await page.evaluate(() => document.getElementById('compose-text').selectionStart)); }
@@ -229,6 +270,34 @@ const DRAFT = [
 
   ok(errs.length === 0, 'no page errors across the room journey: ' + JSON.stringify(errs));
   await ctx.close();
+
+  // ---- 8. reduced motion shows the REAL letter, immediately -------------
+  // There is no animationend when there is no animation, so nothing may wait
+  // for the class to come off: the copy must not be drawn and the letter must
+  // paint itself. Getting this wrong makes the text invisible for exactly the
+  // people who asked for less motion.
+  const rmCtx = await browser.newContext({ viewport: { width: 1200, height: 700 }, reducedMotion: 'reduce' });
+  await rmCtx.addCookies([{ name: fs.readFileSync(path.join(DIR, 'cookie'), 'utf8').trim(),
+                            value: fs.readFileSync(path.join(DIR, 'token'), 'utf8').trim(),
+                            domain: '127.0.0.1', path: '/' }]);
+  const rmPage = await rmCtx.newPage();
+  await rmPage.goto(BASE + '/'); await rmPage.waitForTimeout(1100);
+  await rmPage.evaluate(() => openWorkspace('write')); await rmPage.waitForTimeout(400);
+  await rmPage.click('#compose-text');
+  await rmPage.keyboard.type('Letters arrive and then they are simply words.', { delay: 0 });
+  const rm = await rmPage.evaluate(() => {
+    const gs = Array.from(document.querySelectorAll('#ink .g'));
+    const g = gs.find(x => x.classList.contains('landing')) || gs[0];
+    const cs = getComputedStyle(g), bf = getComputedStyle(g, '::before');
+    return { landing: gs.filter(x => x.classList.contains('landing')).length,
+             color: cs.color, beforeContent: bf.content,
+             text: document.getElementById('ink').textContent };
+  });
+  ok(rm.landing > 0 && rm.color !== 'rgba(0, 0, 0, 0)' && rm.beforeContent === 'none',
+    'with motion reduced the real letter is visible at once and no copy is drawn: ' + JSON.stringify(rm));
+  ok(rm.text === 'Letters arrive and then they are simply words.',
+    'and the picture still holds exactly the draft: ' + JSON.stringify(rm.text));
+  await rmCtx.close();
   await browser.close();
   finish('room');
 })().catch(e => { console.log('FAIL journey crashed: ' + (e && e.stack || e)); process.exit(1); });

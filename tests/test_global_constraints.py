@@ -16092,6 +16092,22 @@ console.log(out.join('\\n'));
         if "addEventListener('animationend', () => el.classList.remove('landing'), {once: true})" not in _idxP1:
             _fP1("a landed letter never stops being a landing letter — it stays an atomic "
                  "box and keeps its compositing layer forever")
+        # Containment, proved at the parent rather than repeated on the copy.
+        # pointer-events was already here; user-select was NOT, and without it a
+        # select-all with focus outside the box picked up the PICTURE's copy of
+        # the draft instead of the real one. aria-hidden keeps the whole layer
+        # out of the reader. Three guarantees, one place, and the journey
+        # measures the behaviour rather than trusting the cascade.
+        _inkRule = _re.search(r"\n  \.ink \{([^}]*)\}", _idxP1)
+        for _need, _why in (("pointer-events: none", "the picture can be clicked"),
+                            ("user-select: none", "the picture's copy of the draft can be selected — "
+                             "a select-all outside the box returns it instead of the real one"),
+                            ("-webkit-user-select: none", "Safari is not covered by the selection guard")):
+            if not _inkRule or _need not in _inkRule.group(1):
+                _fP1(f"{_why} ({_need} is not on the ink layer)")
+        if 'id="ink" class="ink" aria-hidden="true"' not in _idxP1:
+            _fP1("the picture is not hidden from the accessibility tree — the draft would be "
+                 "announced twice, once as a picture of itself")
         _rm = _re.search(r"@media \(prefers-reduced-motion: reduce\) \{([^}]*\}[^}]*)\}", _idxP1)
         if not _rm or "content: none" not in _rm.group(1) or "color: inherit" not in _rm.group(1):
             _fP1("with motion reduced there is no animationend to take the class off, so the "
@@ -16160,6 +16176,12 @@ console.log(out.join('\\n'));
                                 ("while the letters are still animating",
                                  "nothing measures the caret DURING the 360ms window, which is where "
                                  "the second half of this bug lived"),
+                                ("the picture and its animated copies are hidden from the reader",
+                                 "nothing measures that the copy is inert to pointer, reader and selection"),
+                                ("selecting in the room returns the draft exactly once",
+                                 "nothing proves a selection returns the draft once rather than twice"),
+                                ("with motion reduced the real letter is visible at once",
+                                 "nothing proves reduced motion reveals the real letter instead of hiding it"),
                                 ("no wrap point moves while the letters are still animating",
                                  "nothing compares the wrap points during the animation against the "
                                  "settled truth")):

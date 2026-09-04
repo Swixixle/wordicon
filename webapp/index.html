@@ -137,7 +137,16 @@
   .ink-wrap { position: relative; flex: 1 1 auto; min-width: 0; display: flex;
     width: 100%; max-width: var(--write-measure, 60ch); margin: 0 auto; }
   .compose-cols .ink-wrap textarea { flex: 1 1 auto; }
+  /* The picture is never the thing you touch. pointer-events was already
+     here and covers the mouse — the hit test over a drawn letter reaches the
+     textarea, not this. user-select is the other half and was missing: the
+     ink holds a second copy of the draft, and without this a select-all with
+     focus outside the box selects the PICTURE's copy rather than the real
+     one. It is one declaration on the parent, inherited by the glyphs and by
+     the animated copies, and aria-hidden on the element keeps the whole
+     layer out of the accessibility tree. Three guarantees, one place. */
   .ink { position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+    -webkit-user-select: none; user-select: none;
     white-space: pre-wrap; overflow-wrap: break-word; color: var(--write-ink);
     line-height: 1.65; letter-spacing: 0.01em; }
   /* The real box goes transparent and rides on top: it owns the caret, the
