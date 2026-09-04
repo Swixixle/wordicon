@@ -16092,6 +16092,38 @@ console.log(out.join('\\n'));
         if "addEventListener('animationend', () => el.classList.remove('landing'), {once: true})" not in _idxP1:
             _fP1("a landed letter never stops being a landing letter — it stays an atomic "
                  "box and keeps its compositing layer forever")
+        # ---- the paint contract, clause by clause ------------------------
+        # "Paint may mirror the writing, but it may never own layout,
+        #  selection, input, pointer behavior, clipboard content, or
+        #  accessibility meaning. The editor remains the sole semantic text."
+        # An implementation contract, deliberately not an interface law — it
+        # binds this file and these tests, and the owner should never have to
+        # read it on a page. Every clause below is enforced, not described.
+        _CONTRACT = ("Paint may mirror the writing, but it may never own layout, selection,\n"
+                     "       input, pointer behavior, clipboard content, or accessibility meaning.\n"
+                     "       The editor remains the sole semantic text.")
+        if _CONTRACT not in _idxP1:
+            _fP1("the paint contract is not stated in the room's own source, verbatim — every "
+                 "future arrival effect is governed by it and nothing else says so")
+        # clause: INPUT. The picture takes no keys, no focus, and is never the
+        # editable thing. A contenteditable ink layer is the failure this whole
+        # design exists to avoid.
+        _inkTag = _re.search(r'<div id="ink"[^>]*>', _idxP1)
+        for _bad in ("contenteditable", "tabindex", "onclick", "oninput", "onkeydown"):
+            if not _inkTag or _bad in _inkTag.group(0):
+                _fP1(f"the picture takes input ({_bad}) — the editor is the only thing that does")
+        # clause: CLIPBOARD. Nothing in the layer intercepts a copy, and the
+        # animated letter is drawn by generated content, which no clipboard
+        # carries — the journey measures the result.
+        _inkJs = _idxP1[_idxP1.index("function paintInk(text, fromIndex)"):_idxP1.index("function applyInk()")]
+        for _bad in ("addEventListener('copy'", "addEventListener('cut'", "addEventListener('paste'",
+                     "navigator.clipboard"):
+            if _bad in _inkJs:
+                _fP1(f"the picture touches the clipboard ({_bad})")
+        if "content: attr(data-ch)" not in _idxP1:
+            _fP1("the animated letter is drawn from real DOM text rather than generated content — "
+                 "a clipboard would carry it twice")
+
         # Containment, proved at the parent rather than repeated on the copy.
         # pointer-events was already here; user-select was NOT, and without it a
         # select-all with focus outside the box picked up the PICTURE's copy of

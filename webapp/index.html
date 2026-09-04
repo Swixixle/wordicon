@@ -117,7 +117,28 @@
     letter-spacing: 0.01em; font-family: inherit; }
   .compose textarea:focus { outline: none; border: none; }
 
-  /* ---- letters landing -------------------------------------------------
+  /* ==== THE WRITING ROOM'S PAINT CONTRACT ==============================
+
+       Paint may mirror the writing, but it may never own layout, selection,
+       input, pointer behavior, clipboard content, or accessibility meaning.
+       The editor remains the sole semantic text.
+
+     Ruled after two halves of one bug. Glyphs drawn as inline-blocks made the
+     picture break lines between CHARACTERS while the textarea broke them
+     between WORDS, so clicking a letter put the caret fifteen characters
+     away; and the letters still inside the 360ms window moved the wrap point
+     under the cursor by thirty-nine more. Both were paint owning layout.
+     Then the picture's copy of the draft turned out to be selectable, which
+     was paint owning selection.
+
+     This governs every future arrival effect — gel, ripple, drip, whatever
+     comes next. It is an implementation contract, not an interface law: it
+     binds this file and the tests, and it is not something the owner should
+     ever have to read on a page. Each clause is enforced mechanically in
+     tests/test_global_constraints.py (pass 1) and measured in real WebKit by
+     tests/journeys/room.js.
+
+     ---- letters landing -------------------------------------------------
      The textarea stays the writing. It is not replaced by a contenteditable
      and it is not read from a DOM: it keeps its value, its undo stack, its
      spellcheck and its selection, and everything below is a layer painted
