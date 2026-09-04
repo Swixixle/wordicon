@@ -53,7 +53,7 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep; do
+for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume; do
   echo "== journey: $j"
   if [ "$j" = quiet ] || [ "$j" = speak ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
@@ -109,6 +109,20 @@ done
 for need in "the chord opens the question rather than starting the run" "and it has spent nothing" "cancelling spent nothing at all" "one press starts exactly one run" "the run leaves the element, the draft and the caret exactly as they were" "and it does not take the focus" "the room has NOT split while the run is still going" "the room splits when the answer arrives" "the paragraph is exactly the text between the blank lines" "with a selection the paragraph command offers the selection" "the expansion is counted from the components that actually came back" "clicking it runs nothing" "it renders as this page's unbuilt door" "the undo stack survived the whole invocation"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/deep.log" || { echo "== deep: missing check: $need"; status=1; }
 done
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log | awk '{s+=$2} END {print s+0}')
+# defect 4: every origin, not one guessed path. Each of these is a scenario
+# that used to end with the owner leaving the room and coming back before the
+# page would notice its own answer.
+for need in "the run records which surface asked" "and the stored route carries no word of the draft" "a full reload picks the running job back up" "a workup that lands while he is away waits and offers itself" "opening it puts the workup beside the writing" "a run submitted from the page belongs to the page" "it does not hijack the writing room into a split" "a failure names its real class" "a job the server has lost is stated, not left as a frozen line" "every character typed while the answer was arriving is in the draft"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/resume.log" || { echo "== resume: missing check: $need"; status=1; }
+done
+# the Tab repair, in the room journey where the room is
+for need in "Tab indents at the caret and does not leave the writing" "a selection spanning lines indents every line it touches" "Shift and Tab take one level back off" "one undo takes back the whole indent and nothing else" "Escape arms the exit and says so" "Escape then Tab leaves the writing untouched"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/room.log" || { echo "== room: missing check: $need"; status=1; }
+done
+# defect 2: the room's line has to have MOVED through honest states
+for need in "the room says submitted while the job is queued" "the estimate becomes an exact count the moment the split comes back, and is still called an estimate"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/deep.log" || { echo "== deep: missing check: $need"; status=1; }
+done
+total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log | awk '{s+=$2} END {print s+0}')
 echo "== journeys: $total checks, exit $status"
 exit $status

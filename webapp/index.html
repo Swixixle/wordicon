@@ -214,13 +214,37 @@
   /* Soft mass settling: overshoot on the way in, then rest. 360ms is long
      enough to read as weight and short enough that a fast typist never sees
      a queue — the glyph is already legible at 45%. */
-  .ink .g.landing::before { animation: land 360ms cubic-bezier(0.22, 1.0, 0.32, 1) both; }
-  .ink .g.landing.punct::before { animation-duration: 250ms; }
+  /* SETTLE is the arrival the Aperture brief describes and the one that has
+     been shipping unnamed since the room existed: a quick drop, soft mass, a
+     slight overshoot, blur resolving into clarity, then complete rest. What
+     is new here is only the NAME and the list around it — the motion is the
+     same motion, and saying otherwise would be a lie about the diff. */
+  .ink.style-settle .g.landing::before { animation: land 360ms cubic-bezier(0.22, 1.0, 0.32, 1) both; }
+  .ink.style-settle .g.landing.punct::before { animation-duration: 250ms; }
+  /* INK is the optional style, and its whole licence is the word DURING.
+     It may splatter on the way in; when the animation ends the class comes
+     off, the copy stops existing, and what is left is ordinary settled text.
+     Nothing crawls, drips or decays after the landing — that is the Aperture
+     law, and an optional style does not get to break it. */
+  @keyframes ink-splat {
+    0%   { transform: translateY(-0.30em) scale(1.60); opacity: 0;   filter: blur(5.5px); }
+    26%  { transform: translateY(-0.04em) scale(0.80); opacity: 1;   filter: blur(2.8px); }
+    50%  { transform: translateY(0.11em)  scale(1.16);               filter: blur(1.2px); }
+    74%  { transform: translateY(-0.03em) scale(0.965);              filter: blur(0.3px); }
+    100% { transform: translateY(0) scale(1); opacity: 1; filter: blur(0); }
+  }
+  .ink.style-ink .g.landing::before { animation: ink-splat 420ms cubic-bezier(0.18, 0.9, 0.28, 1) both; }
+  .ink.style-ink .g.landing.punct::before { animation-duration: 300ms; }
   @media (prefers-reduced-motion: reduce) {
     /* With no animation there is no animationend to take the class off, so
        nothing here may depend on the class ever coming off: the letter is
-       painted by itself, and the copy is not drawn at all. */
-    .ink .g.landing::before, .ink .g.landing.punct::before { animation: none; content: none; }
+       painted by itself, and the copy is not drawn at all. Both named styles
+       are listed by name because each of the rules above now carries one more
+       class than this block would otherwise, and a lower-specificity override
+       is not an override. */
+    .ink.style-settle .g.landing::before, .ink.style-ink .g.landing::before,
+    .ink.style-settle .g.landing.punct::before, .ink.style-ink .g.landing.punct::before {
+      animation: none; content: none; }
     .ink .g.landing { color: inherit; }
   }
   .compose textarea::placeholder { color: var(--write-faint); }
@@ -254,6 +278,21 @@
     pointer-events: none; }
   body.ws-open .room-run { left: auto; right: 16px; }
   body.ws-open.write-left .room-run { right: auto; left: 16px; }
+  /* The line may carry ONE action — open the finished workup beside the
+     writing — and only while it carries one does it accept the pointer. With
+     no button it stays inert, which is what keeps it out of the way of the
+     writing the rest of the time. */
+  .room-run.has-act { pointer-events: auto; }
+  .room-run button { margin-left: 8px; background: transparent;
+    border: 1px solid var(--write-faint); color: var(--write-ink); border-radius: 7px;
+    padding: 3px 9px; font-size: 12px; font-family: inherit; cursor: pointer; }
+  .room-run button:hover, .room-run button:focus { border-color: var(--write-ink); }
+  /* Present to a screen reader, absent from the picture. The room has one
+     keyboard behaviour a sighted user discovers by pressing Tab and a blind
+     user would otherwise discover by being trapped, so it is described here
+     rather than printed on the wall. */
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   .write-style .lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--write-panel-ink); margin: 0 0 5px; }
   .write-style button { background: transparent; border: 1px solid var(--write-faint);
@@ -1091,7 +1130,14 @@
       <div class="section-label">The room — where writing happens</div>
       <p class="body"><strong>⤢ full page</strong> opens the writing room: warm yellow on deep blue,
       type larger than any input box, and nothing else — no counter, no timer, no praise.
-      <strong>Aa</strong> changes the face and size and remembers your choice. Spell check is the
+      <strong>Aa</strong> changes the face, the size, the measure and how the letters arrive, and
+      remembers your choice on this device. The letters land in one of three ways: <strong>Settle</strong>,
+      a soft drop with a slight overshoot; <strong>Ink</strong>, which splatters on the way in and
+      is plain text the moment it lands; and <strong>Plain</strong>, no motion at all. Nothing
+      continues moving after a letter has arrived, and none of it is part of what you wrote.
+      <strong>Tab</strong> indents rather than leaving the writing — a selection across lines
+      indents every line, ⇧Tab takes a level back off, and one undo takes back the whole indent.
+      To leave with the keyboard: <strong>Esc</strong> then Tab. Spell check is the
       browser's own, which marks and offers and never rewrites; <strong>autocorrect is off</strong>,
       because a phone keyboard is most confident that a coined word is a mistake. <strong>Esc</strong>
       leaves.</p>
@@ -1437,7 +1483,11 @@
     <div class="ink-wrap">
       <div id="ink" class="ink" aria-hidden="true"></div>
       <textarea id="compose-text" spellcheck="true" autocorrect="off" autocapitalize="sentences"
-                placeholder="write" oninput="composeMirror()" onscroll="inkScroll()"></textarea>
+                placeholder="write" aria-describedby="room-keys"
+                oninput="composeMirror()" onscroll="inkScroll()"
+                onkeydown="roomKeydown(event)"></textarea>
+      <p id="room-keys" class="sr-only">Tab inserts an indent. Shift with Tab removes one.
+        To leave the writing with the keyboard, press Escape and then Tab.</p>
     </div>
   </div>
   <div id="write-style" class="write-style" style="display:none"></div>
@@ -2265,7 +2315,11 @@ async function runOperation(deep, explicitMode) {
             typed ? null : (ATTACHED && ATTACHED.artifact.artifact_id));
 }
 
-async function submitRun(submitMode, text, fromArtifact, gesture) {
+// `route` is routing identity only — which surface asked, what scope it
+// asked for, where the answer belongs. No draft, no text, nothing of what he
+// wrote: the server's job record is the source of truth for content, and this
+// is only enough to find it again after a reload.
+async function submitRun(submitMode, text, fromArtifact, gesture, route) {
   const goBtn = document.getElementById('go-btn');
   const deepBtn = document.getElementById('deep-btn');
   goBtn.disabled = true; deepBtn.disabled = true;
@@ -2301,6 +2355,16 @@ async function submitRun(submitMode, text, fromArtifact, gesture) {
     roundCount = 1;
     localStorage.setItem(ACTIVE_JOB_KEY, d.job_id);
     saveSession({job: d.job_id, shown: '', label: ''});
+    // Written here, synchronously, before a single poll can return. It used
+    // to be assigned in a .then() AFTER this call, which left a window —
+    // small, but real — in which the answer could arrive at a room that did
+    // not yet know it had asked for one.
+    RUN = {job: d.job_id,
+           surface: (route && route.surface) || 'home',
+           scope: (route && route.scope) || '',
+           dest: (route && route.dest) || 'work',
+           revealed: false};
+    saveRun();
     watchJob(d.job_id);
   } catch (e) {
     reset();
@@ -2355,6 +2419,7 @@ function renderWorking(job) {
 // something is still running.
 async function watchJob(jobId) {
   if (activePollTimer) { clearTimeout(activePollTimer); activePollTimer = null; }
+  WATCHING = jobId;
 
   async function poll() {
     let job;
@@ -2362,7 +2427,15 @@ async function watchJob(jobId) {
       const r = await fetch(`/api/jobs/${jobId}`);
       if (!r.ok) {
         localStorage.removeItem(ACTIVE_JOB_KEY);
-        return; // unknown job (server likely restarted) — stop quietly
+        WATCHING = '';
+        // Stopping quietly is what left "sending the workup…" on the wall
+        // forever. A job the server cannot find is a fact, and the room says
+        // it instead of continuing to imply that something is happening.
+        if (RUN.job === jobId) {
+          roomRun('that workup cannot be resumed — the server no longer has it (it restarts between runs)');
+          clearRun();
+        }
+        return;
       }
       job = await r.json();
     } catch (e) {
@@ -2410,19 +2483,27 @@ async function watchJob(jobId) {
         appendRetryCard();
       }
       loadHistory();
-      deepArrived(job.job_id || jobId);   // pass 2: the room splits now, not before
+      WATCHING = '';
+      runArrived(jobId);                 // pass 2: the room splits now, not before
       return;
     }
 
     if (job.status === 'failed') {
       localStorage.removeItem(ACTIVE_JOB_KEY);
       document.getElementById('result-area').innerHTML = `<div class="card"><div class="error">${escapeHtml(job.error || 'Something went wrong.')}</div></div>`;
-      if (DEEP_JOB && (job.job_id || jobId) === DEEP_JOB) { DEEP_JOB = ''; roomRun('the workup failed — the page says why'); }
+      WATCHING = '';
+      if (RUN.job === jobId) {
+        // The real failure class, not a euphemism and not a pointer at a page
+        // he may not be looking at.
+        roomRun('the workup failed — ' + failureClass(job.error));
+        clearRun();
+      }
       return;
     }
 
     renderWorking(job);
     activePollTimer = setTimeout(poll, 2500);
+    // one line, low, in the room — and only for the run this room asked for
   }
   poll();
 }
@@ -4685,6 +4766,10 @@ function loadWriteStyle() {
       const d = JSON.parse(raw);
       if (WRITE_FACES.some(f => f[0] === d.face)) writeStyle.face = d.face;
       if (WRITE_SIZES.indexOf(d.size) >= 0) writeStyle.size = d.size;
+      // The view was being written to storage and never read back, so Wide
+      // survived exactly until the next reload. Found while naming the
+      // landing styles; the same one-line class of mistake as the rest.
+      if (WRITE_VIEWS.some(v => v[0] === d.view)) writeStyle.view = d.view;
     }
   } catch (e) { /* a preference that cannot be read is not an error */ }
 }
@@ -4737,10 +4822,10 @@ function renderWriteStyle() {
     WRITE_VIEWS.map(v => `<button class="${v[0] === writeView()[0] ? 'on' : ''}"
        title="${v[3]}" onclick="setWriteView('${v[0]}')">${v[1]}</button>`).join('') +
     `</div>` +
-    `<div class="lbl" style="margin-top:10px">Letters</div><div class="row">
-       <button class="${inkOn ? 'on' : ''}" onclick="setInk(true)">land</button>
-       <button class="${inkOn ? '' : 'on'}" onclick="setInk(false)">still</button>
-     </div>`;
+    `<div class="lbl" style="margin-top:10px">Letters</div><div class="row">` +
+    WRITE_LANDINGS.map(l => `<button class="${l[0] === landing ? 'on' : ''}"
+       title="${l[2]}" onclick="setLanding('${l[0]}')">${l[1]}</button>`).join('') +
+    `</div>`;
 }
 
 function setWriteFace(key) { writeStyle.face = key; saveWriteStyle(); applyWriteStyle(); }
@@ -4828,18 +4913,42 @@ async function ensureLibrary() {
 const TAIL_MAX = 240;
 const PASTE_MAX = 12;      // more than this arriving at once is a paste, not typing
 const INK_KEY = 'wordicon.write.ink.v1';
-let inkOn = true;
+// The arrival styles, by name. The stored value is a NAME so a fourth can be
+// added without touching a stored preference, and an unknown name falls back
+// to the first — the same shape as the views, for the same reason.
+// Settle is not new: it is the motion that has been shipping since the room
+// existed, now named so that the list can hold a second one.
+const WRITE_LANDINGS = [
+  ['settle', 'Settle', 'a soft drop, a slight overshoot, then rest'],
+  ['ink',    'Ink',    'it splatters on the way in and is plain text the moment it lands'],
+  ['plain',  'Plain',  'the letter is simply there — no motion at all'],
+];
+let landing = 'settle';
+let inkOn = true;          // derived: any style but Plain paints the layer
 let inkShown = '';         // what the layer is currently painting
 
 function loadInkPref() {
-  try { const v = localStorage.getItem(INK_KEY); if (v !== null) inkOn = v === '1'; } catch (e) {}
+  try {
+    const v = localStorage.getItem(INK_KEY);
+    // '1'/'0' is the old boolean this key used to hold. It is still read, so
+    // a preference set before the styles existed survives the upgrade.
+    if (v === '0') landing = 'plain';
+    else if (v === '1') landing = 'settle';
+    else if (v && WRITE_LANDINGS.some(l => l[0] === v)) landing = v;
+  } catch (e) { /* a preference that cannot be read is not an error */ }
+  inkOn = landing !== 'plain';
 }
-function setInk(on) {
-  inkOn = !!on;
-  try { localStorage.setItem(INK_KEY, inkOn ? '1' : '0'); } catch (e) {}
+function setLanding(key) {
+  if (!WRITE_LANDINGS.some(l => l[0] === key)) return;
+  landing = key;
+  inkOn = landing !== 'plain';
+  try { localStorage.setItem(INK_KEY, landing); } catch (e) {}
   applyInk();
   renderWriteStyle();
 }
+// The old name, kept because it is what the rest of the page and the journeys
+// call. Nothing else changed meaning.
+function setInk(on) { setLanding(on ? 'settle' : 'plain'); }
 
 // The ink layer has to lay text out identically to the textarea or the
 // picture drifts from the caret. It inherits the same face and size, and
@@ -4915,6 +5024,11 @@ function applyInk() {
   const ink = document.getElementById('ink');
   if (!room || !ta || !ink) return;
   room.classList.toggle('inked', inkOn);
+  // The style is a class on the layer, so the whole choice is one attribute
+  // and no glyph carries it. Paint may mirror the writing; it may not own
+  // anything, and a style name is the least it could own.
+  WRITE_LANDINGS.forEach(l => ink.classList.remove('style-' + l[0]));
+  if (inkOn) ink.classList.add('style-' + landing);
   if (!inkOn) { ink.textContent = ''; inkShown = ''; return; }
   syncInkBox();
   paintInk(ta.value, null);
@@ -4946,6 +5060,96 @@ function composeMirror() {
   dst.value = src.value;
   toggleClearBtn();
   inkUpdate();
+}
+
+// ---- Tab ---------------------------------------------------------------
+//
+// Tab used to do the browser's default, which is to leave the writing. In a
+// room whose entire purpose is the writing that is the wrong default, so it
+// indents instead. Two things have to be true for that to be acceptable.
+//
+// One: it must be ONE undo. execCommand('insertText') is the only way to put
+// text into a textarea that goes onto the element's NATIVE undo stack —
+// assigning to .value silently empties it, which would trade a small
+// convenience for the loss of everything typed before it. It is deprecated
+// and it is also the only thing that works; if it ever returns false the
+// fallback still writes the text and this comment is where to look.
+//
+// Two: it must not trap a keyboard. Swallowing Tab with no way out strands
+// anyone who does not use a mouse, so Escape ARMS an exit and the very next
+// Tab is handed to the browser untouched. That behaviour is described to a
+// screen reader on the textarea itself (#room-keys) and shown as a dim line
+// the first time Tab is pressed, which is discoverable without becoming
+// furniture.
+const INDENT = '  ';         // plain text, two spaces — nothing structural
+let TAB_ESCAPED = false;
+let TAB_TOLD = false;
+
+// One edit, on the native undo stack, selection under our control afterwards.
+function roomInsert(ta, text) {
+  ta.focus({preventScroll: true});
+  let ok = false;
+  try { ok = document.execCommand('insertText', false, text); } catch (e) { ok = false; }
+  if (!ok) {
+    const a = ta.selectionStart, b = ta.selectionEnd;
+    ta.value = ta.value.slice(0, a) + text + ta.value.slice(b);
+    ta.setSelectionRange(a + text.length, a + text.length);
+    ta.dispatchEvent(new Event('input', {bubbles: true}));
+  }
+  return ok;
+}
+
+// A caret indents at the caret. A selection that spans a line break indents
+// every line it touches, and Shift takes one level back off — from each line
+// that has one, leaving alone the lines that do not.
+function roomIndent(ta, remove) {
+  const v = ta.value, a = ta.selectionStart, b = ta.selectionEnd;
+  const spans = v.slice(a, b).indexOf('\n') >= 0;
+  if (!spans && !remove) { roomInsert(ta, INDENT); return; }
+  const from = v.lastIndexOf('\n', a - 1) + 1;
+  let to = v.indexOf('\n', b);
+  if (to < 0) to = v.length;
+  const block = v.slice(from, to);
+  let head = 0, total = 0;
+  const next = block.split('\n').map((ln, i) => {
+    if (remove) {
+      const m = /^(\t| {1,2})/.exec(ln);
+      const cut = m ? m[0].length : 0;
+      if (i === 0) head = -cut;
+      total -= cut;
+      return ln.slice(cut);
+    }
+    if (ln === '') return ln;               // a blank line is not indented
+    if (i === 0) head = INDENT.length;
+    total += INDENT.length;
+    return INDENT + ln;
+  }).join('\n');
+  if (next === block) return;               // nothing to take off: no edit, no undo entry
+  ta.setSelectionRange(from, to);
+  roomInsert(ta, next);
+  ta.setSelectionRange(Math.max(from, a + head), Math.max(from, b + total));
+}
+
+function roomKeydown(e) {
+  const ta = e.target;
+  if (!ta || ta.id !== 'compose-text') return;
+  if (e.key === 'Escape') {
+    // Escape is not swallowed — the panels still close on it. It only arms
+    // the exit, and says so once.
+    TAB_ESCAPED = true;
+    roomRun('Tab will now leave the writing. Type anything and it indents again.');
+    return;
+  }
+  if (e.key !== 'Tab') { TAB_ESCAPED = false; return; }
+  if (TAB_ESCAPED) { TAB_ESCAPED = false; roomRun(''); return; }   // the browser gets this one
+  if (e.metaKey || e.ctrlKey || e.altKey) return;                  // a chord is not an indent
+  e.preventDefault();
+  if (!TAB_TOLD) {
+    TAB_TOLD = true;
+    roomRun('Tab indents. Escape then Tab leaves the writing.');
+  }
+  roomIndent(ta, e.shiftKey);
+  composeMirror();
 }
 
 // ---- the workspace ----------------------------------------------------
@@ -4999,6 +5203,9 @@ function openWorkspace(mode) {
     if (!ta.value || WS_MODE === '') ta.setSelectionRange(ta.value.length, ta.value.length);
   }
   setWorkspaceMode(mode || 'write');
+  // Coming into the room is one of the two moments an answer that was waiting
+  // can be offered without moving anything under him.
+  checkPendingRun();
 }
 function openCompose() { openWorkspace('write'); }
 
@@ -5216,6 +5423,7 @@ function closePlace(push) {
   const sc = pageScroller();
   if (sc) sc.scrollTop = PLACE_RETURN; else window.scrollTo(0, PLACE_RETURN);
   if (push !== false && location.pathname !== '/') history.pushState({place: '/'}, '', '/');
+  checkPendingRun();   // and coming back from a place is the other
 }
 
 // For the handful of places the page reaches from script rather than a link.
@@ -5318,7 +5526,54 @@ const DEEP_CHORDS = {
   paragraph: {key: 'enter',  label: '⌘⇧⏎', what: 'this paragraph'},
 };
 let DEEP_ASK = null;      // the scope currently being asked about
-let DEEP_JOB = '';        // a job this room started, so only its arrival splits
+
+// ---- the route a run took ----------------------------------------------
+//
+// One run at a time, and the page has to be able to find it again after a
+// reload, after walking to a place, after closing the room, and after the
+// server has restarted underneath it. What is kept is ROUTING IDENTITY and
+// nothing else — the job's id, which surface asked, what scope was asked
+// for, where the answer belongs, and whether he has been shown it yet. Not a
+// character of the draft is stored: the server's job record holds the
+// content, and this is only the thread back to it.
+const ROOM_RUN_KEY = 'nikodemus.run.route.v1';
+let RUN = {job: '', surface: '', scope: '', dest: '', revealed: false};
+let WATCHING = '';        // the job the poll loop currently has in hand
+
+function saveRun() {
+  try {
+    if (RUN.job) localStorage.setItem(ROOM_RUN_KEY, JSON.stringify(RUN));
+    else localStorage.removeItem(ROOM_RUN_KEY);
+  } catch (e) { /* a route that cannot be stored still works for this page */ }
+}
+function loadRun() {
+  try {
+    const raw = localStorage.getItem(ROOM_RUN_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d && d.job) RUN = {job: String(d.job), surface: String(d.surface || ''),
+                           scope: String(d.scope || ''), dest: String(d.dest || ''),
+                           revealed: !!d.revealed};
+  } catch (e) { /* an unreadable route is no route */ }
+}
+function clearRun() {
+  RUN = {job: '', surface: '', scope: '', dest: '', revealed: false};
+  saveRun();
+}
+
+// The failure classes the room can name without pretending to know more than
+// the server told it. An error it has never seen is reported as itself,
+// trimmed — never as "something went wrong".
+function failureClass(err) {
+  const e = String(err || '');
+  if (!e) return 'the server gave no reason';
+  if (/no api key|absent key|not configured|no gateway/i.test(e)) return 'no model key is configured';
+  if (/rate.?limit|429/i.test(e)) return 'the provider rate-limited the run';
+  if (/timeout|timed out/i.test(e)) return 'the provider timed out';
+  if (/refus|blocked|policy/i.test(e)) return 'the provider refused it';
+  if (/connect|network|dns|unreachable/i.test(e)) return 'the provider could not be reached';
+  return e.length > 90 ? e.slice(0, 88) + '…' : e;
+}
 
 // A paragraph is what lies between blank lines. Mechanical, no guessing —
 // and if there is a selection, the selection is OFFERED as the scope rather
@@ -5414,49 +5669,134 @@ function startDeepFromRoom() {
   const scope = DEEP_ASK;
   closeDeepAsk();
   if (!scope || !scope.text) return;
-  roomRun('sending the workup…');
+  roomRun('submitted · waiting for a turn');
   // The draft is not touched, not copied into the intake box, not moved.
   // What goes is a COPY of the scope, and the room is unaware of it.
-  submitRun('deep', scope.text, null, 'trial').then(() => {
-    DEEP_JOB = localStorage.getItem(ACTIVE_JOB_KEY) || '';
-  });
+  submitRun('deep', scope.text, null, 'trial',
+            {surface: 'room', scope: scope.kind, dest: 'beside'});
 }
 
 // One line, low and dim, that never takes the caret and never moves the page.
-function roomRun(msg) {
+// It may carry ONE action, and only while it does can it be clicked at all.
+function roomRun(msg, act) {
   const el = document.getElementById('room-run');
   if (!el) return;
-  if (!msg) { el.hidden = true; el.textContent = ''; return; }
+  if (!msg) { el.hidden = true; el.textContent = ''; el.classList.remove('has-act'); return; }
   el.hidden = false;
   el.textContent = msg;
+  el.classList.toggle('has-act', !!act);
+  if (act) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = act;
+    b.onclick = revealRun;
+    el.appendChild(b);
+  }
 }
 
 // The progress string the job already publishes carries "[3/7]" once the
 // split is done — which is the exact idea count, so the honest estimate
 // becomes an honest number without asking the server anything new.
+// THE CONTRACT. `GET /api/jobs/<id>` returns the job record, and that record
+// carries its own id under the key `id`. It has never carried `job_id` —
+// that is the key the POST answers with, and reading it here meant this
+// comparison was `undefined !== "job_..."` on every poll, so the function
+// returned on its first line forever and the line on the wall never moved
+// past "sending the workup…". The server's shape is the authority; block 108
+// pins that every `job.` key read in this room exists in it.
 function roomRunProgress(job) {
-  if (!DEEP_JOB || job.job_id !== DEEP_JOB) return;
+  if (!RUN.job || job.id !== RUN.job) return;
+  if (job.status === 'queued') { roomRun('submitted · waiting for a turn'); return; }
   const m = /\[(\d+)\/(\d+)\]/.exec(job.progress || '');
+  if (!m) { roomRun(`working · ${String(job.progress || 'thinking').replace(/…$/, '')}…`); return; }
+  const n = Number(m[2]);
   const b = deepBudget();
-  roomRun(m ? `working · ${m[2]} ideas found, about ${b.fixed + b.perIdea * Number(m[2])} model calls · ${m[1]} of ${m[2]} done`
-            : `working · ${(job.progress || 'thinking').replace(/…$/, '')}…`);
+  // The count of components is now known, so the estimate becomes a number —
+  // and it is still called an estimate, because the per-component calls are
+  // not all made yet and one of them can come back empty.
+  roomRun(`working · ${n} component${n === 1 ? '' : 's'} found · about ${
+    b.fixed + b.perIdea * n} model calls, still an estimate · ${m[1]} of ${n} done`);
 }
 
-// The room splits only when the answer ARRIVES, and only if he is still in
-// the room to see it. If he walked to a place, closed the room, or is reading
-// the page full-screen, nothing moves — the result is on Home either way, so
-// coming back to the split shows it.
-function deepArrived(jobId) {
-  if (!DEEP_JOB || jobId !== DEEP_JOB) return;
-  DEEP_JOB = '';
-  roomRun('');
-  if (!document.body.classList.contains('ws-open')) return;   // he closed the room
-  if (PLACE) return;                                          // he is somewhere else
-  if (WS_MODE === 'split') return;                            // already beside him
+// WHERE AN ANSWER GOES, and it is decided by the route the run recorded —
+// not by where the page happens to be standing when the answer lands.
+//
+// A run the ROOM asked for belongs beside the draft. If the room is open and
+// he is in it, it opens there now. If he stepped away — a place, a closed
+// room, the page full-screen — nothing moves under him; the line offers to
+// open it, and coming back offers the same thing, which is what stops the
+// answer needing him to leave and re-enter before the page notices.
+//
+// A run HOME asked for belongs to Home and never takes the draft. It has
+// already rendered into the work area; the room only says so, and offers.
+function runArrived(jobId) {
+  if (!RUN.job || jobId !== RUN.job) return;
+  RUN.revealed = false;
+  if (RUN.surface !== 'room') {
+    if (document.body.classList.contains('ws-open')) {
+      roomRun('a workup you started on the page has finished', 'Open beside writing');
+    }
+    saveRun();
+    return;
+  }
+  const here = document.body.classList.contains('ws-open') && !PLACE;
+  if (here && WS_MODE === 'split') {   // already beside him: nothing to move
+    RUN.revealed = true;
+    roomRun('the workup is beside your draft');
+    clearRun();
+    return;
+  }
+  if (!here) { roomRun('your workup is ready', 'Open beside writing'); saveRun(); return; }
+  revealRun();
+}
+
+// Opening it is the one thing the line can do, and it is the same code
+// whether the page does it on arrival or he clicks it an hour later.
+function revealRun() {
   const ta = document.getElementById('compose-text');
   const sel = ta ? [ta.selectionStart, ta.selectionEnd] : null;
-  setWorkspaceMode('split');
+  if (PLACE) closePlace();
+  if (!document.body.classList.contains('ws-open')) openWorkspace('split');
+  if (WS_MODE !== 'split') setWorkspaceMode('split');
+  // The caret is put back exactly where it was. Opening a result is not an
+  // edit and must not read as one.
   if (ta && sel) { ta.setSelectionRange(sel[0], sel[1]); ta.focus({preventScroll: true}); }
+  RUN.revealed = true;
+  roomRun('');
+  clearRun();
+}
+
+// Called whenever the page arrives somewhere it could show a waiting answer:
+// entering the room, and coming back from a place.
+function checkPendingRun() {
+  if (!RUN.job || RUN.revealed) return;
+  if (RUN.surface !== 'room') return;
+  if (WATCHING === RUN.job) return;      // still running: the poll will call arrival
+  roomRun('your workup is ready', 'Open beside writing');
+}
+
+// On load: the route survived, so find out what became of the job. The
+// SERVER is asked — a stored id is a thread back to the record, never a
+// claim about it.
+async function resumeRun() {
+  loadRun();
+  if (!RUN.job) return;
+  let job = null;
+  try {
+    const r = await fetch(`/api/jobs/${RUN.job}`);
+    if (!r.ok) {
+      roomRun('that workup cannot be resumed — the server no longer has it (it restarts between runs)');
+      clearRun();
+      return;
+    }
+    job = await r.json();
+  } catch (e) {
+    return;                              // offline for a moment: the route keeps
+  }
+  if (job.status === 'failed') { roomRun('the workup failed — ' + failureClass(job.error)); clearRun(); return; }
+  if (job.status === 'complete') { runArrived(RUN.job); return; }
+  if (WATCHING !== RUN.job) watchJob(RUN.job);
+  roomRunProgress(job);
 }
 
 // The chords, and the reason each is the one it is. Registered once, on the
@@ -6304,6 +6644,10 @@ loadWriteStyle();
 loadInkPref();
 loadHistory();
 loadHome();
+// The route of a run that was going when the page went away. Read before
+// restoreSession so that a job it also finds is already known to belong to
+// the room rather than to Home.
+resumeRun();
 // Panels he closed stay closed; then the page he left comes back. Neither
 // of these clears anything — a reset is something he asks for.
 resumeJobIfAny();

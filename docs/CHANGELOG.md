@@ -1,5 +1,58 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.4.3 — the four defects the owner's manual pass found
+
+The manual writing-room pass did not pass. Four defects, all in work that had
+already shipped green, and one of them was the test rather than the code.
+
+**Tab left the writing.** There was no handler at all, so the browser did its
+default and moved focus out of the room. Tab now inserts a plain two-space
+indent at the caret; a selection that spans lines indents every line it
+touches; Shift takes one level back off from each line that has one; the
+selection survives; and the whole edit is a single entry on the textarea's
+NATIVE undo stack, which is why it goes in through `execCommand('insertText')`
+— assigning to `.value` empties that stack, which would trade an indent for
+every keystroke before it. Escape arms an exit and the very next Tab is handed
+to the browser untouched, so nobody is trapped; that behaviour is described on
+the textarea itself with `aria-describedby` and shown as a dim line on first
+use, rather than printed on the wall.
+
+**The room's progress line never moved.** `roomRunProgress` compared
+`job.job_id`; the job record returned by `GET /api/jobs/<id>` carries its id
+under `id` — `job_id` is what the POST answers with. The comparison was
+`undefined !== "job_..."` on every poll, so the function returned on its first
+line forever and the line stayed at "sending the workup…". It now reads `id`
+and walks honest states: submitted, working, the component count with the
+call-budget estimate still named as an estimate, completed, and failure with
+its real class rather than a euphemism.
+
+**The test proved a fixture that the application never emitted.** The deep
+journey mocked that GET with a body carrying `job_id`, so thirty-one checks
+went green against a shape the server has never sent once. Recorded here as
+test-was-wrong. The fixture now answers the server's shape, and block 108 is a
+contract test that reads the real serializer out of `server.py` with `ast` and
+requires every `job.` key the room reads to exist in it — rename the key in the
+server and it fails, read a key the server does not send and it fails. The
+sabotage battery mutates each side independently and both are caught.
+
+**A finished workup needed you to leave the room and come back.** Every deep
+invocation now records routing identity — job id, which surface asked, the
+scope requested, where the answer belongs, whether it has been revealed — and
+nothing else: not a character of the draft, because the server's job record is
+the source of truth and this is only the thread back to it. The room open and
+in front of you splits on arrival without taking the caret; away, the answer
+waits and offers itself, and entering the room or returning from a place finds
+it; a full reload picks the run back up from the stored reference; a run
+started from the page belongs to the page and never hijacks a draft; and a job
+the server no longer has says so instead of leaving a frozen line.
+
+Also in this block: the arrival styles are named — **Settle** (the motion that
+has been shipping unnamed since the room existed), **Ink** (splatter during
+arrival only; the letter is plain settled text the moment the class comes off),
+and **Plain** — behind `Aa` beside the face, size and view; and the View
+preference, which was being written to storage and never read back, now
+survives a reload. The constitution is amended in the same block.
+
 ## v1.4.0 — connected instruments (block 107: Open Case and EthicalAlt as a federation)
 
 Block 107 (`docs/adr-federation.md`, `docs/connectors.md`,

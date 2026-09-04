@@ -8,7 +8,7 @@
 // lines between CHARACTERS while the textarea broke them between WORDS, and
 // the two drifted further apart the deeper into the draft you clicked:
 // fifteen characters off by the fourth paragraph, measured.
-const { BASE, ok, place, pairedContext, finish } = require('./lib');
+const { BASE, ok, place, pairedContext, finish, tok, ck } = require('./lib');
 const { webkit } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -298,6 +298,82 @@ const DRAFT = [
   ok(rm.text === 'Letters arrive and then they are simply words.',
     'and the picture still holds exactly the draft: ' + JSON.stringify(rm.text));
   await rmCtx.close();
+
+  // ---- Tab -------------------------------------------------------------
+  // Tab used to leave the writing, which in a room whose only purpose is the
+  // writing is the wrong default. Four things have to hold: it indents, a
+  // multi-line selection indents every line, Shift takes one level back off,
+  // and the whole thing is ONE undo — because the only way to put text into a
+  // textarea without emptying its native undo stack is execCommand, and if
+  // that ever stops working the draft's whole history goes with it.
+  const tbCtx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  await tbCtx.addCookies([{ name: ck, value: tok, domain: '127.0.0.1', path: '/' }]);
+  const tb = await tbCtx.newPage();
+  const tbErrs = []; tb.on('pageerror', e => tbErrs.push(String(e)));
+  await tb.goto(BASE + '/'); await tb.waitForTimeout(1100);
+  await tb.evaluate(() => openWorkspace('write')); await tb.waitForTimeout(400);
+  await tb.click('#compose-text');
+  await tb.keyboard.type('alpha', { delay: 0 });
+  await tb.keyboard.press('Tab'); await tb.waitForTimeout(200);
+  const t1 = await tb.evaluate(() => ({ v: document.getElementById('compose-text').value,
+                                        focus: document.activeElement ? document.activeElement.id : '' }));
+  ok(t1.v === 'alpha  ' && t1.focus === 'compose-text',
+    'Tab indents at the caret and does not leave the writing: ' + JSON.stringify(t1));
+
+  await tb.evaluate(() => { const ta = document.getElementById('compose-text');
+    ta.value = 'one\ntwo\nthree'; ta.dispatchEvent(new Event('input')); ta.setSelectionRange(1, 9); });
+  await tb.keyboard.press('Tab'); await tb.waitForTimeout(200);
+  const t2 = await tb.evaluate(() => { const ta = document.getElementById('compose-text');
+    return { v: ta.value, s: ta.selectionStart, e: ta.selectionEnd }; });
+  ok(t2.v === '  one\n  two\n  three',
+    'a selection spanning lines indents every line it touches: ' + JSON.stringify(t2.v));
+  ok(t2.s === 3 && t2.e === 15,
+    'and the selection still covers the same words afterwards: ' + JSON.stringify([t2.s, t2.e]));
+
+  await tb.keyboard.press('Shift+Tab'); await tb.waitForTimeout(200);
+  const t3 = await tb.evaluate(() => document.getElementById('compose-text').value);
+  ok(t3 === 'one\ntwo\nthree', 'Shift and Tab take one level back off: ' + JSON.stringify(t3));
+  await tb.keyboard.press('Shift+Tab'); await tb.waitForTimeout(200);
+  const t4 = await tb.evaluate(() => document.getElementById('compose-text').value);
+  ok(t4 === 'one\ntwo\nthree',
+    'and outdenting text with no indent left changes nothing at all: ' + JSON.stringify(t4));
+
+  // one undo per indent, on the element's own stack
+  await tb.evaluate(() => { const ta = document.getElementById('compose-text');
+    ta.value = ''; ta.dispatchEvent(new Event('input')); ta.focus(); });
+  await tb.keyboard.type('kept', { delay: 0 });
+  // A caret move closes the typing group. Without it WebKit folds the indent
+  // into the same run of characters and one undo takes both back — which is
+  // still ONE action, but not a useful test of whether the stack survived.
+  await tb.keyboard.press('ArrowLeft'); await tb.keyboard.press('ArrowRight');
+  await tb.keyboard.press('Tab'); await tb.waitForTimeout(200);
+  await tb.keyboard.press('ControlOrMeta+z'); await tb.waitForTimeout(250);
+  const t5 = await tb.evaluate(() => document.getElementById('compose-text').value);
+  ok(t5 === 'kept',
+    'one undo takes back the whole indent and nothing else — the native stack survived: '
+    + JSON.stringify(t5));
+
+  // and the way out, for anyone who does not use a mouse
+  await tb.evaluate(() => { const ta = document.getElementById('compose-text'); ta.focus(); });
+  await tb.keyboard.press('Escape'); await tb.waitForTimeout(200);
+  const t6 = await tb.evaluate(() => ({
+    line: document.getElementById('room-run').hidden ? '' : document.getElementById('room-run').textContent,
+    described: document.getElementById('compose-text').getAttribute('aria-describedby'),
+    says: (document.getElementById('room-keys') || {}).textContent || '' }));
+  ok(/Tab will now leave the writing/.test(t6.line),
+    'Escape arms the exit and says so: ' + JSON.stringify(t6.line));
+  ok(t6.described === 'room-keys' && /Escape and then Tab/.test(t6.says),
+    'and a screen reader is told the same thing from the writing itself: ' + JSON.stringify(t6.says));
+  const beforeV = await tb.evaluate(() => document.getElementById('compose-text').value);
+  await tb.keyboard.press('Tab'); await tb.waitForTimeout(250);
+  const t7 = await tb.evaluate(() => ({ focus: document.activeElement ? document.activeElement.id : '',
+                                        v: document.getElementById('compose-text').value }));
+  ok(t7.focus !== 'compose-text' && t7.v === beforeV,
+    'Escape then Tab leaves the writing untouched, exactly as it would anywhere else: '
+    + JSON.stringify(t7));
+  ok(tbErrs.length === 0, 'no page errors from the Tab work: ' + JSON.stringify(tbErrs));
+  await tbCtx.close();
+
   await browser.close();
   finish('room');
 })().catch(e => { console.log('FAIL journey crashed: ' + (e && e.stack || e)); process.exit(1); });

@@ -3887,8 +3887,41 @@ console.log(JSON.stringify({ok: true, nodes: INK.childNodes.length, len: TA.valu
     # Signature and call site both: `function setInk` matches `setInkX`, and
     # a renamed function with a dead button walked through the first version
     # of this check.
-    if "function setInk(on)" not in _pg65 or 'onclick="setInk(false)"' not in _pg65:
+    # The off switch is now a NAMED style rather than a boolean: Plain is the
+    # non-animated one, and the Aa panel offers it beside Settle and Ink. The
+    # old boolean entry point is kept because the rest of the page calls it,
+    # so both the list and the way out of it are pinned.
+    if "function setInk(on)" not in _pg65 or "function setLanding(key)" not in _pg65:
         failures.append("65: the landing cannot be switched off")
+    if "['plain',  'Plain'," not in _pg65 or "setLanding('${l[0]}')" not in _pg65:
+        failures.append("65: the panel no longer offers Plain — the brief says cut the motion "
+                        "if it fights focus, and there has to be a way to cut it")
+    if "['settle', 'Settle'," not in _pg65:
+        failures.append("65: Settle is no longer a named arrival style")
+    # Settle is the DEFAULT, by ruling: the narrow Aperture brief governs what
+    # arrives unasked, and Ink is the option beside it. Flipping this one word
+    # would make the splatter the default and nothing else in the suite would
+    # have noticed — the sabotage battery found exactly that.
+    if "let landing = 'settle';" not in _pg65:
+        failures.append("65: Settle is not the default arrival — the brief governs what happens "
+                        "unasked, and Ink is offered beside it, never in front of it")
+    # REDUCED MOTION AND SPECIFICITY. Each style's animation rule carries one
+    # more class than a bare `.ink .g.landing::before`, so an override written
+    # the short way LOSES and the animation runs for someone who asked for no
+    # motion. It is invisible in review and invisible to a string search for
+    # "prefers-reduced-motion", which is why the exact selectors are pinned.
+    _rm65 = _pg65[_pg65.index("@media (prefers-reduced-motion: reduce) {"):]
+    _rm65 = _rm65[:_rm65.index("\n  }") + 4]
+    for _sel in (".ink.style-settle .g.landing::before", ".ink.style-ink .g.landing::before",
+                 ".ink.style-settle .g.landing.punct::before", ".ink.style-ink .g.landing.punct::before"):
+        if _sel not in _rm65:
+            failures.append(f"65: the reduced-motion override does not name {_sel!r}. Each style's "
+                            "rule carries one more class than a bare selector, so an override "
+                            "that omits it is outranked and the motion runs anyway")
+    _run65 = (_pathlib.Path(__file__).resolve().parent.parent / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
+    if "with motion reduced the real letter is visible at once" not in _run65:
+        failures.append("65: run.sh no longer requires the reduced-motion check to have PRINTED, "
+                        "so the only thing left is this file's reading of the stylesheet")
     # Whitespace stays a text node. An inline-block newline does not break a
     # line, so wrapping every character would put the picture and the caret
     # on different lines the moment a paragraph appears.
@@ -16076,7 +16109,7 @@ console.log(out.join('\\n'));
         for _land in ("  .ink .g { display: inline; }",
                       "  .ink .g.landing { position: relative; color: transparent; }",
                       "  .ink .g.landing::before { content: attr(data-ch); position: absolute;",
-                      "  .ink .g.landing::before { animation: land 360ms cubic-bezier(0.22, 1.0, 0.32, 1) both; }"):
+                      "  .ink.style-settle .g.landing::before { animation: land 360ms cubic-bezier(0.22, 1.0, 0.32, 1) both; }"):
             if _land not in _idxP1:
                 _fP1(f"the glyph display rules are not the repaired ones ({_land.strip()!r})")
         _landRule = _re.search(r"\n  \.ink \.g\.landing \{([^}]*)\}", _idxP1)
@@ -16262,8 +16295,9 @@ console.log(out.join('\\n'));
 
         _landP2 = ("const DEEP_CHORDS = {", "function deepScope(kind)", "function deepBudget()",
                    "async function askDeep(kind)", "function closeDeepAsk()",
-                   "function startDeepFromRoom()", "function roomRun(msg)",
-                   "function deepArrived(jobId)", "function expansionCard(d)")
+                   "function startDeepFromRoom()", "function roomRun(msg, act)",
+                   "function runArrived(jobId)", "function revealRun()",
+                   "function resumeRun()", "function expansionCard(d)")
         _goneP2 = [x for x in _landP2 if x not in _idxP2]
         if _goneP2:
             for _g in _goneP2:
@@ -16350,8 +16384,8 @@ console.log(out.join('\\n'));
                  "closing the question")
 
         # ---- one press, and it reuses the workup that already exists ------
-        _start = _idxP2[_idxP2.index("function startDeepFromRoom()"):_idxP2.index("function roomRun(msg)")]
-        if "submitRun('deep', scope.text, null, 'trial')" not in _start:
+        _start = _idxP2[_idxP2.index("function startDeepFromRoom()"):_idxP2.index("function roomRun(msg, act)")]
+        if "submitRun('deep', scope.text, null, 'trial'," not in _start:
             _fP2("the room does not reach the existing deep workup — a second analysis pipeline "
                  "is exactly what the brief forbade")
         for _bad in ("ta.value", "setSelectionRange", "input-text"):
@@ -16362,23 +16396,84 @@ console.log(out.join('\\n'));
                  "every other run")
 
         # ---- quiet progress that cannot take the caret --------------------
-        _rr = _idxP2[_idxP2.index("function roomRun(msg)"):_idxP2.index("function roomRunProgress(job)")]
+        _rr = _idxP2[_idxP2.index("function roomRun(msg, act)"):_idxP2.index("// THE CONTRACT.")]
         if "focus" in _rr or "scrollIntoView" in _rr:
             _fP2("the running line moves the page or takes the focus")
+        # It is inert BY DEFAULT and reachable only while it is carrying the
+        # one action — "open it beside the writing". That is a narrower claim
+        # than the original "it can never be clicked", and it is the true one
+        # now, so it is written as it is rather than left reading stricter
+        # than the code.
         if not _re.search(r"\.room-run \{[^}]*pointer-events: none", _idxP2, _re.S):
-            _fP2("the running line can be clicked — it is a report, not a control")
+            _fP2("the running line accepts the pointer by default — it is a report first")
+        if ".room-run.has-act { pointer-events: auto; }" not in _idxP2:
+            _fP2("the running line's one action cannot be clicked, so an answer that is waiting "
+                 "cannot be opened from it")
+        if "b.onclick = revealRun" not in _rr:
+            _fP2("the running line's action is not the one action it is allowed to carry")
 
         # ---- the split happens on arrival, and only if he is still here ---
-        _arr = _idxP2[_idxP2.index("function deepArrived(jobId)"):_idxP2.index("// The chords, and the reason")]
-        for _guard, _why in (("if (!document.body.classList.contains('ws-open')) return;", "he closed the room"),
-                             ("if (PLACE) return;", "he walked to a place"),
-                             ("if (WS_MODE === 'split') return;", "he is already looking at it")):
-            if _guard not in _arr:
-                _fP2(f"the room is yanked into a split when {_why}")
+        # Where an answer goes is decided by the ROUTE the run recorded, not by
+        # where the page is standing when it lands. The three guards are still
+        # guards; what changed is that stepping away no longer means the answer
+        # is silently dropped — it waits, and it is offered.
+        _arr = _idxP2[_idxP2.index("function runArrived(jobId)"):_idxP2.index("// The chords, and the reason")]
+        # The needle carries its brace. Without it the same words in
+        # checkPendingRun's early return satisfied this pin, and turning the
+        # real branch into `if (false)` went straight through — caught by the
+        # sabotage battery, which is what it is for.
+        if "if (RUN.surface !== 'room') {" not in _arr:
+            _fP2("a run started on the page can take the writing room's draft — the surface that "
+                 "asked is the only thing allowed to decide where the answer goes")
+        if "const here = document.body.classList.contains('ws-open') && !PLACE;" not in _arr:
+            _fP2("the room is yanked into a split without checking he is still in it")
+        if "if (!here) { roomRun('your workup is ready', 'Open beside writing'); saveRun(); return; }" not in _arr:
+            _fP2("an answer that lands while he is away is dropped instead of waiting to be offered")
         if "setWorkspaceMode('split')" not in _arr:
             _fP2("the answer never comes to sit beside the writing")
         if "ta.setSelectionRange(sel[0], sel[1])" not in _arr:
             _fP2("the split does not put the caret back where it was")
+        if "function checkPendingRun()" not in _idxP2:
+            _fP2("nothing looks for a waiting answer on the way back in, so it takes leaving and "
+                 "re-entering for the page to notice — the exact defect this repairs")
+        for _entry in ("  checkPendingRun();\n}\nfunction openCompose()",
+                       "  checkPendingRun();   // and coming back from a place is the other"):
+            if _entry not in _idxP2:
+                _fP2(f"a way back into the room does not look for a waiting answer ({_entry.strip()!r})")
+        # Routing identity only. A stored draft would make the browser a second
+        # copy of the corpus, which is the one thing local storage may not be.
+        # saveRun() serialises whatever is on RUN, so guarding the block where
+        # RUN is DECLARED proves nothing about what is put on it three thousand
+        # lines away in submitRun — which is where the sabotage battery duly
+        # added the draft and walked through. Every assignment to RUN is found
+        # and its keys are required to be exactly the five that are identity.
+        _allowed = {"job", "surface", "scope", "dest", "revealed"}
+        _assigns = [m for m in _re.finditer(r"\bRUN = \{", _idxP2)]
+        if len(_assigns) < 2:
+            _fP2("the run route is assigned in fewer places than it is written and cleared — "
+                 "this guard has lost its target")
+        for _m in _assigns:
+            i = _m.end()
+            j = _idxP2.index("}", i)
+            _keys = set(_re.findall(r"([A-Za-z_]\w*)\s*:", _idxP2[i:j]))
+            _extra = _keys - _allowed
+            if _extra:
+                _fP2(f"the stored route carries {sorted(_extra)!r} as well as its identity. "
+                     "saveRun serialises the whole object into this browser, and the corpus does "
+                     "not get a second copy of itself in local storage: the server's job record "
+                     "is the source of truth and this is only the thread back to it")
+            if _keys - _extra != _allowed:
+                _fP2(f"the stored route is missing part of its identity "
+                     f"({sorted(_allowed - _keys)!r}) — it has to be enough to find the run "
+                     "again after a reload, from any surface")
+        # Two sites, and both matter: one while the run is being polled, one on
+        # the way back in after a reload. Counting them is the difference
+        # between pinning the behaviour and pinning that the words exist
+        # somewhere — renaming one of the two used to walk straight through.
+        if _idxP2.count("roomRun('that workup cannot be resumed") != 2:
+            _fP2("a job the server has lost still leaves the room implying that something is "
+                 "happening — it has to be said BOTH while polling and on the way back in after "
+                 "a reload, and one of those two sites has gone")
 
         # ---- the expansion is priced from what exists, and fires nothing --
         _exp = _idxP2[_idxP2.index("function expansionCard(d)"):]
@@ -16454,6 +16549,210 @@ console.log(out.join('\\n'));
                      "so the suite's source pin is the only thing left and nothing "
                      "proves the check ran")
     _pass2()
+
+    # ---- block 108: the job contract, read from the serializer itself -----
+    #
+    # This block exists because a test lied. The deep journey mocked
+    # `GET /api/jobs/<id>` with a body carrying `job_id`, the room read
+    # `job.job_id`, and thirty-one checks went green against a response shape
+    # the server has never emitted once. The POST answers `job_id`; the job
+    # RECORD carries its id under `id`. Nothing in the suite compared the two
+    # sides, so each was internally consistent and jointly wrong, and the
+    # progress line on the wall never moved for a single real run.
+    #
+    # The repair is not another assertion about the client. It is to derive
+    # the key set from the REAL serializer — the dict server.py builds and the
+    # field api_get_job adds — and require that every `job.` the room reads
+    # exists in it. Rename the key in server.py and this fails; read a key the
+    # server does not send and this fails. Two sides, one test.
+    def _pass108():
+        import ast as _ast108
+        _root108 = _pathlib.Path(__file__).resolve().parent.parent
+        _srv108 = (_root108 / "server.py").read_text(encoding="utf-8")
+        _tree108 = _ast108.parse(_srv108)
+        _keys108 = set()
+        for _n in _ast108.walk(_tree108):
+            # the job record: JOBS[job_id] = { ... }
+            if isinstance(_n, _ast108.Assign) and isinstance(_n.value, _ast108.Dict):
+                for _t in _n.targets:
+                    if (isinstance(_t, _ast108.Subscript)
+                            and isinstance(_t.value, _ast108.Name) and _t.value.id == "JOBS"):
+                        for _k in _n.value.keys:
+                            if isinstance(_k, _ast108.Constant) and isinstance(_k.value, str):
+                                _keys108.add(_k.value)
+            # anything api_get_job adds on the way out: shaped["x"] = ...
+            if isinstance(_n, _ast108.Assign):
+                for _t in _n.targets:
+                    if (isinstance(_t, _ast108.Subscript)
+                            and isinstance(_t.value, _ast108.Name) and _t.value.id == "shaped"
+                            and isinstance(_t.slice, _ast108.Constant)
+                            and isinstance(_t.slice.value, str)):
+                        _keys108.add(_t.slice.value)
+        # Two different failures, and they were one message until the sabotage
+        # battery renamed the key and got told the parser was broken.
+        if len(_keys108) < 8:
+            failures.append("108: could not read the job record's keys out of server.py — "
+                            f"got {sorted(_keys108)!r}; the contract test is not testing anything")
+            return
+        if "id" not in _keys108:
+            failures.append("108: the job record no longer carries its own id under 'id'. The "
+                            f"room reads job.id from GET /api/jobs/<id>; the record now sends "
+                            f"{sorted(_keys108)!r}, so the progress line will silently stop "
+                            "moving exactly as it did before")
+            return
+        if "job_id" in _keys108:
+            failures.append("108: the job record now carries job_id as well as id. The GET's "
+                            "shape is the authority and it has one id; adding a duplicate field "
+                            "to spare a client is how two shapes start being maintained at once")
+        _pg108 = (_root108 / "webapp" / "index.html").read_text(encoding="utf-8")
+        def _fn108(name):
+            i = _pg108.index("function " + name)
+            j = _pg108.index("\n}", i)
+            return _pg108[i:j + 2]
+        # every function that is handed a job record from the GET
+        _read108 = "".join(_fn108(n) for n in ("watchJob", "roomRunProgress", "renderWorking"))
+        _used108 = set(_re.findall(r"\bjob\.([A-Za-z_]\w*)", _read108))
+        for _k in sorted(_used108):
+            if _k not in _keys108:
+                failures.append(f"108: the room reads job.{_k} from GET /api/jobs/<id>, and the "
+                                f"server never puts {_k!r} in the record it returns "
+                                f"(it sends {sorted(_keys108)!r})")
+        if "id" not in _used108:
+            failures.append("108: nothing in watchJob/roomRunProgress/renderWorking reads job.id "
+                            "any more, so this contract is no longer exercised by the room and "
+                            "the next rename will go unnoticed")
+        # and the fixture the journey answers with has to be that same shape
+        _dj108 = (_root108 / "tests" / "journeys" / "deep.js").read_text(encoding="utf-8")
+        i108 = _dj108.index("await page.route('**/api/jobs/job_probe'")
+        _get108 = _dj108[i108:i108 + 900]
+        if "job_id:" in _get108:
+            failures.append("108: the deep journey's GET fixture answers job_id again — that is "
+                            "the exact invention this block exists to stop")
+        if _get108.count("id: 'job_probe'") < 2:
+            failures.append("108: the deep journey's GET fixture no longer answers the server's "
+                            "own id key, so the journey is back to proving itself")
+    _pass108()
+
+    # ---- block 109: Tab, and the two things that make it acceptable -------
+    #
+    # Tab used to do the browser's default, which is to leave the writing.
+    # Indenting instead is only acceptable if (a) it is ONE undo and (b) it
+    # does not trap a keyboard, and both are easy to lose in a later edit
+    # that looks harmless. So both are pinned to the mechanism, not to the
+    # message: execCommand is the ONLY way to put text into a textarea
+    # without silently emptying its native undo stack — assigning to .value
+    # would trade an indent for everything typed before it — and Escape has
+    # to arm an exit that the next Tab actually takes.
+    def _pass109():
+        _root109 = _pathlib.Path(__file__).resolve().parent.parent
+        _pg109 = (_root109 / "webapp" / "index.html").read_text(encoding="utf-8")
+        def _f109(name):
+            i = _pg109.index("function " + name)
+            j = _pg109.index("\n}", i)
+            return _pg109[i:j + 2]
+        for _need in ("function roomKeydown(e)", "function roomIndent(ta, remove)",
+                      "function roomInsert(ta, text)"):
+            if _need not in _pg109:
+                failures.append(f"109: the room's Tab handling is missing a part: {_need!r}")
+                return
+        _ins = _f109("roomInsert(ta, text)")
+        if "document.execCommand('insertText', false, text)" not in _ins:
+            failures.append("109: the indent no longer goes in through execCommand, which is the "
+                            "only insertion a textarea keeps on its NATIVE undo stack. Assigning "
+                            "to .value empties that stack: the indent would cost him every "
+                            "keystroke before it")
+        _kd = _f109("roomKeydown(e)")
+        if "e.preventDefault();" not in _kd:
+            failures.append("109: Tab is not intercepted, so it leaves the writing again")
+        for _need, _why in (
+                ("if (e.key === 'Escape')", "Escape no longer arms an exit"),
+                ("if (TAB_ESCAPED) { TAB_ESCAPED = false; roomRun(''); return; }",
+                 "the armed Tab is swallowed too, which traps anyone not using a mouse"),
+                ("if (e.metaKey || e.ctrlKey || e.altKey) return;",
+                 "a chord like the deep shortcut is eaten as an indent")):
+            if _need not in _kd:
+                failures.append(f"109: {_why} ({_need!r})")
+        # the way out has to be discoverable without becoming furniture
+        if 'aria-describedby="room-keys"' not in _pg109 or 'id="room-keys" class="sr-only"' not in _pg109:
+            failures.append("109: the escape from the writing is not described to a screen reader "
+                            "on the writing itself, so a keyboard user meets it by being trapped")
+        if "press Escape and then Tab" not in _pg109:
+            failures.append("109: the described escape does not say what to press")
+        if ".sr-only { position: absolute" not in _pg109:
+            failures.append("109: the description is not hidden from the picture — the room is "
+                            "paper first and does not grow a permanent instruction on the wall")
+        _ind = _f109("roomIndent(ta, remove)")
+        if "const INDENT = '  ';" not in _pg109:
+            failures.append("109: the indent is no longer plain text of a declared width")
+        for _need, _why in (
+                ("v.lastIndexOf('\\n', a - 1) + 1", "a multi-line indent does not start at a line start"),
+                ("if (next === block) return;",
+                 "outdenting text that has no indent still writes an edit, and an edit that "
+                 "changes nothing still costs an undo press")):
+            if _need not in _ind:
+                failures.append(f"109: {_why}")
+        # and the journeys have to have RUN these, not merely contain them
+        _run109 = (_root109 / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
+        for _need in ("Tab indents at the caret and does not leave the writing",
+                      "a selection spanning lines indents every line it touches",
+                      "Shift and Tab take one level back off",
+                      "one undo takes back the whole indent and nothing else",
+                      "Escape then Tab leaves the writing untouched"):
+            if _need not in _run109:
+                failures.append(f"109: run.sh no longer requires the Tab check {_need!r} to have "
+                                "printed, so nothing proves it ran")
+        for _need in ("a full reload picks the running job back up",
+                      "a workup that lands while he is away waits and offers itself",
+                      "a run submitted from the page belongs to the page",
+                      "a job the server has lost is stated, not left as a frozen line",
+                      "every character typed while the answer was arriving is in the draft"):
+            if _need not in _run109:
+                failures.append(f"109: run.sh no longer requires the restoration check {_need!r} "
+                                "to have printed, so nothing proves it ran")
+        if not _re.search(r"^for j in .*\bresume\b", _run109, _re.M):
+            failures.append("109: the resume journey exists but is not in the list run.sh runs")
+    _pass109()
+
+    # The standing law: a block that changes what the room visibly DOES amends
+    # the constitution in the same block. Tab and the named arrival styles both
+    # change it, so both are said on the panel and pinned here.
+    def _pass109c():
+        _root = _pathlib.Path(__file__).resolve().parent.parent
+        _pg = (_root / "webapp" / "index.html").read_text(encoding="utf-8")
+        i = _pg.index("The room \u2014 where writing happens")
+        _room = _pg[i:i + 3000]
+        for _need, _why in (
+                ("<strong>Tab</strong> indents rather than leaving the writing",
+                 "the constitution does not say that Tab indents"),
+                ("<strong>Esc</strong> then Tab",
+                 "the constitution does not say how to leave the room with a keyboard"),
+                ("<strong>Settle</strong>", "Settle is not named in the constitution"),
+                ("<strong>Ink</strong>", "Ink is not named in the constitution"),
+                ("<strong>Plain</strong>", "the way to switch the motion off is not in the constitution"),
+                ("Nothing\n      continues moving after a letter has arrived",
+                 "the constitution does not carry Aperture's law — that letters arrive and then "
+                 "are simply words — beside the style that is allowed to splatter")):
+            if _need not in _room:
+                failures.append(f"109c: {_why} ({_need!r})")
+    _pass109c()
+
+    # The ADR carries the reconciliation of the two memories, because both are
+    # real and neither may be quietly rewritten later into the other.
+    def _pass109d():
+        _root = _pathlib.Path(__file__).resolve().parent.parent
+        _adr = (_root / "docs" / "adr-shortcut-deviation.md").read_text(encoding="utf-8")
+        # Needles that fit on one line of the file as it is wrapped — a pin
+        # that spans a line break in prose is a pin that fails on a reflow
+        # rather than on a change of meaning.
+        for _need in ("letters do not splatter, drip, smear, or decay",
+                      "shipping since the room existed",
+                      "its whole licence is the word *during*",
+                      "Stated plainly, and not proved here:"):
+            if _need not in _adr:
+                failures.append(f"109d: the arrival-styles record no longer says {_need!r} — "
+                                "the brief's own words, that Settle predates its name, that Ink "
+                                "is licensed only DURING arrival, and what was not measured")
+    _pass109d()
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

@@ -50,3 +50,43 @@ never the only route.
 the suite pins the refusal deliberately: a mutation restoring `key: 't'` fails
 by name, with the reason. Changing it means changing that pin too, which is the
 intended friction.
+
+---
+
+## Addendum, 2026-09-04: the arrival styles, reconciled
+
+The owner asked for letters that "splatter and drip into place," describing it
+as closer to the Aperture Writer concept. His own Aperture brief says the
+opposite in as many words — *"letters do not splatter, drip, smear, or decay
+after they form. They arrive beautifully and then they are simply words"* —
+and the drip language in that document belongs to a different layer of it, the
+optional momentum feeling, not to the letters.
+
+Both memories are real and neither is rewritten here. The narrow Aperture
+brief governs the DEFAULT; the broader writing-system concept, which envisaged
+several arrival styles, governs what may be offered beside it.
+
+- **Settle** is the default and is not new. It is the motion that has been
+  shipping since the room existed: a quick drop, soft mass, a slight
+  overshoot, blur resolving into clarity, then complete rest. What this block
+  added was the name and the list around it, not the animation.
+- **Ink** is optional and its whole licence is the word *during*. It may
+  splatter on the way in; when the 360–420 ms animation ends the class comes
+  off, the out-of-flow copy stops existing, and what remains is ordinary
+  settled text. Nothing crawls, drips or decays after the landing.
+- **Plain** is the non-animated option, and is what a reduced-motion setting
+  produces regardless of the choice stored.
+
+All three obey the paint contract: *paint may mirror the writing, but it may
+never own layout, selection, input, pointer behavior, clipboard content, or
+accessibility meaning.* Ink is cheap only because of the caret repair — the
+animated copy is an out-of-flow `::before` that occupies no space, so it can
+overshoot, scale and blur without moving a single wrap point. Before that fix
+this style could not have been built without breaking the room.
+
+The preference lives behind **Aa** beside the face, the size and the view. It
+is a device preference: never part of a draft, never a record event.
+
+**Stated plainly, and not proved here:** Ink is a first visual cut. It has been
+tested for containment and for obeying the reduced-motion setting, not for
+whether it is pleasant to type behind for an hour.

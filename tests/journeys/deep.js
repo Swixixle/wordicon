@@ -55,10 +55,19 @@ function deepResult() {
   let polls = 0;
   await page.route('**/api/jobs', r => r.request().method() === 'POST'
     ? r.fulfill({ json: { job_id: 'job_probe', status: 'queued' } }) : r.continue());
+  // THE FIXTURE WAS WRONG, and this is the record of it. Both lines below
+  // used to answer `job_id`. The POST does answer `job_id` — the GET never
+  // has: the job record carries its own id under `id`, and every one of the
+  // checks in this file passed against a response shape the server has never
+  // emitted. The test proved the fixture. The key here is `id` because that
+  // is what server.py writes, and block 108 in the suite now reads the real
+  // serializer and fails if this file and that file drift apart again.
   await page.route('**/api/jobs/job_probe', r => {
     polls += 1;
-    if (polls < 3) return r.fulfill({ json: { job_id: 'job_probe', mode: 'deep', status: 'running', progress: '[2/3] Two — forging…', result: null } });
-    return r.fulfill({ json: { job_id: 'job_probe', mode: 'deep', status: 'complete', progress: 'done', input_text: PARA2, result: deepResult() } });
+    // queued first, so the room's honest states are walked rather than assumed
+    if (polls === 1) return r.fulfill({ json: { id: 'job_probe', mode: 'deep', status: 'queued', progress: 'Queued…', result: null } });
+    if (polls < 4) return r.fulfill({ json: { id: 'job_probe', mode: 'deep', status: 'running', progress: '[2/3] Two — forging…', result: null } });
+    return r.fulfill({ json: { id: 'job_probe', mode: 'deep', status: 'complete', progress: 'done', input_text: PARA2, result: deepResult() } });
   });
 
   await page.goto(BASE + '/'); await page.waitForTimeout(1200);
@@ -127,6 +136,17 @@ function deepResult() {
   await page.click('#deep-ask-go'); await page.waitForTimeout(900);
   const started = posts.filter(x => x === 'POST /api/jobs');
   ok(started.length === 1, 'one press starts exactly one run, with no second form: ' + JSON.stringify(posts.slice(before)));
+  // The line has to have MOVED. It used to say "sending the workup…" forever,
+  // because the client compared job.job_id against a record whose id lives
+  // under `id`; the check that would have caught it did not exist, and the
+  // fixture that would have exposed it was answering the invented shape.
+  const queued = await page.evaluate(() => {
+    const l = document.getElementById('room-run');
+    return l.hidden ? '' : l.textContent;
+  });
+  ok(/submitted · waiting for a turn/.test(queued),
+    'the room says submitted while the job is queued: ' + JSON.stringify(queued));
+  await page.waitForTimeout(2700);          // one poll interval: queued -> working
   const running = await page.evaluate(() => {
     const ta = document.getElementById('compose-text'), line = document.getElementById('room-run');
     return { probe: ta.dataset.deepProbe || '', v: ta.value, s: ta.selectionStart, e: ta.selectionEnd,
@@ -137,8 +157,9 @@ function deepResult() {
   ok(running.probe === 'live-1' && running.v === roomBefore.v && running.s === roomBefore.s && running.e === roomBefore.e,
     'the run leaves the element, the draft and the caret exactly as they were: ' + JSON.stringify([roomBefore.s, roomBefore.e, running.s, running.e]));
   ok(running.focus === 'compose-text', 'and it does not take the focus: ' + running.focus);
-  ok(/3 ideas found, about 14 model calls/.test(running.line),
-    'the estimate becomes an exact count the moment the split comes back: ' + JSON.stringify(running.line));
+  ok(/3 components found · about 14 model calls, still an estimate/.test(running.line),
+    'the estimate becomes an exact count the moment the split comes back, and is still called an '
+    + 'estimate: ' + JSON.stringify(running.line));
   ok(running.pointer === 'none', 'the running line cannot be clicked and is never in the way');
   ok(/ws-write/.test(running.mode) && !/ws-split/.test(running.mode),
     'the room has NOT split while the run is still going: ' + running.mode);
