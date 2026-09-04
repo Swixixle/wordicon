@@ -77,11 +77,81 @@ const DRAFT = [
     'the textarea and the picture behind it are the same box: ' + JSON.stringify(boxes));
   const settled = await page.evaluate(() => {
     const gs = Array.from(document.querySelectorAll('#ink .g'));
-    return { total: gs.length, blocks: gs.filter(g => getComputedStyle(g).display === 'inline-block').length,
+    return { total: gs.length, blocks: gs.filter(g => getComputedStyle(g).display !== 'inline').length,
              landing: gs.filter(g => g.classList.contains('landing')).length };
   });
-  ok(settled.blocks === settled.landing,
-    'only a letter still animating is an atomic box — settled letters wrap like words: ' + JSON.stringify(settled));
+  ok(settled.total > 0 && settled.blocks === 0,
+    'no letter is an atomic box — every one of them wraps like the words in the textarea: ' + JSON.stringify(settled));
+
+  // ---- 1b. the caret while the letters are still animating -------------
+  // The reviewer's objection, and it was right. Making only the SETTLED
+  // letters inline left the ones inside the 360ms window as atomic boxes,
+  // with the caret sitting after them — so a run of them at a line boundary
+  // moved the wrap point while you typed, and it snapped back when the
+  // animation ended. Thirty-nine characters of reflow on the last line,
+  // measured, before the copy-out-of-flow repair. This types across a line
+  // boundary faster than the animation can finish and compares the wrap
+  // points DURING the window against the settled truth.
+  const lineStarts = () => page.evaluate(() => {
+    const ink = document.getElementById('ink');
+    const w = document.createTreeWalker(ink, NodeFilter.SHOW_TEXT); const ys = []; let n;
+    while ((n = w.nextNode())) for (let i = 0; i < n.textContent.length; i++) {
+      const r = document.createRange(); r.setStart(n, i); r.setEnd(n, i + 1);
+      ys.push(Math.round(r.getBoundingClientRect().y));
+    }
+    const starts = []; let last = null;
+    ys.forEach((y, i) => { if (y !== last) { starts.push(i); last = y; } });
+    return starts;
+  });
+  const animating = () => page.evaluate(() => document.querySelectorAll('#ink .g.landing').length);
+
+  const SEED = 'The refusenik posture is the stance of one who exits a containing system without pretending the exit resolves anything at all, and the';
+  await page.evaluate(s => { const ta = document.getElementById('compose-text'); ta.value = s; ta.dispatchEvent(new Event('input')); }, SEED);
+  await page.waitForTimeout(800);
+  await page.click('#compose-text');
+  await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.setSelectionRange(ta.value.length, ta.value.length); });
+  const BURST = ' ledger does not close when you walk out of the room that opened it and the door swings shut behind you';
+  const samples = [];
+  for (let i = 0; i < BURST.length; i++) {
+    await page.keyboard.type(BURST[i], { delay: 0 });   // faster than 360ms, so they stack up
+    if (i % 6 === 0) {
+      const n = await animating();
+      if (n > 0) samples.push({ i, animating: n, starts: await lineStarts(),
+                                len: await page.evaluate(() => document.getElementById('compose-text').value.length) });
+    }
+  }
+  await page.waitForTimeout(900);
+  const settledStarts = await lineStarts();
+  const moved = [];
+  for (const s of samples) {
+    const want = settledStarts.filter(v => v < s.len);
+    const k = Math.min(want.length, s.starts.length);
+    for (let j = 0; j < k; j++) if (want[j] !== s.starts[j]) { moved.push({ at: s.i, animating: s.animating, line: j, drew: s.starts[j], settles: want[j] }); break; }
+  }
+  const mostAtOnce = Math.max(0, ...samples.map(s => s.animating));
+  ok(samples.length >= 6 && mostAtOnce >= 3,
+    'the burst really did stack animating letters up: ' + samples.length + ' samples, up to ' + mostAtOnce + ' at once');
+  ok(moved.length === 0,
+    'no wrap point moves while the letters are still animating (' + mostAtOnce + ' animating at the peak): ' + JSON.stringify(moved.slice(0, 4)));
+  ok((await animating()) === 0, 'every letter that landed stopped being a landing letter');
+
+  // and the caret still lands on the letter, mid-burst, with copies in the air
+  await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.setSelectionRange(ta.value.length, ta.value.length); ta.focus(); });
+  await page.keyboard.type('abcdefghijkl', { delay: 0 });
+  const midAnimating = await animating();
+  const midDrift = [];
+  for (const n of [40, 120, 200]) { const r = await clickChar(n); if (r.got !== null) midDrift.push(r.got - r.want); await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.setSelectionRange(ta.value.length, ta.value.length); ta.focus(); }); }
+  ok(midDrift.length === 3 && midDrift.every(d => Math.abs(d) <= 1),
+    'the caret lands on the letter while the letters are still animating (' + midAnimating + ' in the air): ' + JSON.stringify(midDrift));
+  // the letter itself is what holds the line; the copy is out of flow
+  const shape = await page.evaluate(() => {
+    const g = document.querySelector('#ink .g.landing') || document.querySelector('#ink .g');
+    const cs = getComputedStyle(g), bf = getComputedStyle(g, '::before');
+    return { display: cs.display, landing: g.classList.contains('landing'), beforePos: bf.position };
+  });
+  ok(shape.display === 'inline', 'no letter is an atomic box, animating or not: ' + JSON.stringify(shape));
+  await page.evaluate(d => { const ta = document.getElementById('compose-text'); ta.value = d; ta.dispatchEvent(new Event('input')); }, DRAFT);
+  await page.waitForTimeout(800);
 
   // ---- 2. arrows across wrapped lines, and back ------------------------
   await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.focus(); ta.setSelectionRange(40, 40); });

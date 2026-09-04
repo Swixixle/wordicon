@@ -158,7 +158,23 @@
      characters of the draft, where a different break has nothing after it to
      push out of place, and they return to inline the moment they land. */
   .ink .g { display: inline; }
-  .ink .g.landing { display: inline-block; will-change: transform, opacity, filter; }
+  /* A LANDING letter is inline too, and this is the second half of the same
+     bug. Making only the settled letters inline was not enough: the letters
+     still inside the 360ms window were atomic boxes, the caret sits after
+     them, and a run of them at a line boundary moved the wrap point while
+     you typed — measured at thirty-nine characters of reflow on the last
+     line, snapping into place when the animation finished. "Nothing after
+     them to push out of place" was an assertion, and it was wrong.
+     So the letter that animates never moves: it stays inline text and keeps
+     its exact advance width, while an absolutely-positioned COPY of it —
+     out of flow, influencing no line-breaking decision anywhere — does the
+     arriving. The copy is drawn from data-ch, the real glyph goes
+     transparent underneath it for the duration, and both facts end together
+     when the class comes off. */
+  .ink .g.landing { position: relative; color: transparent; }
+  .ink .g.landing::before { content: attr(data-ch); position: absolute;
+    left: 0; top: 0; white-space: pre; color: var(--write-ink);
+    will-change: transform, opacity, filter; }
   @keyframes land {
     0%   { transform: translateY(-0.42em) scale(0.88); opacity: 0; filter: blur(2.2px); }
     45%  { opacity: 1; filter: blur(0.4px); }
@@ -168,14 +184,14 @@
   /* Soft mass settling: overshoot on the way in, then rest. 360ms is long
      enough to read as weight and short enough that a fast typist never sees
      a queue — the glyph is already legible at 45%. */
-  .ink .g.landing { animation: land 360ms cubic-bezier(0.22, 1.0, 0.32, 1) both; }
-  .ink .g.landing.punct { animation-duration: 250ms; }
+  .ink .g.landing::before { animation: land 360ms cubic-bezier(0.22, 1.0, 0.32, 1) both; }
+  .ink .g.landing.punct::before { animation-duration: 250ms; }
   @media (prefers-reduced-motion: reduce) {
     /* With no animation there is no animationend to take the class off, so
-       the block must not be one here at all — otherwise the caret bug comes
-       back for exactly the people who asked for less motion. */
-    .ink .g.landing, .ink .g.landing.punct { animation: none; }
-    .ink .g.landing { display: inline; will-change: auto; }
+       nothing here may depend on the class ever coming off: the letter is
+       painted by itself, and the copy is not drawn at all. */
+    .ink .g.landing::before, .ink .g.landing.punct::before { animation: none; content: none; }
+    .ink .g.landing { color: inherit; }
   }
   .compose textarea::placeholder { color: var(--write-faint); }
   .compose textarea::selection { background: rgba(255, 217, 125, 0.22); }
@@ -4762,7 +4778,15 @@ function glyphSpan(ch, animate) {
   // will-change on every glyph forever meant a layer per character, hundreds
   // of them, for an animation that finished a third of a second after it
   // started.
-  if (animate) el.addEventListener('animationend', () => el.classList.remove('landing'), {once: true});
+  // The copy the animation actually moves is drawn from here, so the letter
+  // itself never has to become a box.
+  if (animate) {
+    el.setAttribute('data-ch', ch);
+    // The animation runs on ::before, and its end still reports on this
+    // element. Taking the class off removes the copy, restores the letter's
+    // own colour, and drops the only will-change in the layer.
+    el.addEventListener('animationend', () => el.classList.remove('landing'), {once: true});
+  }
   return el;
 }
 

@@ -3783,7 +3783,8 @@ console.log(JSON.stringify(els['input-text'].value));
         # editing in the middle.
         if _sh58.which("node"):
             _stub65 = """
-class N { constructor(t){ this.nodeValue=t; this.className=''; this._t=t; this.classList={remove(){}}; }
+class N { constructor(t){ this.nodeValue=t; this.className=''; this._t=t; this.classList={remove(){}}; this.attrs={}; }
+  setAttribute(k,v){ this.attrs[k]=v; }
   // ledger (pass 1): a landed letter takes its own class off on animationend,
   // which is what returns it to inline and drops its compositing layer. The
   // stub carries the listener so the ink layer still runs here.
@@ -16053,10 +16054,30 @@ console.log(out.join('\\n'));
         def _fP1(msg):
             failures.append("pass 1: " + msg)
 
+        # The repair, in both halves. Making only the SETTLED letters inline was
+        # not enough: the letters still inside the 360ms window were atomic
+        # boxes, the caret sits after them, and a run of them at a line boundary
+        # moved the wrap point while the owner typed — thirty-nine characters of
+        # reflow on the last line, measured, snapping into place when the
+        # animation ended. So no letter is ever a box. The one that animates
+        # stays inline text at its exact advance width and an absolutely
+        # positioned COPY of it, out of flow, does the arriving.
         for _land in ("  .ink .g { display: inline; }",
-                      "  .ink .g.landing { display: inline-block; will-change: transform, opacity, filter; }"):
+                      "  .ink .g.landing { position: relative; color: transparent; }",
+                      "  .ink .g.landing::before { content: attr(data-ch); position: absolute;",
+                      "  .ink .g.landing::before { animation: land 360ms cubic-bezier(0.22, 1.0, 0.32, 1) both; }"):
             if _land not in _idxP1:
                 _fP1(f"the glyph display rules are not the repaired ones ({_land.strip()!r})")
+        _landRule = _re.search(r"\n  \.ink \.g\.landing \{([^}]*)\}", _idxP1)
+        if not _landRule or "inline-block" in _landRule.group(1) or "display:" in _landRule.group(1):
+            _fP1("a letter that is still animating is a box again — a run of them at a line "
+                 "boundary moves the wrap point while the owner is typing into it")
+        _beforeRule = _re.search(r"\.ink \.g\.landing::before \{ content: attr\(data-ch\);([^}]*)\}", _idxP1)
+        if not _beforeRule or "position: absolute" not in _beforeRule.group(1):
+            _fP1("the animated copy is in flow — then it influences line-breaking, which is "
+                 "the whole reason it is a copy")
+        if "el.setAttribute('data-ch', ch)" not in _idxP1:
+            _fP1("the copy has nothing to draw — data-ch is what ::before renders")
         # the exact regression, stated as itself: no rule may make a SETTLED
         # letter an atomic box again
         _gRule = _re.search(r"\n  \.ink \.g \{([^}]*)\}", _idxP1)
@@ -16072,9 +16093,10 @@ console.log(out.join('\\n'));
             _fP1("a landed letter never stops being a landing letter — it stays an atomic "
                  "box and keeps its compositing layer forever")
         _rm = _re.search(r"@media \(prefers-reduced-motion: reduce\) \{([^}]*\}[^}]*)\}", _idxP1)
-        if not _rm or "display: inline" not in _rm.group(1):
+        if not _rm or "content: none" not in _rm.group(1) or "color: inherit" not in _rm.group(1):
             _fP1("with motion reduced there is no animationend to take the class off, so the "
-                 "caret bug returns for exactly the people who asked for less motion")
+                 "letter must paint itself and the copy must not be drawn at all — otherwise "
+                 "anyone who asked for less motion gets invisible text")
 
         # the measure is on the shared box, and on nothing else
         if not _re.search(r"\.ink-wrap \{[^}]*max-width: var\(--write-measure", _idxP1, _re.S):
@@ -16129,7 +16151,18 @@ console.log(out.join('\\n'));
                                  "the room journey no longer states which engine it ran in"),
                                 ("the caret lands on the letter that is drawn", "the caret measurement is gone"),
                                 ("the same box", "the shared-box measurement is gone"),
-                                ("changing the view records nothing", "nothing proves a view change writes nothing")):
+                                ("changing the view records nothing", "nothing proves a view change writes nothing"),
+                                # exact sentences, not fragments: run.sh greps for these same
+                                # strings, and the suite is what notices when one is reworded —
+                                # a battery that runs only the suite would otherwise miss it
+                                ("'no letter is an atomic box \u2014 every one of them wraps like the words in the textarea: '",
+                                 "the journey stopped asserting that no letter is a box"),
+                                ("while the letters are still animating",
+                                 "nothing measures the caret DURING the 360ms window, which is where "
+                                 "the second half of this bug lived"),
+                                ("no wrap point moves while the letters are still animating",
+                                 "nothing compares the wrap points during the animation against the "
+                                 "settled truth")):
                 if _need not in _j:
                     _fP1(_why + f" ({_need!r})")
             _runP1 = (_rootP1 / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
