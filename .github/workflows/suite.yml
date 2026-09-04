@@ -46,7 +46,7 @@ jobs:
         working-directory: tests/journeys
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
       - name: Browser journeys (scratch store, gateway poisoned, no key, no network)
         env:
           JOURNEY_OUT: ${{ runner.temp }}/journeys-out

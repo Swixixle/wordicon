@@ -25,6 +25,12 @@ fi
 if ! (cd "$HERE" && node -e "const {chromium}=require('playwright'); chromium.launch(process.env.JOURNEY_CHROME?{executablePath:process.env.JOURNEY_CHROME}:{}).then(b=>b.close())" 2>"$JOURNEY_OUT/browser-probe.err"); then
   echo "FAIL the browser could not launch:"; cat "$JOURNEY_OUT/browser-probe.err"; exit 2
 fi
+# The room journey runs in WebKit — Safari's own engine — because the caret bug
+# that pass 1 repaired was invisible to source review and the owner writes in
+# Safari. A missing WebKit is a failure, not a skip.
+if ! (cd "$HERE" && node -e "const {webkit}=require('playwright'); webkit.launch().then(b=>b.close())" 2>"$JOURNEY_OUT/webkit-probe.err"); then
+  echo "FAIL WebKit could not launch (npx playwright install webkit):"; cat "$JOURNEY_OUT/webkit-probe.err"; exit 2
+fi
 
 # the port must be free — a stale server would answer for a build that is not this one
 if curl -s -o /dev/null "http://127.0.0.1:$JOURNEY_PORT/pair"; then
@@ -47,7 +53,7 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser speak speakkeep encounter federation shell; do
+for j in quiet home anatomy chooser speak speakkeep encounter federation shell room; do
   echo "== journey: $j"
   if [ "$j" = quiet ] || [ "$j" = speak ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
@@ -93,6 +99,11 @@ done
 for need in "the document was never replaced" "the writing room is the SAME element" "the caret AND the selection survived the walk" "undo walked back through an edit made BEFORE the walk" "a closed place stops running" "Home came back to where it was scrolled" "the anatomy takes the whole window, as ruled"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/shell.log" || { echo "== shell: missing check: $need"; status=1; }
 done
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log | awk '{s+=$2} END {print s+0}')
+# pass 1: the caret must have been measured against the letters actually drawn,
+# in WebKit, or this journey proved nothing about the thing it exists for.
+for need in "the room is measured in WebKit" "the caret lands on the letter that is drawn" "the textarea and the picture behind it are the same box" "only a letter still animating is an atomic box" "changing the view records nothing" "a view name this build does not know falls back" "the caret is still on the letter after every mode change and a walk"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/room.log" || { echo "== room: missing check: $need"; status=1; }
+done
+total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log | awk '{s+=$2} END {print s+0}')
 echo "== journeys: $total checks, exit $status"
 exit $status

@@ -107,10 +107,12 @@
   .compose textarea {
     background: transparent; border: none; border-radius: 0; padding: 0;
     color: var(--write-ink); caret-color: var(--write-ink);
-    /* Measure before size: ~34em keeps the line short enough to read
-       even when the window is wide, which is what actually makes a big
-       font comfortable rather than shouty. */
-    width: 100%; max-width: 34em; height: 100%; min-height: 0; resize: none;
+    /* Measure before size: a short line is what makes a big font comfortable
+       rather than shouty. But the measure is NOT set here any more — it is
+       set on .ink-wrap, the one box the textarea and the ink layer share, so
+       the two cannot be given different widths and drawn different lines.
+       That was the caret bug once already; this makes it structural. */
+    width: 100%; max-width: none; height: 100%; min-height: 0; resize: none;
     font-size: clamp(20px, 2.3vw, 27px); line-height: 1.65;
     letter-spacing: 0.01em; font-family: inherit; }
   .compose textarea:focus { outline: none; border: none; }
@@ -125,7 +127,15 @@
 
      Aperture's law: letters arrive beautifully and then they are simply
      words. Nothing here decays, drips or smears after it has landed. */
-  .ink-wrap { position: relative; flex: 1 1 56%; min-width: 0; display: flex; }
+  /* THE MEASURE. One box holds both the textarea and the picture behind it,
+     so they are the same width by construction rather than by coincidence.
+     Width is presentation: it is a device preference, never part of the
+     draft and never a record event. --write-measure is in ch of the WRITING
+     font (applyWriteStyle gives this box the textarea's own font-size), so
+     the line stays the same number of characters at every type size, which
+     is what a measure actually means. */
+  .ink-wrap { position: relative; flex: 1 1 auto; min-width: 0; display: flex;
+    width: 100%; max-width: var(--write-measure, 60ch); margin: 0 auto; }
   .compose-cols .ink-wrap textarea { flex: 1 1 auto; }
   .ink { position: absolute; inset: 0; overflow: hidden; pointer-events: none;
     white-space: pre-wrap; overflow-wrap: break-word; color: var(--write-ink);
@@ -134,7 +144,21 @@
      selection and every keystroke; the ink layer owns only the picture. */
   .compose.inked textarea { color: transparent; background: transparent; position: relative; z-index: 1; }
   .compose.inked textarea::selection { background: rgba(255, 217, 125, 0.22); color: transparent; }
-  .ink .g { display: inline-block; will-change: transform, opacity, filter; }
+  /* THE CARET BUG, and the whole of it.
+     A settled letter is ordinary inline text. It used to be an inline-BLOCK,
+     and an inline-block is an ATOMIC box: a run of them breaks between
+     CHARACTERS, while the textarea underneath breaks between WORDS. The two
+     then draw different lines — and since the textarea owns the caret and
+     this layer owns the picture, clicking on a letter put the cursor
+     somewhere else, further off the further down the draft you were.
+     Measured at fifteen characters by the fourth paragraph, identically in
+     WebKit and in Chromium: not a Safari quirk, a layout mistake.
+     Only a letter that is actually ANIMATING has to be a block, because
+     transforms do not apply to inline elements. Those are the last few
+     characters of the draft, where a different break has nothing after it to
+     push out of place, and they return to inline the moment they land. */
+  .ink .g { display: inline; }
+  .ink .g.landing { display: inline-block; will-change: transform, opacity, filter; }
   @keyframes land {
     0%   { transform: translateY(-0.42em) scale(0.88); opacity: 0; filter: blur(2.2px); }
     45%  { opacity: 1; filter: blur(0.4px); }
@@ -147,7 +171,11 @@
   .ink .g.landing { animation: land 360ms cubic-bezier(0.22, 1.0, 0.32, 1) both; }
   .ink .g.landing.punct { animation-duration: 250ms; }
   @media (prefers-reduced-motion: reduce) {
+    /* With no animation there is no animationend to take the class off, so
+       the block must not be one here at all — otherwise the caret bug comes
+       back for exactly the people who asked for less motion. */
     .ink .g.landing, .ink .g.landing.punct { animation: none; }
+    .ink .g.landing { display: inline; will-change: auto; }
   }
   .compose textarea::placeholder { color: var(--write-faint); }
   .compose textarea::selection { background: rgba(255, 217, 125, 0.22); }
@@ -181,7 +209,7 @@
      every swap is CSS only: nothing is display:none'd, nothing is moved
      in the DOM, nothing is rebuilt — which is why open cards, scroll
      positions, the draft, its caret and its undo stack all survive. */
-  .compose-cols { display: flex; gap: 30px; width: 100%; max-width: 34em;
+  .compose-cols { display: flex; gap: 30px; width: 100%; max-width: none;
     height: 100%; min-height: 0; justify-content: center; }
   body.ws-open { overflow: hidden; }
   body.place-open { overflow: hidden; }
@@ -4530,8 +4558,20 @@ const WRITE_FACES = [
 // ordinary 16px input this replaces, so "larger than normal" stays true at
 // every rung and cannot be dialled away by accident.
 const WRITE_SIZES = [18, 20, 23, 27, 31, 36, 42];
+// Two views, and deliberately only two. The stored value is a NAME, so a
+// third can be added later without touching a single stored draft — an
+// unknown name simply falls back to the first. Measured in ch of the
+// writing font, which keeps the line the same number of characters however
+// large the type is.
+const WRITE_VIEWS = [
+  ['focused', 'Focused', '58ch', 'a comfortable measure'],
+  ['wide',    'Wide',    '96ch', 'uses more of the room'],
+];
+function writeView() {
+  return WRITE_VIEWS.find(v => v[0] === writeStyle.view) || WRITE_VIEWS[0];
+}
 const WRITE_KEY = 'wordicon.write.style.v1';
-let writeStyle = {face: 'sans', size: null};   // size null = the CSS clamp
+let writeStyle = {face: 'sans', size: null, view: 'focused'};   // size null = the CSS clamp
 
 function loadWriteStyle() {
   try {
@@ -4556,6 +4596,14 @@ function applyWriteStyle() {
   // Clearing the inline size hands the decision back to the stylesheet's
   // clamp, which is the default and stays viewport-fluid.
   ta.style.fontSize = writeStyle.size ? writeStyle.size + 'px' : '';
+  // The shared box gets the WRITING font-size so that a measure written in
+  // ch means characters of the type you are actually looking at, not
+  // characters of the page font it would otherwise inherit.
+  const wrap = document.querySelector('.compose .ink-wrap');
+  if (wrap) {
+    wrap.style.fontSize = getComputedStyle(ta).fontSize;
+    wrap.style.setProperty('--write-measure', writeView()[2]);
+  }
   // The picture must follow the type, or the letters land in the wrong place.
   syncInkBox();
   renderWriteStyle();
@@ -4576,6 +4624,10 @@ function renderWriteStyle() {
        <button onclick="nudgeWriteSize(1)" aria-label="larger">+</button>
        ${cur ? `<button onclick="resetWriteSize()">reset</button>` : ''}
      </div>` +
+    `<div class="lbl" style="margin-top:10px">View</div><div class="row">` +
+    WRITE_VIEWS.map(v => `<button class="${v[0] === writeView()[0] ? 'on' : ''}"
+       title="${v[3]}" onclick="setWriteView('${v[0]}')">${v[1]}</button>`).join('') +
+    `</div>` +
     `<div class="lbl" style="margin-top:10px">Letters</div><div class="row">
        <button class="${inkOn ? 'on' : ''}" onclick="setInk(true)">land</button>
        <button class="${inkOn ? '' : 'on'}" onclick="setInk(false)">still</button>
@@ -4583,6 +4635,16 @@ function renderWriteStyle() {
 }
 
 function setWriteFace(key) { writeStyle.face = key; saveWriteStyle(); applyWriteStyle(); }
+// Width is presentation. It is kept on this device beside the face and the
+// size, and it is not a judgment, not an event, and nothing the record ever
+// hears about. Changing it must not touch a character of the draft, so the
+// only thing that happens is a repaint of the picture at the new width.
+function setWriteView(key) {
+  writeStyle.view = key;
+  saveWriteStyle();
+  applyWriteStyle();
+  applyInk();
+}
 
 function nudgeWriteSize(dir) {
   let i = WRITE_SIZES.indexOf(writeStyle.size);
@@ -4695,6 +4757,12 @@ function glyphSpan(ch, animate) {
   el.className = 'g' + (animate ? ' landing' : '') +
     (animate && /[.,;:!?'"“”‘’—–-]/.test(ch) ? ' punct' : '');
   el.textContent = ch;
+  // A landed letter stops being a block. Two things depended on this and
+  // neither was done: the wrapping (see the CSS), and the compositing —
+  // will-change on every glyph forever meant a layer per character, hundreds
+  // of them, for an animation that finished a third of a second after it
+  // started.
+  if (animate) el.addEventListener('animationend', () => el.classList.remove('landing'), {once: true});
   return el;
 }
 

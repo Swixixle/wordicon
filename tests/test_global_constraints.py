@@ -3376,7 +3376,11 @@ console.log(JSON.stringify([lineageTag('recorded'), lineageTag('derived'), linea
                         "than the ordinary input it replaces")
     # A long line in a big font is harder to read, not easier. The measure
     # is what makes the size comfortable rather than shouty.
-    if not _re.search(r"\.compose textarea\b[^}]*max-width:\s*\d+", _pg61, _re.S):
+    # ledger (pass 1): the measure lives on .ink-wrap now — the one box the
+    # textarea and the picture behind it share — so that the two cannot be
+    # given different widths and drawn different lines. Same invariant, one
+    # element up. The old needle would have gone on matching `max-width: none`.
+    if not _re.search(r"\.ink-wrap \{[^}]*max-width: var\(--write-measure,\s*\d+ch\)", _pg61, _re.S):
         failures.append("61: the writing room sets no line length — a big font across a wide "
                         "window is worse to read than a small one")
 
@@ -3512,7 +3516,13 @@ console.log(JSON.stringify(els['input-text'].value));
                             "information pane is the page itself, not a miniature")
     # And the writing column must keep a measure whatever the pane width —
     # a full-width line at 27px is the thing the max-width existed to prevent.
-    if not _re.search(r"\.compose-cols \{[^}]*max-width:", _pg62, _re.S):
+    # ledger (pass 1): the measure moved to .ink-wrap, the one box the textarea
+    # and the picture behind it SHARE, so the two cannot be given different
+    # widths and made to draw different lines. This pin had to move with it —
+    # and note what it would otherwise have become: `.compose-cols` still
+    # carries a max-width, it is just `none`, so the old regex would have gone
+    # on passing while the measure was gone.
+    if not _re.search(r"\.ink-wrap \{[^}]*max-width: var\(--write-measure", _pg62, _re.S):
         failures.append("62: the writing column lost its measure — the line runs the full "
                         "width of whatever pane it is in")
 
@@ -3773,7 +3783,11 @@ console.log(JSON.stringify(els['input-text'].value));
         # editing in the middle.
         if _sh58.which("node"):
             _stub65 = """
-class N { constructor(t){ this.nodeValue=t; this.className=''; this._t=t; }
+class N { constructor(t){ this.nodeValue=t; this.className=''; this._t=t; this.classList={remove(){}}; }
+  // ledger (pass 1): a landed letter takes its own class off on animationend,
+  // which is what returns it to inline and drops its compositing layer. The
+  // stub carries the listener so the ink layer still runs here.
+  addEventListener(){}
   get textContent(){ return this._t; } set textContent(v){ this._t=v; } }
 class E { constructor(){ this.childNodes=[]; this.style={}; this.className=''; this._frag=false; }
   appendChild(c){ if (c instanceof F) { c.kids.forEach(k=>this.childNodes.push(k)); }
@@ -3870,6 +3884,13 @@ console.log(JSON.stringify({ok: true, nodes: INK.childNodes.length, len: TA.valu
             r"if \(/\\s/\.test\(ch\)\)[^\n]*createTextNode", _pg65):
         failures.append("65: whitespace is wrapped like a glyph — the painted text will wrap "
                         "differently from the textarea it sits behind")
+    # ledger (pass 1): the sentence above had exactly half the insight in it.
+    # An inline-block does not break a line — true of a newline, and equally
+    # true of every OTHER character, because a run of atomic boxes may break
+    # between any two of them while the textarea breaks between words. Every
+    # glyph WAS an inline-block, and the picture and the caret drifted apart by
+    # fifteen characters by the fourth paragraph, identically in WebKit and in
+    # Chromium. The rest of that pin is in the pass 1 block below.
 
     # ---- 66. AS MANY COMPONENTS AS HE WANTS -------------------------
     #
@@ -16002,6 +16023,124 @@ console.log(out.join('\\n'));
                 _fS2(f"webapp/{_f} contains a raw NUL byte — write it as an escape, not a byte")
 
     _slice2()
+
+    # ============ pass 1: the writing room, repaired ======================
+    # The owner said the cursor felt broken. It was, and the cause was one
+    # declaration: every letter the ink layer draws was display:inline-block.
+    # An inline-block is an ATOMIC box, so a run of them may break between any
+    # two CHARACTERS, while the textarea underneath breaks between WORDS. The
+    # two then draw different lines — and since the textarea owns the caret
+    # while the ink layer owns the picture, clicking on a letter put the caret
+    # somewhere else, further off the deeper into the draft you were. Measured
+    # in real WebKit at fifteen characters by the fourth paragraph, and the
+    # same fifteen in Chromium, which is what proves it a layout mistake
+    # rather than a Safari quirk.
+    #
+    # Two structural repairs came out of it. A settled letter is inline again,
+    # and only a letter still ANIMATING is a block (transforms do not apply to
+    # inline elements) — those are the last few characters of the draft, where
+    # a different break has nothing after it to push out of place, and they go
+    # back to inline on animationend. And the measure now lives on the ONE box
+    # the textarea and the picture share, so they cannot be given different
+    # widths again by anyone editing either rule.
+    #
+    # What source can hold is here. That the caret actually lands on the
+    # letter is held by tests/journeys/room.js, which runs in WebKit.
+    def _pass1():
+        _rootP1 = Path(cli.__file__).parent.parent
+        _idxP1 = (_rootP1 / "webapp" / "index.html").read_text(encoding="utf-8")
+
+        def _fP1(msg):
+            failures.append("pass 1: " + msg)
+
+        for _land in ("  .ink .g { display: inline; }",
+                      "  .ink .g.landing { display: inline-block; will-change: transform, opacity, filter; }"):
+            if _land not in _idxP1:
+                _fP1(f"the glyph display rules are not the repaired ones ({_land.strip()!r})")
+        # the exact regression, stated as itself: no rule may make a SETTLED
+        # letter an atomic box again
+        _gRule = _re.search(r"\n  \.ink \.g \{([^}]*)\}", _idxP1)
+        if not _gRule or "inline-block" in _gRule.group(1):
+            _fP1("a settled letter is an atomic box again — the picture will break lines "
+                 "between characters while the textarea breaks them between words, and the "
+                 "caret will drift from the letter it is drawn under")
+        if "will-change" in (_gRule.group(1) if _gRule else ""):
+            _fP1("every glyph carries will-change again — a compositing layer per character, "
+                 "for an animation that ended a third of a second after it started")
+        # ...and the class must come OFF, or "only while animating" is a lie
+        if "addEventListener('animationend', () => el.classList.remove('landing'), {once: true})" not in _idxP1:
+            _fP1("a landed letter never stops being a landing letter — it stays an atomic "
+                 "box and keeps its compositing layer forever")
+        _rm = _re.search(r"@media \(prefers-reduced-motion: reduce\) \{([^}]*\}[^}]*)\}", _idxP1)
+        if not _rm or "display: inline" not in _rm.group(1):
+            _fP1("with motion reduced there is no animationend to take the class off, so the "
+                 "caret bug returns for exactly the people who asked for less motion")
+
+        # the measure is on the shared box, and on nothing else
+        if not _re.search(r"\.ink-wrap \{[^}]*max-width: var\(--write-measure", _idxP1, _re.S):
+            _fP1("the measure is not on the box the textarea and the picture share")
+        _taRule = _re.search(r"\.compose textarea \{(.*?)\n  \}", _idxP1, _re.S)
+        if not _taRule or "max-width: none" not in _taRule.group(1):
+            _fP1("the textarea carries its own max-width again — it and the picture can be "
+                 "given different widths, which is how the caret drifted the first time")
+        if "wrap.style.fontSize = getComputedStyle(ta).fontSize" not in _idxP1:
+            _fP1("the shared box does not take the writing font-size, so a measure in ch "
+                 "counts characters of the wrong type")
+
+        # two views, stored as NAMES so a third can be added later, device-local
+        _views = _re.search(r"const WRITE_VIEWS = \[(.*?)\];", _idxP1, _re.S)
+        if not _views or _views.group(1).count("['") != 2:
+            _fP1("there are not exactly the two ruled views")
+        for _v in ("'focused'", "'Focused'", "'wide'", "'Wide'"):
+            if not _views or _v not in _views.group(1):
+                _fP1(f"a ruled view is missing ({_v})")
+        if "return WRITE_VIEWS.find(v => v[0] === writeStyle.view) || WRITE_VIEWS[0];" not in _idxP1:
+            _fP1("an unknown view name does not fall back — a third view added later would "
+                 "break every device that had not been updated")
+        _setV = _idxP1[_idxP1.index("function setWriteView(key)"):]
+        _setV = _setV[:_setV.index("\n}")]
+        for _bad in ("fetch(", "/api/"):
+            if _bad in _setV:
+                _fP1(f"changing the view talks to the server ({_bad}) — width is presentation, "
+                     "not a judgment and not a record event")
+        if "saveWriteStyle()" not in _setV:
+            _fP1("the view is not remembered on this device")
+        # no new permanent chrome: the choice lives in the panel that already
+        # existed behind Aa, and the room's control bar is unchanged
+        _bar = _idxP1[_idxP1.index('<div id="ws-bar"'):_idxP1.index('<div id="ws-divider"')]
+        if _bar.count("<button") != 7:
+            _fP1(f"the room's bar changed size ({_bar.count('<button')} buttons) — the view "
+                 "belongs in the panel behind Aa, not on a permanent toolbar")
+        if '<div class="lbl" style="margin-top:10px">View</div>' not in _idxP1:
+            _fP1("the View choice is not in the panel that already existed")
+
+        # the journey that measures what source cannot
+        _roomJ = _rootP1 / "tests" / "journeys" / "room.js"
+        if not _roomJ.exists():
+            _fP1("tests/journeys/room.js is gone — nothing measures the caret against the "
+                 "letters that are actually drawn")
+        else:
+            _j = _roomJ.read_text(encoding="utf-8")
+            for _need, _why in (("const { webkit } = require('playwright');",
+                                 "the room journey no longer imports WebKit itself — and a rename "
+                                 "(const { chromium: webkit }) walks past a looser needle, which is "
+                                 "why the journey also asks the browser what engine it is"),
+                                ("browser.browserType().name() === 'webkit'",
+                                 "the room journey no longer states which engine it ran in"),
+                                ("the caret lands on the letter that is drawn", "the caret measurement is gone"),
+                                ("the same box", "the shared-box measurement is gone"),
+                                ("changing the view records nothing", "nothing proves a view change writes nothing")):
+                if _need not in _j:
+                    _fP1(_why + f" ({_need!r})")
+            _runP1 = (_rootP1 / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
+            if _re.search(r"^for j in .*\broom\b", _runP1, _re.M) is None:
+                _fP1("the room journey exists but is not in the list run.sh runs")
+            if "webkit.launch()" not in _runP1:
+                _fP1("run.sh does not prove WebKit is there before claiming the room passed")
+            if "webkit" not in (_rootP1 / ".github" / "workflows" / "suite.yml").read_text(encoding="utf-8"):
+                _fP1("CI does not install WebKit — the room journey would fail there for the "
+                     "wrong reason")
+    _pass1()
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to
