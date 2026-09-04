@@ -53,7 +53,7 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser speak speakkeep encounter federation shell room; do
+for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep; do
   echo "== journey: $j"
   if [ "$j" = quiet ] || [ "$j" = speak ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
@@ -104,6 +104,11 @@ done
 for need in "the room is measured in WebKit" "the caret lands on the letter that is drawn" "the textarea and the picture behind it are the same box" "no letter is an atomic box — every one of them wraps" "no wrap point moves while the letters are still animating" "the caret lands on the letter while the letters are still animating" "the picture and its animated copies are hidden from the reader" "the pointer over a drawn letter reaches the writing" "selecting the whole page does not pick up" "selecting in the room returns the draft exactly once" "with motion reduced the real letter is visible at once" "changing the view records nothing" "a view name this build does not know falls back" "the caret is still on the letter after every mode change and a walk"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/room.log" || { echo "== room: missing check: $need"; status=1; }
 done
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log | awk '{s+=$2} END {print s+0}')
+# pass 2: the invocation must have been proved not to spend, the run proved
+# not to disturb the room, and the expansion proved not to fire.
+for need in "the chord opens the question rather than starting the run" "and it has spent nothing" "cancelling spent nothing at all" "one press starts exactly one run" "the run leaves the element, the draft and the caret exactly as they were" "and it does not take the focus" "the room has NOT split while the run is still going" "the room splits when the answer arrives" "the paragraph is exactly the text between the blank lines" "with a selection the paragraph command offers the selection" "the expansion is counted from the components that actually came back" "clicking it runs nothing" "the undo stack survived the whole invocation"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/deep.log" || { echo "== deep: missing check: $need"; status=1; }
+done
+total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log | awk '{s+=$2} END {print s+0}')
 echo "== journeys: $total checks, exit $status"
 exit $status

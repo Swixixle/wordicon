@@ -239,6 +239,21 @@
     border-radius: 10px; padding: 10px 12px; width: min(300px, calc(100vw - 32px));
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); }
   .write-style .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  /* The invocation panel borrows the type panel's clothes on purpose: one
+     more quiet thing in the corner, not a new kind of surface. */
+  #deep-ask { width: min(360px, calc(100vw - 32px)); }
+  #deep-ask .scope { color: var(--write-ink); font-size: 13px; margin: 0 0 6px; }
+  #deep-ask .preview { color: var(--write-panel-ink); font-size: 12px; line-height: 1.4;
+    margin: 0 0 8px; max-height: 4.6em; overflow: hidden; }
+  #deep-ask .fact { color: var(--write-panel-ink); font-size: 11.5px; line-height: 1.45; margin: 3px 0; }
+  #deep-ask .fact b { color: var(--write-ink); font-weight: 600; }
+  /* The running line: bottom-left of the room, dim, never in the way of the
+     writing and never a thing that can take focus. */
+  .room-run { position: fixed; left: 16px; bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
+    z-index: 61; font-size: 12px; color: var(--write-faint); max-width: min(46ch, calc(100vw - 32px));
+    pointer-events: none; }
+  body.ws-open .room-run { left: auto; right: 16px; }
+  body.ws-open.write-left .room-run { right: auto; left: 16px; }
   .write-style .lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em;
     color: var(--write-panel-ink); margin: 0 0 5px; }
   .write-style button { background: transparent; border: 1px solid var(--write-faint);
@@ -1427,6 +1442,15 @@
   </div>
   <div id="write-style" class="write-style" style="display:none"></div>
   <div id="write-save" class="write-style" style="display:none"></div>
+  <!-- Pass 2. A keystroke may not spend money, so it opens this instead: one
+       panel that says what would be sent, down which lane, at what cost, and
+       that it keeps going without you. One press starts it; escape spends
+       nothing. It is the same quiet furniture as the type panel — the room is
+       paper first and does not become a cockpit. -->
+  <div id="deep-ask" class="write-style" style="display:none" role="dialog"
+       aria-modal="false" aria-labelledby="deep-ask-title"></div>
+  <!-- and while it runs: one line, low, that never takes the caret -->
+  <div id="room-run" class="room-run" hidden aria-live="polite"></div>
 </div>
 
 
@@ -2346,6 +2370,7 @@ async function watchJob(jobId) {
       return;
     }
 
+    roomRunProgress(job);
     if (job.status === 'complete') {
       localStorage.removeItem(ACTIVE_JOB_KEY);
       pendingDecisions = {}; cardTraceId = {}; cardData = {}; cardIndex = 0;
@@ -2385,12 +2410,14 @@ async function watchJob(jobId) {
         appendRetryCard();
       }
       loadHistory();
+      deepArrived(job.job_id || jobId);   // pass 2: the room splits now, not before
       return;
     }
 
     if (job.status === 'failed') {
       localStorage.removeItem(ACTIVE_JOB_KEY);
       document.getElementById('result-area').innerHTML = `<div class="card"><div class="error">${escapeHtml(job.error || 'Something went wrong.')}</div></div>`;
+      if (DEEP_JOB && (job.job_id || jobId) === DEEP_JOB) { DEEP_JOB = ''; roomRun('the workup failed — the page says why'); }
       return;
     }
 
@@ -2806,7 +2833,34 @@ function buildDeepHtml(d) {
       ${g.summary ? `<div class="muted" style="font-size:13px;margin-bottom:12px">${escapeHtml(g.summary)}</div>` : ''}
       ${cards}`;
   }).join('<div style="height:8px"></div>');
-  return attackCard + groupsHtml;
+  return attackCard + groupsHtml + expansionCard(d);
+}
+
+// The one secondary action the workup is allowed, and it is a door with its
+// price written on it. N is counted from the components that ACTUALLY came
+// back — three instruments on each — so it is not an estimate. Nothing in it
+// runs by itself, and it does not run yet at all: the fan-out is a second
+// subsystem and the owner's standing order for this pass was not to start
+// one. It says so rather than pretending, which is what every unbuilt door
+// in here does.
+function expansionCard(d) {
+  const groups = (d.groups || []).filter(g => g.result && (g.result.candidates || []).length);
+  if (!groups.length) return '';
+  const n = groups.length * 3;
+  return `<div class="card" id="deep-expansion" style="margin-top:10px">
+    <div class="section-label" style="margin-top:0">And the rest</div>
+    <p class="body">Run <strong>archetype</strong>, <strong>sprout</strong> and <strong>refract</strong>
+      on every component — <strong>${groups.length} component${groups.length === 1 ? '' : 's'} × 3 instruments
+      = up to ${n} more model calls.</strong> Counted from the components that came back, not estimated.</p>
+    <p class="body muted" style="font-size:12.5px">Not built yet, and deliberately: firing three
+      instruments across every component is its own machinery, and one of the three is
+      <strong>sprout</strong> — the stage that has never once in fifty-eight runs come back empty. It
+      belongs behind a decision, not behind a button that already exists. Each candidate below still
+      carries its own ⤷ Sprout, ⇄ Refract and archetype, one at a time, chosen.</p>
+    <button class="go-btn" disabled aria-disabled="true"
+      style="background:var(--panel-2);color:var(--muted);border:1px dashed var(--border)">
+      Run all three on every component — up to ${n} model calls · not built yet</button>
+  </div>`;
 }
 
 // The component's own verdict, shown on the component and not spelled out
@@ -4670,6 +4724,10 @@ function renderWriteStyle() {
        <button onclick="nudgeWriteSize(1)" aria-label="larger">+</button>
        ${cur ? `<button onclick="resetWriteSize()">reset</button>` : ''}
      </div>` +
+    `<div class="lbl" style="margin-top:10px">Go deep</div><div class="row">` +
+    `<button onclick="toggleWriteStyle();askDeep('paragraph')" title="the paragraph the caret is in — or your selection">This paragraph <span style="opacity:.6">${DEEP_CHORDS.paragraph.label}</span></button>` +
+    `<button onclick="toggleWriteStyle();askDeep('draft')" title="everything in the room">The whole draft <span style="opacity:.6">${DEEP_CHORDS.draft.label}</span></button>` +
+    `</div>` +
     `<div class="lbl" style="margin-top:10px">View</div><div class="row">` +
     WRITE_VIEWS.map(v => `<button class="${v[0] === writeView()[0] ? 'on' : ''}"
        title="${v[3]}" onclick="setWriteView('${v[0]}')">${v[1]}</button>`).join('') +
@@ -5225,6 +5283,193 @@ window.addEventListener('popstate', function (e) {
   if (PLACES[location.pathname]) openPlace(location.pathname + location.search, false);
 })();
 
+// ---- Go deep, from the room -------------------------------------------
+// Pass 2, and the whole of it. The workup already exists: run_deep takes raw
+// prose, splits it into components, names each one's existing neighbours,
+// criticises the input exactly as it was given, and forges candidates for
+// every component. Nothing new is built here — this is a door to it that
+// does not require leaving the room.
+//
+// The rules it is built under, all of them the owner's:
+//   · a keystroke must not spend money, so the chord opens a panel;
+//   · the panel says the scope, the lane and the cost, and one press starts
+//     it — there is no second form;
+//   · escape spends nothing;
+//   · the run leaves the draft, the element, the caret, the undo stack and
+//     the scroll alone, and keeps going if the room is closed or left;
+//   · the room splits only when the answer ARRIVES, and only if he is still
+//     here to see it;
+//   · the expansion onto every component never starts by itself.
+//
+// The chords. Cmd/Ctrl+Shift+P is free in Safari and in Chrome. The paragraph
+// chord is NOT Cmd+Shift+T as first asked: that is Reopen Last Closed Tab in
+// both, a browser-chrome binding a page cannot cancel, so pressing it would
+// have opened a stray tab every time. Cmd/Ctrl+Shift+Return is unbound in
+// both and is used instead. Neither is load-bearing: the same two doors sit
+// in the panel behind Aa, because a capability reachable only by a chord is
+// a capability most people never have.
+const DEEP_CHORDS = {
+  draft:     {key: 'p',      label: '⌘⇧P', what: 'the whole draft'},
+  paragraph: {key: 'enter',  label: '⌘⇧⏎', what: 'this paragraph'},
+};
+let DEEP_ASK = null;      // the scope currently being asked about
+let DEEP_JOB = '';        // a job this room started, so only its arrival splits
+
+// A paragraph is what lies between blank lines. Mechanical, no guessing —
+// and if there is a selection, the selection is OFFERED as the scope rather
+// than being silently widened to the paragraph around it.
+function deepScope(kind) {
+  const ta = document.getElementById('compose-text');
+  if (!ta) return null;
+  const v = ta.value;
+  if (kind === 'draft') return {kind: 'draft', text: v, what: 'the whole draft'};
+  if (ta.selectionStart !== ta.selectionEnd) {
+    return {kind: 'selection', text: v.slice(ta.selectionStart, ta.selectionEnd),
+            what: 'the text you have selected'};
+  }
+  const at = ta.selectionStart;
+  let start = 0, end = v.length;
+  const before = v.lastIndexOf('\n\n', Math.max(0, at - 1));
+  if (before !== -1) start = before + 2;
+  const after = v.indexOf('\n\n', at);
+  if (after !== -1) end = after;
+  // a blank line may carry spaces; walk off any whitespace-only edges
+  while (start < end && /\s/.test(v[start])) start += 1;
+  while (end > start && /\s/.test(v[end - 1])) end -= 1;
+  return {kind: 'paragraph', text: v.slice(start, end), what: 'this paragraph'};
+}
+
+// What a workup costs, said honestly. The exact number cannot be known
+// before the first call returns, because how many ideas are in the text is
+// what the first call is FOR. So this states the shape of the bill and the
+// two ends of it, and the running line names the real number the moment the
+// split comes back.
+function deepBudget() {
+  return {
+    fixed: 2,
+    perIdea: 4,
+    why: 'It cannot be exact yet: counting the ideas in your text is what the first call is '
+       + 'for. The line at the bottom says the real number the moment it answers.',
+  };
+}
+
+async function deepLane() {
+  try {
+    const d = await (await fetch('/api/config')).json();
+    if (!d.ok) return {lane: 'the model lane is not available', model: '', ok: false};
+    return {lane: d.gateway === 'mock' ? 'the mock gateway (no real calls)' : d.gateway,
+            model: d.model || '', ok: true, mock: d.gateway === 'mock'};
+  } catch (e) { return {lane: 'unreachable', model: '', ok: false}; }
+}
+
+async function askDeep(kind) {
+  const el = document.getElementById('deep-ask');
+  const scope = deepScope(kind);
+  if (!el || !scope) return;
+  const text = (scope.text || '').trim();
+  DEEP_ASK = {...scope, text};
+  const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
+  const b = deepBudget();
+  el.style.display = 'block';
+  el.innerHTML = `<div class="lbl" id="deep-ask-title">Go deep</div>
+    <p class="scope">on <strong>${escapeHtml(scope.what)}</strong> — ${words} word${words === 1 ? '' : 's'}</p>
+    <p class="preview">${text ? '“' + escapeHtml(text.slice(0, 180)) + (text.length > 180 ? '…' : '') + '”'
+                              : 'There is nothing there to send.'}</p>
+    <p class="fact" id="deep-ask-lane">Lane: <b>checking…</b></p>
+    <p class="fact">Model calls: <b>${b.fixed} + about ${b.perIdea} for each idea it finds.</b> ${escapeHtml(b.why)}</p>
+    <p class="fact">It keeps running if you close the room or the tab. The answer opens beside
+      your writing when it arrives.</p>
+    <div class="row" style="margin-top:10px">
+      <button id="deep-ask-go"${text ? '' : ' disabled aria-disabled="true"'}>Go deep</button>
+      <button onclick="closeDeepAsk()">Cancel · esc</button>
+    </div>`;
+  document.getElementById('deep-ask-go').onclick = () => startDeepFromRoom();
+  // the panel takes focus so it can be answered and dismissed from the
+  // keyboard; the caret goes straight back to the draft on either exit
+  const go = document.getElementById('deep-ask-go');
+  if (go && !go.disabled) go.focus({preventScroll: true});
+  const lane = await deepLane();
+  const laneEl = document.getElementById('deep-ask-lane');
+  if (laneEl && DEEP_ASK) {
+    laneEl.innerHTML = 'Lane: <b>' + escapeHtml(lane.lane) + '</b>'
+      + (lane.model ? ' · model <b>' + escapeHtml(lane.model) + '</b>'
+                    : (lane.ok ? ' · no model of its own' : ''));
+  }
+}
+
+function closeDeepAsk() {
+  const el = document.getElementById('deep-ask');
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+  DEEP_ASK = null;
+  const ta = document.getElementById('compose-text');
+  if (ta && document.body.classList.contains('ws-open')) ta.focus({preventScroll: true});
+}
+
+function startDeepFromRoom() {
+  const scope = DEEP_ASK;
+  closeDeepAsk();
+  if (!scope || !scope.text) return;
+  roomRun('sending the workup…');
+  // The draft is not touched, not copied into the intake box, not moved.
+  // What goes is a COPY of the scope, and the room is unaware of it.
+  submitRun('deep', scope.text, null, 'trial').then(() => {
+    DEEP_JOB = localStorage.getItem(ACTIVE_JOB_KEY) || '';
+  });
+}
+
+// One line, low and dim, that never takes the caret and never moves the page.
+function roomRun(msg) {
+  const el = document.getElementById('room-run');
+  if (!el) return;
+  if (!msg) { el.hidden = true; el.textContent = ''; return; }
+  el.hidden = false;
+  el.textContent = msg;
+}
+
+// The progress string the job already publishes carries "[3/7]" once the
+// split is done — which is the exact idea count, so the honest estimate
+// becomes an honest number without asking the server anything new.
+function roomRunProgress(job) {
+  if (!DEEP_JOB || job.job_id !== DEEP_JOB) return;
+  const m = /\[(\d+)\/(\d+)\]/.exec(job.progress || '');
+  const b = deepBudget();
+  roomRun(m ? `working · ${m[2]} ideas found, about ${b.fixed + b.perIdea * Number(m[2])} model calls · ${m[1]} of ${m[2]} done`
+            : `working · ${(job.progress || 'thinking').replace(/…$/, '')}…`);
+}
+
+// The room splits only when the answer ARRIVES, and only if he is still in
+// the room to see it. If he walked to a place, closed the room, or is reading
+// the page full-screen, nothing moves — the result is on Home either way, so
+// coming back to the split shows it.
+function deepArrived(jobId) {
+  if (!DEEP_JOB || jobId !== DEEP_JOB) return;
+  DEEP_JOB = '';
+  roomRun('');
+  if (!document.body.classList.contains('ws-open')) return;   // he closed the room
+  if (PLACE) return;                                          // he is somewhere else
+  if (WS_MODE === 'split') return;                            // already beside him
+  const ta = document.getElementById('compose-text');
+  const sel = ta ? [ta.selectionStart, ta.selectionEnd] : null;
+  setWorkspaceMode('split');
+  if (ta && sel) { ta.setSelectionRange(sel[0], sel[1]); ta.focus({preventScroll: true}); }
+}
+
+// The chords, and the reason each is the one it is. Registered once, on the
+// document, and inert unless the room is open — a shortcut that fires while
+// he is reading the page would be a shortcut that fires by accident.
+document.addEventListener('keydown', function (e) {
+  if (!document.body.classList.contains('ws-open')) return;
+  if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey) return;
+  const k = (e.key || '').toLowerCase();
+  let kind = '';
+  if (k === DEEP_CHORDS.draft.key) kind = 'draft';
+  else if (k === DEEP_CHORDS.paragraph.key) kind = 'paragraph';
+  if (!kind) return;
+  e.preventDefault();
+  askDeep(kind);
+});
+
+
 
 // The divider: drag to give either pane more room; the width is remembered.
 // Clamped so neither pane can be dragged out of usefulness.
@@ -5253,6 +5498,9 @@ window.addEventListener('popstate', function (e) {
 
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
+  // The invocation panel goes first, and going costs nothing. Escaping the
+  // room out from under an unanswered question would be the wrong order.
+  if (DEEP_ASK) { e.preventDefault(); closeDeepAsk(); return; }
   if (document.body.classList.contains('ws-open')) { e.preventDefault(); closeWorkspace(); }
 });
 

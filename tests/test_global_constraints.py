@@ -3496,12 +3496,23 @@ console.log(JSON.stringify(els['input-text'].value));
     # Mode changes and the side swap must not carry a .value write at all,
     # because a swap that rewrites the textarea is a swap that can lose
     # the sentence he was in.
-    _ws62 = _pg62[_pg62.index("function openWorkspace"):_pg62.index("document.addEventListener('keydown'")]
+    # ledger (pass 2): this used to slice "from openWorkspace to the first
+    # keydown listener", which meant any function inserted between the
+    # workspace's own functions silently shortened the region under guard —
+    # and the checks below then read an empty string and passed. Each function
+    # is cut by its own name now, so the guard cannot be moved off its target
+    # by an unrelated edit.
+    def _fn62(name):
+        i = _pg62.index("function " + name)
+        j = _pg62.index("\n}", i)
+        return _pg62[i:j + 2]
+    _ws62 = "".join(_fn62(n) for n in ("openWorkspace", "setWorkspaceMode", "swapSides",
+                                       "closeWorkspace"))
     if _ws62.count("ta.value = src.value") != 1:
         failures.append("62: the draft is copied into the room somewhere other than the "
                         "one open-from-closed moment")
-    _swap62 = _ws62[_ws62.index("function swapSides"):_ws62.index("function closeWorkspace")]
-    _mode62 = _ws62[_ws62.index("function setWorkspaceMode"):_ws62.index("function swapSides")]
+    _swap62 = _fn62("swapSides")
+    _mode62 = _fn62("setWorkspaceMode")
     for _nm62, _sl62 in (("swapSides", _swap62), ("setWorkspaceMode", _mode62)):
         if ".value" in _sl62 or "innerHTML" in _sl62 or "appendChild" in _sl62:
             failures.append(f"62: {_nm62} touches pane contents — it must move panes, "
@@ -16228,6 +16239,186 @@ console.log(out.join('\\n'));
                 _fP1("CI does not install WebKit — the room journey would fail there for the "
                      "wrong reason")
     _pass1()
+
+    # ============ pass 2: Go deep, from the room ==========================
+    # A door to the workup that already exists, not a second pipeline. The
+    # rules it is built under are all the owner's, and each is enforced here:
+    # a keystroke must not spend money; the panel says the scope, the lane and
+    # the cost and ONE press starts it; escape spends nothing; the run leaves
+    # the draft, the element, the caret, the undo stack and the scroll alone
+    # and keeps going if he leaves; the room splits only when the answer
+    # ARRIVES; and the expansion onto every component never starts by itself.
+    #
+    # What source can hold is here. That the caret is where it was, that the
+    # focus never moved, that cancelling cost nothing and that the room split
+    # at the right moment are held by tests/journeys/deep.js, in WebKit.
+    def _pass2():
+        _rootP2 = Path(cli.__file__).parent.parent
+        _idxP2 = (_rootP2 / "webapp" / "index.html").read_text(encoding="utf-8")
+        _srvP2 = (_rootP2 / "server.py").read_text(encoding="utf-8")
+
+        def _fP2(msg):
+            failures.append("pass 2: " + msg)
+
+        _landP2 = ("const DEEP_CHORDS = {", "function deepScope(kind)", "function deepBudget()",
+                   "async function askDeep(kind)", "function closeDeepAsk()",
+                   "function startDeepFromRoom()", "function roomRun(msg)",
+                   "function deepArrived(jobId)", "function expansionCard(d)")
+        _goneP2 = [x for x in _landP2 if x not in _idxP2]
+        if _goneP2:
+            for _g in _goneP2:
+                _fP2(f"the room's door to the workup is missing a part: {_g!r}")
+            return
+
+        # ---- the chords, and the one that was refused ---------------------
+        _ch = _idxP2[_idxP2.index("const DEEP_CHORDS = {"):]
+        _ch = _ch[:_ch.index("\n};")]
+        if "key: 'p'" not in _ch or "key: 'enter'" not in _ch:
+            _fP2(f"the chords are not the ruled ones: {' '.join(_ch.split())[:120]}")
+        if "key: 't'" in _ch:
+            _fP2("Cmd+Shift+T is bound again — that is Reopen Last Closed Tab in Safari and in "
+                 "Chrome, a browser-chrome binding a page cannot cancel, so every press would "
+                 "also open a stray tab")
+        # ...and the reason is written down where the next person will read it
+        if "Reopen Last Closed Tab" not in _idxP2:
+            _fP2("nothing says why the paragraph chord is not the one that was asked for")
+
+        # ---- a keystroke opens a question; it does not spend --------------
+        # found by the battery: slicing on a long literal meant a mutation that
+        # deleted part of that literal crashed the checker instead of failing by
+        # name. The handler is located by its own comment now, and its absence
+        # is a named failure.
+        _keyMark = "// The chords, and the reason each is the one it is."
+        if _keyMark not in _idxP2:
+            _fP2("the chord handler is gone, or no longer says why its chords are what they are")
+        else:
+            _key = _idxP2[_idxP2.index(_keyMark):]
+            _key = _key[:_key.index("\n});") + 4]
+            if "askDeep(kind)" not in _key or "submitRun" in _key or "fetch(" in _key:
+                _fP2("the chord does something other than open the question — a keystroke may not "
+                     "spend money")
+            if "e.preventDefault();" not in _key:
+                _fP2("the chord does not stop the browser doing whatever else it would")
+            if "if (!document.body.classList.contains('ws-open')) return;" not in _key:
+                _fP2("the chord fires outside the room, where it would fire by accident")
+        _ask = _idxP2[_idxP2.index("async function askDeep(kind)"):_idxP2.index("function closeDeepAsk()")]
+        for _bad in ("submitRun", "method: 'POST'", "/api/jobs"):
+            if _bad in _ask:
+                _fP2(f"asking the question spends money ({_bad})")
+        # what the panel must actually say
+        # exact markup, not fragments: the battery hid the cost with a `hidden`
+        # attribute and renamed nothing, and a substring pin passed while the
+        # panel showed neither the lane nor the price
+        for _say, _why in (('<p class="fact" id="deep-ask-lane">Lane: <b>checking…</b></p>',
+                            "the panel does not name the lane it would spend on"),
+                           ("' · model <b>'", "the panel does not name the model"),
+                           ('<p class="fact">Model calls: <b>', "the panel does not price the run, or hides the price"),
+                           ('<p class="fact">It keeps running if you close the room',
+                            "the panel does not say the run outlives the room"),
+                           ("Cancel · esc", "there is no way out of the panel")):
+            if _say not in _ask:
+                _fP2(_why)
+        _bud = _idxP2[_idxP2.index("function deepBudget()"):_idxP2.index("async function deepLane()")]
+        # the sentence is built by concatenation, so the needle is a piece that
+        # survives it; the journey holds the RENDERED sentence
+        if "cannot be exact yet" not in _bud or "what the first call is" not in _bud:
+            _fP2("the estimate does not admit that it cannot be exact before the first call — "
+                 "how many ideas are in the text is what the first call is FOR")
+
+        # ---- cancelling, and the order escape works in --------------------
+        _close = _idxP2[_idxP2.index("function closeDeepAsk()"):_idxP2.index("function startDeepFromRoom()")]
+        for _bad in ("submitRun", "fetch(", "/api/"):
+            if _bad in _close:
+                _fP2(f"cancelling spends something ({_bad})")
+        if "ta.focus({preventScroll: true})" not in _close:
+            _fP2("cancelling does not give the caret back to the draft")
+        if "if (DEEP_ASK) { e.preventDefault(); closeDeepAsk(); return; }" not in _idxP2:
+            _fP2("escape closes the room out from under an unanswered question instead of "
+                 "closing the question")
+
+        # ---- one press, and it reuses the workup that already exists ------
+        _start = _idxP2[_idxP2.index("function startDeepFromRoom()"):_idxP2.index("function roomRun(msg)")]
+        if "submitRun('deep', scope.text, null, 'trial')" not in _start:
+            _fP2("the room does not reach the existing deep workup — a second analysis pipeline "
+                 "is exactly what the brief forbade")
+        for _bad in ("ta.value", "setSelectionRange", "input-text"):
+            if _bad in _start:
+                _fP2(f"starting the run touches the draft ({_bad})")
+        if "/api/deep" in _idxP2 or "/api/deep" in _srvP2:
+            _fP2("a new endpoint was added for this — run_deep is reached through /api/jobs like "
+                 "every other run")
+
+        # ---- quiet progress that cannot take the caret --------------------
+        _rr = _idxP2[_idxP2.index("function roomRun(msg)"):_idxP2.index("function roomRunProgress(job)")]
+        if "focus" in _rr or "scrollIntoView" in _rr:
+            _fP2("the running line moves the page or takes the focus")
+        if not _re.search(r"\.room-run \{[^}]*pointer-events: none", _idxP2, _re.S):
+            _fP2("the running line can be clicked — it is a report, not a control")
+
+        # ---- the split happens on arrival, and only if he is still here ---
+        _arr = _idxP2[_idxP2.index("function deepArrived(jobId)"):_idxP2.index("// The chords, and the reason")]
+        for _guard, _why in (("if (!document.body.classList.contains('ws-open')) return;", "he closed the room"),
+                             ("if (PLACE) return;", "he walked to a place"),
+                             ("if (WS_MODE === 'split') return;", "he is already looking at it")):
+            if _guard not in _arr:
+                _fP2(f"the room is yanked into a split when {_why}")
+        if "setWorkspaceMode('split')" not in _arr:
+            _fP2("the answer never comes to sit beside the writing")
+        if "ta.setSelectionRange(sel[0], sel[1])" not in _arr:
+            _fP2("the split does not put the caret back where it was")
+
+        # ---- the expansion is priced from what exists, and fires nothing --
+        _exp = _idxP2[_idxP2.index("function expansionCard(d)"):]
+        _exp = _exp[:_exp.index("\n}")]
+        if "(d.groups || []).filter(g => g.result && (g.result.candidates || []).length)" not in _exp:
+            _fP2("the expansion's count is not taken from the components that actually came back")
+        if "groups.length * 3" not in _exp:
+            _fP2("the expansion does not price three instruments per component")
+        if "disabled aria-disabled=\"true\"" not in _exp or "not built yet" not in _exp:
+            _fP2("the expansion is a live button — nothing in that second stage may run, least of "
+                 "all by itself")
+        for _bad in ("submitRun", "fetch(", "onclick=\"run"):
+            if _bad in _exp:
+                _fP2(f"the expansion can fire ({_bad})")
+
+        # ---- a door that is not only a chord ------------------------------
+        if "onclick=\"toggleWriteStyle();askDeep('paragraph')\"" not in _idxP2 \
+                or "onclick=\"toggleWriteStyle();askDeep('draft')\"" not in _idxP2:
+            _fP2("the workup is reachable only by a chord — a capability behind a keystroke alone "
+                 "is a capability most people never have")
+        _bar2 = _idxP2[_idxP2.index('<div id="ws-bar"'):_idxP2.index('<div id="ws-divider"')]
+        if _bar2.count("<button") != 7:
+            _fP2(f"the room's bar grew to {_bar2.count('<button')} buttons — the room is paper "
+                 "first and does not become a cockpit")
+
+        # ---- the lane the panel names comes from the server ---------------
+        if '"model": getattr(gw, "model", None)' not in _srvP2:
+            _fP2("/api/config does not report the model, so the panel cannot say what a keystroke "
+                 "would spend money on")
+        _cP2 = _paired(server.app.test_client())
+        _cfg = _cP2.get("/api/config")
+        if _cfg.status_code != 200 or "model" not in _cfg.get_json():
+            _fP2(f"/api/config does not answer with a model: {_cfg.status_code} {_cfg.get_json()}")
+
+        # ---- the journey that measures what source cannot ----------------
+        _dj = _rootP2 / "tests" / "journeys" / "deep.js"
+        if not _dj.exists():
+            _fP2("tests/journeys/deep.js is gone — nothing proves the caret, the focus, the "
+                 "spending or the moment of the split")
+        else:
+            _j2 = _dj.read_text(encoding="utf-8")
+            for _need, _why in (("const { webkit } = require('playwright');", "the deep journey left WebKit"),
+                                ("'and it has spent nothing: '", "nothing proves the chord spends nothing"),
+                                ("'cancelling spent nothing at all: '", "nothing proves cancelling spends nothing"),
+                                ("'one press starts exactly one run, with no second form: '", "nothing proves one press is one run"),
+                                ("'the room has NOT split while the run is still going: '", "nothing proves the split waits for the answer"),
+                                ("'clicking it runs nothing: '", "nothing proves the expansion fires nothing")):
+                if _need not in _j2:
+                    _fP2(_why + f" ({_need})")
+            _run2 = (_rootP2 / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
+            if _re.search(r"^for j in .*\bdeep\b", _run2, _re.M) is None:
+                _fP2("the deep journey exists but is not in the list run.sh runs")
+    _pass2()
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

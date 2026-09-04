@@ -2488,11 +2488,16 @@ def api_library_support_rule():
 
 @app.route("/api/config")
 def api_config():
+    """Which lane a run would actually go down. `model` is new (pass 2): the
+    room's invocation panel has to say what a keystroke is about to spend
+    money on, and "the provider" is not enough — the same provider serves
+    several models and the receipt records which one. A gateway with no model
+    of its own (the mock) reports none rather than inventing a name."""
     try:
         gw = server_gateway()
-        return jsonify({"gateway": gw.name, "ok": True})
+        return jsonify({"gateway": gw.name, "model": getattr(gw, "model", None), "ok": True})
     except Exception as e:
-        return jsonify({"gateway": None, "ok": False, "error": str(e)})
+        return jsonify({"gateway": None, "model": None, "ok": False, "error": str(e)})
 
 
 @app.route("/api/jobs", methods=["POST"])
