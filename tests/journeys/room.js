@@ -317,7 +317,7 @@ const DRAFT = [
   await tb.keyboard.press('Tab'); await tb.waitForTimeout(200);
   const t1 = await tb.evaluate(() => ({ v: document.getElementById('compose-text').value,
                                         focus: document.activeElement ? document.activeElement.id : '' }));
-  ok(t1.v === 'alpha  ' && t1.focus === 'compose-text',
+  ok(t1.v === 'alpha    ' && t1.focus === 'compose-text',
     'Tab indents at the caret and does not leave the writing: ' + JSON.stringify(t1));
 
   await tb.evaluate(() => { const ta = document.getElementById('compose-text');
@@ -325,9 +325,9 @@ const DRAFT = [
   await tb.keyboard.press('Tab'); await tb.waitForTimeout(200);
   const t2 = await tb.evaluate(() => { const ta = document.getElementById('compose-text');
     return { v: ta.value, s: ta.selectionStart, e: ta.selectionEnd }; });
-  ok(t2.v === '  one\n  two\n  three',
+  ok(t2.v === '    one\n    two\n    three',
     'a selection spanning lines indents every line it touches: ' + JSON.stringify(t2.v));
-  ok(t2.s === 3 && t2.e === 15,
+  ok(t2.s === 5 && t2.e === 21,
     'and the selection still covers the same words afterwards: ' + JSON.stringify([t2.s, t2.e]));
 
   await tb.keyboard.press('Shift+Tab'); await tb.waitForTimeout(200);

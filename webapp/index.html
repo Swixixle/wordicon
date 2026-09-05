@@ -1135,8 +1135,9 @@
       a soft drop with a slight overshoot; <strong>Ink</strong>, which splatters on the way in and
       is plain text the moment it lands; and <strong>Plain</strong>, no motion at all. Nothing
       continues moving after a letter has arrived, and none of it is part of what you wrote.
-      <strong>Tab</strong> indents rather than leaving the writing — a selection across lines
-      indents every line, ⇧Tab takes a level back off, and one undo takes back the whole indent.
+      <strong>Tab</strong> indents a paragraph's width rather than leaving the writing — a
+      selection across lines indents every line, ⇧Tab takes a level back off, and one undo takes
+      back the whole indent.
       To leave with the keyboard: <strong>Esc</strong> then Tab. Spell check is the
       browser's own, which marks and offers and never rewrites; <strong>autocorrect is off</strong>,
       because a phone keyboard is most confident that a coined word is a mistake. <strong>Esc</strong>
@@ -5121,7 +5122,14 @@ function composeMirror() {
 // screen reader on the textarea itself (#room-keys) and shown as a dim line
 // the first time Tab is pressed, which is discoverable without becoming
 // furniture.
-const INDENT = '  ';         // plain text, two spaces — nothing structural
+// Four, not two. Two spaces is a CODE indent — it is the width you want when
+// the indent means nesting and the font is monospaced. This is prose in a
+// large proportional face, where an indent means "a paragraph starts here",
+// and at 27px two spaces came to about half an em: visible if you looked for
+// it, invisible if you did not. The owner's report was exactly that. Four is
+// roughly one em at the room's sizes, which is what a paragraph indent has
+// looked like since long before any of this.
+const INDENT = '    ';      // plain text, four spaces — nothing structural
 let TAB_ESCAPED = false;
 let TAB_TOLD = false;
 
@@ -5153,7 +5161,9 @@ function roomIndent(ta, remove) {
   let head = 0, total = 0;
   const next = block.split('\n').map((ln, i) => {
     if (remove) {
-      const m = /^(\t| {1,2})/.exec(ln);
+      // Take back one level: four spaces, or fewer if that is all there is,
+      // or a tab someone else's editor left behind. It never eats a fifth.
+      const m = /^(\t| {1,4})/.exec(ln);
       const cut = m ? m[0].length : 0;
       if (i === 0) head = -cut;
       total -= cut;

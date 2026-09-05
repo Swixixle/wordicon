@@ -16731,10 +16731,11 @@ console.log(out.join('\\n'));
             failures.append("109: the description is not hidden from the picture — the room is "
                             "paper first and does not grow a permanent instruction on the wall")
         _ind = _f109("roomIndent(ta, remove)")
-        if "const INDENT = '  ';" not in _pg109:
+        if "const INDENT = '    ';" not in _pg109:
             failures.append("109: the indent is no longer plain text of a declared width")
         for _need, _why in (
                 ("v.lastIndexOf('\\n', a - 1) + 1", "a multi-line indent does not start at a line start"),
+                ("/^(\\t| {1,4})/", "outdent no longer takes back exactly one level"),
                 ("if (next === block) return;",
                  "outdenting text that has no indent still writes an edit, and an edit that "
                  "changes nothing still costs an undo press")):
@@ -16771,7 +16772,7 @@ console.log(out.join('\\n'));
         i = _pg.index("The room \u2014 where writing happens")
         _room = _pg[i:i + 3000]
         for _need, _why in (
-                ("<strong>Tab</strong> indents rather than leaving the writing",
+                ("<strong>Tab</strong> indents a paragraph's width rather than leaving the writing",
                  "the constitution does not say that Tab indents"),
                 ("<strong>Esc</strong> then Tab",
                  "the constitution does not say how to leave the room with a keyboard"),
