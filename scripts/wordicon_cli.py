@@ -2305,13 +2305,33 @@ class MockGateway(Gateway):
         if prompt.startswith("You are the sprout-review stage") or \
            prompt.startswith("You are the refraction-review stage") or \
            prompt.startswith("You are the verify stage"):
-            # one of each kind, so the offline suite exercises the
-            # opened-vs-quoted distinction rather than only the quoted path
+            # One row of each state the record can hold, so the offline
+            # path exercises all three rather than only the quoted one.
+            # The third — returned AND cited — is the state the old scalar
+            # `used` could not express at all, and is therefore the state
+            # the offline path could never reach until now.
             return text, [
                 {"url": "https://example.com/mock-source-one",
-                 "title": "Mock source one (offline gateway)", "used": "searched"},
+                 "title": "Mock source one (offline gateway)",
+                 "observed": [RESULT_RETURNED],
+                 "returned_occurrences": 1, "cited_occurrences": 0,
+                 "provider_citation_excerpts": [], "used": "searched"},
                 {"url": "https://example.com/mock-source-two",
-                 "title": "Mock source two (offline gateway)", "used": "cited"},
+                 "title": "Mock source two (offline gateway)",
+                 "observed": [PROSE_CITED],
+                 "returned_occurrences": 0, "cited_occurrences": 1,
+                 "provider_citation_excerpts": [
+                     {"excerpt": "an excerpt the provider associated with the prose",
+                      "text_block": 0}],
+                 "used": "cited"},
+                {"url": "https://example.com/mock-source-three",
+                 "title": "Mock source three (offline gateway)",
+                 "observed": [RESULT_RETURNED, PROSE_CITED],
+                 "returned_occurrences": 2, "cited_occurrences": 1,
+                 "provider_citation_excerpts": [
+                     {"excerpt": "a second excerpt, from a source that was also returned",
+                      "text_block": 1}],
+                 "used": "cited"},
             ]
         return text, []
 
@@ -2996,46 +3016,7 @@ class AnthropicAPIGateway(Gateway):
                 print(f"  [gateway] search call failed after {waited:.0f}s ({type(e).__name__}) — "
                       f"retry {attempt + 1}/{attempts - 1} in {backoff:.0f}s...")
                 time.sleep(backoff)
-        # TWO PLACES, NOT ONE. This used to read citations only off text
-        # blocks — the sources the model chose to QUOTE. A model that
-        # searches and then paraphrases attaches nothing there, so the
-        # list came back empty and the page showed no sources at all.
-        # Across 28 real sprout and refract runs the stored citation count
-        # was zero, every time, while the reviews themselves said things
-        # like "Checked live: a search turned up a decorated WWI veteran
-        # losing citizenship under the 1935 laws". The searches happened
-        # and were thrown away at the parser.
-        #
-        # So both are collected and kept distinct: "cited" is what the
-        # model quoted, "searched" is what it actually looked at. After
-        # this, an EMPTY list is a reliable fact — no search was performed
-        # — instead of an artefact of how the model chose to write.
-        text_parts = []
-        citations: list[dict] = []
-        seen_urls: set[str] = set()
-
-        def _add(url, title, used):
-            if url and url not in seen_urls:
-                seen_urls.add(url)
-                citations.append({"url": url, "title": title or url, "used": used})
-
-        for block in response.content:
-            if hasattr(block, "text"):
-                text_parts.append(block.text)
-                for c in (getattr(block, "citations", None) or []):
-                    _add(getattr(c, "url", None), getattr(c, "title", "") or "", "cited")
-            # server-side web search returns its hits in their own block,
-            # whose shape varies by SDK version — walk it defensively
-            # rather than assuming an attribute that may be renamed.
-            if getattr(block, "type", "") == "web_search_tool_result":
-                results = getattr(block, "content", None) or []
-                if isinstance(results, dict):
-                    results = results.get("content") or []
-                for r in results:
-                    url = getattr(r, "url", None) or (r.get("url") if isinstance(r, dict) else None)
-                    title = getattr(r, "title", None) or (r.get("title") if isinstance(r, dict) else "")
-                    _add(url, title, "searched")
-        text = "".join(text_parts)
+        text, citations = collect_citations(response.content)
         if not text.strip():
             block_types = [type(b).__name__ for b in response.content]
             raise RuntimeError(
@@ -3143,6 +3124,182 @@ def make_gateway(name: str, model: str | None) -> Gateway:
 # a run drains the ledger into its receipt when it writes one.
 
 PROMPT_RENDERER_REV = "renderer-1"
+# The only two acquisition observations Nikodemus can actually make on the
+# provider-mediated search route. Everything past the provider boundary —
+# which pages it fetched, what entered the model's context, what it read —
+# is opaque to this client and is never rendered as a number.
+# An example sentence is written by the model to show the coined word in
+# use. It is not a quotation, not a passage from the owner's text, and not
+# evidence of anything — and rendered in quotation marks, in italics, under
+# a definition, it reads exactly like all three. The label is the same
+# string everywhere it appears: in the card, in anything copied out of it,
+# and in the packet handed to the reviewing model, which was previously
+# given the sentence under the bare heading "Example:" and had no way to
+# know whether the owner had written it.
+#
+# It is a full sentence of plain text on purpose. Colour, an icon, a
+# tooltip and CSS ::before content all vanish the moment the text is
+# selected, copied, saved or read aloud, which is exactly when the reader
+# most needs to know what they are holding.
+INVENTED_EXAMPLE_PREFIX = "INVENTED EXAMPLE — NOT IN YOUR TEXT:"
+
+RESULT_RETURNED = "returned_by_provider_search"
+PROSE_CITED = "cited_in_generated_prose"
+
+
+def _acquisition_phrase(citations) -> str:
+    """The one-line acquisition summary the run's own summary carries."""
+    a = acquisition_counts(citations)
+    if a["unrecorded"] == a["sources"]:
+        return (f" · {a['sources']} source(s) recorded during review, from before this record "
+                "separated a search result from a citation — see below")
+    bits = [f"{a['returned']} search result(s) came back"]
+    if a["cited"]:
+        bits.append(f"{a['cited']} cited in the prose")
+    return " · " + ", ".join(bits) + " during review — see below"
+
+
+def acquisition_counts(citations) -> "dict":
+    """How many sources the record can say were RETURNED, and how many CITED.
+
+    `len(citations)` is neither. It is the number of distinct sources the
+    call touched in any way, and the summary line used to print it after
+    the words "search result(s) came back" — which was true only while the
+    scalar `used` made every row look like a search result. A source the
+    prose cited without the search returning it is a real state now, and it
+    did not come back from a search.
+
+    Rows written before that distinction existed carry no `observed`. They
+    are counted as unrecorded rather than as zero: `used` said "searched"
+    on every one of the 3,781 of them whether or not the prose cited it."""
+    returned = cited = unrecorded = 0
+    for c in citations or []:
+        obs = c.get("observed") if isinstance(c, dict) else None
+        if not isinstance(obs, list):
+            unrecorded += 1
+            continue
+        if RESULT_RETURNED in obs:
+            returned += 1
+        if PROSE_CITED in obs:
+            cited += 1
+    return {"sources": len(citations or []), "returned": returned,
+            "cited": cited, "unrecorded": unrecorded}
+
+
+def collect_citations(blocks) -> "tuple[str, list[dict]]":
+    """The acquisition record for one search-enabled call.
+
+    Pure and offline on purpose: the whole claim being made here is
+    that BLOCK ORDER CANNOT CHANGE THE RESULT, and that is only
+    provable by handing the same blocks in every permutation to a
+    function that needs no provider to run.
+
+    Returns the joined text and one row per source."""
+    # TWO PLACES, AND TWO PASSES.
+    #
+    # This began by reading citations only off text blocks — the sources
+    # the model chose to QUOTE. A model that searches and then paraphrases
+    # attaches nothing there, so the list came back empty and the page
+    # showed no sources at all. Collecting the search-result blocks too
+    # fixed that half.
+    #
+    # It did not fix the other half, and the census found it: across 470
+    # stored result files, 3,781 citation rows, EVERY ONE of them
+    # "searched" and not one "cited". The cause is deterministic. The
+    # provider's documented response puts the web_search_tool_result
+    # block BEFORE the text block that cites it, both branches ran in one
+    # ordered walk, and the collector deduplicated on URL keeping the
+    # FIRST label seen. So every citation for an already-returned URL was
+    # discarded, every time. The comment that used to sit here said the
+    # two were "kept distinct". They were not.
+    #
+    # What the record can therefore say about its own history is only
+    # this: N provider-result rows survive, and whether any of them were
+    # also cited was never captured. Nothing is backfilled.
+    #
+    # So: two full passes over the whole response, gathered separately,
+    # associated only afterwards by exact URL. Block order cannot decide
+    # which observation survives, because neither pass can see the other.
+    # A URL carries a LIST of observations, never one winning label.
+    #
+    # The second loss found at the same time: a citation object carries
+    # `cited_text` — up to about 150 characters of the passage the model
+    # says it cited — and this code never read it. That excerpt is the
+    # closest thing to a passage this route can yield, and it was thrown
+    # away with the rest. It is kept now, bound to the index of the text
+    # block that cited it, and it is called a PROVIDER CITATION EXCERPT:
+    # text the provider associated with generated prose. It is not a
+    # Library anchor, not a passage Nikodemus fetched, and not a verified
+    # quotation. Nothing downstream may promote it into one.
+    #
+    # What none of this can establish, because the search happens inside
+    # the provider: which pages were fetched, what entered the model's
+    # context, or what it actually read. Those are opaque, not merely
+    # unrecorded, and the surfaces say so rather than printing a zero.
+    text_parts = []
+    returned: "dict[str, dict]" = {}
+    cited: "dict[str, dict]" = {}
+
+    def _url_title(o):
+        u = getattr(o, "url", None) or (o.get("url") if isinstance(o, dict) else None)
+        t = getattr(o, "title", None) or (o.get("title") if isinstance(o, dict) else "")
+        return u, (t or "")
+
+    # PASS 1 — what the provider's search returned.
+    for block in blocks:
+        if getattr(block, "type", "") == "web_search_tool_result":
+            results = getattr(block, "content", None) or []
+            if isinstance(results, dict):
+                results = results.get("content") or []
+            for r in results:
+                u, t = _url_title(r)
+                if not u:
+                    continue
+                e = returned.setdefault(u, {"title": t or u, "n": 0})
+                e["n"] += 1
+                if t and e["title"] == u:
+                    e["title"] = t
+
+    # PASS 2 — what the generated prose cited, and the excerpt it carried.
+    for i, block in enumerate(blocks):
+        if hasattr(block, "text"):
+            text_parts.append(block.text)
+            for c in (getattr(block, "citations", None) or []):
+                u, t = _url_title(c)
+                if not u:
+                    continue
+                e = cited.setdefault(u, {"title": t or u, "n": 0, "excerpts": []})
+                e["n"] += 1
+                if t and e["title"] == u:
+                    e["title"] = t
+                ex = getattr(c, "cited_text", None) or (
+                    c.get("cited_text") if isinstance(c, dict) else None)
+                if ex:
+                    e["excerpts"].append({"excerpt": str(ex)[:400], "text_block": i})
+
+    # ASSOCIATE — exact URL identity only. Two URLs that merely look
+    # alike, or differ by a redirect, stay two sources: a false merge is
+    # worse than a duplicate, and the provider gives no canonical id.
+    citations: list[dict] = []
+    for u in list(returned) + [u for u in cited if u not in returned]:
+        r, c = returned.get(u), cited.get(u)
+        observed = ([RESULT_RETURNED] if r else []) + ([PROSE_CITED] if c else [])
+        citations.append({
+            "url": u,
+            "title": (r or c)["title"],
+            # THE AUTHORITY. A list, because both can be true at once.
+            "observed": observed,
+            "returned_occurrences": (r or {}).get("n", 0),
+            "cited_occurrences": (c or {}).get("n", 0),
+            "provider_citation_excerpts": (c or {}).get("excerpts", []),
+            # Compatibility only, for every reader written before this
+            # block. It is lossy by construction — it cannot say "both" —
+            # and `observed` is what any new surface must read.
+            "used": "cited" if c else "searched",
+        })
+    return "".join(text_parts), citations
+
+
 PROMPT_STAGE_BUILDERS = {
     "attribution": "build_attribution_prompt", "transcription": "build_transcription_prompt",
     "generation": "build_generation_prompt", "riff": "build_riff_prompt", "play": "build_play_prompt",
@@ -3856,7 +4013,7 @@ Definition: {candidate['definition']}
 Central contradiction: {candidate.get('central_contradiction', '')}
 Axiom: {candidate.get('axiom', '')}
 Plain gloss: {candidate.get('plain_gloss', '')}
-Example: {candidate.get('example_sentence', '')}
+{INVENTED_EXAMPLE_PREFIX} {candidate.get('example_sentence', '')}
 
 Verdict "keep" when the coin is alive even if flawed; "reject" only when
 it is genuinely dead. The verdict "existing" is NOT available here — an
@@ -7015,8 +7172,7 @@ def run_sprout(candidate: dict, gateway: Gateway,
                f"verify before you trust — the locators make it one search each"
                + (f" · {n_joint} demoted for missing a part the concept itself requires"
                   if n_joint else "")
-               + (f" · {len(review_citations)} search result(s) came back during review — see below"
-                  if review_citations else ""))
+               + (_acquisition_phrase(review_citations) if review_citations else ""))
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
@@ -8223,8 +8379,7 @@ def run_refract(candidate: dict, gateway: Gateway,
                + (f" · {', '.join(missing_langs)} was asked for and did not come back"
                   if missing_langs else "")
                + " · all terms are recall, unverified — verify before you trust"
-               + (f" · {len(review_citations)} search result(s) came back during review — see below"
-                  if review_citations else ""))
+               + (_acquisition_phrase(review_citations) if review_citations else ""))
 
     for r in refractions:
         mark = r.get("review_verdict", "?")

@@ -1062,7 +1062,19 @@
       tension, axiom; interpretation labelled as interpretation. <strong>Friction</strong> — a critic
       that attacks every candidate, tags it kitchen word or seminar term, and hides nothing. Each
       card opens with three rows pointing the same way — grounded, well-made, unclaimed — and a
-      plain-terms box: the idea in one ordinary breath, plus the word in a real sentence.</p>
+      plain-terms box: the idea in one ordinary breath, plus an <strong>invented example</strong> —
+      a sentence the model wrote to show the word in use, labelled as invented in the text itself,
+      because it used to arrive in quotation marks and read like something you had written. Where a
+      candidate is well made and nothing established it, the craft row says so in the same breath:
+      <em>craft coherent; source warrant absent</em>.</p>
+
+      <p class="body">And where a review searched, the panel says only what it can actually
+      observe. That a result <strong>came back</strong> and that the prose <strong>cited</strong> it
+      are two different facts and are recorded separately. What the provider fetched, and what the
+      model read, are <strong>opaque</strong> — the search happens inside the provider — so they are
+      printed as <em>not applicable</em> and <em>unknown</em>, never as a zero, because a zero is a
+      measurement and no measurement was taken. The reviewer's own account of its work is labelled a
+      model self-report; where it disagrees with the record, the record wins.</p>
 
       <details style="margin:10px 0">
         <summary style="cursor:pointer;color:var(--muted);font-size:12.5px;font-weight:600">The four buttons on a card</summary>
@@ -3078,7 +3090,7 @@ function renderCandidateCard(cand, traceId, extra) {
       ${(bff.flesh && (bff.flesh.plain_gloss || bff.flesh.example_sentence)) ? `
       <div style="margin:8px 0 2px;padding:8px 10px;border-left:3px solid var(--accent, #888);background:rgba(128,128,128,0.07);border-radius:4px">
         ${bff.flesh.plain_gloss ? `<p class="body" style="margin:0;font-size:13.5px"><span style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);display:block">In one breath</span>${escapeHtml(bff.flesh.plain_gloss)}</p>` : ''}
-        ${bff.flesh.example_sentence ? `<p class="body muted" style="margin:${bff.flesh.plain_gloss ? '4px' : '0'} 0 0;font-size:13px"><em>“${escapeHtml(bff.flesh.example_sentence)}”</em></p>` : ''}
+        ${inventedExampleHtml(bff.flesh.example_sentence)}
       </div>` : ''}
 
       <div class="section-label">The concept — what the idea is, before any name</div>
@@ -3216,12 +3228,26 @@ function verdictRows(bff, extra) {
       : (bff.form_note || '').length
         ? 'a reworked meaning — its parent\u2019s grounding does NOT carry over, and nothing has been checked for this one'
         : 'not checked for this card';
+  // TWO ANCHOR STATES WERE CROSSED HERE, AND THE CROSS RAN THE WRONG WAY.
+  // check_anchor_integrity emits five statuses. `absent` means NO QUOTE WAS
+  // OFFERED — "no anchor supplied — nothing to check". `not_found` means a
+  // quote WAS offered and is not in the source: the check ran and refuted
+  // it. This function read `absent` as "the quote is not in your text" and
+  // did not mention `not_found` at all, so a refuted anchor fell through to
+  // "the support check did not run" — an empty circle meaning nothing
+  // happened, on a card where something did happen and it was bad. The
+  // strongest negative result the mechanical tier can produce was rendering
+  // as the absence of a result. Both directions are fixed here, and the
+  // suite pins them by state rather than by sentence.
+  } else if (ci.status === 'absent') {
+    g = 'none'; gWhy = 'no quote was offered, so nothing was checked';
   } else if (cs.support === 'supported' && (ci.status === 'exact' || ci.status === 'normalized')) {
     g = 'yes'; gWhy = 'the quote is in your text and it licenses the claim';
-  } else if (['topical', 'contradicted'].includes(cs.support) || ['near', 'absent'].includes(ci.status)) {
+  } else if (['topical', 'contradicted'].includes(cs.support) || ['near', 'not_found'].includes(ci.status)) {
     g = 'no';
     gWhy = cs.support === 'contradicted' ? 'the anchor\u2019s own words deny this'
-         : ci.status === 'absent' ? 'the quote is not in your text'
+         : ci.status === 'not_found' ? 'the quote is not in your text'
+         : ci.status === 'near' ? 'close to your text, but not the words your text has'
          : 'same subject, but the anchor does not license this claim';
   } else if (['not_run', 'undetermined'].includes(cs.support)) {
     g = 'none'; gWhy = 'the support check did not run';
@@ -3237,6 +3263,24 @@ function verdictRows(bff, extra) {
               reject: ['no', 'objection raised'],
               contradicted: ['no', 'reads against the source it cites']}[f.verdict]
              || ['none', 'not reviewed'];
+  // WARRANT DOMINATES CRAFT. A filled Well-made row beside an empty Grounded
+  // row read as an endorsement: "no decisive objection" is what a reader
+  // takes away, and the row above it — the one saying nothing established
+  // this — is three words long and easy to slide past. The rows are in the
+  // right order and that was not enough. So when the warrant is absent or
+  // failed, the craft row says which of the two questions it answered, in
+  // the same breath.
+  //
+  // The DOT is not downgraded and that is deliberate: filled means
+  // good-on-this-row, the legend is the same on every card, and a dot that
+  // sometimes means the row and sometimes means the card would be worse
+  // than the problem. The sentence carries the correction, because a
+  // sentence is what a reader actually reads.
+  if (wm[0] === 'yes' && (g === 'none' || g === 'no')) {
+    wm[1] = g === 'no'
+      ? 'craft coherent; source warrant FAILED — see the row above'
+      : 'craft coherent; source warrant ABSENT — nothing has established this';
+  }
   rows.push(['Well-made', wm[0], wm[1]]);
   return rows;
 }
@@ -3312,11 +3356,82 @@ function safeHref(u) {
   return s.replace(/"/g, '%22');
 }
 
-// Rendered wherever a review stage actually searched the live web this
-// run. Deliberately call-level, not per-claim: a source listed here was
+// ---- invented examples -------------------------------------------------
+//
+// The example sentence is written by the model to show the coined word in
+// use. It rendered as italic text inside curly quotation marks, directly
+// under the definition — the three visual conventions this app uses for
+// QUOTATIONS everywhere else. Nothing distinguished a sentence the model
+// made up from a sentence lifted out of the owner's own passage.
+//
+// The label is a real sentence of text, not a colour, an icon, a tooltip
+// or CSS ::before content. Those all disappear at exactly the moment the
+// reader most needs them: on select-and-copy, in a screen reader, in
+// anything saved or exported. The quotation marks are gone too, because
+// punctuation is a claim.
+//
+// It is never softened. If it reads as heavy, the sentence collapses; the
+// label does not shrink.
+const INVENTED_EXAMPLE_PREFIX = 'INVENTED EXAMPLE — NOT IN YOUR TEXT:';
+
+function inventedExampleHtml(sentence) {
+  const t = String(sentence || '').trim();
+  if (!t) return '';
+  return `<p class="body muted" style="margin:5px 0 0;font-size:13px">
+      <span style="letter-spacing:0.04em">${INVENTED_EXAMPLE_PREFIX}</span>
+      <span style="font-style:italic">${escapeHtml(t)}</span></p>`;
+}
+
+// ---- the acquisition record -------------------------------------------
+//
+// FIVE DIFFERENT FACTS used to be printed as one number, and the number a
+// reader takes from one number is "work done". They are not one fact, and
+// three of them this client cannot observe at all:
+//
+//   returned  — the provider's search handed this URL back.  OBSERVABLE
+//   cited     — the generated prose carried a citation to it. OBSERVABLE
+//   fetched   — a page was actually retrieved. NOT OBSERVABLE. The search
+//               runs inside the provider; Nikodemus never makes the request.
+//   examined  — it entered the model's context and was read. NOT
+//               OBSERVABLE, and not merely unrecorded — there is no event
+//               to record.
+//   anchored  — a passage the owner holds in his Library backs it. On this
+//               route Nikodemus anchors nothing, so: none.
+//
+// The three it cannot observe are printed as words. Never as 0. A zero is
+// a measurement, and claiming a measurement that was never taken is the
+// exact failure this panel exists to prevent.
+const ACQ_RETURNED = 'returned_by_provider_search';
+const ACQ_CITED = 'cited_in_generated_prose';
+
+// `observed` is the authority; `used` is the lossy summary that shipped
+// before it. `used` cannot say "both", and the collector that wrote it
+// walked the response once keeping the first label it saw — so on the
+// 3,781 rows already in the store it says "searched" whether or not the
+// prose went on to cite that source. A row without `observed` is therefore
+// NOT read as "returned and not cited". Its citation state is read as
+// never recorded, and nothing here backfills it into a fact it never held.
+function acquisitionOf(c) {
+  const obs = (c && Array.isArray(c.observed)) ? c.observed : null;
+  if (obs) {
+    return {recorded: true,
+            returned: obs.indexOf(ACQ_RETURNED) !== -1,
+            cited: obs.indexOf(ACQ_CITED) !== -1,
+            citedKnown: true, returnedKnown: true};
+  }
+  const u = c && c.used;
+  // A legacy "cited" is a reliable positive — the old walk only wrote it
+  // when a citation was the first thing it saw for that URL. A legacy
+  // "searched" is reliable about the search and silent about the prose.
+  return {recorded: false,
+          returned: u === 'searched', returnedKnown: u === 'searched',
+          cited: u === 'cited', citedKnown: u === 'cited'};
+}
+
+// Rendered wherever a review stage was handed the live web-search tool.
+// Deliberately call-level, not per-claim: a source listed here was
 // consulted for SOMETHING in this batch of reviews, not confirmation of
-// every individual quote/attribution above it — the label says that
-// plainly rather than implying a verification the tool didn't do.
+// every individual quote or attribution above it.
 function citationsHtml(citations) {
   const list = citations || [];
   // SILENCE IS NOT SUCCESS. This returned '' when nothing came back, so a
@@ -3333,23 +3448,104 @@ function citationsHtml(citations) {
       a normal outcome and not an error; it is printed because a blank space here used to look
       exactly like a review that had searched.</div>`;
   }
-  const searched = list.filter(c => c.used === 'searched').length;
-  const quoted = list.filter(c => c.used !== 'searched').length;
-  const items = list.map(c => {
-    const href = safeHref(c.url);
-    const label = escapeHtml(c.title || c.url || '') +
-      (c.used === 'searched' ? ' <span style="opacity:0.7">(came back from a search)</span>' : '');
-    return `<li style="margin:4px 0">${href ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>` : label}</li>`;
-  }).join('');
-  return `<div class="body muted" style="font-size:12.5px;margin:0 0 10px">
-      <em>What the searches turned up</em> — ${searched ? `${searched} result(s) came back` : 'no search results'}${quoted ? `, ${quoted} quoted directly` : ''}.
-      Read this as three separate facts, because an earlier version ran them together and produced a
-      contradiction: <strong>a result came back</strong> is not <strong>a page was read</strong>, and
-      neither is <strong>a claim was supported</strong>. Only the quoted ones were used for anything
-      specific. A single search returns many results at once, so a large number here can come from
-      very few queries — it is not a count of work done.
-      <ul style="margin:4px 0 0 18px;padding:0;line-height:1.55">${items}</ul>
+
+  const acq = list.map(acquisitionOf);
+  const nReturned = acq.filter(a => a.returned).length;
+  const nCited = acq.filter(a => a.cited).length;
+  const nCitedUnknown = acq.filter(a => !a.citedKnown).length;
+  const nReturnedUnknown = acq.filter(a => !a.returnedKnown).length;
+  const occReturned = list.reduce((n, c) => n + (Number(c.returned_occurrences) || 0), 0);
+  const occCited = list.reduce((n, c) => n + (Number(c.cited_occurrences) || 0), 0);
+  const nExcerpts = list.reduce(
+    (n, c) => n + ((c.provider_citation_excerpts || []).length), 0);
+  const anyRecorded = acq.some(a => a.recorded);
+
+  const row = (label, value, note) => `<div style="display:flex;gap:10px;margin:3px 0">
+      <span style="flex:0 0 15.5em;opacity:0.85">${label}</span>
+      <span><strong>${value}</strong>${note ? ` <span style="opacity:0.8">— ${note}</span>` : ''}</span>
     </div>`;
+
+  const facts = [
+    row('Returned by provider search',
+        nReturnedUnknown === list.length ? 'not recorded'
+          : `${nReturned} source(s)`,
+        occReturned ? `${occReturned} occurrence(s) across the call; one search returns many results at once, so this is not a count of searches or of work done` : ''),
+    row('Cited in generated prose',
+        anyRecorded ? `${nCited} source(s)` : 'not recorded',
+        anyRecorded
+          ? (occCited ? `${occCited} citation(s)${nExcerpts ? `, ${nExcerpts} carrying the provider's own excerpt` : ''}` : 'the prose cited none of them')
+          : 'these rows were written before the citation observation was captured, and are not being reinterpreted now'),
+    row('Fetched by Nikodemus', 'not applicable',
+        'the search ran inside the provider; Nikodemus never made the request'),
+    row('Examined', 'unknown',
+        'what entered the model\u2019s context, and what it read, are opaque to this client — there is no event to record'),
+    row('Anchored in your Library', 'none',
+        'nothing here is tied to a passage you hold; a returned result is not a supported claim'),
+  ].join('');
+
+  const legacyNote = nCitedUnknown
+    ? `<p class="body" style="font-size:11.5px;margin:7px 0 0;color:var(--muted)">
+        ${nCitedUnknown === list.length ? 'These rows' : `${nCitedUnknown} of these rows`} predate the
+        record that separates <em>returned</em> from <em>cited</em>. They are shown as they were
+        written. Whether the prose cited them was never captured, and it is not being guessed.</p>`
+    : '';
+
+  const items = list.map((c, i) => {
+    const a = acq[i];
+    const href = safeHref(c.url);
+    const marks = [];
+    if (a.returned) marks.push('returned by provider search');
+    if (a.cited) marks.push('cited in generated prose');
+    if (!a.citedKnown) marks.push('citation not recorded');
+    if (!a.returnedKnown) marks.push('search result not recorded');
+    const label = escapeHtml(c.title || c.url || '') +
+      (marks.length ? ` <span style="opacity:0.7">(${escapeHtml(marks.join(' · '))})</span>` : '');
+    const ex = (c.provider_citation_excerpts || []).map(e =>
+      `<div style="margin:3px 0 0 0;padding-left:9px;border-left:2px solid var(--line, #ddd);opacity:0.9">
+         <span style="opacity:0.7">provider citation excerpt</span> — “${escapeHtml(String(e.excerpt || ''))}”
+       </div>`).join('');
+    return `<li style="margin:5px 0">${href ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>` : label}${ex}</li>`;
+  }).join('');
+
+  return `<div class="body muted" style="font-size:12.5px;margin:0 0 10px">
+      <em>What this call can actually say it acquired</em> — ${list.length} distinct source(s).
+      ${facts}
+      ${legacyNote}
+      <ul style="margin:6px 0 0 18px;padding:0;line-height:1.55">${items}</ul>
+    </div>`;
+}
+
+// ---- model self-report -------------------------------------------------
+//
+// Reviewer prose is the model talking about its own work. It is not a
+// record of what happened; it is a CLAIM about what happened, produced by
+// the same call it describes. The mechanical record — what the collector
+// observed — is the record. Where the two disagree the record wins, and
+// this says so in text rather than leaving the two side by side for the
+// reader to reconcile.
+//
+// The contradiction test is deliberately ONE-DIRECTIONAL and narrow. It
+// fires only when the run's own record shows nothing at all came back AND
+// the prose makes a first-person acquisition claim. It can miss a
+// contradiction; it cannot manufacture one, because it never fires while
+// the record holds sources. A test that could accuse in the other
+// direction would be asserting something about prose it cannot parse.
+const SELF_REPORT_LABEL = 'MODEL SELF-REPORT — UNVERIFIED';
+const ACQUISITION_CLAIM = /\b(?:i|we)\s+(?:searched|looked\s+(?:it\s+)?up|checked\s+online|browsed|googled)\b|\bmy\s+search\b|\ba\s+search\s+(?:of|for|revealed|showed|confirmed|turned)\b|\baccording\s+to\s+(?:my|the)\s+search\b|\bsearching\s+(?:for|the\s+web|online)\b/i;
+
+function reviewerProseHtml(note, nAcquired) {
+  const t = String(note || '').trim();
+  if (!t) return '';
+  const contradicted = (Number(nAcquired) || 0) === 0 && ACQUISITION_CLAIM.test(t);
+  return `<p class="body muted" style="font-size:12.5px;margin:6px 0 0">
+      <strong>${SELF_REPORT_LABEL}</strong> — the reviewer describing its own work, in its own
+      words. Nothing in it has been checked against the record.<br>
+      <em>Reviewer:</em> ${escapeHtml(t)}${contradicted ? `<br><strong>The record disagrees.</strong>
+      This call acquired nothing — no result came back and no source was cited — so a first-person
+      account of searching, looking something up or finding it online describes something that did
+      not happen here. The mechanical record wins; the sentence is kept only so you can see what
+      was claimed.` : ''}
+    </p>`;
 }
 
 // The parts a candidate can fail on, separately. "title" is deliberately
@@ -3739,7 +3935,7 @@ function buildSproutHtml(res, areaId) {
           : `<p class="body" style="border-left:3px solid var(--accent, #888);padding-left:10px;font-style:italic">“${escapeHtml(t.quote)}”</p>
           ${qLabel ? `<p class="body muted" style="font-size:12px;margin-top:2px">${escapeHtml(qLabel)}</p>` : ''}`}
         ${t.locator ? `<p class="body muted" style="font-size:12.5px"><em>Check it:</em> ${escapeHtml(t.locator)}</p>` : ''}
-        ${t.review_note ? `<p class="body muted" style="font-size:12.5px"><em>Reviewer:</em> ${escapeHtml(t.review_note)}</p>` : ''}
+        ${reviewerProseHtml(t.review_note, (res.citations || []).length)}
         <button class="judge-btn" style="margin-top:6px;font-size:12px" onclick="sproutFromSeed('${seedKey}', '${areaId}')">⤷ sprout from this</button>
       </div>`;
   }).join('');
@@ -4168,7 +4364,7 @@ function buildRefractHtml(res) {
         ${(r.drops || r.adds || r.review_note) ? `<details style="margin-top:4px"><summary style="cursor:pointer;color:var(--muted);font-size:12px">more</summary>
           ${r.drops ? `<p class="body muted" style="font-size:12.5px;margin-top:6px"><em>What it loses:</em> ${escapeHtml(r.drops)}</p>` : ''}
           ${r.adds ? `<p class="body muted" style="font-size:12.5px"><em>What it brings:</em> ${escapeHtml(r.adds)}</p>` : ''}
-          ${r.review_note ? `<p class="body muted" style="font-size:12.5px"><em>Reviewer:</em> ${escapeHtml(r.review_note)}</p>` : ''}
+          ${reviewerProseHtml(r.review_note, (res.citations || []).length)}
         </details>` : ''}
       </div>`;
   }).join('');
@@ -6193,7 +6389,7 @@ function sourceRowHtml(a) {
         onclick="loadPastResult('${escapeJs(ac.trace_id)}');return false">${escapeHtml(ac.from_concept || '(untitled)')}</a>${
         ac.created_at ? `, ${escapeHtml(String(ac.created_at).slice(0, 10))}` : ''}${
         ac.verdict ? ` — the thread it sat on was rated ${escapeHtml(ac.verdict)}` : ''}.${
-        ac.review_note ? ` Reviewer: ${escapeHtml(ac.review_note)}` : ''}</div>${ac.leak ? `<div class="history-meta"
+        ac.review_note ? ` ${SELF_REPORT_LABEL} · Reviewer: ${escapeHtml(ac.review_note)}` : ''}</div>${ac.leak ? `<div class="history-meta"
         style="font-size:12px;color:var(--rule-reworked)">Wording check: this account ${escapeHtml(ac.leak)} —
         the one thing the account was told not to do. Read it as the run's language, not the
         source's.</div>` : ''}`).join('')

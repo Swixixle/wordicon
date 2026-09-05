@@ -1,5 +1,104 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.7.0 — the Epistemic Presentation, phase 1 (block 113): what a call can say it acquired
+
+A census of the store found **3,781 citation rows across 470 result files, every
+one of them `searched` and not one `cited`.** The cause was deterministic, not
+occasional. The provider's documented response puts the search-result block
+*before* the text block that cites it; the collector walked the response once
+and deduplicated on URL keeping the first label it saw; so the citation
+observation was thrown away on every run this app has ever made. Beside it sat a
+second loss: a citation object carries `cited_text` — the passage the model says
+it cited — and the collector never read it.
+
+The collector is now a **pure module-level function**, extracted out of the
+gateway method on purpose: the claim being made about it is that *block order
+cannot change the result*, and that is only provable by a function that runs
+with no provider present. It makes two passes, associates by exact URL only —
+two URLs that merely look alike stay two sources, because a false merge is worse
+than a duplicate and the provider gives no canonical id — and writes `observed`
+as a **list**, because a source can be both returned and cited at once. The old
+scalar `used` is kept, documented as lossy, and is the field no new surface may
+read.
+
+**Nothing is backfilled.** The 3,781 stored rows carry no `observed`, and the
+app now reads them as *citation not recorded* rather than as proof the prose
+cited nothing. A row that says "searched" was written by a collector that would
+have said "searched" either way.
+
+**Three of the five acquisition facts cannot be observed at all**, and they are
+printed as words, never as zero: *Fetched by Nikodemus — not applicable, the
+search ran inside the provider*; *Examined — unknown, what entered the model's
+context is opaque to this client, and opaque is not the same as unrecorded*;
+*Anchored in your Library — none*. A zero is a measurement. Claiming a
+measurement nobody took is the failure the panel exists to prevent.
+
+**Reviewer prose is labelled `MODEL SELF-REPORT — UNVERIFIED`.** It is the model
+describing its own work, produced by the same call it describes. Where the prose
+claims a search and the record shows nothing came back, the panel says the
+record wins. That test is deliberately one-directional: it fires only when the
+record is empty, so it can miss a contradiction and cannot invent one.
+
+**An invented example is labelled in text.** The model-written example sentence
+rendered in italics inside curly quotation marks directly under the definition —
+this app's three visual conventions for a *quotation*. It now carries
+`INVENTED EXAMPLE — NOT IN YOUR TEXT:` as a real sentence, with the quotation
+marks gone, and the same label goes into the packet handed to Friction, which
+was previously given the sentence under the bare heading "Example:" with no way
+to know whether the owner wrote it. The label is text and not a colour, an icon,
+a tooltip or CSS `::before` content, because all four vanish exactly when the
+reader selects, copies or listens.
+
+**Warrant dominates craft.** A filled *Well-made* row beside an empty *Grounded*
+row read as an endorsement. Where the warrant is absent or failed, the craft row
+now says which of the two questions it answered: *craft coherent; source warrant
+ABSENT*. The dot is not downgraded — filled means good-on-this-row on every card,
+and a dot that sometimes means the row and sometimes the card would be worse than
+the problem.
+
+**A defect found while wiring the fixture, and it ran the wrong way.** The
+checker emits five anchor statuses. `absent` means *no quote was offered*;
+`not_found` means *a quote was offered and is not in your source*. The card
+header read `absent` as "the quote is not in your text" and did not mention
+`not_found` at all — so **the strongest negative result the mechanical tier can
+produce was rendering as an empty circle meaning nothing had happened.** Both
+directions are fixed, and the new journey calls the pure function directly with
+every status rather than pinning a sentence.
+
+**The suite could not report what it already knew.** Two block-113 sabotages
+were caught *by crash rather than by name*: the broken collector returned no
+text, a caller five thousand lines earlier raised, and the run died before the
+checks that name the defect ever ran. The failure list now outlives `main()`,
+the crash path prints what was already found before the traceback, and the
+collector's pure checks run at the top of the run instead of the bottom. The
+audit that protects this is at **import time and reads the parse tree** — the
+first version lived inside the very block whose call site the sabotage deletes,
+and the version before that asked whether the string `except BaseException:`
+appeared in the file, which it always did, because the check's own line
+contained it. That is the fifth self-satisfying pin this suite has produced and
+the pattern is now named: *a source-text guard that quotes what it looks for is
+not a guard.*
+
+**Stated plainly, and not proved here:** no provider is reachable from where
+this was built, by standing law, so **production citation capture is still
+unconfirmed**. The collector is proved against the documented response shape and
+against fixtures; a live run on the owner's machine is what would settle whether
+a real call emits native citations at all. Until that probe runs, the honest
+reading of the new record is *this is what the client would capture*, not *this
+is what the provider sends*.
+
+Suite OK. Fourteen journeys, 436 checks — a new **epistemic** journey calls the
+pure functions in a real browser and strips every stylesheet to prove the labels
+are text. **Twelve sabotage mutations, all caught by name.** Seven against the
+suite, including the two that previously only crashed, one that narrows the
+crash guard, and one that moves the pure checks back to the end of the run; and
+five against the journey through a new harness (`sabj.sh`) that mutates a
+throwaway tree and runs one journey against it — because a browser check that
+cannot fail is theatre, and source review cannot tell the difference. Those five
+re-cross the anchor states, turn the invented-example label into CSS `::before`
+content, print a zero where a word belongs, drop the self-report label, and
+backfill the historical rows.
+
 ## v1.6.0 — the Inquiry, phase 2 (block 112): the Question Reader
 
 A tangled question usually means two or three different things at once, and

@@ -119,3 +119,64 @@ inspection? Does the private constraint meaningfully change output? Are
 three candidates enough? Do you ever strongly disagree with the system's
 implicit read? Does recording judgments measurably change later output?
 Does the corpus produce things a fresh Claude conversation wouldn't?
+
+---
+
+# Block 113 — what phase 1 did not close
+
+## The live capability probe (blocked here; needs the owner's machine)
+
+Production citation capture is **unconfirmed**. Everything phase 1 proves is
+proved against the documented response shape and against fixtures, because no
+provider is reachable from where it was built. The probe has three distinct
+outcomes and they must stay three:
+
+- `not_run_missing_credential` — no key was present. Says nothing about the
+  provider.
+- `ran_no_native_citation_observed` — a real search-enabled call was made and
+  the response carried no citation objects. This is a finding about the
+  provider, not about the collector.
+- `native_citation_observed` — citations came back, and the collector kept them.
+
+Collapsing the first two into "no citations" would hide the difference between
+*we did not look* and *we looked and there was nothing*, which is the same
+class of error as printing zero for a measurement nobody took.
+
+## The suite has no census of its own blocks
+
+A sabotage that deletes a block's **call site** — `pass` where
+`_check_acquisition_record()` used to be — is missed by every check inside that
+block, because the check that would notice never runs. Phase 1 fixed this for
+one block by auditing at import time. It is a general hole: any block whose
+call `main()` stops making disappears silently, and the suite still prints OK.
+A census — every `_passNNN` defined must be called, checked structurally — is
+the fix, and it is a block of its own.
+
+## Still open in the Epistemic Presentation ruling
+
+- **Quarantine.** Unanchored candidates are named as unanchored on their own
+  cards, but not yet *grouped* under *Lateral possibility — not established by
+  this text.*
+- **Refuse malformed extraction.** An unnamed component (`component 2`) can
+  still forge. The ruling requires a usable identity plus either a valid anchor
+  set or an explicit `lateral_only`, and an extraction failure with Retry/Edit
+  where those are missing.
+- **Multi-span anchors.** An anchor is still one span. The ruling requires an
+  anchor *set* that is never concatenated into a false continuous quotation,
+  reporting which element each span carries, which remain absent, and whether
+  the relationship between spans is textual or interpretive. This is a schema
+  migration and wants its own phase.
+- **Ranked initial view.** 3–5 central candidates first with the deterministic
+  basis shown, remainder collapsed by component, expand-all available.
+- **Cost receipt.** Operation, model, successful calls, input/cache/output
+  tokens, elapsed, estimate before, actual after, parent run — and never a
+  price inferred from elapsed time.
+
+## The synthetic public fixture
+
+Still to build, in Git, carrying the same structural traps as the owner's own
+passage: an emotional reversal; one idea distributed over several sentences; an
+unnamed or malformed component; a literal statement followed by an attractive
+unsupported interpretation; and a relationship between distant spans that is
+lost under independent decomposition. The owner's real passage stays outside
+Git.

@@ -90,3 +90,58 @@ is a device preference: never part of a draft, never a record event.
 **Stated plainly, and not proved here:** Ink is a first visual cut. It has been
 tested for containment and for obeying the reduced-motion setting, not for
 whether it is pleasant to type behind for an hour.
+
+---
+
+# Deviation record — the acquisition record has two observations, not five stages
+
+**Ruled:** *"per-thread acquisition facts; `returned` / `fetched` / `examined` /
+`anchored` / `used` are distinct."*
+**Built:** two recorded observations — `returned_by_provider_search` and
+`cited_in_generated_prose` — and five *rendered* facts, three of which are
+printed as words because there is no event to record.
+**Commit:** block 113 phase 1. **Recorded:** 2026-09-05.
+
+## The conflict
+
+The ruling names five stages. Two of them are observable from where this client
+sits: the provider's search-result block says what came back, and the citing
+text block says what the prose cited. The other three are not.
+
+- **fetched** — the search runs *inside* the provider. Nikodemus never issues
+  the request, never sees a status code, never holds the bytes.
+- **examined** — what entered the model's context, and what it read there, is
+  not reported in the response at any level of detail.
+- **anchored** — on the provider route Nikodemus anchors nothing. This one is
+  observable and its value is always the same: none.
+
+## Why fields were not created for them
+
+A schema field is a promise that a value can be filled. Three of the five could
+only ever be filled with `0`, `null` or `unknown`, and `0` is the dangerous one:
+it reads as a measurement. The record would then contain three columns that look
+like counts and are not, and the first surface to sum them would be printing a
+lie with a straight face — which is precisely the failure mode the ruling was
+written to end.
+
+So the distinction the ruling asks for is kept **in the presentation**, where
+all five facts appear by name and in the same order on every panel, and the
+three unobservable ones say *not applicable*, *unknown* and *none* in words.
+The record carries only what was observed.
+
+## What this costs
+
+If the provider ever begins reporting fetches or context admissions, the record
+has no place to put them and the schema will need a versioned addition. That is
+a smaller cost than shipping three fields that can only ever hold a fiction, and
+it is a recorded cost rather than a discovered one.
+
+## The dedup defect this record replaces
+
+The first version of the collector deduplicated by URL keeping the first label
+seen, in a single ordered walk. Because the provider's documented response puts
+the search-result block before the citing text block, the citation observation
+was discarded on **every run this application has ever made**: 3,781 rows, all
+`searched`, none `cited`. The correction is two independent passes and an
+`observed` list. **No historical row is rewritten**, and the surfaces read a
+missing `observed` as *not recorded* rather than as *not cited*.

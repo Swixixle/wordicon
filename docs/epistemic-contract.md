@@ -46,3 +46,36 @@ Creative intensity, adversarial pressure, and register are user-adjustable. The 
 - A rejected candidate's reasoning quietly disappearing instead of being captured as a negative example.
 - A claim's confidence score being a number nobody can trace back to actual source authority, relevance, and entailment.
 - The owner's own private conviction being asserted as documented fact rather than personal authority (which is a real epistemic class, §4.3, but a different one from external factual authority).
+
+## 7. What a surface may say it acquired (block 113)
+
+Every fact printed about how material was acquired must name the observation it
+rests on, and a fact nobody observed is printed as a word, never as a number.
+
+1. **`observed` is the record.** The acquisition record carries exactly the
+   observations the client can make: that the provider's search returned a URL,
+   and that the generated prose cited it. Both can be true of one source at
+   once, so it is a list. Any other summary of the same rows is a convenience
+   and may not be read as the authority.
+2. **Opaque is not the same as unrecorded.** Where the search runs inside a
+   provider, what it fetched and what the model read are opaque — there is no
+   event to record, and there was never going to be one. A surface says so in
+   those terms. It does not print `0`, which asserts a measurement, and it does
+   not print "not recorded", which implies the event happened and was missed.
+3. **No backfill.** A row written before an observation existed is displayed as
+   it was written and reported as *not recorded*. It is never reinterpreted into
+   a finding it never held, in either direction.
+4. **A model's account of its own work is a claim, not a record.** Reviewer
+   prose is labelled `MODEL SELF-REPORT — UNVERIFIED` wherever it appears. Where
+   it contradicts the mechanical record, **the mechanical record wins**, and the
+   surface says so rather than presenting the two side by side.
+5. **A model-written illustration is labelled in the text itself.** Anything the
+   system invented that could be mistaken for the owner's own words — an example
+   sentence above all — carries `INVENTED EXAMPLE — NOT IN YOUR TEXT:` as real
+   text, not as a colour, an icon, a tooltip or generated content, because those
+   four disappear on selection, copy, export and screen reader. The label is
+   never softened; if the presentation is heavy, the example collapses.
+6. **Warrant outranks craft.** Where a candidate is well made and nothing
+   established it, the craft verdict must say which of the two questions it
+   answered. "No decisive objection" standing alone beside an empty warrant row
+   reads as an endorsement, and did.

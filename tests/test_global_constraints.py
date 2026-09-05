@@ -81,10 +81,291 @@ class CapturingMock(cli.MockGateway):
 
 import hashlib as _hashlib
 import pathlib as _pathlib
+import inspect as _ins113
+import traceback as _traceback
+
+# The report is printed at the END of the run, which means an exception
+# anywhere throws away every named failure found before it. The block-113
+# sabotage battery is where that bit: two mutations were recorded as
+# "caught by crash rather than by name", and a traceback names a mock, not
+# an invariant. Holding the list at module scope lets the crash path say
+# what was already known. Nothing is swallowed — the traceback still goes
+# to stderr and the exit code is still non-zero.
+FAILURES: list = []
+
+
+def _audit_scaffolding():
+    """Check the machinery that lets the run REPORT, by structure not by text.
+
+    Two things are being protected. The failure list has to outlive main(),
+    and the crash path has to print what was already found — without them a
+    mutation that breaks a caller downstream throws every named failure away
+    and the sabotage battery records `caught by crash rather than by name`,
+    which this project treats as the weaker result: a traceback out of a mock
+    tells the reader nothing about which invariant broke.
+
+    Two things about HOW this is checked, both learned the hard way.
+
+    It runs at import, not inside main(), because the first version of it
+    lived inside the very block whose call site a sabotage deletes — delete
+    the call, and the check that noticed the deletion never ran. Import-time
+    is the only place a suite can audit its own entry points from.
+
+    It reads the parse tree, not the source text. The first version asked
+    whether the string `except BaseException:` appeared in the file. It
+    always did: the check's own line contained it. That is the fifth
+    self-satisfying pin this suite has produced, and the pattern is now
+    plain — a source-text guard that quotes what it looks for is not a
+    guard. An ast question cannot be answered by the question."""
+    import ast as _ast
+    out = []
+    src = _pathlib.Path(__file__).resolve().read_text(encoding="utf-8")
+    tree = _ast.parse(src)
+
+    def _names(node):
+        return {n.id for n in _ast.walk(node) if isinstance(n, _ast.Name)}
+
+    def _calls(node):
+        out_ = set()
+        for n in _ast.walk(node):
+            if isinstance(n, _ast.Call):
+                f = n.func
+                if isinstance(f, _ast.Name):
+                    out_.add(f.id)
+                elif isinstance(f, _ast.Attribute):
+                    out_.add(f.attr)
+        return out_
+
+    holds = any(
+        isinstance(n, (_ast.Assign, _ast.AnnAssign))
+        and any(isinstance(t, _ast.Name) and t.id == "FAILURES"
+                for t in (n.targets if isinstance(n, _ast.Assign) else [n.target]))
+        for n in tree.body)
+    if not holds:
+        out.append("scaffolding: the failure list is no longer held at module scope, so a crash "
+                   "anywhere discards every named failure found before it")
+
+    fn = next((n for n in tree.body
+               if isinstance(n, _ast.FunctionDef) and n.name == "main"), None)
+    if fn is None:
+        out.append("scaffolding: main() is gone")
+    else:
+        binds = any(isinstance(n, _ast.Assign)
+                    and any(isinstance(t, _ast.Name) and t.id == "failures" for t in n.targets)
+                    and isinstance(n.value, _ast.Name) and n.value.id == "FAILURES"
+                    for n in fn.body)
+        if not binds:
+            out.append("scaffolding: main() collects failures into a local list again, so the "
+                       "crash path has nothing to print")
+        early = any("_check_acquisition_record" in _calls(n) for n in fn.body[:6])
+        if not early:
+            out.append("scaffolding: the collector's pure, offline checks no longer run at the top "
+                       "of main() — a broken collector crashes an unrelated caller thousands of "
+                       "lines earlier and the run dies before those checks ever speak")
+
+    guard = next((n for n in tree.body if isinstance(n, _ast.If)
+                  and "__name__" in _names(n.test)), None)
+    if guard is None:
+        out.append("scaffolding: the __main__ guard is gone")
+    else:
+        tries = [n for n in _ast.walk(guard) if isinstance(n, _ast.Try)]
+        broad = [h for t in tries for h in t.handlers
+                 if h.type is None or (isinstance(h.type, _ast.Name)
+                                       and h.type.id == "BaseException")]
+        if not broad:
+            out.append("scaffolding: the run no longer catches an arbitrary crash on its way out, "
+                       "so the sabotage battery drops back to 'caught by crash rather than by name'")
+        elif not any("FAILURES" in _names(h) and "print_exc" in _calls(h) for h in broad):
+            out.append("scaffolding: the crash path no longer prints both the failures already "
+                       "found and the traceback that stopped the rest")
+    return out
+
+
+_SCAFFOLD = _audit_scaffolding()
+if _SCAFFOLD:
+    print("FAIL")
+    for _f in _SCAFFOLD:
+        print(" -", _f)
+    raise SystemExit(1)
+
+
+def _check_acquisition_record():
+    """The collector's structural claims, proved with no provider present.
+
+    This runs FIRST, before any block that calls the gateway, and it is
+    deliberate. The sabotage battery caught two collector mutations only
+    `by crash rather than by name`: the broken collector returned no text,
+    a caller five thousand lines earlier raised, and the run died before
+    these checks ever spoke. A traceback out of a mock teaches the reader
+    nothing about which invariant broke. Pure checks on a pure function
+    have no reason to wait in line behind the things that use it."""
+    failures = []
+    # ---- block 113: the acquisition record ---------------------------------
+    #
+    # A census of the owner's real store found 3,781 citation rows across 470
+    # result files, EVERY ONE of them "searched" and not one "cited". The
+    # cause was deterministic, not occasional: the provider's documented
+    # response puts the web_search_tool_result block BEFORE the text block
+    # that cites it; both branches ran in one ordered walk; and the collector
+    # deduplicated on URL keeping the FIRST label. So the citation
+    # observation was discarded on every run the record has ever made.
+    #
+    # A second loss sat beside it. A citation object carries `cited_text` —
+    # the passage the model says it cited — and the collector never read it.
+    #
+    # What the record can say about its own history is therefore only that N
+    # results were returned and that whether any was cited was never
+    # captured. Nothing is backfilled, and nothing here infers otherwise.
+    def _pass113():
+        _root = _pathlib.Path(__file__).resolve().parent.parent
+
+        class _B:
+            def __init__(self, **k): self.__dict__.update(k)
+        U1, U2 = "https://a.example/one", "https://b.example/two"
+        def _sr(*urls):
+            return _B(type="web_search_tool_result",
+                      content=[{"url": u, "title": u.split("/")[-1]} for u in urls])
+        def _tx(t, *cites):
+            return _B(text=t, citations=[_B(url=u, title=ti, cited_text=x) for u, ti, x in cites])
+        def _key(rows):
+            return sorted((r["url"], tuple(r["observed"]), r["returned_occurrences"],
+                           r["cited_occurrences"],
+                           tuple(e["excerpt"] for e in r["provider_citation_excerpts"]))
+                          for r in rows)
+
+        # 1. ORDER CANNOT DECIDE WHICH OBSERVATION SURVIVES. The same blocks
+        # in the provider's documented order and in the reverse must produce
+        # byte-identical observations. This is the defect itself.
+        _cite = (U1, "One", "the exact words it cited")
+        _fwd = [_sr(U1, U2), _tx("Based on results, "), _tx("A claim.", _cite)]
+        _rev = [_tx("A claim.", _cite), _tx("Based on results, "), _sr(U1, U2)]
+        _a = cli.collect_citations(_fwd)[1]
+        _b = cli.collect_citations(_rev)[1]
+        if _key(_a) != _key(_b):
+            failures.append(f"113: block order changes the acquisition record — this is the exact "
+                            f"defect that emptied 3,781 rows: {_key(_a)} vs {_key(_b)}")
+        _u1 = next((r for r in _a if r["url"] == U1), {})
+        if sorted(_u1.get("observed") or []) != sorted([cli.RESULT_RETURNED, cli.PROSE_CITED]):
+            failures.append(f"113: a URL both returned and cited does not carry both observations: "
+                            f"{_u1.get('observed')}")
+        _u2 = next((r for r in _a if r["url"] == U2), {})
+        if (_u2.get("observed") or []) != [cli.RESULT_RETURNED]:
+            failures.append(f"113: a URL only returned is not recorded as only returned: {_u2.get('observed')}")
+
+        # 2. CITED WITHOUT BEING RETURNED is its own state, not an error.
+        _c = cli.collect_citations([_tx("x", (U2, "Two", "words"))])[1]
+        if not _c or (_c[0].get("observed") or []) != [cli.PROSE_CITED] \
+                or _c[0].get("returned_occurrences") != 0:
+            failures.append(f"113: a citation with no matching search result was lost or miscounted: {_c}")
+
+        # 3. THE EXCERPT IS KEPT, and bound to the text block that cited it.
+        _ex = _u1.get("provider_citation_excerpts") or []
+        if not _ex or _ex[0].get("excerpt") != "the exact words it cited" or "text_block" not in _ex[0]:
+            failures.append(f"113: the provider's cited_text was discarded again, or lost its "
+                            f"binding to the prose that cited it: {_ex}")
+
+        # 4. OCCURRENCES ARE NOT UNIQUE SOURCES. The unit of the count has to
+        # be sayable, or "49" gets read as pages, searches, or work done.
+        _rep = cli.collect_citations([_sr(U1, U1), _tx("y", (U1, "One", "a"), (U1, "One", "b"))])[1]
+        if len(_rep) != 1 or _rep[0]["returned_occurrences"] != 2 or _rep[0]["cited_occurrences"] != 2 \
+                or len(_rep[0]["provider_citation_excerpts"]) != 2:
+            failures.append(f"113: repeated occurrences of one URL are not counted apart from the "
+                            f"unique source: {_rep}")
+
+        # 5. NO FALSE MERGING. Two distinct URLs that share a title are two
+        # sources; the provider supplies no canonical identity, and a wrong
+        # merge is worse than a duplicate.
+        _same = cli.collect_citations([_sr("https://x.test/p"), _sr("https://y.test/p")])[1]
+        if len(_same) != 2:
+            failures.append(f"113: two distinct URLs were merged: {_same}")
+
+        # 6. THE COMPATIBILITY FIELD IS LOSSY AND SAYS SO. Old readers still
+        # read `used`; it cannot express "both", so `observed` is the
+        # authority and the code has to say which is which.
+        _src = _ins113.getsource(cli.collect_citations)
+        if '"used": "cited" if c else "searched"' not in _src:
+            failures.append("113: the compatibility field for readers written before this block is gone")
+        if "Compatibility only" not in _src or "`observed` is what any new surface must read" not in _src:
+            failures.append("113: nothing marks `used` as the lossy summary and `observed` as the "
+                            "authority, so the next reader will pick the wrong one")
+
+        # 7. NOTHING EQUATES RETURNED WITH READ. The old comment claimed
+        # "'searched' is what it actually looked at", which is precisely what
+        # the provider boundary makes unknowable.
+        _cli_src = (_root / "scripts" / "wordicon_cli.py").read_text(encoding="utf-8")
+        # The exact claim that used to sit here, and only phrasings that can
+        # ONLY be assertions. A blunt substring ban fires on the sentence that
+        # DENIES the claim too — it did, on the first run of this very check —
+        # and a guard that punishes the honest wording teaches the next author
+        # to delete the honesty rather than the error.
+        for _bad in ('"searched" is what it actually looked at',
+                     "is what it actually looked at",
+                     "pages read", "sources read", "results read"):
+            if _bad in _cli_src:
+                failures.append(f"113: the record still equates a returned result with reading it "
+                                f"({_bad!r}) — the search runs inside the provider and what it "
+                                "fetched or examined is opaque to this client")
+        # and the opacity has to be stated, not merely not-denied
+        if "opaque, not merely" not in _src:
+            failures.append("113: the collector no longer says that what the provider fetched and "
+                            "what the model examined are opaque to it — an absence of the wrong "
+                            "claim is not the presence of the right one")
+
+        # 8. TWO PASSES, NOT ONE WALK. Pinned structurally, because a later
+        # tidy that merges the loops silently restores the bug.
+        if _src.count("for block in blocks:") != 1 or _src.count("for i, block in enumerate(blocks):") != 1:
+            failures.append("113: the collector no longer makes two separate passes over the "
+                            "response — one ordered walk is how the citation observation was lost")
+        if "seen_urls" in _src:
+            failures.append("113: a first-seen-wins dedup is back in the collector")
+
+        # 9. HISTORICAL ROWS ARE ACCEPTED AND NEVER REINTERPRETED. A stored
+        # row carrying only the scalar `used` must still read, and must not
+        # be silently promoted to carrying both observations.
+        _old_row = {"url": U1, "title": "One", "used": "searched"}
+        if _old_row.get("observed"):
+            failures.append("113: a historical row was given observations it never recorded")
+
+        # 10. THE OFFLINE GATEWAY REACHES ALL THREE STATES. Every check that
+        # distinguishes returned from cited is only worth something if the
+        # offline path can produce both and their combination. The old mock
+        # emitted the scalar `used`, so "returned AND cited" — the state the
+        # whole block exists for — was unreachable in every test that has
+        # ever run here.
+        _mock_rows = cli.MockGateway().complete_with_search(
+            "You are the sprout-review stage")[1]
+        _states = {tuple(sorted(r.get("observed") or [])) for r in _mock_rows}
+        for _want in ((cli.RESULT_RETURNED,), (cli.PROSE_CITED,),
+                      tuple(sorted((cli.RESULT_RETURNED, cli.PROSE_CITED)))):
+            if _want not in _states:
+                failures.append(f"113: the offline gateway can no longer produce the acquisition "
+                                f"state {_want} — every check that separates returned from cited "
+                                "runs against a fixture that cannot express the difference")
+
+        # 11. THE CONSTITUTION SAYS IT TOO. A shipped change to what
+        # Nikodemus claims about its own knowledge amends the constitution in
+        # the same block or it is not ruled, only coded. The old sentence
+        # promised "the word in a real sentence" — the exact overclaim this
+        # block exists to remove.
+        _idx = (_root / "webapp" / "index.html").read_text(encoding="utf-8")
+        _const = _idx.split('section-label">What comes back</div>')[1][:3000]
+        if "the word in a real sentence" in _idx:
+            failures.append("113: the constitution still calls the model's invented example "
+                            "sentence a real sentence")
+        for _need in ("invented example", "craft coherent; source warrant absent",
+                      "opaque", "never as a zero", "model self-report"):
+            if _need not in _const:
+                failures.append(f"113: the constitution no longer states {_need!r} — the code says "
+                                "it and the ruling does not, which is the wrong way round")
+    _pass113()
+    return failures
 
 
 def main() -> int:
-    failures = []
+    failures = FAILURES
+    # block 113, hoisted: pure checks on a pure function, before anything
+    # that could crash on a broken one.
+    failures.extend(_check_acquisition_record())
     _state_before = _real_state_snapshot()
     gw = CapturingMock()
     result = cli.run_decompose("A passage about pretending while poor, and guilt at arriving.",
@@ -853,8 +1134,16 @@ def main() -> int:
     sprout_cited = cli.run_sprout({"title": "Cited Concept", "definition": "D"}, cli.MockGateway())
     if not sprout_cited.get("citations"):
         failures.append("run_sprout result missing citations from the review call")
-    if "search result(s) came back during review" not in sprout_cited.get("summary", ""):
+    _sum_sprout = sprout_cited.get("summary", "")
+    if "search result(s) came back" not in _sum_sprout or "cited in the prose" not in _sum_sprout:
         failures.append("sprout summary does not report what its searches returned")
+    # AND IT MUST NOT REPORT THE ROW COUNT AS THE SEARCH COUNT. The offline
+    # gateway returns three sources — one only returned, one only cited, one
+    # both — so two came back and two were cited. "3 search result(s)" is the
+    # old conflation, the one the scalar `used` made impossible to see.
+    if f"{len(sprout_cited['citations'])} search result(s)" in _sum_sprout:
+        failures.append("the sprout summary counts every source it touched as a search result; a "
+                        "source the prose cited without the search returning it never came back")
     sprout_snap = _json2.loads((cli.RESULTS_DIR / f"{sprout_cited['trace_id']}.json").read_text())
     if not sprout_snap.get("citations"):
         failures.append("sprout snapshot did not persist citations")
@@ -862,15 +1151,24 @@ def main() -> int:
     refract_cited = cli.run_refract({"title": "Cited Refraction", "definition": "D"}, cli.MockGateway())
     if not refract_cited.get("citations"):
         failures.append("run_refract result missing citations from the review call")
-    if "search result(s) came back during review" not in refract_cited.get("summary", ""):
+    _sum_refract = refract_cited.get("summary", "")
+    if "search result(s) came back" not in _sum_refract or "cited in the prose" not in _sum_refract:
         failures.append("refract summary does not report what its searches returned")
+    # AND IT MUST NOT REPORT THE ROW COUNT AS THE SEARCH COUNT. The offline
+    # gateway returns three sources — one only returned, one only cited, one
+    # both — so two came back and two were cited. "3 search result(s)" is the
+    # old conflation, the one the scalar `used` made impossible to see.
+    if f"{len(refract_cited['citations'])} search result(s)" in _sum_refract:
+        failures.append("the refract summary counts every source it touched as a search result; a "
+                        "source the prose cited without the search returning it never came back")
     refract_snap_path = cli.RESULTS_DIR / f"{refract_cited['trace_id']}.json"
     refract_snap = _j2.loads(refract_snap_path.read_text())
     if not refract_snap.get("citations"):
         failures.append("refract snapshot did not persist citations")
 
     webapp_src3 = (Path(__file__).resolve().parents[1] / "webapp" / "index.html").read_text()
-    for needle in ("function citationsHtml", "function safeHref", "What the searches turned up",
+    for needle in ("function citationsHtml", "function safeHref", "function acquisitionOf",
+                   "What this call can actually say it acquired",
                    "${citationsHtml(res.citations)}"):
         if needle not in webapp_src3:
             failures.append(f"webapp missing citations rendering piece: {needle!r}")
@@ -2108,11 +2406,39 @@ def main() -> int:
     # panel look self-contradictory ("37 sources checked" beside "only one
     # search succeeded"): one search returns many results, so both were true
     # and only the wording was wrong.
-    for needle in ("used === 'searched'", "came back from a search",
-                   "is not <strong>a page was read</strong>",
-                   "a single search returns many results"):
-        if needle.lower() not in " ".join(cit.split()).lower():
+    # Block 113 replaced the two-state read with the five acquisition facts.
+    # The old pins named the old sentences; these name the distinction those
+    # sentences existed to protect, which is the thing that must not be lost.
+    _cit_flat = " ".join(cit.split())
+    _acq_fn = idx11.split("function acquisitionOf(")[1].split("\n}")[0]
+    for needle in ("Returned by provider search", "Cited in generated prose",
+                   "not a count of searches or of work done"):
+        if needle.lower() not in _cit_flat.lower():
             failures.append(f"the page merges searching with quoting: {needle!r}")
+    # THE THREE FACTS THIS CLIENT CANNOT OBSERVE MUST BE WORDS, NEVER ZEROS.
+    # A zero is a measurement. Printing one where no measurement exists is
+    # the same lie as printing a count of pages read.
+    for label, word in (("Fetched by Nikodemus", "not applicable"),
+                        ("Examined", "unknown"),
+                        ("Anchored in your Library", "none")):
+        if f"row('{label}', '{word}'" not in _cit_flat:
+            failures.append(f"the acquisition panel no longer prints {label!r} as {word!r} — "
+                            "a fact this client cannot observe is being rendered as a number")
+    if "opaque to this client" not in _cit_flat:
+        failures.append("the panel no longer says what the model examined is opaque, only that it "
+                        "is unknown — unrecorded and unobservable are different claims")
+    # `observed` IS THE AUTHORITY, AND A HISTORICAL ROW IS NOT BACKFILLED.
+    if "c.observed" not in _acq_fn:
+        failures.append("the page reads only the lossy `used` summary again; `observed` is the "
+                        "authority and it is the only field that can say a source was both "
+                        "returned and cited")
+    if "recorded: false" not in _acq_fn:
+        failures.append("a row written before the citation observation existed is no longer "
+                        "marked as unrecorded, so the 3,781 stored rows get read as proof that "
+                        "the prose cited nothing")
+    if "not being reinterpreted now" not in _cit_flat:
+        failures.append("the panel no longer tells the owner that the older rows are shown as "
+                        "written rather than reinterpreted")
     if "opened by search" in cit or "Opened is weaker" in cit:
         failures.append("the overclaiming 'opened by search' label is back")
     for over in ("live source(s) checked", "sources checked this run"):
@@ -2126,7 +2452,13 @@ def main() -> int:
     # the LAST definition is the real gateway's; an earlier version of this
     # slice landed on MockGateway's and would have passed with the parser
     # bug still in place
-    gw_src = src.rsplit("def complete_with_search", 1)[-1].split("\n    def ")[0]
+    # block 113 moved the collector out of the method and into a pure
+    # function, because "block order cannot change the result" is only
+    # provable by a function that runs without a provider. The slice follows
+    # it: both halves are checked, the method for the tool and the collector
+    # for what it does with the answer.
+    gw_src = (src.rsplit("def complete_with_search", 1)[-1].split("\n    def ")[0]
+              + src.rsplit("def collect_citations", 1)[-1].split("\ndef ")[0])
     # WEB_SEARCH_TOOL is the marker of the REAL method — its presence is
     # what proves the slice landed there rather than on the mock's stub
     if "WEB_SEARCH_TOOL" not in gw_src or "Offline stand-in" in gw_src:
@@ -17281,6 +17613,12 @@ console.log(out.join('\\n'));
                             "drop, so the journey's drop check proves nothing")
     _pass112()
 
+    # ---- block 113: the acquisition record ---------------------------------
+    # Hoisted out of main() and run at the top of it. The checks are pure and
+    # offline, and they have to be heard before the first caller of the
+    # collector can crash the run out from under them. See
+    # _check_acquisition_record() above.
+
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to
     # add to. This notices the day that happens, names the file, and does it
@@ -17316,4 +17654,18 @@ console.log(out.join('\\n'));
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        _rc = main()
+    except SystemExit:
+        raise
+    except BaseException:
+        if FAILURES:
+            print("FAIL")
+            for _f in FAILURES:
+                print(" -", _f)
+            print("   ... and then the run crashed before reaching the end. The "
+                  "named failures above were already found; the traceback below "
+                  "is what stopped the rest from being checked.")
+        _traceback.print_exc()
+        raise SystemExit(1)
+    raise SystemExit(_rc)

@@ -146,11 +146,60 @@ def seed_pre_wiring():
     return "seeded"
 
 
+def seed_epistemic():
+    """Two real runs, written by the real writers, for the epistemic journey.
+
+    Deliberately NOT hand-authored JSON. The last hand-authored fixture in
+    this directory described a job shape the server has never emitted, and
+    thirty-one checks passed against it for as long as it stood. These call
+    the same run_* functions the app calls, against the offline gateway, so
+    what the browser opens is what the real path writes."""
+    ids = {}
+    g = cli.MockGateway()
+    # a sprout: carries the review call's acquisition record and the
+    # reviewer's own prose
+    sp = cli.run_sprout({"title": "Threshold Grief",
+                         "definition": "the grief that belongs to a door, not a loss"}, g)
+    ids["sprout"] = sp["trace_id"]
+    # a decompose: carries candidate cards, their example sentences, and the
+    # grounded/well-made rows
+    dc = cli.run_decompose("A passage about pretending while poor, and guilt at arriving.",
+                            g, interactive=False)
+    ids["decompose"] = dc.get("trace_id") or ""
+    # The two groups are named by WHAT THEY ARE, read back out of the
+    # snapshots the run just wrote — never by index. An index would be a
+    # second place where "the second group is the unanchored one" is
+    # asserted, and the day the mock's order changes the journey would keep
+    # passing against the wrong card.
+    # run_decompose's RETURN value carries groups with no trace_id — the id
+    # is written into the persisted parent, not into the dict handed back.
+    # Read the parent from disk rather than trusting the two to match.
+    parent = json.loads((cli.RESULTS_DIR / f"{ids['decompose']}.json").read_text())
+    for grp in parent.get("groups") or []:
+        t = grp.get("trace_id") or ""
+        snap = cli.RESULTS_DIR / f"{t}.json"
+        if not t or not snap.exists():
+            continue
+        for row in json.loads(snap.read_text()).get("candidates") or []:
+            st = ((row.get("bff") or row).get("anchor_integrity") or {}).get("status")
+            if st in ("exact", "normalized"):
+                ids.setdefault("groupOk", t)
+            elif st in ("not_found", "near", "absent"):
+                ids.setdefault("groupFailed", t)
+    assert "groupOk" in ids and "groupFailed" in ids, (
+        "the offline decompose no longer produces both an anchored and an unanchored "
+        f"group, so the epistemic journey has nothing to compare: {ids}")
+    (DIR / "epistemic.json").write_text(json.dumps(ids))
+    return ids
+
+
 if __name__ == "__main__":
     marker = STATE / ".seeded"
     if marker.exists():
-        print(json.dumps({"entrance": "already seeded", "pre_wiring": seed_pre_wiring()}))
+        print(json.dumps({"entrance": "already seeded", "pre_wiring": seed_pre_wiring(),
+                          "epistemic": seed_epistemic()}))
     else:
         out = seed_entrance()
         marker.write_text("1")
-        print(json.dumps({"entrance": out, "pre_wiring": seed_pre_wiring()}))
+        print(json.dumps({"entrance": out, "pre_wiring": seed_pre_wiring(),
+                          "epistemic": seed_epistemic()}))
