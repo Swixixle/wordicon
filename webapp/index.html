@@ -1167,6 +1167,18 @@
       pairing screen drawn inside an
       unpaired page would be a lie about what is locked.</p>
 
+      <div class="section-label">Inquiry — a question, kept</div>
+      <p class="body">A question you mean to <em>work</em> gets a place of its own. It is kept
+      <strong>exactly as you asked it</strong>, however tangled — a narrowed or corrected question
+      becomes a descendant of it, never a replacement — and the branches you open, and what became
+      of each, stay with it. A branch you abandon keeps <strong>why</strong> and <strong>what the
+      failure revealed</strong>, because the throw that did not stick is the half worth having.
+      Nothing in an inquiry is a ruling until you promote it. Reopen it in a year and it is standing
+      where you left it.</p>
+      <p class="body muted">This is the first block of it. The room keeps a question and its
+      branches; it does not yet read a messy question several ways, search your record, go outside
+      for sources, or put anything on trial. Each of those is named on its own face as unbuilt,
+      with the reason.</p>
       <div class="section-label">The Work Room — a change of scale</div>
       <p class="body">Click <strong>Enter</strong> on a linked source entry and you are inside the
       work itself — <em>The Fall</em>, not the run that mentioned it. A work is an identity
@@ -1425,7 +1437,7 @@
         skipped and counted — never silently. Speakers exist only where the file declares them.
         And the model's support question does not run on media claims yet — only your own ruling
         does.</p>
-        <p class="body"><strong>Nothing here reads your writing.</strong> The writing room is a room;
+      <p class="body"><strong>Nothing here reads your writing.</strong> The writing room is a room;
         the tool sees only what you hand it by pressing a button. The whole thing runs as
         <strong>a local server on your own machine</strong> with no account or telemetry of its own.
         Text leaves the machine only through a lane you explicitly invoke: bounded model payloads go
@@ -2300,6 +2312,20 @@ async function chooseDestination(id) {
       pageNote('kept as an open question, verbatim — in the Library under Open questions. Nothing ran.');
       HOME = null; loadHome(); loadOpenQuestions();
     } catch (e) { pageNote('could not reach the server to keep the question.'); }
+  }
+  // Block 111 phase 1. Opening an inquiry keeps the question the same way
+  // the question door does — verbatim, with how it arrived — and then walks
+  // to the room it now has. Nothing runs, and no model is touched.
+  if (id === 'inquiry') {
+    try {
+      const r = await fetch('/api/inquiry', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({question: DEST.text, provenance: DEST.provenance, shape: d.shape, opened_from: 'chooser'})});
+      const qd = await r.json();
+      if (qd.error) { pageNote('the inquiry was not opened: ' + qd.error); return; }
+      speakMarkSent();
+      pageNote('an inquiry is open on that question, kept exactly as you asked it. Nothing ran.');
+      goPlace('/inquiry');
+    } catch (e) { pageNote('could not reach the server to open the inquiry.'); }
   }
 }
 
@@ -5304,6 +5330,7 @@ const PLACES = {
   '/clinic':        {name: 'Clinic',         why: 'authorities admitted by role, never blended'},
   '/recovery':      {name: 'Recovery Review', why: 'acceptances that survived without a definition'},
   '/investigation': {name: 'Investigation Rooms', why: 'what your other instruments deposited'},
+  '/inquiry':       {name: 'Inquiry',              why: 'a question, kept — with its branches and what became of them'},
 };
 const STANDALONE = ['/anatomy', '/pair'];
 

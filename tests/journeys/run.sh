@@ -53,7 +53,7 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume; do
+for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry; do
   echo "== journey: $j"
   if [ "$j" = quiet ] || [ "$j" = speak ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
@@ -123,6 +123,10 @@ done
 for need in "the room says submitted while the job is queued" "the estimate becomes an exact count the moment the split comes back, and is still called an estimate"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/deep.log" || { echo "== deep: missing check: $need"; status=1; }
 done
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log | awk '{s+=$2} END {print s+0}')
+# block 111 phase 1: the question survives everything the room does to it
+for need in "the question is kept exactly as it was asked" "the same words opened twice are two inquiries" "every phase this room has not built renders as an unbuilt door" "an abandoned branch keeps what the failure revealed" "after a full reload it reopens on the question as asked" "exploring created no ruling due" "walking to the Inquiry and back leaves the same room element"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/inquiry.log" || { echo "== inquiry: missing check: $need"; status=1; }
+done
+total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log | awk '{s+=$2} END {print s+0}')
 echo "== journeys: $total checks, exit $status"
 exit $status

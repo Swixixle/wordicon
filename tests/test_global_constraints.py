@@ -14155,7 +14155,7 @@ console.log(out.join('\\n'));
     # ---- (1) the shapes and the offers, mechanical -----------------------
     _sc = cli.suggest_destinations(_cats)
     if _sc.get("shape") != "question" or _sc.get("suggested") != "research" or _sc.get("suggested_built") is not False \
-            or [d["id"] for d in _sc["destinations"]] != ["research", "search", "develop", "room", "write", "question"] \
+            or [d["id"] for d in _sc["destinations"]] != ["research", "search", "develop", "inquiry", "room", "write", "question"] \
             or sum(1 for d in _sc["destinations"] if d.get("suggested")) != 1 \
             or next(d for d in _sc["destinations"] if d["id"] == "develop").get("suggested") \
             or not next(d for d in _sc["destinations"] if d["id"] == "research").get("why_unbuilt"):
@@ -14172,9 +14172,13 @@ console.log(out.join('\\n'));
         if _r.get("shape") != _shape or _r.get("suggested") != _sugg or not _r.get("signals"):
             _f105(f"{_t[:30]!r} reads as {_r.get('shape')}/{_r.get('suggested')}, not {_shape}/{_sugg}")
     # ledger (block 107): the instruments' five doors — two imports, a look, a search, the Investigation Room — built, each naming its producer
-    if set(cli.DESTINATION_IDS) != {"research", "search", "develop", "room", "write", "question", "name_study", "portrait", "owner_facts",
+    # ledger (block 111): a seventh door beside "save it" — an inquiry, for a
+    # question that is going to be worked rather than kept. It is built and it
+    # is honest about how little it does yet: the room itself names readings,
+    # record search, outside research and trial as unbuilt on its own face.
+    if set(cli.DESTINATION_IDS) != {"research", "search", "develop", "inquiry", "room", "write", "question", "name_study", "portrait", "owner_facts",
                                     "import_open_case", "import_ethicalalt", "look_ethicalalt", "search_open_case", "investigation_room"} \
-            or {d["id"] for d in cli.DESTINATIONS if d["built"]} != {"search", "develop", "room", "write", "question",
+            or {d["id"] for d in cli.DESTINATIONS if d["built"]} != {"search", "develop", "inquiry", "room", "write", "question",
                                                                      "import_open_case", "import_ethicalalt", "look_ethicalalt", "search_open_case", "investigation_room"}:
         _f105(f"the destinations or their built flags changed: {cli.DESTINATION_IDS}")
     # typed and spoken: the same destinations, the provenance carried beside the words, never branching
@@ -15850,6 +15854,7 @@ console.log(out.join('\\n'));
         ("Where the work happens", [
             "What comes back",
             "The room — where writing happens",
+            "Inquiry — a question, kept",
             "The Work Room — a change of scale",
             "The Clinic — where authorities stay separate",
             "The Bench — working on a word you already kept"]),
@@ -16843,6 +16848,174 @@ console.log(out.join('\\n'));
                                 "and fail on the first of next month for no reason at all")
     from datetime import datetime as _datetime110, timezone as _tz110
     _pass110()
+
+    # ---- block 111 (phase 1): the Inquiry ----------------------------------
+    #
+    # A durable place for one question. What phase 1 must prove is small and
+    # load-bearing: the question survives verbatim, identity is minted rather
+    # than read off a title, navigation is history rather than a mutable
+    # field, nothing here is a judgment, and the room says out loud how
+    # little it can do yet instead of letting the page imply more.
+    def _pass111():
+        import inquiry as _inq
+        _root = _pathlib.Path(__file__).resolve().parent.parent
+
+        # 1. NAMES. The federation Investigation Room shipped in block 107 and
+        # keeps its name; this is a different object and must not overload it.
+        if _inq.log_path().parent.name != "inquiry":
+            failures.append("111: the Inquiry writes somewhere other than local_state/inquiry")
+        import federation as _fed111
+        if _fed111.rooms_log() == _inq.log_path():
+            failures.append("111: the Inquiry and the federation Investigation Room share a log — "
+                            "one seats what other instruments deposited, the other holds a question "
+                            "being worked, and collapsing them collapses two constitutional meanings")
+
+        # 2. NO MODEL. Said in the docstring and true in the source.
+        _src111 = (_root / "scripts" / "inquiry.py").read_text(encoding="utf-8")
+        for _bad in ("Gateway", "gateway", "run_deep", "build_", "_prompt", "openai", "anthropic"):
+            if _bad in _src111.split('"""', 2)[-1]:
+                failures.append(f"111: the Inquiry module reaches for a model ({_bad!r}) — phase 1 "
+                                "keeps a question; it does not answer one")
+
+        _q111 = ("Are there pre-Christian figures with descriptions resembling Jesus, "
+                 "and does that even mean borrowing?")
+        _jbefore = cli.JUDGMENTS_LOG.read_text() if cli.JUDGMENTS_LOG.exists() else ""
+
+        _a = _inq.create_inquiry(_q111, provenance="typed")
+        _b = _inq.create_inquiry(_q111, provenance="typed")
+        # 3. IDENTITY IS MINTED. The same words twice are two inquiries.
+        if _a["inquiry_id"] == _b["inquiry_id"]:
+            failures.append("111: two inquiries opened on identical words share an id — identity "
+                            "is being read off the question, which is the law item 34 forbids")
+
+        # 4. THE QUESTION IS KEPT VERBATIM, and nothing in the module can
+        # change it. Renaming, branching, navigating and disposing all run,
+        # and afterwards the asked text is byte-identical.
+        _inq.rename(_a["inquiry_id"], "a different label entirely")
+        _n1 = _inq.add_node(_a["inquiry_id"], _a["root_node_id"], "reading", "shared descriptive motifs")
+        _n2 = _inq.add_node(_a["inquiry_id"], _a["root_node_id"], "meta", "am I assuming resemblance implies borrowing?")
+        _inq.set_active(_a["inquiry_id"], _n2["node_id"])
+        _inq.set_disposition(_a["inquiry_id"], _n1["node_id"], "abandoned",
+                             reason="the comparison class was never defined",
+                             revealed="that 'similar' was doing all the work")
+        _got = _inq.get_inquiry(_a["inquiry_id"])
+        if _got.get("root_question") != _q111:
+            failures.append(f"111: the question as asked did not survive its own inquiry: "
+                            f"{_got.get('root_question')!r}")
+        if _got.get("title") != "a different label entirely":
+            failures.append("111: a rename did not take, or took the question with it")
+
+        # 5. NAVIGATION IS HISTORY. Where he stood is appended, so the
+        # earlier position is still in the log rather than overwritten.
+        _actives = [r for r in _inq._rows(_inq.log_path())
+                    if r.get("kind") == "active" and r.get("inquiry_id") == _a["inquiry_id"]]
+        if len(_actives) < 2:
+            failures.append("111: the active node is a mutable field, not an appended act — where "
+                            "he was standing last month is gone")
+        if _got.get("active_node_id") != _n2["node_id"]:
+            failures.append("111: reopening does not put him back where he left")
+
+        # 6. THE FAILED THROW IS KEPT. Abandoning retains why AND what it
+        # revealed, which is the half of the record most worth having.
+        _ab = next((n for n in _got["nodes"] if n["node_id"] == _n1["node_id"]), {})
+        _d = _ab.get("disposition") or {}
+        if _d.get("disposition") != "abandoned" or "comparison class" not in _d.get("reason", "") \
+                or "all the work" not in _d.get("revealed", ""):
+            failures.append(f"111: abandoning a branch lost its reason or what it revealed: {_d}")
+
+        # 7. NOTHING IS A JUDGMENT. Exploring wrote no ruling.
+        _jafter = cli.JUDGMENTS_LOG.read_text() if cli.JUDGMENTS_LOG.exists() else ""
+        if _jafter != _jbefore:
+            failures.append("111: opening and branching an inquiry wrote a judgment — exploration "
+                            "is not a ruling, and only an explicit promotion may make one")
+        if "promoted" not in _inq.DISPOSITIONS:
+            failures.append("111: there is no way to promote a branch to a ruling later")
+
+        # 8. NODES CANNOT CROSS INQUIRIES.
+        for _bad_call, _why in (
+                (lambda: _inq.add_node(_b["inquiry_id"], _n1["node_id"], "reading", "x"),
+                 "a node hung off a parent belonging to a different inquiry"),
+                (lambda: _inq.set_active(_b["inquiry_id"], _n1["node_id"]),
+                 "another inquiry's node became the active one"),
+                (lambda: _inq.add_node(_a["inquiry_id"], "", "finding", "x"),
+                 "an unknown node type was accepted"),
+                (lambda: _inq.create_inquiry("   "),
+                 "an inquiry was opened on nothing at all")):
+            try:
+                _bad_call()
+                failures.append(f"111: {_why}")
+            except ValueError:
+                pass
+
+        # 9. THE ROOM SAYS WHAT IT CANNOT DO. Every phase after this one is
+        # named on the object, so the page cannot imply a door that is not
+        # there — the same rule the expansion card was repaired under.
+        for _u in ("readings", "meta-questions", "ask my record", "research outside",
+                   "trial", "comparison", "synthesis"):
+            if _u not in (_got.get("unbuilt") or []):
+                failures.append(f"111: the inquiry does not name {_u!r} as unbuilt, so the page "
+                                "can imply a door this phase did not build")
+        _pg111 = (_root / "webapp" / "inquiry.html").read_text(encoding="utf-8")
+        if "class=\"node unbuilt\" disabled" not in _pg111:
+            failures.append("111: the unbuilt doors render as something other than this page's "
+                            "unbuilt idiom — dashed and inert, naming their own reason")
+        # the question is painted as TEXT, never as markup
+        if "getElementById('asked').textContent" not in _pg111:
+            failures.append("111: the question is written into the page as markup rather than as "
+                            "text — what he typed is not HTML and must never be run as it")
+
+        # 10. THE THIRD AXIS EXISTS BEFORE IT IS NEEDED. An accusation is not
+        # a finding; a settlement without admission is not a conviction. The
+        # vocabulary is declared now so phase 4 slots into a pinned shape.
+        for _k in ("allegation", "regulatory_allegation", "charge", "settlement_no_admission",
+                   "adjudicated_finding", "conviction", "testimony", "company_assertion",
+                   "measured_datum", "model_inference", "owner_judgment"):
+            if _k not in _inq.EVIDENCE_KINDS:
+                failures.append(f"111: the evidence-kind vocabulary lost {_k!r} — that axis is what "
+                                "keeps an accusation from becoming a finding")
+        if set(_inq.ROUTES) & set(_inq.STANDINGS):
+            failures.append("111: route and standing share a term — how a thing was produced and "
+                            "what warrant it has are two questions")
+
+        # 11. IT IS REACHABLE. A door in the chooser, a place in the shell.
+        _idx111 = (_root / "webapp" / "index.html").read_text(encoding="utf-8")
+        if "'/inquiry':" not in _idx111:
+            failures.append("111: the Inquiry is not a place in the shell, so it opens as a bare "
+                            "page outside the one document")
+        if "if (id === 'inquiry')" not in _idx111:
+            failures.append("111: choosing the inquiry door does nothing")
+        _srv111 = (_root / "server.py").read_text(encoding="utf-8")
+        for _route in ('@app.route("/inquiry")', '@app.route("/api/inquiry", methods=["POST"])',
+                       '@app.route("/api/inquiry/<iid>", methods=["GET"])'):
+            if _route not in _srv111:
+                failures.append(f"111: {_route} is missing")
+        # 12. THE STANDING LAW: a wing that ships amends the constitution in
+        # the same block, and says what it cannot do as plainly as what it can.
+        _i = _idx111.index("Inquiry \u2014 a question, kept")
+        _con111 = _idx111[_i:_i + 1800]
+        for _need, _why in (
+                ("exactly as you asked it", "the constitution does not say the question is kept verbatim"),
+                ("becomes a descendant of it, never a replacement",
+                 "the constitution does not say a corrected question is a descendant"),
+                ("what the\n      failure revealed", "the constitution does not say an abandoned branch keeps what it revealed"),
+                ("Nothing in an inquiry is a ruling until you promote it",
+                 "the constitution does not say exploring is not judging"),
+                ("named on its own face as unbuilt", "the constitution does not admit what this phase cannot do")):
+            if _need not in _con111:
+                failures.append(f"111: {_why} ({_need!r})")
+        # 13. And the journey has to have RUN these, not merely contain them.
+        _run111 = (_root / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
+        for _need in ("the question is kept exactly as it was asked",
+                      "the same words opened twice are two inquiries",
+                      "an abandoned branch keeps what the failure revealed",
+                      "exploring created no ruling due",
+                      "walking to the Inquiry and back leaves the same room element"):
+            if _need not in _run111:
+                failures.append(f"111: run.sh no longer requires the check {_need!r} to have "
+                                "printed, so nothing proves it ran")
+        if not _re.search(r"^for j in .*\binquiry\b", _run111, _re.M):
+            failures.append("111: the inquiry journey exists but is not in the list run.sh runs")
+    _pass111()
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to

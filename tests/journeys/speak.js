@@ -39,7 +39,7 @@ const CATS = 'I would like to know about the historical superstitions involving 
   ok(posts.filter(p => p !== 'POST /api/speak/transcribe' && p !== 'POST /api/destinations').length === 0 && posts.filter(p => p === 'POST /api/speak/transcribe').length === 1, 'one transcription was posted and nothing else: ' + JSON.stringify(posts));
   await page.waitForTimeout(600);
   const dest = await page.evaluate(() => ({ reading: document.getElementById('destination-reading').textContent.replace(/\s+/g, ' '), chips: Array.from(document.querySelectorAll('#destination-chips .dest')).map(b => b.dataset.dest + (b.classList.contains('suggested') ? '*' : '') + (b.disabled ? '!' : '')).join(','), dev: document.getElementById('develop-controls').hidden }));
-  ok(/arrived spoken/.test(dest.reading) && dest.chips === 'research*!,search,develop,room,write,question' && dest.dev, 'the spoken sentence receives the typed sentence\'s destinations, arrived spoken, nothing run: ' + dest.chips);
+  ok(/arrived spoken/.test(dest.reading) && dest.chips === 'research*!,search,develop,inquiry,room,write,question' && dest.dev, 'the spoken sentence receives the typed sentence\'s destinations, arrived spoken, nothing run: ' + dest.chips);
   // editing keeps it spoken
   await page.fill('#input-text', CATS + ' Correct the transcript.'); await page.dispatchEvent('#input-text', 'input'); await page.waitForTimeout(700);
   const edited = await page.evaluate(() => ({ reading: document.getElementById('destination-reading').textContent.replace(/\s+/g, ' '), block: (typeof speechBlock === 'function') ? speechBlock() : null, heard: document.getElementById('speak-heard').textContent }));

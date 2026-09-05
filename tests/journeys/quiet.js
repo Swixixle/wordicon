@@ -41,7 +41,7 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
   ok(!ident.row && /Reads as a name with a date and a place/.test(ident.reading) && ident.chips.join(',') === 'name_study!,portrait!,owner_facts!,write,search,develop', 'an identity-shaped input is read and shown with the studies unbuilt: ' + ident.chips.join(','));
   await page.fill('#input-text', 'I would like to know about the historical superstitions involving cats.'); await page.dispatchEvent('#input-text', 'input'); await page.waitForTimeout(900);
   const catsRow = await page.evaluate(() => Array.from(document.querySelectorAll('#destination-chips .dest')).map(b => b.dataset.dest + (b.classList.contains('suggested') ? '*' : '') + (b.disabled ? '!' : '')).join(','));
-  ok(catsRow === 'research*!,search,develop,room,write,question', 'the cats sentence is read with Research outside Nikodemus highlighted and unbuilt: ' + catsRow);
+  ok(catsRow === 'research*!,search,develop,inquiry,room,write,question', 'the cats sentence is read with Research outside Nikodemus highlighted and unbuilt: ' + catsRow);
   await page.fill('#input-text', ''); await page.dispatchEvent('#input-text', 'input'); await page.waitForTimeout(500);
   const readsOnly = posts.filter(p => p !== 'POST /api/destinations');
   ok(readsOnly.length === 0, 'browsing with recording off posted nothing: ' + JSON.stringify(readsOnly) + ' (reads of the words\' shape: ' + posts.length + ')');

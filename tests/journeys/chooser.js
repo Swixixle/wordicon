@@ -34,7 +34,7 @@ const IDENT = 'Rowan Ashby Pell, born 1985-04-11 at 3 p.m. in Duluth, Minnesota'
   ok(!c.row && c.dev, 'typing the cats sentence shows the destination row and keeps Develop\'s controls hidden');
   ok(/Reads as a question/.test(c.reading) && /arrived typed/.test(c.reading) && /Nothing runs until you choose/.test(c.reading), 'the reading names the shape, the arrival, and the law: ' + c.reading.slice(0, 120));
   const ids = c.chips.map(x => x.id).join(',');
-  ok(ids === 'research,search,develop,room,write,question', 'the question shape offers Research, Search, Develop, Room, Write, Save as an open question: ' + ids);
+  ok(ids === 'research,search,develop,inquiry,room,write,question', 'the question shape offers Research, Search, Develop, Inquiry, Room, Write, Save as an open question: ' + ids);
   const research = c.chips.find(x => x.id === 'research'), develop = c.chips.find(x => x.id === 'develop');
   ok(research && research.suggested && research.unbuilt && research.disabled && /not built/.test(research.text), 'Research is highlighted and unbuilt — a label, not a door: ' + (research && research.text.slice(0, 80)));
   ok(develop && !develop.suggested && !develop.disabled, 'Develop the idea is offered but not highlighted for a question');

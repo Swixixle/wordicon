@@ -80,6 +80,7 @@ import keeper  # noqa: E402  (the Book's narrator — summoned only, never sched
 import recovery  # noqa: E402  (the Recovery Review — block 103; reads the queue, appends rulings)
 import speech  # noqa: E402  (Speak to Nikodemus — block 106; the transcription adapter, local only)
 import federation  # noqa: E402  (connected instruments — block 107; Open Case and EthicalAlt behind the membrane, manual pull only)
+import inquiry  # noqa: E402  (the Inquiry — block 111 phase 1; a question kept, branched and returnable. Zero model calls)
 from wordicon_corpus.objects import Judgment  # noqa: E402
 
 WEBAPP_DIR = REPO_ROOT / "webapp"
@@ -1367,6 +1368,88 @@ def api_speak_keep_transcript():
 # proposals the owner alone can turn into declarations, and a mechanical
 # convergence after a declaration. No model on any route here; nothing
 # polls; nothing runs on paint. Behind the pairing gate like everything.
+
+# ---- the Inquiry (block 111, phase 1) ---------------------------------
+#
+# A durable place for one question. Phase 1 keeps the question verbatim,
+# hangs nodes off it, remembers where the owner was standing, and can be
+# reopened. It proposes no readings, searches nothing and calls no model:
+# those are the phases after this one, and the object says so itself in
+# `unbuilt` rather than letting the page imply otherwise.
+#
+# NOT the Investigation Room below. That one seats what other instruments
+# deposited; this one holds a question being worked.
+
+@app.route("/inquiry")
+def inquiry_page():
+    page = (pathlib.Path(WEBAPP_DIR) / "inquiry.html").read_text(encoding="utf-8")
+    return Response(page.replace("__BRAND_NAME__", BRAND["name"]), mimetype="text/html")
+
+
+@app.route("/api/inquiry", methods=["GET"])
+def api_inquiry_list():
+    return jsonify({"inquiries": inquiry.load_inquiries(), "status": inquiry.status()})
+
+
+@app.route("/api/inquiry", methods=["POST"])
+def api_inquiry_create():
+    data = request.get_json(force=True) or {}
+    try:
+        made = inquiry.create_inquiry(
+            str(data.get("question") or ""),
+            title=str(data.get("title") or ""),
+            provenance=str(data.get("provenance") or "typed"),
+            shape=str(data.get("shape") or ""),
+            opened_from=str(data.get("opened_from") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"inquiry": inquiry.get_inquiry(made["inquiry_id"])})
+
+
+@app.route("/api/inquiry/<iid>", methods=["GET"])
+def api_inquiry_get(iid):
+    got = inquiry.get_inquiry(iid)
+    if not got:
+        return jsonify({"error": "no inquiry with that id"}), 404
+    return jsonify({"inquiry": got})
+
+
+@app.route("/api/inquiry/<iid>/node", methods=["POST"])
+def api_inquiry_node(iid):
+    data = request.get_json(force=True) or {}
+    try:
+        node = inquiry.add_node(iid, str(data.get("parent_id") or ""),
+                                str(data.get("node_type") or "reading"),
+                                str(data.get("text") or ""),
+                                route=str(data.get("route") or "owner"),
+                                standing=str(data.get("standing") or "owner_stated"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"node": node, "inquiry": inquiry.get_inquiry(iid)})
+
+
+@app.route("/api/inquiry/<iid>/active", methods=["POST"])
+def api_inquiry_active(iid):
+    data = request.get_json(force=True) or {}
+    try:
+        inquiry.set_active(iid, str(data.get("node_id") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"inquiry": inquiry.get_inquiry(iid)})
+
+
+@app.route("/api/inquiry/<iid>/disposition", methods=["POST"])
+def api_inquiry_disposition(iid):
+    data = request.get_json(force=True) or {}
+    try:
+        row = inquiry.set_disposition(iid, str(data.get("node_id") or ""),
+                                      str(data.get("disposition") or ""),
+                                      reason=str(data.get("reason") or ""),
+                                      revealed=str(data.get("revealed") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"disposition": row, "inquiry": inquiry.get_inquiry(iid)})
+
 
 @app.route("/investigation")
 def investigation_page():

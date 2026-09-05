@@ -1,5 +1,58 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.5.0 — the Inquiry, phase 1 (block 111): a question, kept
+
+A durable place for one question. It can be opened, listed, reopened and
+navigated; the question is kept verbatim and nothing in the module can change
+it; every later act is a node hanging off another node, so a clarified
+question is a descendant rather than a correction. Reopen it in a year and it
+is standing where you left it.
+
+**The name, first, because the obvious one was taken.** Block 107 already
+shipped an "Investigation Room" — `inv_` ids at `/investigation`, fixed seats,
+holding depositions Open Case and EthicalAlt signed. That room seats what
+*other instruments* deposited; this one holds a question the owner is
+*working*. Two different objects. Overloading one name would blur two
+constitutional meanings and break the ledger that pins the first, so this is
+an **Inquiry** (`inq_`, `/inquiry`, `local_state/inquiry/`) and the federation
+room keeps its name.
+
+`scripts/inquiry.py` follows the house conventions rather than inventing new
+ones: call-time paths off `cli.LOCAL_STATE`, one append-only log, federation's
+clock discipline (`recorded_at`, `clock_regression`), minted ids salted so two
+inquiries opened on identical words in the same second are two inquiries.
+Zero model calls, and the suite reads the source to prove it.
+
+Three vocabularies are declared in full now, unused until later phases, so
+they slot into a pinned shape instead of being widened under pressure.
+**Route** — how an element was produced. **Standing** — what warrant it
+currently has; separate from route, because collapsing them is how a model
+proposal becomes a fact. **Evidence kind** — what kind of assertion it is:
+allegation, regulatory allegation, charge, settlement without admission,
+adjudicated finding, conviction, testimony, company assertion, measured datum,
+model inference, owner judgment. That third axis exists to keep an accusation
+from becoming a finding, and a settlement from becoming a conviction.
+
+Branch dispositions are open, parked, abandoned, kept-supported,
+kept-generative, kept-unresolved, promoted. **Only promotion may ever lead to
+a judgment, and this module writes none** — the suite proves that opening and
+branching an inquiry leaves the judgments log byte-identical. Abandoning keeps
+the reason *and what the failure revealed*, because the throw that did not
+stick is the half of the record most worth having.
+
+The chooser gains a seventh door — *Open an inquiry*, beside *Save as an open
+question* — and the shell gains `/inquiry` as a place, so walking there and
+back never rebuilds the writing room. The constitution is amended in the same
+block and says plainly what this phase cannot do; the room names every later
+phase on its own face as an unbuilt door, dashed and inert with its reason,
+rather than implying a capability it does not have.
+
+**Not built here, and named as such:** readings of a messy question,
+meta-questions, ask-my-record, research outside, trial, comparison, synthesis.
+
+Suite OK. Thirteen journeys, 397 checks, exit 0. Seven sabotage mutations, all
+caught by name.
+
 ## v1.4.4 — two defects in the suite itself
 
 Neither of these was in the application. Both were in the file that is

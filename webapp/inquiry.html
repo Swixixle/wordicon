@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__BRAND_NAME__ — Inquiry</title>
+<style>
+  :root {
+    --bg: #11161d; --panel: #181f29; --panel-2: #1f2833; --border: #2a3441;
+    --text: #e7ecf3; --muted: #8b98a9; --accent: #78aaff;
+    --good: #6fcf97; --bad: #e08a8a; --warn: #d9a441;
+    --root: #d9c7ff; --branch: #9bb8ff; --meta: #d9a441;
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 18px 16px 60px; }
+  header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 15px; margin: 0 0 6px; }
+  header a, a { color: var(--accent); text-decoration: none; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin: 12px 0; }
+  .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+  .body { font-size: 14px; line-height: 1.55; margin: 6px 0; }
+  .muted { color: var(--muted); }
+  .foot { font-size: 12px; color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+  label { font-size: 11.5px; color: var(--muted); display: block; margin: 8px 0 3px; }
+  input, textarea { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 9px; font-size: 13px; font-family: inherit; width: 100%; box-sizing: border-box; }
+  textarea { min-height: 74px; resize: vertical; line-height: 1.5; }
+  button { background: var(--panel-2); color: var(--accent); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; font-family: inherit; }
+  button:hover { border-color: var(--accent); }
+  button.quiet { color: var(--muted); font-size: 12px; padding: 4px 9px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .error { color: var(--bad); font-size: 13px; }
+  /* The question, exactly as it arrived. It is set apart because it is the
+     one thing on this page that nothing can rewrite. */
+  .asked { border-left: 3px solid var(--root); padding: 4px 0 4px 12px; margin: 8px 0;
+    font-size: 15px; line-height: 1.55; white-space: pre-wrap; }
+  .rail { display: flex; flex-direction: column; gap: 5px; }
+  .node { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 8px 11px; font-size: 13px; line-height: 1.5; cursor: pointer; text-align: left;
+    width: 100%; color: var(--text); }
+  .node:hover { border-color: var(--accent); }
+  .node.on { border-color: var(--accent); }
+  .node .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .node.root .k { color: var(--root); } .node.meta .k { color: var(--meta); }
+  .tag { display: inline-block; font-size: 10.5px; padding: 1px 7px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted); margin-right: 4px; }
+  .grid2 { display: grid; grid-template-columns: 300px 1fr; gap: 14px; align-items: start; }
+  /* The doors this phase has not built. Dashed and inert, naming their own
+     reason — the page's own idiom for a thing that is coming and is not
+     here, rather than a button that reads as broken. */
+  /* :disabled is named too: Chromium's own sheet puts `cursor: default` on a
+     disabled control, and a single class does not outrank it. An unbuilt door
+     has to LOOK unbuilt in every engine, or the idiom is decorative. */
+  .unbuilt, .unbuilt:disabled { border-style: dashed; color: var(--muted); cursor: not-allowed; }
+  .unbuilt:hover { border-color: var(--border); }
+  code { font-size: 12px; color: var(--muted); word-break: break-all; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } .wrap { padding: 12px 10px 60px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Inquiry</h1>
+  <a href="/">← back to <span data-brand>__BRAND_NAME__</span></a>
+  <span class="foot">a question, kept · no model on this page</span>
+</header>
+
+<div id="err" class="error" style="display:none"></div>
+
+<div class="card" id="open-card">
+  <div class="section-label">Open an inquiry</div>
+  <p class="body muted">Ask it however it comes out. It is kept exactly as you type it, and
+  nothing here corrects it — a narrowed or better question becomes a descendant of this one,
+  never a replacement.</p>
+  <label for="q">The question</label>
+  <textarea id="q" placeholder="Are there pre-Christian figures with descriptions resembling Jesus?"></textarea>
+  <div class="row"><button id="open-btn" onclick="openInquiry()">Open it</button></div>
+</div>
+
+<div class="card" id="list-card">
+  <div class="section-label">Your inquiries</div>
+  <div id="list" class="rail"><p class="body muted">Loading…</p></div>
+</div>
+
+<div class="card" id="one-card" style="display:none">
+  <div class="row" style="justify-content:space-between">
+    <div class="section-label" id="one-title">Inquiry</div>
+    <button class="quiet" onclick="closeOne()">← all inquiries</button>
+  </div>
+  <div class="section-label">Asked</div>
+  <div class="asked" id="asked"></div>
+  <div class="foot" id="one-meta"></div>
+
+  <div class="grid2" style="margin-top:14px">
+    <div>
+      <div class="section-label">Branches</div>
+      <div class="rail" id="rail"></div>
+    </div>
+    <div>
+      <div class="section-label">Here</div>
+      <div id="here"></div>
+      <div class="section-label" style="margin-top:14px">Not built yet</div>
+      <div class="rail" id="unbuilt"></div>
+    </div>
+  </div>
+</div>
+
+<p class="foot">Phase 1 of the Inquiry. It keeps a question and its branches and can be
+reopened; it proposes no readings, searches nothing, and calls no model. Each of those is
+its own block, and the doors below say which.</p>
+</div>
+
+<script>
+const NODE_LABEL = {root: 'asked', reading: 'reading', meta: 'about the question',
+                    answer: 'answer', attack: 'attack', comparison: 'comparison',
+                    synthesis: 'synthesis'};
+const UNBUILT_WHY = {
+  'readings': 'reading a messy question several ways, and forking one branch per reading',
+  'meta-questions': 'a question about the question, which never becomes a finding about the world',
+  'ask my record': 'exact text in your own shelf and library, labelled internal-only',
+  'research outside': 'sources beyond your record — found, opened, each claim anchored to a passage',
+  'trial': 'putting a claim, a source or a branch on trial and cross-examining it',
+  'comparison': 'comparing branches you select, with the exhibits shown',
+  'synthesis': 'what still holds — owner-summoned, and never calling an unattacked branch survived',
+};
+let ONE = null;
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fail(m) { const e = document.getElementById('err');
+  e.style.display = m ? 'block' : 'none'; e.textContent = m || ''; }
+
+async function jget(u) { const r = await fetch(u); const d = await r.json();
+  if (d.error) throw new Error(d.error); return d; }
+async function jpost(u, body) {
+  const r = await fetch(u, {method: 'POST', headers: {'Content-Type': 'application/json'},
+                           body: JSON.stringify(body || {})});
+  const d = await r.json(); if (d.error) throw new Error(d.error); return d;
+}
+
+async function loadList() {
+  try {
+    const d = await jget('/api/inquiry');
+    const el = document.getElementById('list');
+    if (!d.inquiries.length) {
+      el.innerHTML = '<p class="body muted">None yet. The first question you open stays here.</p>';
+      return;
+    }
+    el.innerHTML = d.inquiries.map(i => `<button class="node" onclick="openOne('${i.inquiry_id}')">
+      <span class="k">${esc(i.opened_at.slice(0, 10))} · ${i.nodes} node${i.nodes === 1 ? '' : 's'}</span><br>
+      ${esc(i.title)}</button>`).join('');
+  } catch (e) { fail(String(e.message || e)); }
+}
+
+async function openInquiry() {
+  const q = document.getElementById('q').value.trim();
+  if (!q) return;
+  const b = document.getElementById('open-btn');
+  b.disabled = true;
+  try {
+    const d = await jpost('/api/inquiry', {question: q, provenance: 'typed'});
+    document.getElementById('q').value = '';
+    await loadList();
+    show(d.inquiry);
+  } catch (e) { fail(String(e.message || e)); }
+  b.disabled = false;
+}
+
+async function openOne(iid) {
+  try { show((await jget('/api/inquiry/' + iid)).inquiry); }
+  catch (e) { fail(String(e.message || e)); }
+}
+
+function closeOne() {
+  ONE = null;
+  document.getElementById('one-card').style.display = 'none';
+  document.getElementById('open-card').style.display = '';
+  document.getElementById('list-card').style.display = '';
+}
+
+function show(inq) {
+  ONE = inq;
+  document.getElementById('open-card').style.display = 'none';
+  document.getElementById('list-card').style.display = 'none';
+  document.getElementById('one-card').style.display = '';
+  document.getElementById('one-title').textContent = inq.title;
+  // The question, verbatim. textContent, never innerHTML: what he typed is
+  // what is shown, and it is not markup.
+  document.getElementById('asked').textContent = inq.root_question;
+  document.getElementById('one-meta').textContent =
+    'opened ' + inq.opened_at + ' · arrived ' + inq.provenance + ' · ' + inq.nodes.length +
+    ' node' + (inq.nodes.length === 1 ? '' : 's') + ' · id ' + inq.inquiry_id;
+  document.getElementById('rail').innerHTML = inq.nodes.map(n =>
+    `<button class="node ${n.node_type} ${n.node_id === inq.active_node_id ? 'on' : ''}"
+       onclick="goNode('${n.node_id}')">
+       <span class="k">${esc(NODE_LABEL[n.node_type] || n.node_type)}</span><br>
+       ${esc((n.text || '').slice(0, 90))}${(n.text || '').length > 90 ? '…' : ''}</button>`).join('');
+  const here = inq.nodes.find(n => n.node_id === inq.active_node_id) || inq.nodes[0];
+  document.getElementById('here').innerHTML = here ? `<div class="body">
+      <span class="tag">${esc(NODE_LABEL[here.node_type] || here.node_type)}</span>
+      <span class="tag">route ${esc(here.route)}</span>
+      <span class="tag">${esc(here.standing.replace(/_/g, ' '))}</span>
+      <span class="tag">${esc((here.disposition || {}).disposition || 'open')}</span>
+      </div><div class="asked" style="border-left-color:var(--branch)">${esc(here.text)}</div>
+      <p class="foot">Standing where you left it. Coming back a year from now shows this same
+      node, this same question, and whatever the branches became.</p>` : '';
+  document.getElementById('unbuilt').innerHTML = (inq.unbuilt || []).map(u =>
+    `<button class="node unbuilt" disabled aria-disabled="true">
+      <span class="k">not built — ${esc(u)}</span><br>${esc(UNBUILT_WHY[u] || '')}</button>`).join('');
+}
+
+async function goNode(nid) {
+  if (!ONE) return;
+  try { show((await jpost('/api/inquiry/' + ONE.inquiry_id + '/active', {node_id: nid})).inquiry); }
+  catch (e) { fail(String(e.message || e)); }
+}
+
+loadList();
+</script>
+</body>
+</html>

@@ -1821,6 +1821,13 @@ DESTINATIONS = (
      "sub": "the words as words, in the writing room — nothing interprets them"},
     {"id": "question", "label": "Save as an open question", "built": True,
      "sub": "kept verbatim, with how it arrived, until you come back to it"},
+    # Block 111 phase 1. The door beside "save it": a question that is going
+    # to be WORKED gets a place of its own, where its branches and what
+    # became of them are kept. Phase 1 opens the room and keeps the question;
+    # readings, record search, outside research and trial are the phases
+    # after, and the room names each of them as unbuilt on its own face.
+    {"id": "inquiry", "label": "Open an inquiry", "built": True,
+     "sub": "a place for this question — branches, and what became of them, kept"},
     {"id": "name_study", "label": "Study the name", "built": False,
      "sub": "structure, sourced etymology per part, scripts, construction",
      "why_unbuilt": "the Name Study is the next block after the chooser"},
@@ -1851,7 +1858,7 @@ SHAPES = ("question", "identity", "word", "phrase", "passage", "statement", "url
 # choose concept analysis deliberately — but is highlighted only where
 # it is the plain reading of the words)
 _SHAPE_OFFERS = {
-    "question": ("research", "search", "develop", "room", "write", "question"),
+    "question": ("research", "search", "develop", "inquiry", "room", "write", "question"),
     "identity": ("name_study", "portrait", "owner_facts", "write", "search", "develop"),
     "word": ("develop", "search", "write", "question", "look_ethicalalt", "search_open_case", "investigation_room"),
     "phrase": ("develop", "search", "room", "write", "question", "look_ethicalalt", "search_open_case", "investigation_room"),
