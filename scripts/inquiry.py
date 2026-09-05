@@ -76,26 +76,88 @@ STANDINGS = (
     "source_unavailable",
 )
 
-# WHAT A THING IS, which is a third axis and not a synonym for either of
-# the two above. Route says how an element was produced; standing says what
-# warrant it has; this says what KIND of assertion it is. It is declared
-# here, unused until phase 4, because the distinction it protects is the
-# one most easily lost in a hurry: an accusation is not a finding, a
-# settlement without admission is not a conviction, and a company saying a
-# thing about itself is evidence of the saying and not of the thing.
-EVIDENCE_KINDS = (
-    "allegation",                 # someone asserts it; nobody has adjudicated it
-    "regulatory_allegation",      # a regulator asserts it, still unadjudicated
-    "charge",                     # formally charged, not tried
-    "settlement_no_admission",    # resolved, explicitly without admitting it
-    "adjudicated_finding",        # a tribunal found it
-    "conviction",                 # criminal, decided
-    "testimony",                  # a person's account, first-hand
-    "company_assertion",          # the subject's own statement about itself
-    "measured_datum",             # a number from a named dataset or filing
-    "model_inference",            # a model proposed it
-    "owner_judgment",             # the owner ruled it
+# WHAT A THING IS — and it takes four axes, not one label.
+#
+# The first cut of this was a single flat list with `allegation`, `charge`,
+# `settlement_no_admission`, `adjudicated_finding` and `conviction` sitting
+# beside `testimony` and `measured_datum`. That mixed three different
+# questions: what the material IS, who ISSUED it, and where it stands
+# PROCEDURALLY. A settlement is not a kind of evidence — it is a state a
+# document can be in, and that document contains allegations, company
+# assertions and stipulated facts at the same time. Flattened into one label,
+# procedural movement silently becomes proof: a charge reads as a finding, a
+# settlement reads as an admission, and the exculpatory outcomes — dismissal,
+# acquittal, reversal — have nowhere to live at all.
+#
+# So: four axes, and a classification is attached to ONE claim or answer
+# element, never to a whole document.
+#
+# The vocabulary is VERSIONED. "Declared in full" means complete for this
+# schema version, not sealed: a later phase may extend it through a recorded
+# migration, and every classification carries the version it was made under.
+VOCAB_VERSION = "inquiry.vocab.v1"
+
+# What the material is.
+EVIDENCE_NATURE = (
+    "assertion",         # someone states it
+    "testimony",         # a first-hand account
+    "allegation",        # an accusation, unadjudicated
+    "measured_datum",    # a number from a named dataset or filing
+    "documented_event",  # a thing that demonstrably happened, with a record of it
+    "analysis",          # a reading of other material, human or model
+    "owner_judgment",    # the owner ruled it
 )
+
+# Who is speaking. A regulator asserting a thing and a company asserting the
+# same thing are the same NATURE and very different weight, and that
+# difference belongs on its own axis rather than inside the word.
+ISSUER_ROLES = ("company", "regulator", "court", "journalist", "researcher",
+                "whistleblower", "owner", "model", "other")
+
+# Where it stands. Exculpatory outcomes are first-class here, which the flat
+# list could not express at all.
+PROCEDURAL_POSTURE = (
+    "none",                   # not a legal matter
+    "investigation",          # being looked into
+    "complaint_or_charge",    # formally alleged
+    "settlement",             # resolved by agreement
+    "adjudication",           # decided by a tribunal
+    "conviction",             # criminal, decided
+    "dismissal_or_acquittal", # decided the other way
+    "appeal",                 # under review
+    "reversal",               # the decision was undone
+)
+
+# What, if anything, was admitted — because "settled" says nothing about this
+# on its own, and the difference is the whole argument.
+ADMISSION_STATUS = ("not_applicable", "explicit", "limited", "none", "not_stated")
+
+# Whether it is over. An adjudicated finding under appeal is not a settled
+# fact, and a reversal is not a footnote on the finding it undid.
+FINALITY = ("pending", "interim", "final", "appealed", "overturned")
+
+
+def classify(nature: str, issuer: str = "other", posture: str = "none",
+             admission: str = "not_applicable", finality: str = "pending",
+             note: str = "") -> dict:
+    """One classification, for ONE claim or answer element.
+
+    Never for a whole document: a single settlement carries allegations, the
+    company's own assertions, stipulated facts and procedural terms, and one
+    label over all of it is how the procedural movement becomes the proof.
+    Unknown terms raise rather than being coerced to a default, because a
+    silently defaulted posture is exactly the failure this axis exists for."""
+    for _v, _allowed, _name in ((nature, EVIDENCE_NATURE, "nature"),
+                                (issuer, ISSUER_ROLES, "issuer"),
+                                (posture, PROCEDURAL_POSTURE, "posture"),
+                                (admission, ADMISSION_STATUS, "admission"),
+                                (finality, FINALITY, "finality")):
+        if _v not in _allowed:
+            raise ValueError(f"unknown {_name} {_v!r}")
+    return {"vocab_version": VOCAB_VERSION, "nature": nature, "issuer": issuer,
+            "posture": posture, "admission": admission, "finality": finality,
+            "note": str(note or "")[:400]}
+
 
 # What became of a branch. Only "promoted" is ever allowed to lead to a
 # judgment event, and phase 1 writes no judgments at all.

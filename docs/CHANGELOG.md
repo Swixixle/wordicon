@@ -1,5 +1,40 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.5.1 — the evidence vocabulary, corrected before it was used
+
+The flat `evidence_kind` list shipped one block ago put `allegation`,
+`regulatory_allegation`, `charge`, `settlement_no_admission`,
+`adjudicated_finding` and `conviction` beside `testimony`, `measured_datum`
+and `company_assertion`, as though they answered one question. They answer
+three: what the material **is**, who **issued** it, and where it stands
+**procedurally**. A settlement is not a kind of evidence — it is a state a
+document can be in, and that same document holds allegations, the company's
+own assertions and stipulated facts at once. Flattened into one label,
+procedural movement silently becomes proof: a charge reads as a finding, a
+settlement reads as an admission. Worse, the list had nowhere at all to put
+a dismissal, an acquittal or a reversal.
+
+Corrected while still unwritten by any row, into four axes: **nature**
+(assertion, testimony, allegation, measured datum, documented event, analysis,
+owner judgment), **issuer role** (company, regulator, court, journalist,
+researcher, whistleblower, owner, model, other), **procedural posture** (none,
+investigation, complaint or charge, settlement, adjudication, conviction,
+dismissal or acquittal, appeal, reversal), **admission status** (not
+applicable, explicit, limited, none, not stated), and **finality** (pending,
+interim, final, appealed, overturned).
+
+A classification is attached to one claim or answer element, never to a whole
+document, and `classify()` raises on an unknown term rather than coercing it
+to a default — a silently defaulted posture is the exact failure the axis
+exists to prevent. The vocabulary is versioned (`inquiry.vocab.v1`) and every
+classification carries the version it was made under, so a later extension is
+a recorded migration rather than a redefinition of what old rows meant.
+
+Suite OK. Five sabotage mutations, all caught by name — including one that
+restores the flat list and one that removes `dismissal_or_acquittal`, on the
+grounds that an investigation which can record a charge but not its dismissal
+is a machine for accumulating suspicion.
+
 ## v1.5.0 — the Inquiry, phase 1 (block 111): a question, kept
 
 A durable place for one question. It can be opened, listed, reopened and

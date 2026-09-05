@@ -16964,18 +16964,60 @@ console.log(out.join('\\n'));
             failures.append("111: the question is written into the page as markup rather than as "
                             "text — what he typed is not HTML and must never be run as it")
 
-        # 10. THE THIRD AXIS EXISTS BEFORE IT IS NEEDED. An accusation is not
-        # a finding; a settlement without admission is not a conviction. The
-        # vocabulary is declared now so phase 4 slots into a pinned shape.
-        for _k in ("allegation", "regulatory_allegation", "charge", "settlement_no_admission",
-                   "adjudicated_finding", "conviction", "testimony", "company_assertion",
-                   "measured_datum", "model_inference", "owner_judgment"):
-            if _k not in _inq.EVIDENCE_KINDS:
-                failures.append(f"111: the evidence-kind vocabulary lost {_k!r} — that axis is what "
-                                "keeps an accusation from becoming a finding")
+        # 10. WHAT A THING IS TAKES FOUR AXES, NOT ONE LABEL.
+        #
+        # The first cut was a flat `evidence_kind` list with `charge`,
+        # `settlement_no_admission`, `adjudicated_finding` and `conviction`
+        # sitting beside `testimony` and `measured_datum`. That collapsed what
+        # the material IS, who ISSUED it, and where it stands PROCEDURALLY into
+        # one word — which is how a charge reads as a finding and a settlement
+        # reads as an admission — and it had nowhere at all to put a dismissal,
+        # an acquittal or a reversal. Corrected while still unused.
+        if hasattr(_inq, "EVIDENCE_KINDS"):
+            failures.append("111: the flat evidence-kind list is back. A source's nature, its "
+                            "speaker and its procedural status may not be collapsed into one "
+                            "label — that is how procedural movement becomes proof")
+        for _axis, _need in (
+                ("EVIDENCE_NATURE", ("assertion", "testimony", "allegation", "measured_datum",
+                                     "documented_event", "analysis", "owner_judgment")),
+                ("ISSUER_ROLES", ("company", "regulator", "court", "journalist", "researcher",
+                                  "whistleblower", "owner", "model", "other")),
+                ("PROCEDURAL_POSTURE", ("none", "investigation", "complaint_or_charge", "settlement",
+                                        "adjudication", "conviction", "dismissal_or_acquittal",
+                                        "appeal", "reversal")),
+                ("ADMISSION_STATUS", ("not_applicable", "explicit", "limited", "none", "not_stated")),
+                ("FINALITY", ("pending", "interim", "final", "appealed", "overturned"))):
+            _have = getattr(_inq, _axis, ())
+            for _t in _need:
+                if _t not in _have:
+                    failures.append(f"111: {_axis} lost {_t!r}")
+        # the exculpatory outcomes are first-class, which the flat list could
+        # not express at all
+        for _t in ("dismissal_or_acquittal", "reversal"):
+            if _t not in _inq.PROCEDURAL_POSTURE:
+                failures.append(f"111: {_t!r} is gone — an investigation that can record a charge "
+                                "but not its dismissal is a machine for accumulating suspicion")
+        # a classification is versioned, validated, and per-element
+        _c111 = _inq.classify("allegation", issuer="regulator", posture="settlement",
+                              admission="none", finality="final")
+        if _c111.get("vocab_version") != _inq.VOCAB_VERSION:
+            failures.append("111: a classification does not carry the vocabulary version it was "
+                            "made under, so a later migration cannot tell old rows from new")
+        for _bad in (("conviction",), ("assertion", "judge"), ("assertion", "court", "guilty")):
+            try:
+                _inq.classify(*_bad)
+                failures.append(f"111: classify accepted {_bad!r} — an unknown term coerced to a "
+                                "default is exactly the silent posture this axis exists to stop")
+            except ValueError:
+                pass
         if set(_inq.ROUTES) & set(_inq.STANDINGS):
             failures.append("111: route and standing share a term — how a thing was produced and "
                             "what warrant it has are two questions")
+        _srcC = (_root / "scripts" / "inquiry.py").read_text(encoding="utf-8")
+        if "for ONE claim or answer element" not in _srcC:
+            failures.append("111: the record no longer says a classification belongs to one claim "
+                            "rather than a whole document — one settlement carries allegations, "
+                            "company assertions and stipulated facts at once")
 
         # 11. IT IS REACHABLE. A door in the chooser, a place in the shell.
         _idx111 = (_root / "webapp" / "index.html").read_text(encoding="utf-8")
