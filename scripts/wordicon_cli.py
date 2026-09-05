@@ -3157,7 +3157,7 @@ PROMPT_STAGE_BUILDERS = {
     "concept_names": "build_concept_names_prompt", "road": "build_road_prompt",
     "route_analysis": "build_route_analysis_prompt", "support": "build_support_prompt",
     "bench_build": "build_bench_build_prompt", "dissect": "build_dissect_prompt",
-    "attack": "build_attack_prompt",
+    "attack": "build_attack_prompt", "readings": "build_readings_prompt",
 }
 _PROMPT_LEDGER = threading.local()
 
@@ -10617,6 +10617,150 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
             "impositions — that line is the whole job.\n\n" + _marker), 1)
     return Cacheable(stable, f"""Input on trial:
 {quoted_source(text)}""")
+
+
+# ---- the Question Reader (block 111 phase 2) --------------------------
+#
+# THE GUARANTEE IS STRUCTURAL, NOT SEMANTIC, and that distinction is the
+# whole design. A model asked to read a question could easily answer it
+# instead — slip in what the pre-Christian sources actually say while
+# claiming to be listing readings. No wording in a prompt reliably stops
+# that. So the OUTPUT SHAPE has nowhere for a fact to live:
+#
+#   a reading   = a label + a scope + what evidence it would REQUIRE
+#   an assumption = a span of HIS OWN QUESTION + why it is an assumption
+#   an ambiguity  = a term from HIS OWN QUESTION + the senses it could take
+#
+# Nothing in that schema is an assertion about the world; every field is
+# either a requirement or a pointer back into his own sentence. Then the
+# pointers are CHECKED: an assumption or ambiguity whose quoted span is not
+# in the question is dropped and the drop is recorded. A model that wants
+# to smuggle a finding has to put it in a field that does not exist.
+
+def build_readings_prompt(question: str) -> "Cacheable":
+    stable = """You are the Question Reader. You are given one question, exactly as
+its author typed it. Your entire job is to say what it could MEAN. You
+are not answering it, and you have no information about its subject.
+
+Return two to four genuinely DISTINCT readings. Distinct means they would
+need DIFFERENT EVIDENCE to settle — not different wording of the same
+question. If you can only find one honest reading, return one; padding
+the list with restatements is worse than a short list.
+
+For each reading give:
+  label   - a short name for this way of reading it
+  scope   - what would be examined under this reading, in one sentence
+  needs   - what kind of evidence would settle it, in one sentence
+
+Then, separately:
+
+assumptions - things the question TAKES FOR GRANTED. Each one must quote a
+  span COPIED EXACTLY from the question, plus one sentence on why it is an
+  assumption rather than a given.
+
+ambiguities - terms in the question that could be read more than one way.
+  Each must quote the term EXACTLY as it appears, plus the senses it could
+  take.
+
+HARD RULES.
+- You do not know anything about the subject and must not act as if you
+  do. No dates, no names of sources, no claims about what is or is not
+  the case. If you catch yourself about to be informative, you have left
+  your job.
+- Every quoted span in assumptions and ambiguities must appear VERBATIM in
+  the question. Spans that do not are discarded before the author sees
+  them, so inventing one wastes the slot.
+- Do not rewrite, correct or tidy the question. Its messiness is the
+  material.
+- `needs` describes a KIND of evidence, never a finding. "Dated texts from
+  before the first century" is a need. "Such texts exist" is a finding and
+  is not yours to make.
+
+Return ONLY JSON:
+{"readings":[{"label":"...","scope":"...","needs":"..."}],
+ "assumptions":[{"span":"...","why":"..."}],
+ "ambiguities":[{"term":"...","senses":"..."}]}"""
+    return Cacheable(stable, f"""The question, as typed:
+{quoted_source(question)}""")
+
+
+def check_readings(parsed: dict, question: str) -> dict:
+    """Mechanical, offline, and the reason the Reader cannot assert a fact.
+
+    Every assumption and ambiguity must point at a span that is really in
+    the question. One that is not is DROPPED and counted — never quietly
+    kept, and never repaired into something that would pass."""
+    qn = _norm_quote(question)
+    readings, assumptions, ambiguities = [], [], []
+    dropped = {"readings": 0, "assumptions": [], "ambiguities": []}
+    for r in (parsed.get("readings") or [])[:4]:
+        if not isinstance(r, dict) or not str(r.get("label") or "").strip():
+            dropped["readings"] += 1
+            continue
+        readings.append({"label": str(r.get("label", ""))[:120],
+                         "scope": str(r.get("scope", ""))[:400],
+                         "needs": str(r.get("needs", ""))[:400]})
+    for a in (parsed.get("assumptions") or [])[:6]:
+        span = str((a or {}).get("span", ""))
+        if not span.strip() or _norm_quote(span) not in qn:
+            dropped["assumptions"].append(span[:120])
+            continue
+        assumptions.append({"span": span[:300], "why": str((a or {}).get("why", ""))[:400]})
+    for m in (parsed.get("ambiguities") or [])[:6]:
+        term = str((m or {}).get("term", ""))
+        if not term.strip() or _norm_quote(term) not in qn:
+            dropped["ambiguities"].append(term[:120])
+            continue
+        ambiguities.append({"term": term[:120], "senses": str((m or {}).get("senses", ""))[:400]})
+    return {"readings": readings, "assumptions": assumptions, "ambiguities": ambiguities,
+            "dropped": dropped,
+            # Said on the object, so no surface has to remember to say it.
+            "note": "Readings are proposals about what the question could mean. "
+                    "Nothing here was looked up, and nothing here is a finding about the subject."}
+
+
+class MockReader:
+    """A deterministic, offline stand-in for the Reader's model — the same
+    kind of seam speech.MockEngine is, and used the same way: the journeys
+    install it so the WHOLE server path runs for real (the mechanical check,
+    the recorded run, adopting into siblings) with nothing reaching a
+    provider. It deliberately returns one span that IS in the question and
+    one that is NOT, so the drop is exercised end to end rather than
+    described."""
+
+    name = "mock-reader"
+    model = "mock-reader-1"
+
+    def complete(self, prompt) -> str:
+        q = getattr(prompt, "variable", "") or ""
+        term = "resembling" if "resembling" in q else (q.strip().split() or ["the"])[-1].strip("?.,")
+        return json.dumps({
+            "readings": [
+                {"label": "shared descriptive motifs", "scope": "the descriptions themselves",
+                 "needs": "dated texts on both sides of the comparison"},
+                {"label": "historical borrowing", "scope": "transmission between communities",
+                 "needs": "evidence of contact in the right direction and period"},
+                {"label": "independent recurrence", "scope": "similar conditions, similar stories",
+                 "needs": "comparable cases with no contact between them"}],
+            "assumptions": [{"span": term, "why": "it is treated as one thing rather than several"},
+                            {"span": "the Council of Nicaea", "why": "not in the question at all"}],
+            "ambiguities": [{"term": term, "senses": "it could mean either of two things"}],
+        })
+
+
+def run_readings(question: str, gateway: Gateway,
+                 on_progress: "Callable[[str, str], None] | None" = None) -> dict:
+    """One model call. Reads the question; answers nothing."""
+    trace_id = "trace_read_" + uuid.uuid4().hex[:12]
+    mark = prompt_ledger_mark()
+    if on_progress:
+        on_progress("reading", "reading the question")
+    parsed = _extract_json(gateway.complete(build_readings_prompt(question)))
+    out = check_readings(parsed, question)
+    out["trace_id"] = trace_id
+    out["question"] = question
+    out["prompt_identities"] = prompt_identities_since(mark, gateway)
+    return out
 
 
 def run_deep(text: str, gateway: Gateway, interactive: bool = True,

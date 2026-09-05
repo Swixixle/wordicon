@@ -124,6 +124,11 @@ for need in "the room says submitted while the job is queued" "the estimate beco
   grep -q "^ok   $need" "$JOURNEY_OUT/deep.log" || { echo "== deep: missing check: $need"; status=1; }
 done
 # block 111 phase 1: the question survives everything the room does to it
+# block 111 phase 2: the Reader proposes; it never asserts, and it never
+# spends without saying so first
+for need in "the page says what a reading costs before it spends it" "a span the Reader invented is dropped and shown as dropped" "taking every reading makes separate sibling branches" "an edit descends from the proposal" "a meta-question is marked as being about the question" "the whole of that spent exactly one model call"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/inquiry.log" || { echo "== inquiry: missing check: $need"; status=1; }
+done
 for need in "the question is kept exactly as it was asked" "the same words opened twice are two inquiries" "every phase this room has not built renders as an unbuilt door" "an abandoned branch keeps what the failure revealed" "after a full reload it reopens on the question as asked" "exploring created no ruling due" "walking to the Inquiry and back leaves the same room element"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/inquiry.log" || { echo "== inquiry: missing check: $need"; status=1; }
 done

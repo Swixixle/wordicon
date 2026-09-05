@@ -1127,6 +1127,142 @@ def api_recovery_rule():
 
 
 # ---------------------------------------------------------------------------
+# The one seam the Reader has, and it is the same shape as speech.ENGINE:
+# None in every real run, and assigned only by the journey server, so the
+# whole server path — the mechanical check, the recorded run, adopting into
+# siblings — executes for real with nothing reaching a provider. The suite
+# pins that nothing else in this file ever assigns it.
+READER_GATEWAY = None
+
+# ---- the Inquiry (block 111, phase 1) ---------------------------------
+#
+# A durable place for one question. Phase 1 keeps the question verbatim,
+# hangs nodes off it, remembers where the owner was standing, and can be
+# reopened. It proposes no readings, searches nothing and calls no model:
+# those are the phases after this one, and the object says so itself in
+# `unbuilt` rather than letting the page imply otherwise.
+#
+# NOT the Investigation Room below. That one seats what other instruments
+# deposited; this one holds a question being worked.
+
+@app.route("/inquiry")
+def inquiry_page():
+    page = (pathlib.Path(WEBAPP_DIR) / "inquiry.html").read_text(encoding="utf-8")
+    return Response(page.replace("__BRAND_NAME__", BRAND["name"]), mimetype="text/html")
+
+
+@app.route("/api/inquiry", methods=["GET"])
+def api_inquiry_list():
+    return jsonify({"inquiries": inquiry.load_inquiries(), "status": inquiry.status()})
+
+
+@app.route("/api/inquiry", methods=["POST"])
+def api_inquiry_create():
+    data = request.get_json(force=True) or {}
+    try:
+        made = inquiry.create_inquiry(
+            str(data.get("question") or ""),
+            title=str(data.get("title") or ""),
+            provenance=str(data.get("provenance") or "typed"),
+            shape=str(data.get("shape") or ""),
+            opened_from=str(data.get("opened_from") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"inquiry": inquiry.get_inquiry(made["inquiry_id"])})
+
+
+@app.route("/api/inquiry/<iid>", methods=["GET"])
+def api_inquiry_get(iid):
+    got = inquiry.get_inquiry(iid)
+    if not got:
+        return jsonify({"error": "no inquiry with that id"}), 404
+    return jsonify({"inquiry": got})
+
+
+@app.route("/api/inquiry/<iid>/node", methods=["POST"])
+def api_inquiry_node(iid):
+    data = request.get_json(force=True) or {}
+    try:
+        node = inquiry.add_node(iid, str(data.get("parent_id") or ""),
+                                str(data.get("node_type") or "reading"),
+                                str(data.get("text") or ""),
+                                route=str(data.get("route") or "owner"),
+                                standing=str(data.get("standing") or "owner_stated"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"node": node, "inquiry": inquiry.get_inquiry(iid)})
+
+
+@app.route("/api/inquiry/<iid>/read", methods=["POST"])
+def api_inquiry_read(iid):
+    """Read the question. ONE model call, and the page has already shown
+    what it costs before this is reached — a keystroke may not spend money,
+    and neither may a click that did not say it would."""
+    got = inquiry.get_inquiry(iid)
+    if not got:
+        return jsonify({"error": "no inquiry with that id"}), 404
+    try:
+        gw = READER_GATEWAY or server_gateway()
+    except Exception as e:
+        return jsonify({"error": f"no model lane is configured: {e}"}), 400
+    try:
+        result = cli.run_readings(got["root_question"], gw)
+    except Exception as e:
+        return jsonify({"error": f"the reading failed: {e}"}), 502
+    run = inquiry.record_reading_run(iid, result)
+    return jsonify({"run": run, "inquiry": inquiry.get_inquiry(iid)})
+
+
+@app.route("/api/inquiry/<iid>/adopt", methods=["POST"])
+def api_inquiry_adopt(iid):
+    """Take one, several, or all of the proposed readings. All makes
+    siblings — never one blended branch."""
+    data = request.get_json(force=True) or {}
+    try:
+        nodes = inquiry.adopt_readings(iid, str(data.get("run_id") or ""),
+                                       list(data.get("indexes") or []))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"nodes": nodes, "inquiry": inquiry.get_inquiry(iid)})
+
+
+@app.route("/api/inquiry/<iid>/edit", methods=["POST"])
+def api_inquiry_edit(iid):
+    """His wording, as a child of the model's. The proposal is untouched."""
+    data = request.get_json(force=True) or {}
+    try:
+        node = inquiry.edit_reading(iid, str(data.get("node_id") or ""),
+                                    str(data.get("text") or ""),
+                                    scope=str(data.get("scope") or ""),
+                                    needs=str(data.get("needs") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"node": node, "inquiry": inquiry.get_inquiry(iid)})
+
+
+@app.route("/api/inquiry/<iid>/active", methods=["POST"])
+def api_inquiry_active(iid):
+    data = request.get_json(force=True) or {}
+    try:
+        inquiry.set_active(iid, str(data.get("node_id") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"inquiry": inquiry.get_inquiry(iid)})
+
+
+@app.route("/api/inquiry/<iid>/disposition", methods=["POST"])
+def api_inquiry_disposition(iid):
+    data = request.get_json(force=True) or {}
+    try:
+        row = inquiry.set_disposition(iid, str(data.get("node_id") or ""),
+                                      str(data.get("disposition") or ""),
+                                      reason=str(data.get("reason") or ""),
+                                      revealed=str(data.get("revealed") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"disposition": row, "inquiry": inquiry.get_inquiry(iid)})
+
+
 # Speak to Nikodemus (block 106, amended 106b; items 53, 55, 56;
 # docs/adr-speak.md). The microphone's server side: a raw audio body in,
 # a transcript with the engine's identity out — and the manifest of what
@@ -1368,88 +1504,6 @@ def api_speak_keep_transcript():
 # proposals the owner alone can turn into declarations, and a mechanical
 # convergence after a declaration. No model on any route here; nothing
 # polls; nothing runs on paint. Behind the pairing gate like everything.
-
-# ---- the Inquiry (block 111, phase 1) ---------------------------------
-#
-# A durable place for one question. Phase 1 keeps the question verbatim,
-# hangs nodes off it, remembers where the owner was standing, and can be
-# reopened. It proposes no readings, searches nothing and calls no model:
-# those are the phases after this one, and the object says so itself in
-# `unbuilt` rather than letting the page imply otherwise.
-#
-# NOT the Investigation Room below. That one seats what other instruments
-# deposited; this one holds a question being worked.
-
-@app.route("/inquiry")
-def inquiry_page():
-    page = (pathlib.Path(WEBAPP_DIR) / "inquiry.html").read_text(encoding="utf-8")
-    return Response(page.replace("__BRAND_NAME__", BRAND["name"]), mimetype="text/html")
-
-
-@app.route("/api/inquiry", methods=["GET"])
-def api_inquiry_list():
-    return jsonify({"inquiries": inquiry.load_inquiries(), "status": inquiry.status()})
-
-
-@app.route("/api/inquiry", methods=["POST"])
-def api_inquiry_create():
-    data = request.get_json(force=True) or {}
-    try:
-        made = inquiry.create_inquiry(
-            str(data.get("question") or ""),
-            title=str(data.get("title") or ""),
-            provenance=str(data.get("provenance") or "typed"),
-            shape=str(data.get("shape") or ""),
-            opened_from=str(data.get("opened_from") or ""))
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    return jsonify({"inquiry": inquiry.get_inquiry(made["inquiry_id"])})
-
-
-@app.route("/api/inquiry/<iid>", methods=["GET"])
-def api_inquiry_get(iid):
-    got = inquiry.get_inquiry(iid)
-    if not got:
-        return jsonify({"error": "no inquiry with that id"}), 404
-    return jsonify({"inquiry": got})
-
-
-@app.route("/api/inquiry/<iid>/node", methods=["POST"])
-def api_inquiry_node(iid):
-    data = request.get_json(force=True) or {}
-    try:
-        node = inquiry.add_node(iid, str(data.get("parent_id") or ""),
-                                str(data.get("node_type") or "reading"),
-                                str(data.get("text") or ""),
-                                route=str(data.get("route") or "owner"),
-                                standing=str(data.get("standing") or "owner_stated"))
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    return jsonify({"node": node, "inquiry": inquiry.get_inquiry(iid)})
-
-
-@app.route("/api/inquiry/<iid>/active", methods=["POST"])
-def api_inquiry_active(iid):
-    data = request.get_json(force=True) or {}
-    try:
-        inquiry.set_active(iid, str(data.get("node_id") or ""))
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    return jsonify({"inquiry": inquiry.get_inquiry(iid)})
-
-
-@app.route("/api/inquiry/<iid>/disposition", methods=["POST"])
-def api_inquiry_disposition(iid):
-    data = request.get_json(force=True) or {}
-    try:
-        row = inquiry.set_disposition(iid, str(data.get("node_id") or ""),
-                                      str(data.get("disposition") or ""),
-                                      reason=str(data.get("reason") or ""),
-                                      revealed=str(data.get("revealed") or ""))
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    return jsonify({"disposition": row, "inquiry": inquiry.get_inquiry(iid)})
-
 
 @app.route("/investigation")
 def investigation_page():
@@ -2576,11 +2630,23 @@ def api_config():
     money on, and "the provider" is not enough — the same provider serves
     several models and the receipt records which one. A gateway with no model
     of its own (the mock) reports none rather than inventing a name."""
+    # The Reader may have a lane of its own (block 111 phase 2), and the page
+    # asking "what will reading this question cost" must be answered about
+    # THAT lane rather than about whichever lane a run would take. Reported
+    # separately so neither can be mistaken for the other.
+    def _lane(g):
+        return {"gateway": g.name, "model": getattr(g, "model", None), "ok": True}
+    try:
+        rd = _lane(READER_GATEWAY) if READER_GATEWAY else None
+    except Exception:
+        rd = None
     try:
         gw = server_gateway()
-        return jsonify({"gateway": gw.name, "model": getattr(gw, "model", None), "ok": True})
+        out = _lane(gw)
     except Exception as e:
-        return jsonify({"gateway": None, "model": None, "ok": False, "error": str(e)})
+        out = {"gateway": None, "model": None, "ok": False, "error": str(e)}
+    out["reader"] = rd or dict(out)
+    return jsonify(out)
 
 
 @app.route("/api/jobs", methods=["POST"])

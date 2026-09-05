@@ -260,6 +260,17 @@ def add_node(inquiry_id: str, parent_id: str, node_type: str, text: str,
     happened — it is not a finding, and it is never a judgment."""
     if node_type not in NODE_TYPES:
         raise ValueError(f"unknown node type {node_type!r}")
+    # THE META LAW, in code rather than in a comment. A question about the
+    # question may expose an assumption, name an ambiguous term or propose a
+    # narrower question. It may never become a finding about the world — so
+    # an answer can never hang off one, and a meta node can never be dressed
+    # up as the parent of a world-directed branch. Phase 2 pins this before
+    # answers exist, which is the only moment it is free.
+    if node_type in ("answer", "attack") and parent_id:
+        _p = next((n for n in nodes_of(inquiry_id) if n["node_id"] == parent_id), None)
+        if _p and _p.get("node_type") == "meta":
+            raise ValueError("an answer cannot hang off a meta-question: a question about the "
+                             "question is not a claim about the subject")
     if route not in ROUTES:
         raise ValueError(f"unknown route {route!r}")
     if standing not in STANDINGS:
@@ -283,6 +294,84 @@ def add_node(inquiry_id: str, parent_id: str, node_type: str, text: str,
         "at": cli._now(),
         "epoch": cli.current_epoch(),
     })
+
+
+def record_reading_run(inquiry_id: str, result: dict) -> dict:
+    """The Reader's output, kept exactly as it came back.
+
+    This row is the PROPOSAL and it is never edited. Adopting a reading
+    makes a node that cites it; editing that reading makes a CHILD of the
+    node, so the model's original wording is still in the graph three moves
+    later. Nothing overwrites anything."""
+    if not get_raw(inquiry_id):
+        raise ValueError("no inquiry with that id")
+    rid = _hid("iqr_", inquiry_id, cli._now(), os.urandom(6).hex())
+    return _append(log_path(), {
+        "kind": "reading_run",
+        "object_type": "inquiry_reading_run",
+        "inquiry_id": inquiry_id,
+        "run_id": rid,
+        "trace_id": str(result.get("trace_id") or ""),
+        # how it was produced, named on the row: provider, model, and the
+        # identity of the exact template that was sent
+        "prompt_identities": result.get("prompt_identities") or [],
+        "readings": result.get("readings") or [],
+        "assumptions": result.get("assumptions") or [],
+        "ambiguities": result.get("ambiguities") or [],
+        # what the mechanical check threw away, and what it was
+        "dropped": result.get("dropped") or {},
+        "note": str(result.get("note") or "")[:400],
+        "at": cli._now(),
+        "epoch": cli.current_epoch(),
+    })
+
+
+def adopt_readings(inquiry_id: str, run_id: str, indexes: "list[int]") -> "list[dict]":
+    """Take one, several, or all of the proposed readings.
+
+    ALL creates SIBLINGS — one node per reading, each hanging off the root,
+    each with its own id. It never blends them into a single branch, because
+    two readings that need different evidence are two investigations."""
+    run = next((r for r in _rows(log_path())
+                if r.get("kind") == "reading_run" and r.get("run_id") == run_id
+                and r.get("inquiry_id") == inquiry_id), None)
+    if not run:
+        raise ValueError("no reading run with that id")
+    got = get_inquiry(inquiry_id)
+    root = got.get("root_node_id", "")
+    out = []
+    for i in indexes:
+        if not isinstance(i, int) or i < 0 or i >= len(run.get("readings") or []):
+            raise ValueError(f"no reading at index {i}")
+        r = run["readings"][i]
+        out.append(add_node(
+            inquiry_id, root, "reading",
+            r.get("label", ""),
+            # A model proposed it. Route says how; standing says what it is
+            # worth. It is a proposal until he does something about it.
+            route="develop", standing="model_proposal",
+            extra={"scope": r.get("scope", ""), "needs": r.get("needs", ""),
+                   "proposal": {"run_id": run_id, "index": i, "label": r.get("label", "")},
+                   "origin": "model"}))
+    return out
+
+
+def edit_reading(inquiry_id: str, node_id: str, text: str,
+                 scope: str = "", needs: str = "") -> dict:
+    """His words, as a CHILD of the model's.
+
+    An edit does not overwrite the proposal — it descends from it. The
+    model's wording stays visible in the graph, and the standing changes
+    honestly: what he wrote is owner-stated, not a model proposal."""
+    src = next((n for n in nodes_of(inquiry_id) if n["node_id"] == node_id), None)
+    if not src:
+        raise ValueError("that node is not part of this inquiry")
+    if src.get("node_type") not in ("reading", "meta"):
+        raise ValueError("only a reading or a meta-question is edited this way")
+    return add_node(inquiry_id, node_id, src["node_type"], text,
+                    route="owner", standing="owner_stated",
+                    extra={"scope": scope, "needs": needs,
+                           "edit_of": node_id, "origin": "owner"})
 
 
 def set_active(inquiry_id: str, node_id: str) -> dict:
@@ -418,9 +507,19 @@ def get_inquiry(inquiry_id: str) -> dict:
                           "standing": r.get("standing", ""),
                           "extra": r.get("extra", {}),
                           "at": r.get("at", "")})
+    runs = [{"run_id": r.get("run_id", ""), "trace_id": r.get("trace_id", ""),
+             "prompt_identities": r.get("prompt_identities") or [],
+             "readings": r.get("readings") or [], "assumptions": r.get("assumptions") or [],
+             "ambiguities": r.get("ambiguities") or [], "dropped": r.get("dropped") or {},
+             "note": r.get("note", ""), "at": r.get("at", "")}
+            for r in rows if r.get("kind") == "reading_run"]
     root = next((n for n in nodes if n["node_type"] == "root"), None)
     for n in nodes:
         n["disposition"] = disp.get(n["node_id"], {"disposition": "open"})
+        # A meta-question is about the question. It is marked so on every
+        # node the page ever sees, rather than left for a surface to infer
+        # from the type name.
+        n["world_directed"] = n["node_type"] != "meta"
     if active and active not in {n["node_id"] for n in nodes}:
         active = ""
     return {"inquiry_id": inquiry_id,
@@ -436,10 +535,11 @@ def get_inquiry(inquiry_id: str) -> dict:
             "opened_from": base.get("opened_from", ""),
             "active_node_id": active or (root["node_id"] if root else ""),
             "nodes": nodes,
+            "reading_runs": runs,
             # What phase 1 deliberately cannot do yet, said on the object
             # rather than left for the page to imply.
-            "unbuilt": ["readings", "meta-questions", "ask my record",
-                        "research outside", "trial", "comparison", "synthesis"]}
+            "unbuilt": ["ask my record", "research outside", "trial",
+                        "comparison", "synthesis"]}
 
 
 def status() -> dict:

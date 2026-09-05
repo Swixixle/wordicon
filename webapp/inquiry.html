@@ -95,6 +95,30 @@
   <div class="asked" id="asked"></div>
   <div class="foot" id="one-meta"></div>
 
+  <!-- Phase 2. A click may not spend money either: this says what it will
+       cost, down which lane, before anything is sent. -->
+  <div class="card" id="read-card" style="margin:12px 0">
+    <div class="section-label">Read the question</div>
+    <p class="body muted" id="read-why">It proposes two to four ways your question could be
+    read, and names the assumptions and ambiguous terms inside it. It does not answer it,
+    look anything up, or know anything about the subject.</p>
+    <div class="foot" id="read-cost"></div>
+    <div class="row"><button id="read-btn" onclick="readQuestion()">Read it</button></div>
+  </div>
+
+  <div class="card" id="readings-card" style="display:none">
+    <div class="section-label">Proposals — what this could mean</div>
+    <p class="body muted" id="readings-note"></p>
+    <div id="readings"></div>
+    <div class="row">
+      <button id="adopt-btn" onclick="adopt()">Take the ticked readings</button>
+      <button class="quiet" onclick="tickAll()">tick all</button>
+      <span class="foot" id="adopt-note">Taking more than one makes them separate branches —
+      they are never blended into one.</span>
+    </div>
+    <div id="assumptions"></div>
+  </div>
+
   <div class="grid2" style="margin-top:14px">
     <div>
       <div class="section-label">Branches</div>
@@ -103,6 +127,8 @@
     <div>
       <div class="section-label">Here</div>
       <div id="here"></div>
+      <div class="section-label" style="margin-top:14px">Ask about the question itself</div>
+      <div id="meta-box"></div>
       <div class="section-label" style="margin-top:14px">Not built yet</div>
       <div class="rail" id="unbuilt"></div>
     </div>
@@ -182,11 +208,107 @@ function closeOne() {
   document.getElementById('list-card').style.display = '';
 }
 
+let RUN = null;
+
+async function readCost() {
+  try {
+    const c = await (await fetch('/api/config')).json();
+    // The READER's lane, which is not necessarily the lane a run would take.
+    const r = c.reader || c;
+    document.getElementById('read-cost').textContent = r.ok
+      ? `one model call · lane ${r.gateway}${r.model ? ' · model ' + r.model : ''}`
+      : 'no model lane is configured — reading the question needs one';
+    document.getElementById('read-btn').disabled = !r.ok;
+  } catch (e) { document.getElementById('read-cost').textContent = 'could not reach the server'; }
+}
+
+async function readQuestion() {
+  if (!ONE) return;
+  const b = document.getElementById('read-btn');
+  b.disabled = true; b.textContent = 'reading…';
+  try {
+    const d = await jpost('/api/inquiry/' + ONE.inquiry_id + '/read', {});
+    RUN = d.run;
+    show(d.inquiry);
+    renderReadings();
+  } catch (e) { fail(String(e.message || e)); }
+  b.disabled = false; b.textContent = 'Read it';
+}
+
+function renderReadings() {
+  if (!RUN) { document.getElementById('readings-card').style.display = 'none'; return; }
+  document.getElementById('readings-card').style.display = '';
+  document.getElementById('readings-note').textContent = RUN.note || '';
+  document.getElementById('readings').innerHTML = (RUN.readings || []).map((r, i) =>
+    `<div class="item"><label style="display:flex;gap:8px;align-items:flex-start;margin:0">
+       <input type="checkbox" class="pick" value="${i}" style="width:auto;margin-top:3px">
+       <span><strong>${esc(r.label)}</strong><br>
+       <span class="muted">${esc(r.scope)}</span><br>
+       <span class="tag">would need</span> ${esc(r.needs)}</span></label></div>`).join('')
+    || '<p class="body muted">No distinct readings came back.</p>';
+  const asm = (RUN.assumptions || []).map(a =>
+    `<div class="item"><span class="k">assumed</span><br>"${esc(a.span)}" — ${esc(a.why)}</div>`).join('');
+  const amb = (RUN.ambiguities || []).map(a =>
+    `<div class="item"><span class="k">could mean either</span><br>"${esc(a.term)}" — ${esc(a.senses)}</div>`).join('');
+  const drop = RUN.dropped || {};
+  const nd = (drop.assumptions || []).length + (drop.ambiguities || []).length;
+  document.getElementById('assumptions').innerHTML =
+    (asm || amb ? '<div class="section-label" style="margin-top:12px">Inside your question</div>' : '')
+    + asm + amb
+    + (nd ? `<p class="foot">${nd} proposal${nd === 1 ? '' : 's'} pointed at words that are not in your
+        question and ${nd === 1 ? 'was' : 'were'} dropped: ${
+        (drop.assumptions || []).concat(drop.ambiguities || []).map(x => '"' + esc(x) + '"').join(', ')}</p>` : '');
+}
+
+function tickAll() {
+  document.querySelectorAll('#readings .pick').forEach(c => { c.checked = true; });
+}
+
+async function adopt() {
+  if (!ONE || !RUN) return;
+  const idx = Array.from(document.querySelectorAll('#readings .pick'))
+    .filter(c => c.checked).map(c => Number(c.value));
+  if (!idx.length) return;
+  try {
+    const d = await jpost('/api/inquiry/' + ONE.inquiry_id + '/adopt',
+                          {run_id: RUN.run_id, indexes: idx});
+    show(d.inquiry);
+  } catch (e) { fail(String(e.message || e)); }
+}
+
+async function editHere() {
+  if (!ONE) return;
+  const here = ONE.nodes.find(n => n.node_id === ONE.active_node_id);
+  if (!here) return;
+  const box = document.getElementById('edit-text');
+  if (!box || !box.value.trim()) return;
+  try {
+    const d = await jpost('/api/inquiry/' + ONE.inquiry_id + '/edit',
+                          {node_id: here.node_id, text: box.value.trim()});
+    box.value = '';
+    await jpost('/api/inquiry/' + ONE.inquiry_id + '/active', {node_id: d.node.node_id});
+    show((await jget('/api/inquiry/' + ONE.inquiry_id)).inquiry);
+  } catch (e) { fail(String(e.message || e)); }
+}
+
+async function addMeta() {
+  if (!ONE) return;
+  const box = document.getElementById('meta-text');
+  if (!box || !box.value.trim()) return;
+  try {
+    const d = await jpost('/api/inquiry/' + ONE.inquiry_id + '/node',
+      {parent_id: ONE.root_node_id, node_type: 'meta', text: box.value.trim()});
+    box.value = '';
+    show(d.inquiry);
+  } catch (e) { fail(String(e.message || e)); }
+}
+
 function show(inq) {
   ONE = inq;
   document.getElementById('open-card').style.display = 'none';
   document.getElementById('list-card').style.display = 'none';
   document.getElementById('one-card').style.display = '';
+  readCost();
   document.getElementById('one-title').textContent = inq.title;
   // The question, verbatim. textContent, never innerHTML: what he typed is
   // what is shown, and it is not markup.
@@ -208,6 +330,19 @@ function show(inq) {
       </div><div class="asked" style="border-left-color:var(--branch)">${esc(here.text)}</div>
       <p class="foot">Standing where you left it. Coming back a year from now shows this same
       node, this same question, and whatever the branches became.</p>` : '';
+  const isMeta = here && here.node_type === 'meta';
+  document.getElementById('here').innerHTML += here ? `
+      <div class="section-label" style="margin-top:12px">${isMeta
+        ? 'A question about the question' : 'Put it in your own words'}</div>
+      ${isMeta ? '<p class="foot">This asks about your question, not about the subject. It can '
+        + 'expose an assumption or narrow the scope; it can never become a finding about the '
+        + 'world, and nothing can hang an answer off it.</p>' : ''}
+      <textarea id="edit-text" placeholder="${isMeta ? 'reword this' : 'your wording of this reading'}"></textarea>
+      <div class="row"><button onclick="editHere()">Keep my wording</button>
+      <span class="foot">it becomes a descendant — the proposal stays where it is</span></div>` : '';
+  document.getElementById('meta-box').innerHTML = `
+      <textarea id="meta-text" placeholder="am I assuming resemblance implies borrowing?"></textarea>
+      <div class="row"><button onclick="addMeta()">Ask about the question</button></div>`;
   document.getElementById('unbuilt').innerHTML = (inq.unbuilt || []).map(u =>
     `<button class="node unbuilt" disabled aria-disabled="true">
       <span class="k">not built — ${esc(u)}</span><br>${esc(UNBUILT_WHY[u] || '')}</button>`).join('');

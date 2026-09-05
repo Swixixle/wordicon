@@ -36,6 +36,10 @@ def _poisoned(*a, **k):
 
 
 server.server_gateway = _poisoned
+# block 111 phase 2: the Reader's deterministic offline stand-in. The rest of
+# the server stays poisoned; only the Question Reader has a stand-in, and it
+# runs the real check, the real run record and the real adoption.
+server.READER_GATEWAY = cli.MockReader()
 import speech  # noqa: E402
 speech.ENGINE = speech.MockEngine()   # block 106: the journeys transcribe with the mock, offline, deterministic
 # block 107: the mock producers on their own loopback port, and two development

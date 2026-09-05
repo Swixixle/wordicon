@@ -55,7 +55,9 @@ const Q = 'Are there pre-Christian figures with descriptions resembling Jesus, a
              allDisabled: bs.every(b => b.disabled),
              border: cs.map(c => c.borderTopStyle), cursor: cs.map(c => c.cursor) };
   });
-  ok(unbuilt.n >= 7 && unbuilt.allDisabled
+  // five now: phase 2 built readings and meta-questions, and the room stopped
+  // claiming them as unbuilt in the same commit that built them
+  ok(unbuilt.n === 5 && unbuilt.allDisabled
      && unbuilt.border.every(b => b === 'dashed') && unbuilt.cursor.every(c => c === 'not-allowed'),
     'every phase this room has not built renders as an unbuilt door — dashed, inert, naming its own '
     + 'reason: ' + JSON.stringify([unbuilt.n, unbuilt.border[0], unbuilt.cursor[0]]));
@@ -116,6 +118,97 @@ const Q = 'Are there pre-Christian figures with descriptions resembling Jesus, a
             open: document.body.classList.contains('ws-open')}; });
   ok(el1.probe === 'live-inq' && el1.v === el0.v && el1.s === el0.s && el1.e === el0.e && el1.open,
     'walking to the Inquiry and back leaves the same room element, draft and caret: ' + JSON.stringify(el1));
+
+  // ---- phase 2: the Question Reader ------------------------------------
+  //
+  // The model is routed, not run: the journeys keep the gateway poisoned, and
+  // what is under test is the client's whole path — cost shown before spend,
+  // proposals rendered as proposals, all-makes-siblings, an edit that
+  // descends rather than overwrites, and a meta-question that is marked as
+  // being about the question.
+  // Nothing is mocked here. The journey server installs the Reader's
+  // deterministic offline stand-in (server.READER_GATEWAY = cli.MockReader),
+  // so every endpoint below is the real one: the real mechanical check, the
+  // real recorded run, the real adoption into siblings. The stand-in returns
+  // one span that IS in the question and one that is not, so the drop is
+  // exercised rather than described.
+  let readPosts = 0;
+  page.on('request', r => { if (/\/read$/.test(r.url()) && r.method() === 'POST') readPosts += 1; });
+
+  await page.goto(BASE + '/inquiry'); await page.waitForTimeout(800);
+  await page.evaluate(iid => openOne(iid), second); await page.waitForTimeout(600);
+  const cost = await page.evaluate(() => ({
+    line: document.getElementById('read-cost').textContent,
+    why: document.getElementById('read-why').textContent.replace(/\s+/g, ' '),
+    spent: document.getElementById('readings-card').style.display }));
+  ok(/one model call · lane /.test(cost.line) && readPosts === 0,
+    'the page says what a reading costs before it spends it, and has spent nothing: '
+    + JSON.stringify([cost.line, readPosts]));
+  ok(/does not answer it, look anything up/.test(cost.why),
+    'and says plainly that the Reader answers nothing');
+
+  await page.click('#read-btn'); await page.waitForTimeout(700);
+  const props = await page.evaluate(() => ({
+    n: document.querySelectorAll('#readings .pick').length,
+    note: document.getElementById('readings-note').textContent,
+    text: document.getElementById('readings').textContent.replace(/\s+/g, ' '),
+    drop: document.getElementById('assumptions').textContent.replace(/\s+/g, ' ') }));
+  ok(props.n === 3 && /would need/.test(props.text),
+    'three readings come back, each saying what evidence it would need: ' + props.n);
+  ok(/Nothing here was looked up/.test(props.note),
+    'and the card says on its face that nothing was looked up');
+  ok(/Council of Nicaea/.test(props.drop) && /not in your/.test(props.drop),
+    'a span the Reader invented is dropped and shown as dropped, in his own words: '
+    + JSON.stringify(props.drop.slice(-120)));
+
+  await page.evaluate(() => tickAll());
+  await page.click('#adopt-btn'); await page.waitForTimeout(700);
+  const sibs = await page.evaluate(() => {
+    // the three the Reader proposed, not the one this journey wrote by hand
+    // in the phase-1 section — which is the point of the standing axis
+    const rs = ONE.nodes.filter(n => n.node_type === 'reading' && n.standing === 'model_proposal');
+    const mine = ONE.nodes.filter(n => n.node_type === 'reading' && n.standing === 'owner_stated');
+    return { n: rs.length, uniq: new Set(rs.map(r => r.node_id)).size,
+             parents: new Set(rs.map(r => r.parent_id)).size,
+             onRoot: rs.every(r => r.parent_id === ONE.root_node_id),
+             routes: Array.from(new Set(rs.map(r => r.route))), mine: mine.length };
+  });
+  ok(sibs.n === 3 && sibs.uniq === 3 && sibs.parents === 1 && sibs.onRoot,
+    'taking every reading makes separate sibling branches, never one blended prompt: '
+    + JSON.stringify([sibs.n, sibs.uniq, sibs.parents]));
+  ok(JSON.stringify(sibs.routes) === '["develop"]' && sibs.mine >= 1,
+    'each proposed reading stands as a proposal, and his own reading beside it does not: '
+    + JSON.stringify([sibs.routes, sibs.mine]));
+
+  // his wording descends from the model's; the proposal is untouched
+  const target = await page.evaluate(() => ONE.nodes.find(n => n.node_type === 'reading').node_id);
+  await page.evaluate(nid => goNode(nid), target); await page.waitForTimeout(400);
+  await page.fill('#edit-text', 'motifs, but only in the earliest texts');
+  await page.click('text=Keep my wording'); await page.waitForTimeout(700);
+  const edited = await page.evaluate(t => {
+    const kid = ONE.nodes.find(n => n.parent_id === t && n.node_type === 'reading');
+    const orig = ONE.nodes.find(n => n.node_id === t);
+    return { kid: kid && {text: kid.text, standing: kid.standing, route: kid.route},
+             orig: orig && orig.text,
+             proposal: (ONE.reading_runs[0] || {}).readings.map(r => r.label) };
+  }, target);
+  ok(edited.kid && edited.kid.standing === 'owner_stated' && edited.kid.route === 'owner',
+    'an edit descends from the proposal as his own words, not the model\'s: ' + JSON.stringify(edited.kid));
+  ok(edited.orig === 'shared descriptive motifs' && edited.proposal[0] === 'shared descriptive motifs',
+    'and neither the adopted reading nor the proposal behind it was rewritten: '
+    + JSON.stringify([edited.orig, edited.proposal[0]]));
+
+  await page.fill('#meta-text', 'am I assuming resemblance implies borrowing?');
+  await page.click('text=Ask about the question'); await page.waitForTimeout(700);
+  const meta = await page.evaluate(() => {
+    const m = ONE.nodes.find(n => n.node_type === 'meta');
+    return { has: !!m, world: m && m.world_directed,
+             said: document.getElementById('here').textContent.replace(/\s+/g, ' ') };
+  });
+  ok(meta.has && meta.world === false,
+    'a meta-question is marked as being about the question, not about the world: ' + JSON.stringify(meta.world));
+
+  ok(readPosts === 1, 'the whole of that spent exactly one model call: ' + readPosts);
 
   ok(errs.length === 0, 'no page errors: ' + JSON.stringify(errs.slice(0, 3)));
   ok(off.length === 0, 'inquiry: no request left the scratch origin');

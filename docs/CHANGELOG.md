@@ -1,5 +1,62 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.6.0 — the Inquiry, phase 2 (block 112): the Question Reader
+
+A tangled question usually means two or three different things at once, and
+those things need **different evidence**. So the first thing an inquiry
+returns is not an answer: it is two to four ways the question could be read,
+the assumptions sitting inside it, and the terms that could go either way.
+Take one, take all, reword any of them, or write your own. Taking several
+makes **separate sibling branches**, never one blended question.
+
+**The guarantee is structural, not a promise in a prompt.** A model told to
+read a question will cheerfully answer it instead and slip what it thinks the
+sources say into a field labelled "reading" — no wording reliably stops that.
+So the output shape has nowhere for a fact to live. A reading is a label, a
+scope, and *what evidence it would require*. An assumption is a span of **his
+own question** plus why it is an assumption. An ambiguity is a term from his
+own question plus the senses it could take. Every field is either a
+requirement or a pointer back into his own sentence.
+
+Then the pointers are checked. `check_readings` requires every quoted span to
+appear in the question; one that does not is **dropped, counted, and shown to
+him**. A model that wants to smuggle in a finding has to put it in a field
+that does not exist.
+
+An edit does not overwrite its proposal: it **descends** from it, and the
+standing changes honestly with the authorship — the model's wording stays
+`model_proposal` and visible in the graph, his becomes `owner_stated`. That is
+what the two axes were separated for.
+
+**Meta-questions are structurally apart.** A question about the question is
+marked `world_directed: false` on every node the page sees, and `add_node`
+refuses to hang an answer or an attack off one. Pinned now, before answers
+exist — the only moment it is free.
+
+One model call, and the panel names the lane and the model before the button
+that spends it, reporting the **Reader's own lane** rather than whichever lane
+a run would take. Reading a question writes no judgment.
+
+The Reader has one seam, the same shape as `speech.ENGINE`: `READER_GATEWAY`,
+`None` in every real run and assigned only by the journey server, so the whole
+server path — mechanical check, recorded run, adoption into siblings —
+executes offline against `cli.MockReader`. The suite pins that nothing else
+assigns it, that it is `None` in the suite's own process, and that the
+stand-in returns something the check will drop, so the journey's drop check
+cannot be theatre.
+
+**Stated plainly, and not proved here:** no provider is reachable from where
+this was built, by standing law. The suite proves the mechanical check, the
+recorded identity and the structural guarantees; the journey proves the whole
+client-and-server path against a deterministic stand-in. Neither proves that a
+real model returns *good* readings. That is a limit of where this ran, not a
+claim the tests make.
+
+Suite OK. Thirteen journeys, 408 checks, exit 0. Twelve sabotage mutations,
+all caught by name — including one that lets the Reader carry a finding
+through, one that keeps an invented quotation, one that chains the readings
+instead of forking them, and one that leaves the stand-in seam switched on.
+
 ## v1.5.1 — the evidence vocabulary, corrected before it was used
 
 The flat `evidence_kind` list shipped one block ago put `allegation`,

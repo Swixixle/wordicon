@@ -16552,7 +16552,12 @@ console.log(out.join('\\n'));
                  "first and does not become a cockpit")
 
         # ---- the lane the panel names comes from the server ---------------
-        if '"model": getattr(gw, "model", None)' not in _srvP2:
+        # block 111 phase 2 factored the lane into a helper and added the
+        # Reader's own lane beside it. The claim is unchanged — the panel must
+        # be able to name the MODEL, not just the provider — so the needle
+        # follows the code rather than the code being kept in a shape the
+        # needle recognises.
+        if '"model": getattr(g, "model", None)' not in _srvP2 or 'out["reader"] = rd or dict(out)' not in _srvP2:
             _fP2("/api/config does not report the model, so the panel cannot say what a keystroke "
                  "would spend money on")
         _cP2 = _paired(server.app.test_client())
@@ -16950,7 +16955,8 @@ console.log(out.join('\\n'));
         # 9. THE ROOM SAYS WHAT IT CANNOT DO. Every phase after this one is
         # named on the object, so the page cannot imply a door that is not
         # there — the same rule the expansion card was repaired under.
-        for _u in ("readings", "meta-questions", "ask my record", "research outside",
+        # phase 2 built the first two; the rest are still named as unbuilt
+        for _u in ("ask my record", "research outside",
                    "trial", "comparison", "synthesis"):
             if _u not in (_got.get("unbuilt") or []):
                 failures.append(f"111: the inquiry does not name {_u!r} as unbuilt, so the page "
@@ -17034,7 +17040,10 @@ console.log(out.join('\\n'));
         # 12. THE STANDING LAW: a wing that ships amends the constitution in
         # the same block, and says what it cannot do as plainly as what it can.
         _i = _idx111.index("Inquiry \u2014 a question, kept")
-        _con111 = _idx111[_i:_i + 1800]
+        # to the NEXT section, not a fixed number of characters — a slice
+        # measured in bytes silently shrinks the guarded region every time the
+        # prose grows, which is the vacuous-pin failure in another costume
+        _con111 = _idx111[_i:_idx111.index('<div class="section-label">', _i + 10)]
         for _need, _why in (
                 ("exactly as you asked it", "the constitution does not say the question is kept verbatim"),
                 ("becomes a descendant of it, never a replacement",
@@ -17042,7 +17051,21 @@ console.log(out.join('\\n'));
                 ("what the\n      failure revealed", "the constitution does not say an abandoned branch keeps what it revealed"),
                 ("Nothing in an inquiry is a ruling until you promote it",
                  "the constitution does not say exploring is not judging"),
-                ("named on its own face as unbuilt", "the constitution does not admit what this phase cannot do")):
+                ("each named as such with its reason", "the constitution does not admit what this phase cannot do"),
+                # phase 2 in the same block that built it
+                ("It reads the question back to you before it does anything else",
+                 "the constitution does not say the question is read back before anything else happens"),
+                ("<strong>separate branches</strong>, never one blended question",
+                 "the constitution does not say taking several readings makes separate branches"),
+                ("nothing can hang an answer off one",
+                 "the constitution does not carry the meta law — that a question about the question "
+                 "can never become a finding about the world"),
+                ("what evidence it would need",
+                 "the constitution does not say what a reading actually consists of"),
+                ("checked against your question, with anything\n      it invented dropped and shown to you",
+                 "the constitution does not say invented quotations are dropped and shown"),
+                ("names the lane\n      and the model before you spend it",
+                 "the constitution does not say the cost is named before it is spent")):
             if _need not in _con111:
                 failures.append(f"111: {_why} ({_need!r})")
         # 13. And the journey has to have RUN these, not merely contain them.
@@ -17058,6 +17081,204 @@ console.log(out.join('\\n'));
         if not _re.search(r"^for j in .*\binquiry\b", _run111, _re.M):
             failures.append("111: the inquiry journey exists but is not in the list run.sh runs")
     _pass111()
+
+    # ---- block 112 (phase 2): the Question Reader --------------------------
+    #
+    # A model is asked what a question could MEAN. The danger is obvious and
+    # not fixable by asking nicely: a model told to read a question will
+    # cheerfully answer it instead, and slip what it thinks the sources say
+    # into a field labelled "reading". So the guarantee here is STRUCTURAL —
+    # the output shape has nowhere for a fact to live, and every span that
+    # claims to come from his question is checked against his question.
+    def _pass112():
+        import inquiry as _inq
+        _root = _pathlib.Path(__file__).resolve().parent.parent
+        _Q = "Are there pre-Christian figures with descriptions resembling Jesus?"
+
+        # 1. THE SHAPE HAS NO FIELD FOR A FACT. A reading is a label, a scope
+        # and what evidence it would REQUIRE; an assumption and an ambiguity
+        # are spans of his own question. Anything else the model returns is
+        # not carried, because there is nowhere to carry it.
+        _out = cli.check_readings({
+            "readings": [{"label": "shared motifs", "scope": "s", "needs": "n",
+                          "finding": "Mithras predates Christ", "answer": "yes"}],
+            "assumptions": [{"span": "resembling", "why": "w"},
+                            {"span": "the Council of Nicaea in 325", "why": "invented"}],
+            "ambiguities": [{"term": "pre-Christian", "senses": "x"},
+                            {"term": "Zoroaster", "senses": "invented"}],
+            "conclusion": "the parallels are real",
+        }, _Q)
+        import json as _json112
+        # The CARRIED fields only. `dropped` holds the invented spans on
+        # purpose — that is how the owner gets to see that the Reader tried to
+        # quote something he never wrote — so it is not a leak, it is the
+        # receipt for one.
+        _flat = _json112.dumps({k: v for k, v in _out.items() if k != "dropped"})
+        for _leak in ("Mithras", "Council of Nicaea", "Zoroaster", "the parallels are real",
+                      "conclusion", '"finding"'):
+            if _leak in _flat:
+                failures.append(f"112: the Reader's output carried {_leak!r} through — the shape is "
+                                "supposed to have nowhere for a claim about the subject to sit")
+        if [r.get("label") for r in _out["readings"]] != ["shared motifs"]:
+            failures.append(f"112: the readings did not survive their own filter: {_out['readings']}")
+
+        # 2. EVERY SPAN IS CHECKED AGAINST HIS OWN QUESTION, and a span that
+        # is not there is DROPPED AND COUNTED — never repaired into something
+        # that would pass, and never silently discarded.
+        if [a["span"] for a in _out["assumptions"]] != ["resembling"]:
+            failures.append(f"112: an assumption quoting words absent from the question survived: "
+                            f"{_out['assumptions']}")
+        if [a["term"] for a in _out["ambiguities"]] != ["pre-Christian"]:
+            failures.append(f"112: an ambiguity quoting a word absent from the question survived: "
+                            f"{_out['ambiguities']}")
+        _dr = _out.get("dropped") or {}
+        if not any("Nicaea" in x for x in _dr.get("assumptions") or []) \
+                or not any("Zoroaster" in x for x in _dr.get("ambiguities") or []):
+            failures.append(f"112: the drops were not recorded, so an invented span leaves no "
+                            f"trace at all: {_dr}")
+        if "Nothing here was looked up" not in (_out.get("note") or ""):
+            failures.append("112: the Reader's output does not say on its own face that nothing "
+                            "was looked up")
+
+        # 3. THE STAGE IS REGISTERED, so its template identity is recorded
+        # with every call like every other stage.
+        if cli.PROMPT_STAGE_BUILDERS.get("readings") != "build_readings_prompt":
+            failures.append("112: the readings stage is not in the prompt-stage registry, so its "
+                            "template identity is not recorded with the call")
+        _pr = cli.build_readings_prompt(_Q)
+        if "are not answering it" not in _pr.stable or "must appear VERBATIM" not in _pr.stable:
+            failures.append("112: the Reader's prompt no longer tells it that it is not answering "
+                            "the question and that spans must be real")
+        if _Q not in _pr.variable or _Q in _pr.stable:
+            failures.append("112: the question is in the cached half of the prompt, or missing "
+                            "from the variable half")
+
+        # 4. THE ROOT QUESTION IS BYTE-IDENTICAL through the whole of phase 2.
+        _jbefore = cli.JUDGMENTS_LOG.read_text() if cli.JUDGMENTS_LOG.exists() else ""
+        _a = _inq.create_inquiry(_Q)
+        _res = dict(_out); _res["trace_id"] = "trace_read_probe"
+        _res["prompt_identities"] = [{"stage": "readings", "model": "probe-model", "sha": "abc"}]
+        _res["readings"] = [{"label": "shared motifs", "scope": "s1", "needs": "n1"},
+                            {"label": "historical borrowing", "scope": "s2", "needs": "n2"},
+                            {"label": "independent recurrence", "scope": "s3", "needs": "n3"}]
+        _run = _inq.record_reading_run(_a["inquiry_id"], _res)
+        _sibs = _inq.adopt_readings(_a["inquiry_id"], _run["run_id"], [0, 1, 2])
+
+        # 5. ALL MAKES SIBLINGS, not one blended branch.
+        if len({n["node_id"] for n in _sibs}) != 3:
+            failures.append("112: taking every reading did not produce three separate ids")
+        if {n["parent_id"] for n in _sibs} != {_a["root_node_id"]}:
+            failures.append("112: the readings were chained instead of forked — sibling branches "
+                            "are the point, because two readings need different evidence")
+        if any(n["standing"] != "model_proposal" for n in _sibs):
+            failures.append("112: an adopted reading is not standing as a proposal")
+
+        # 6. AN EDIT DOES NOT OVERWRITE ITS PROPOSAL. It descends from it, and
+        # the standing changes honestly with the authorship.
+        _ed = _inq.edit_reading(_a["inquiry_id"], _sibs[0]["node_id"], "motifs, earliest texts only")
+        _got = _inq.get_inquiry(_a["inquiry_id"])
+        if _ed["parent_id"] != _sibs[0]["node_id"] or _ed["standing"] != "owner_stated" \
+                or _ed["route"] != "owner":
+            failures.append(f"112: an edited reading is not an owner-stated descendant of the "
+                            f"model's: {_ed.get('parent_id')} {_ed.get('standing')}")
+        _prop = (_got.get("reading_runs") or [{}])[0].get("readings") or []
+        if not _prop or _prop[0].get("label") != "shared motifs":
+            failures.append("112: editing a reading rewrote the proposal it came from")
+        _still = next((n for n in _got["nodes"] if n["node_id"] == _sibs[0]["node_id"]), {})
+        if _still.get("text") != "shared motifs":
+            failures.append("112: the adopted reading itself was rewritten by the edit")
+
+        # 7. A META-QUESTION CANNOT MASQUERADE AS A FINDING. It is marked as
+        # not world-directed on every node the page sees, and nothing can hang
+        # an answer or an attack off it.
+        _m = _inq.add_node(_a["inquiry_id"], _a["root_node_id"], "meta",
+                           "am I assuming resemblance implies borrowing?")
+        _got = _inq.get_inquiry(_a["inquiry_id"])
+        _mn = next((n for n in _got["nodes"] if n["node_id"] == _m["node_id"]), {})
+        if _mn.get("world_directed") is not False:
+            failures.append("112: a meta-question is not marked as being about the question rather "
+                            "than about the world")
+        if any(n.get("world_directed") is not True for n in _got["nodes"] if n["node_type"] != "meta"):
+            failures.append("112: a world-directed node is marked as a meta-question")
+        for _t in ("answer", "attack"):
+            try:
+                _inq.add_node(_a["inquiry_id"], _m["node_id"], _t, "x")
+                failures.append(f"112: an {_t} hung off a meta-question — a question about the "
+                                "question is not a claim about the subject")
+            except ValueError:
+                pass
+
+        # 8. READING A QUESTION IS NOT JUDGING IT.
+        _jafter = cli.JUDGMENTS_LOG.read_text() if cli.JUDGMENTS_LOG.exists() else ""
+        if _jafter != _jbefore:
+            failures.append("112: reading and interpreting a question wrote a judgment")
+
+        # 9. THE CALL IS RECORDED — provider, model, template identity, trace.
+        _r0 = (_got.get("reading_runs") or [{}])[0]
+        if not _r0.get("trace_id") or not _r0.get("prompt_identities"):
+            failures.append(f"112: the reading run does not record its trace and prompt identity: "
+                            f"{ {k: _r0.get(k) for k in ('trace_id', 'prompt_identities')} }")
+
+        # 10. NO MODEL WITHOUT SAYING WHAT IT COSTS FIRST. The page names the
+        # lane and the model before the button that spends anything.
+        _pg112 = (_root / "webapp" / "inquiry.html").read_text(encoding="utf-8")
+        if "/api/config" not in _pg112 or "one model call · lane" not in _pg112:
+            failures.append("112: the page does not say what a reading will spend, down which "
+                            "lane, before the button that spends it")
+        if "It does not answer it," not in _pg112:
+            failures.append("112: the page does not say the Reader answers nothing")
+        # and the drops are shown to him, not just counted
+        if "pointed at words that are not in your" not in _pg112:
+            failures.append("112: a dropped proposal is invisible to the owner — he cannot see "
+                            "that the Reader tried to quote something he never wrote")
+
+        # 11. THE READER LOOKS NOTHING UP. Its runner touches no search, no
+        # library, no record — one model call and a mechanical check.
+        import inspect as _ins112
+        _src112 = _ins112.getsource(cli.run_readings) + _ins112.getsource(cli.check_readings)
+        for _bad in ("library.", "search", "load_accepted", "requests", "urllib", "fetch"):
+            if _bad in _src112:
+                failures.append(f"112: the Question Reader reaches for {_bad!r} — it reads a "
+                                "question; it does not go and find anything")
+
+        # 12. And the journey has to have RUN these.
+        _run112 = (_root / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
+        for _need in ("taking every reading makes separate sibling branches",
+                      "an edit descends from the proposal",
+                      "a meta-question is marked as being about the question",
+                      "the page says what a reading costs before it spends it",
+                      "a span the Reader invented is dropped and shown as dropped"):
+            if _need not in _run112:
+                failures.append(f"112: run.sh no longer requires {_need!r} to have printed")
+        # 13. THE READER'S SEAM IS THE ONLY ONE, and it is None in every real
+        # run. The journey server assigns it so the whole server path executes
+        # offline; nothing else may, and nothing may quietly leave it set.
+        _srv112 = (_root / "server.py").read_text(encoding="utf-8")
+        if "READER_GATEWAY = None" not in _srv112:
+            failures.append("112: the Reader's stand-in seam is not declared empty in the server")
+        if _srv112.count("READER_GATEWAY =") != 1:
+            failures.append("112: something in server.py assigns the Reader's stand-in seam — it is "
+                            "for the journey server and nothing else")
+        if "READER_GATEWAY or server_gateway()" not in _srv112:
+            failures.append("112: the reading route no longer falls through to the real gateway "
+                            "when there is no stand-in")
+        import server as _srvmod112
+        if _srvmod112.READER_GATEWAY is not None:
+            failures.append("112: the Reader's stand-in is set in this process — a suite that runs "
+                            "against a stand-in proves the stand-in")
+        # and the journey server is the one that installs it
+        _js112 = (_root / "tests" / "journeys" / "serve.py").read_text(encoding="utf-8")
+        if "server.READER_GATEWAY = cli.MockReader()" not in _js112:
+            failures.append("112: the journey server does not install the Reader's stand-in, so "
+                            "the inquiry journey is proving something other than the real path")
+        # the stand-in must exercise the drop, or the journey's drop check is
+        # theatre
+        _mr112 = cli.MockReader().complete(cli.build_readings_prompt(_Q))
+        _mo112 = cli.check_readings(_json112.loads(_mr112), _Q)
+        if not (_mo112.get("dropped") or {}).get("assumptions"):
+            failures.append("112: the Reader's stand-in returns nothing the mechanical check would "
+                            "drop, so the journey's drop check proves nothing")
+    _pass112()
 
     # ---- did any of this land in the owner's real store? -------------
     # The redirect above is a list, and a list is a thing someone forgets to
