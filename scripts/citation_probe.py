@@ -36,12 +36,59 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import wordicon_cli as cli  # noqa: E402
 
+# TWO QUESTIONS, BECAUSE THE FIRST RUN WAS UNDER-DETERMINED.
+#
+# The first probe asked for one sentence and got 271 characters of prose with
+# nine results returned and nothing cited. That is a real observation and it
+# does not distinguish three different worlds:
+#
+#   (a) this account/model never emits citation objects;
+#   (b) it emits them only when the model QUOTES a source, and a one-sentence
+#       paraphrase gives it nothing to attach one to;
+#   (c) it emits them and this client cannot read them — the collector reads
+#       `citations` as an attribute, and an SDK build that exposes it as a
+#       dict key would look identical to "none arrived".
+#
+# So: one question that paraphrases, one that demands a verbatim quotation,
+# and a raw pass that reports what the response actually carried. (c) is now
+# separable from (a) and (b), and (b) from (a).
 QUESTION = ("In one sentence, what is the current stable release version of "
             "the Python programming language? Cite your source.")
+QUOTING_QUESTION = (
+    "Find a source stating the current stable release version of Python. "
+    "Quote one sentence from it VERBATIM, in quotation marks, and name the page "
+    "you took it from. Do not paraphrase the sentence you quote.")
 
 
-def probe() -> dict:
-    out = {"probe": "citation_capture.v1", "at": cli._now(), "question": QUESTION}
+def _raw_shape(response) -> dict:
+    """What the response actually carried, by both access paths.
+
+    The collector reads `citations` as an ATTRIBUTE. If a build exposes it as
+    a mapping key instead, "no citations arrived" and "we could not see them"
+    are indistinguishable from the outside — which is the same shape as the
+    bug this whole block began with."""
+    blocks = []
+    attr_seen = key_seen = 0
+    for b in getattr(response, "content", None) or []:
+        row = {"type": type(b).__name__,
+               "block_type": getattr(b, "type", None),
+               "has_text": hasattr(b, "text")}
+        by_attr = getattr(b, "citations", None)
+        by_key = b.get("citations") if isinstance(b, dict) else None
+        row["citations_by_attribute"] = None if by_attr is None else len(by_attr)
+        row["citations_by_key"] = None if by_key is None else len(by_key)
+        if by_attr:
+            attr_seen += len(by_attr)
+        if by_key:
+            key_seen += len(by_key)
+        blocks.append(row)
+    return {"blocks": blocks, "citations_by_attribute": attr_seen,
+            "citations_by_key": key_seen,
+            "stop_reason": getattr(response, "stop_reason", None)}
+
+
+def probe(quoting: bool = False) -> dict:
+    out = {"probe": "citation_capture.v2", "at": cli._now()}
     if not os.environ.get("ANTHROPIC_API_KEY"):
         out.update(outcome="not_run_missing_credential",
                    why="No ANTHROPIC_API_KEY in the environment. This says nothing "
@@ -61,8 +108,15 @@ def probe() -> dict:
     # machine at the first real run.
     gw = cli.make_gateway("anthropic", model)
     out["gateway"] = getattr(gw, "name", "")
+    question = QUOTING_QUESTION if quoting else QUESTION
+    out["question"] = question
+    out["asks_for_a_verbatim_quote"] = bool(quoting)
+    # The raw pass runs the same call one level lower, so the shape can be
+    # reported without trusting the collector to have seen it.
     try:
-        text, citations = gw.complete_with_search(QUESTION)
+        raw = gw._create(question, tools=[gw.WEB_SEARCH_TOOL])
+        out["raw"] = _raw_shape(raw)
+        text, citations = cli.collect_citations(raw.content)
     except Exception as e:  # noqa: BLE001 — the failure IS the finding
         out.update(outcome="not_run_missing_credential",
                    why=f"The call did not complete: {cli.explain_component_failure(str(e))[:300]}. "
@@ -93,11 +147,24 @@ def probe() -> dict:
 
 
 if __name__ == "__main__":
-    r = probe()
-    print(json.dumps(r, indent=2, ensure_ascii=False))
+    # Both questions, because one of them cannot separate (a) from (b).
+    r = probe(quoting=False)
+    r2 = probe(quoting=True) if r.get("outcome") != "not_run_missing_credential" else None
+    both = {"paraphrasing": r, "quoting": r2}
+    print(json.dumps(both, indent=2, ensure_ascii=False))
     print()
-    print(f"OUTCOME: {r['outcome']}")
-    print(r["why"])
+    print(f"OUTCOME (paraphrasing): {r['outcome']}")
+    if r2:
+        print(f"OUTCOME (verbatim quote asked for): {r2['outcome']}")
+        _attr = (r2.get("raw") or {}).get("citations_by_attribute")
+        _key = (r2.get("raw") or {}).get("citations_by_key")
+        if _key and not _attr:
+            print("\nTHE COLLECTOR CANNOT SEE THEM. Citations arrived as a mapping key and "
+                  "the collector reads an attribute. That is a defect here, not at the provider.")
+        elif not _attr and not _key:
+            print("\nNo citation objects arrived by either access path, on either question. "
+                  "That is a finding about the provider's response for this account and model.")
+    r = both
     # Not written into local_state: the probe is a measurement of the provider,
     # not an event in the owner's corpus.
     dest = pathlib.Path.home() / "Downloads" / "citation-probe.json"
@@ -106,4 +173,4 @@ if __name__ == "__main__":
         print(f"\nSaved to {dest}")
     except OSError:
         pass
-    raise SystemExit(0 if r["outcome"] != "not_run_missing_credential" else 3)
+    raise SystemExit(0 if both["paraphrasing"]["outcome"] != "not_run_missing_credential" else 3)

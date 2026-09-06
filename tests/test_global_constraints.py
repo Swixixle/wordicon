@@ -17797,21 +17797,41 @@ console.log(out.join('\\n'));
         # asserted separately below.
         _realgw = cli.make_gateway
 
+        # STUBS AT THE PROVIDER'S OWN LEVEL, not at the collector's. The probe
+        # now makes the raw call itself so it can report what the response
+        # carried, so these return response-shaped objects and the real
+        # collect_citations runs over them. A stub one level too high is how
+        # the constructor break shipped; a stub one level too high HERE would
+        # let the collector rot untested behind a hand-made citation list.
+        class _Blk117:
+            def __init__(self, **k):
+                self.__dict__.update(k)
+
+        class _Resp117:
+            def __init__(self, content):
+                self.content = content
+                self.stop_reason = "end_turn"
+
+        def _searched(*urls):
+            return _Blk117(type="web_search_tool_result",
+                           content=[{"url": u, "title": u} for u in urls])
+
         class _NoCite:
             name = "stub"
-            def complete_with_search(self, q):
-                return "some prose", [{"url": "https://x.test/a", "title": "A",
-                                       "observed": [cli.RESULT_RETURNED],
-                                       "provider_citation_excerpts": []}]
+            WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search"}
+            def _create(self, prompt, tools=None):
+                return _Resp117([_searched("https://x.test/a"),
+                                 _Blk117(text="prose with no citation", citations=[])])
 
         class _Cited(_NoCite):
-            def complete_with_search(self, q):
-                return "some prose", [{"url": "https://x.test/a", "title": "A",
-                                       "observed": [cli.RESULT_RETURNED, cli.PROSE_CITED],
-                                       "provider_citation_excerpts": [{"excerpt": "x"}]}]
+            def _create(self, prompt, tools=None):
+                return _Resp117([_searched("https://x.test/a"),
+                                 _Blk117(text="prose that quotes",
+                                         citations=[_Blk117(url="https://x.test/a", title="A",
+                                                            cited_text="the quoted words")])])
 
         class _Boom117(_NoCite):
-            def complete_with_search(self, q):
+            def _create(self, prompt, tools=None):
                 raise RuntimeError("the provider refused")
 
         try:
@@ -17842,6 +17862,18 @@ console.log(out.join('\\n'));
         if "Recorded as not-run rather than as an absence of citations" not in _ps:
             failures.append("117: a failed provider call is recorded as 'no citations observed', "
                             "which claims an observation the probe never made")
+        # THE RAW PASS MUST READ BOTH ACCESS PATHS. The collector reads
+        # `citations` as an attribute; a build that exposes it as a mapping key
+        # would make "none arrived" and "we cannot see them" identical from
+        # outside — the same shape as the bug that started this.
+        if "citations_by_attribute" not in _ps or "citations_by_key" not in _ps:
+            failures.append("117: the probe reports citations by one access path only, so a "
+                            "collector that cannot see them is indistinguishable from a provider "
+                            "that sent none")
+        if "QUOTING_QUESTION" not in _ps:
+            failures.append("117: the probe asks only the paraphrasing question, which cannot tell "
+                            "'this account emits no citations' from 'the model had nothing quoted "
+                            "to attach one to'")
         if "local_state" not in _ps:
             failures.append("117: the probe no longer says it writes nothing into the corpus")
 
