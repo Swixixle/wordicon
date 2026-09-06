@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const { BASE, DIR, ok, launch, pairedContext, finish } = require('./lib');
 const IDS = JSON.parse(fs.readFileSync(path.join(DIR, 'epistemic.json'), 'utf8'));
+const VAULT = JSON.parse(fs.readFileSync(path.join(DIR, 'vault_states.json'), 'utf8'));
 const INVENTED = 'INVENTED EXAMPLE — NOT IN YOUR TEXT:';
 const SELF_REPORT = 'MODEL SELF-REPORT — UNVERIFIED';
 
@@ -315,6 +316,41 @@ const SELF_REPORT = 'MODEL SELF-REPORT — UNVERIFIED';
      'and says on the page that it is counting, not ruling');
   ok(!/\bshould\b|\bconsider\b|\brecommend/i.test(lib.text.split('Counting only')[1].slice(0, 900)),
      'the counted panel does not recommend anything');
+
+  // ---- 10. block 117: the Vault strip, against the REAL producer -------
+  // These five status objects were captured from vault.status() itself in a
+  // throwaway directory. Every journey used to mock this endpoint with one
+  // healthy literal, so the red path had never rendered and a renamed field
+  // would have left the strip green forever — on the guarantee that is
+  // supposed to be the floor.
+  const strip = await page.evaluate(states => {
+    const out = {};
+    for (const [name, v] of Object.entries(states)) out[name] = vaultStripState(v);
+    return out;
+  }, VAULT);
+  ok(strip.healthy.hidden === true && strip.healthy.quiet === true && strip.healthy.red === false,
+     'a healthy Vault goes quiet and gets out of the way');
+  ok(strip.uninitialised.red === true && /No vault/.test(strip.uninitialised.text),
+     'no Vault at all is red and says the corpus is on this disk only: '
+     + JSON.stringify(strip.uninitialised.text.slice(0, 40)));
+  ok(strip.dirty.hidden === true,
+     'unsealed changes under the ceiling are not yet an alarm');
+  ok(strip.stale.red === true && /unsealed changes for/.test(strip.stale.text),
+     'unsealed past the ceiling turns red by itself: ' + JSON.stringify(strip.stale.text.slice(-40)));
+  ok(strip.failed.red === true && /did not complete/.test(strip.failed.text),
+     'a recorded failure is shown in the failure\'s own words, not a generic red');
+  // AND THE STATES THAT SHOULD DIFFER, DO. Not all five: `dirty` renders
+  // exactly like `healthy` ON PURPOSE — under the staleness ceiling the
+  // debounce says this is not yet an alarm, and the strip stays out of the
+  // way. The first version of this check demanded five distinct sentences and
+  // failed on that deliberate equality, which would have been a real defect
+  // introduced by a test.
+  ok(strip.dirty.text === strip.healthy.text && strip.dirty.hidden === strip.healthy.hidden,
+     'unsealed-but-under-the-ceiling is deliberately indistinguishable from healthy');
+  const loud = ['uninitialised', 'healthy', 'stale', 'failed'].map(k => strip[k].text);
+  ok(new Set(loud).size === 4,
+     'the four states that must differ render four different strips: '
+     + JSON.stringify(loud.map(t => t.slice(0, 24))));
 
   ok(errs.length === 0, 'no page errors across the epistemic journey: ' + JSON.stringify(errs));
   await browser.close();

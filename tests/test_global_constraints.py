@@ -13197,7 +13197,14 @@ console.log(out.join('\\n'));
     _vs = _idx99[_idx99.index("async function loadVaultStrip"):_idx99.index("function setQuiet")]
     if "el.hidden = true; setQuiet(true" not in _vs:
         _f99("a healthy vault does not go quiet")
-    for _need in ("red(); setQuiet(false, el.textContent); return;", "if (v.stale_red || v.failure) { red();", "UNREACHABLE"):
+    # block 117 split the DECISION out of the fetch so a test could reach the
+    # red path without a live failing Vault. The invariant is the same and the
+    # pin now names it where it lives: the loud condition is in the pure
+    # function, and the fetch obeys it.
+    _vsd = _idx99.split("function vaultStripState(")[1].split("\n}")[0]
+    if "v.stale_red || v.failure" not in _vsd:
+        _f99("a vault failure lost its loud path — the decision no longer turns on stale_red or failure")
+    for _need in ("red(); setQuiet(false, el.textContent); return;", "if (st.red) { red();", "UNREACHABLE"):
         if _need not in _vs:
             _f99(f"a vault failure lost its loud path ({_need[:30]})")
 
@@ -17743,6 +17750,145 @@ console.log(out.join('\\n'));
             (Path(__file__).resolve().parents[1] / "scripts" / "wordicon_cli.py").read_text():
         failures.append("117: the owner's definition edit appends no event again, so the shelf is "
                         "the only copy of the one change he makes by hand")
+
+    # ---- block 117c: the probe, the routes, the denominators ----------------
+    _i117b = (Path(__file__).resolve().parents[1] / "webapp" / "index.html").read_text()
+    _srv117 = (Path(__file__).resolve().parents[1] / "server.py").read_text()
+
+    # THE PROBE'S THREE OUTCOMES MUST STAY THREE. Collapsing "no key" into
+    # "no citations" would hide the difference between not looking and looking
+    # and finding nothing, which is the same class of error as printing zero
+    # for a measurement nobody took.
+    import os as _os117
+    _probe = (Path(__file__).resolve().parents[1] / "scripts" / "citation_probe.py")
+    if not _probe.exists():
+        failures.append("117: the citation probe is not in the repository, so the gate it opens "
+                        "cannot be opened")
+    else:
+        _ps = _probe.read_text()
+        # EXERCISED, NOT GREPPED. Every outcome string also appears in the
+        # probe's own docstring, so a mutation that makes one unreachable
+        # leaves it in the file and passes a presence check — the fourth time
+        # that shape has been caught in this project. The probe is driven with
+        # a stubbed gateway instead, once per outcome.
+        import importlib as _il117
+        _cp = _il117.import_module("citation_probe")
+        _envk = _os117.environ.get("ANTHROPIC_API_KEY")
+        _envm = _os117.environ.get("WORDICON_MODEL")
+        _realgw = cli.AnthropicAPIGateway
+
+        class _NoCite:
+            name = "stub"
+            def complete_with_search(self, q):
+                return "some prose", [{"url": "https://x.test/a", "title": "A",
+                                       "observed": [cli.RESULT_RETURNED],
+                                       "provider_citation_excerpts": []}]
+
+        class _Cited(_NoCite):
+            def complete_with_search(self, q):
+                return "some prose", [{"url": "https://x.test/a", "title": "A",
+                                       "observed": [cli.RESULT_RETURNED, cli.PROSE_CITED],
+                                       "provider_citation_excerpts": [{"excerpt": "x"}]}]
+
+        class _Boom117(_NoCite):
+            def complete_with_search(self, q):
+                raise RuntimeError("the provider refused")
+
+        try:
+            _os117.environ.pop("ANTHROPIC_API_KEY", None)
+            if _cp.probe().get("outcome") != "not_run_missing_credential":
+                failures.append("117: with no credential the probe claims an observation it "
+                                "never made")
+            _os117.environ["ANTHROPIC_API_KEY"] = "probe-stub"
+            _os117.environ["WORDICON_MODEL"] = "stub-model"
+            for _gw, _want in ((_NoCite, "ran_no_native_citation_observed"),
+                               (_Cited, "native_citation_observed"),
+                               (_Boom117, "not_run_missing_credential")):
+                cli.AnthropicAPIGateway = _gw
+                _got = _cp.probe().get("outcome")
+                if _got != _want:
+                    failures.append(f"117: the probe reports {_got!r} where it must report "
+                                    f"{_want!r} — its three outcomes have collapsed, and the "
+                                    "difference between not looking and looking and finding "
+                                    "nothing is the whole point of it")
+        finally:
+            cli.AnthropicAPIGateway = _realgw
+            for _k, _v in (("ANTHROPIC_API_KEY", _envk), ("WORDICON_MODEL", _envm)):
+                if _v is None:
+                    _os117.environ.pop(_k, None)
+                else:
+                    _os117.environ[_k] = _v
+        # a call that FAILED observed nothing, and must not be filed as an absence
+        if "Recorded as not-run rather than as an absence of citations" not in _ps:
+            failures.append("117: a failed provider call is recorded as 'no citations observed', "
+                            "which claims an observation the probe never made")
+        if "local_state" not in _ps:
+            failures.append("117: the probe no longer says it writes nothing into the corpus")
+
+    # DOORLESS ROUTES ARE CLASSIFIED, AND A DORMANT MUTATING ONE REFUSES.
+    if "DOORLESS_ROUTES" not in _srv117:
+        failures.append("117: the routes with no door are unclassified again")
+    else:
+        import server as _srv_mod117
+        _cats = set(_srv_mod117.DOORLESS_ROUTES.values())
+        _allowed = {"intentionally_internal", "compatibility_entry_point",
+                    "external_integration_surface", "dormant_capability", "accidental_orphan"}
+        if not _cats <= _allowed:
+            failures.append(f"117: a doorless route carries a classification outside the ruled "
+                            f"set: {sorted(_cats - _allowed)}")
+        for _r in ("/api/keeper/renarrate", "/api/keeper/deactivate"):
+            if _srv_mod117.DOORLESS_ROUTES.get(_r) != "dormant_capability":
+                failures.append(f"117: {_r} is no longer classified as dormant, but it is a "
+                                "mutating route no surface presses")
+    _dea = _srv117.split("def api_keeper_deactivate():")[1].split("\n@app.route")[0]
+    if "_keeper_inactive()" not in _dea:
+        failures.append("117: the Keeper's other mutating orphan is quietly callable again")
+
+    # EVERY COUNT NAMES ITS POPULATION. Two careful readers computed two
+    # different ratios off one screen because "932" stood in for three
+    # defensible and different numbers.
+    if "rows on this shelf" not in _i117b:
+        failures.append("117: the shelf's count no longer names the population it counts, so the "
+                        "next reader divides by whichever denominator they assume")
+    if "sprout thread anchors are titles too" not in _i117b:
+        failures.append("117: nothing on the page distinguishes the shelf's population from the "
+                        "count of every title in every result file")
+
+    # ---- block 117b: the reader's keys come from the producer ---------------
+    #
+    # The general form of the fixture problem. A journey that invents endpoint
+    # keys proves the journey, not the app — which is how thirty-one checks
+    # once passed against a job shape the server never emitted, and how the
+    # Vault strip stayed green through seven journeys that all mocked it with
+    # the same healthy literal.
+    #
+    # DERIVED, not restated: read the keys `vault.status()` actually returns,
+    # read the keys the strip actually consults, and require the second to be
+    # a subset of the first. Rename a field in the producer and this fails the
+    # same day, in the reader's own vocabulary.
+    import re as _re117
+    import vault as _vault117
+    _st117 = _vault117.status()
+    _produced = set(_st117.keys())
+    _strip117 = _i117b.split("function vaultStripState(")[1].split("\n}")[0]
+    _consumed = set(_re117.findall(r"\bv\.([a-z_]+)", _strip117))
+    _invented = sorted(_consumed - _produced)
+    if _invented:
+        failures.append(f"117: the Vault strip reads {_invented}, which vault.status() does not "
+                        "emit — the strip is rendering fields that only exist in a fixture")
+    # and the four states the journey proves must be reachable from the real
+    # producer's own vocabulary, not from words a test made up
+    for _k in ("initialized", "stale_red", "failure", "dirty_seconds"):
+        if _k not in _produced:
+            failures.append(f"117: vault.status() no longer emits {_k!r}, so the strip's red path "
+                            "cannot be reached and the journey proving it is theatre")
+    if "function vaultStripState" not in _i117b:
+        failures.append("117: the strip's decision is fused back into its fetch, so no test can "
+                        "reach the red path without a live failing Vault")
+    _fx117 = (Path(__file__).resolve().parents[1] / "tests" / "journeys" / "fixtures.py").read_text()
+    if "vault.status()" not in _fx117 or "vault_states.json" not in _fx117:
+        failures.append("117: the journey's Vault states are hand-authored again instead of "
+                        "captured from the real producer")
 
     # ---- block 116: the mark, and the live door -----------------------------
     #

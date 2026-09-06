@@ -7032,8 +7032,9 @@ function renderLibrary(q) {
   const observedHtml = !obsAny ? '' : `<div class="history-item" style="border-left:2px solid var(--accent, #888)">
       <div class="history-title" style="font-size:13px">What the record counted</div>
       <div class="history-meta" style="font-size:12px;margin-bottom:6px">Your rulings beside what the
-        runs recorded. Counting only — nothing here is a suggestion, and none of it is a second
-        verdict on anything you decided.</div>
+        runs recorded, out of <strong>${obs.n} rows on this shelf</strong>. Counting only — nothing
+        here is a suggestion, and none of it is a second verdict on anything you decided.${
+        whyHtml('Every number in this panel is counted over the rows on this shelf and no other population. A count with no named denominator is a number two readers will divide differently.')}</div>
       ${obsRow(obs.kept_over_objection.length, 'kept over the critic\u2019s objection',
                'Friction ruled against these and you kept them anyway. That is the arrangement working — it advises, you decide — and it is also a fact about how you rule.', 'objected')}
       ${obsRow(obs.set_aside_unopposed.length, 'set aside with no objection on record',
@@ -7067,9 +7068,20 @@ function renderLibrary(q) {
   }).join('') : `<div class="empty">No words${needle ? ' match' : ''}${
     wordFilter ? ' under that ruling' : ''}.</div>`;
 
+  // block 117: NAME THE POPULATION BESIDE THE COUNT. "Every word — 932" was
+  // one number standing in for three defensible and different ones: 932 shelf
+  // rows that lead a family, 1,303 distinct titles across every result file
+  // including sprout thread anchors, and 107 entries in the lexicon. Two
+  // careful readers computed two different ratios from the same screen
+  // because nothing on it said which population was being counted.
+  const popNote = `${allWords.length} rows on this shelf${
+      (words.length - allWords.length) > 0
+        ? ` (${words.length - allWords.length} more are alternate names nesting under one of them)` : ''
+    }${whyHtml('This shelf counts every title a run has ever put in front of you that leads its own family. It is not the number of accepted entries in the Lexicon, and it is not the number of distinct titles across every result file — sprout thread anchors are titles too and are not candidates awaiting a ruling. Three different populations, three different numbers, all defensible; this one is named so it cannot be mistaken for the others.')}`;
   document.getElementById('library-content').innerHTML = `
     <div class="section-label">Every word — ${shown.length}${
       shown.length !== allWords.length ? ` of ${allWords.length}` : ''}</div>
+    <p class="history-meta" style="font-size:12px;margin:0 0 8px">${popNote}</p>
     ${observedHtml}${chipsHtml}${standingHtml}${hygieneHtml}${wordsHtml}
     <details style="margin-top:22px">
       <summary class="section-label" style="cursor:pointer;margin:0">Everything else it came from</summary>
@@ -8351,6 +8363,34 @@ function vaultAge(iso) {
   return Math.round(s / 86400) + ' d ago';
 }
 
+// block 117: the strip's rendering, split out from its fetching.
+//
+// Every journey in this suite mocked /api/vault/status with the same healthy
+// literal, so the red path had never rendered in a browser and renaming a
+// field the producer emits would have left the strip green forever — on the
+// one guarantee that is supposed to be the floor. The decision is now a pure
+// function of the status object, and it is called directly with the four
+// states the REAL producer emits, captured from vault.status() itself.
+function vaultStripState(v) {
+  if (!v) return {red: true, quiet: false, hidden: false,
+                  text: 'Vault status UNREACHABLE — backups may not be running'};
+  if (!v.initialized) {
+    return {red: true, quiet: false, hidden: false,
+            text: 'No vault — the corpus exists on this disk only. '
+                  + 'Set up encrypted backups: python scripts/vault.py init'};
+  }
+  const bits = ['Vault: sealed ' + vaultAge(v.last_seal_at),
+                'drilled ' + vaultAge(v.last_drill_at), v.cloud,
+                v.n_vaults + ' vault(s), '
+                + Math.round((v.total_bytes || 0) / 1024) + ' KB'];
+  if (v.failure) bits.push(v.failure);
+  else if (v.stale_red) bits.push('unsealed changes for '
+    + Math.round(v.dirty_seconds / 60) + ' min');
+  const bad = !!(v.stale_red || v.failure);
+  // healthy: the thing protected outranks the machinery, so the strip goes away
+  return {red: bad, quiet: !bad, hidden: !bad, text: bits.join(' · ')};
+}
+
 async function loadVaultStrip() {
   const el = document.getElementById('vault-strip');
   if (!el) return;
@@ -8363,16 +8403,10 @@ async function loadVaultStrip() {
         + 'Set up encrypted backups: python scripts/vault.py init';
       red(); setQuiet(false, el.textContent); return;
     }
-    const bits = ['Vault: sealed ' + vaultAge(v.last_seal_at),
-                  'drilled ' + vaultAge(v.last_drill_at), v.cloud,
-                  v.n_vaults + ' vault(s), '
-                  + Math.round((v.total_bytes || 0) / 1024) + ' KB'];
-    if (v.failure) bits.push(v.failure);
-    else if (v.stale_red) bits.push('unsealed changes for '
-      + Math.round(v.dirty_seconds / 60) + ' min');
-    el.textContent = bits.join(' · ');
-    if (v.stale_red || v.failure) { red(); setQuiet(false, el.textContent); }
-    else { el.hidden = true; setQuiet(true, bits.join(' · ')); }   // healthy: the thing protected outranks the machinery
+    const st = vaultStripState(v);
+    el.textContent = st.text;
+    if (st.red) { red(); setQuiet(false, el.textContent); }
+    else { el.hidden = true; setQuiet(true, st.text); }
   } catch (e) {
     el.textContent = 'Vault status UNREACHABLE — backups may not be '
       + 'running (' + e + ')';

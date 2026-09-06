@@ -314,6 +314,13 @@ def api_keeper_activate():
 
 @app.route("/api/keeper/deactivate", methods=["POST"])
 def api_keeper_deactivate():
+    # block 117: same boundary as renarrate. Deactivating a Keeper that was
+    # never activated is a mutating call on a dormant capability with no door.
+    _off = _keeper_inactive()
+    if _off is not None:
+        return jsonify({"error": "keeper_inactive",
+                        "state": "no_owner_action_reaches_this",
+                        "why": f"Nothing to deactivate: {_off['reason']}."}), 409
     try:
         return jsonify(keeper.deactivate())
     except ValueError as e:
@@ -339,6 +346,34 @@ def api_keeper_retry():
         return jsonify({"error": "the Book is already being closed"}), 409
     _keeper_narrate(keeper.retry, close_id, server_gateway())
     return jsonify({"narrating": True})
+
+
+# ---- block 117: the doorless routes, classified --------------------------
+#
+# The census found twelve routes no surface in the app references. A route
+# without a door is NOT automatically defective — internal, compatibility and
+# integration routes are legitimate — so each is named here with what it is,
+# and the classification is checked rather than remembered.
+#
+# The rule that does bite: a MUTATING route whose capability is dormant must
+# refuse with a named state rather than stay quietly callable. The two Keeper
+# routes are the only ones in that position; the other two mutating routes
+# belong to capabilities that are active and reachable, and their boundary is
+# the session gate every route in this file sits behind.
+DOORLESS_ROUTES = {
+    "/api/auth/devices":            "intentionally_internal",
+    "/api/keeper/deactivate":       "dormant_capability",      # mutating, guarded
+    "/api/keeper/renarrate":        "dormant_capability",      # mutating, guarded
+    "/overworld/map":               "compatibility_entry_point",
+    "/api/warps":                   "dormant_capability",
+    "/api/speak/hints/<sha>":       "intentionally_internal",
+    "/api/federation/recognize":    "external_integration_surface",   # mutating
+    "/api/identity/proposals":      "dormant_capability",
+    "/api/clinic/relation":         "dormant_capability",      # mutating
+    "/api/export/corpus/manifest":  "intentionally_internal",
+    "/api/artifact/<artifact_id>":  "compatibility_entry_point",
+    "/api/bench/corrections":       "intentionally_internal",
+}
 
 
 # block 117: A MUTATING MODEL CALL WITH NO DOOR. The census found this route

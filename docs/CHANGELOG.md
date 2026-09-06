@@ -1,5 +1,68 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.11.1 — the stabilisation pass, part two (block 117)
+
+The rest of the ruling. After this, the building stops.
+
+**The Vault strip, proved against the real producer.** Seven journeys mocked
+`/api/vault/status` with the same healthy literal, so the red path had never
+rendered in a browser and a renamed field would have left the strip green
+forever — on the guarantee that is meant to be the floor. The strip's
+*decision* is now a pure function of the status object, and the fixtures
+capture five states **from `vault.status()` itself**, in a throwaway directory
+the owner's vault never touches: uninitialised, healthy, dirty, stale, failed.
+
+The journey feeds each to the decision and checks the interface changes.
+`dirty` deliberately renders exactly like `healthy` — under the staleness
+ceiling the debounce says this is not yet an alarm — and the first version of
+that check demanded five distinct sentences and failed on that intended
+equality. A test that would have introduced a real defect.
+
+**And the general form of the fixture problem, fixed by derivation.** The suite
+reads the keys `vault.status()` actually emits, reads the keys the strip
+actually consults, and requires the second to be a subset of the first. Rename
+a field in the producer and it fails the same day, in the reader's own words.
+
+**Every count names its population.** "Every word — 932" stood in for three
+defensible and different numbers: 932 shelf rows that lead a family, 1,303
+distinct titles across every result file including sprout thread anchors, and
+107 lexicon entries. Two careful readers computed two different ratios from one
+screen. The shelf and the counted panel now name what they are counting, with
+the distinction behind a mark.
+
+**The doorless routes are classified**, in code rather than in a document, from
+the ruled set: intentionally internal, compatibility entry point, external
+integration surface, dormant capability, accidental orphan. The two Keeper
+mutations — the only mutating routes whose capability is dormant — refuse with
+`keeper_inactive` / `no_owner_action_reaches_this`. The other two mutating
+orphans belong to capabilities that are active and reachable, and their
+boundary is the session gate every route sits behind.
+
+**The citation probe is landed.** `scripts/citation_probe.py` makes one
+search-enabled call, writes nothing into the corpus, and reports one of three
+outcomes that must stay three: `not_run_missing_credential` (says nothing about
+the provider), `ran_no_native_citation_observed` (a finding about the provider,
+not the collector), `native_citation_observed`. **A call that failed is
+recorded as not-run, never as an absence of citations** — a call that did not
+complete observed nothing.
+
+**A fourth presence-not-reachability pin, caught by its own sabotage.** The
+probe's outcome check grepped for three strings that also appear in its
+docstring, so a mutation making one unreachable passed. The suite now drives
+the probe with a stubbed gateway, once per outcome, including the failure path.
+Four times in two days that shape has surfaced; it is now the first thing to
+suspect in any new check.
+
+Suite OK, 2 skipped. Fourteen journeys, 467 checks. Five sabotage mutations,
+all caught by name: one makes the strip read a key the producer does not emit,
+one leaves the Keeper's second mutation unguarded, and two collapse the probe's
+outcomes in opposite directions.
+
+**The building stops here.** What is left belongs to the owner: the manual
+writing-room pass, the real citation probe, one real-model Inquiry reading, one
+real Open Case or EthicalAlt import, and one complete outside-research
+investigation.
+
 ## v1.11.0 — the stabilisation pass, part one (block 117)
 
 Four of the census findings, repaired. Not all of them: the ruling was one

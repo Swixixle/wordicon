@@ -146,6 +146,50 @@ def seed_pre_wiring():
     return "seeded"
 
 
+def seed_vault_states():
+    """The four Vault states, produced by the REAL vault.status().
+
+    block 117. Every journey mocked this endpoint with one healthy literal, so
+    the red path had never rendered in a browser and renaming a field the
+    producer emits would have left the strip permanently green. These four
+    dicts are captured from vault.status() itself, in a THROWAWAY directory —
+    the owner's vault is never touched, read or configured here — so a
+    renamed or dropped field breaks the journey the day it changes.
+    """
+    import tempfile
+    import vault  # noqa: E402
+    out = {}
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="vault_states_"))
+    keep = (vault._DIRTY.get("since"), vault._LAST_FAILURE.get("msg"))
+    try:
+        # NOT INITIALISED — no config at all.
+        _real_cfg = vault.load_config
+        vault.load_config = lambda *a, **k: {}
+        vault._DIRTY["since"] = None
+        vault._LAST_FAILURE["msg"] = ""
+        out["uninitialised"] = vault.status()
+
+        vault.load_config = lambda *a, **k: {"destination": str(tmp)}
+        # HEALTHY — initialised, nothing dirty, nothing failed.
+        out["healthy"] = vault.status()
+        # DIRTY — unsealed changes, but under the ceiling, so not red yet.
+        vault._DIRTY["since"] = __import__("time").monotonic() - 5
+        out["dirty"] = vault.status()
+        # STALE — dirty for longer than the ceiling, which turns red by itself.
+        vault._DIRTY["since"] = __import__("time").monotonic() - (vault.CEILING_SECONDS + 60)
+        out["stale"] = vault.status()
+        # FAILED — a real recorded failure message.
+        vault._DIRTY["since"] = None
+        vault._LAST_FAILURE["msg"] = "the last seal did not complete"
+        out["failed"] = vault.status()
+    finally:
+        vault.load_config = _real_cfg
+        vault._DIRTY["since"], vault._LAST_FAILURE["msg"] = keep
+    (DIR / "vault_states.json").write_text(json.dumps(out, indent=1))
+    return {k: {"stale_red": v.get("stale_red"), "failure": bool(v.get("failure")),
+                "initialized": v.get("initialized")} for k, v in out.items()}
+
+
 def seed_epistemic():
     """Two real runs, written by the real writers, for the epistemic journey.
 
@@ -197,9 +241,11 @@ if __name__ == "__main__":
     marker = STATE / ".seeded"
     if marker.exists():
         print(json.dumps({"entrance": "already seeded", "pre_wiring": seed_pre_wiring(),
-                          "epistemic": seed_epistemic()}))
+                          "epistemic": seed_epistemic(),
+                          "vault_states": seed_vault_states()}))
     else:
         out = seed_entrance()
         marker.write_text("1")
         print(json.dumps({"entrance": out, "pre_wiring": seed_pre_wiring(),
-                          "epistemic": seed_epistemic()}))
+                          "epistemic": seed_epistemic(),
+                          "vault_states": seed_vault_states()}))
