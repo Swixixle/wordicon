@@ -147,6 +147,55 @@ const SELF_REPORT = 'MODEL SELF-REPORT — UNVERIFIED';
   ok(/warrant FAILED|warrant ABSENT/.test(bad),
      'a candidate whose anchor was not found says so beside its craft verdict');
 
+  // ---- 7. block 114: the result comes first ----------------------------
+  // Opened on the PARENT decompose run, which is where component headers
+  // live — and which is also the record that was dropping them. A closed
+  // <details> contributes nothing to innerText, which is what makes the
+  // rule testable at all, and is why it has to be tested here: source
+  // review cannot tell a collapsed line from a deleted one.
+  await page.evaluate(t => loadPastResult(t), IDS.decompose);
+  await page.waitForTimeout(1500);
+  const hdrs = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('#result-area .card')];
+    return cards.filter(c => /^(Concept|Component)/.test(
+        (c.querySelector('.section-label') || {}).textContent || ''))
+      .map(c => ({
+        label: (c.querySelector('.result-title') || {}).textContent.trim(),
+        text: c.innerText,
+        summary: (c.querySelector('details.case > summary') || {}).textContent || '',
+        open: (c.querySelector('details.case') || {}).open,
+        h: c.getBoundingClientRect().height,
+      }));
+  });
+  ok(hdrs.length >= 2, 'both components rendered a header: ' + JSON.stringify(hdrs.map(h => h.label)));
+  const found = hdrs.find(h => !/not found in your text/.test(h.text));
+  const missing = hdrs.find(h => /not found in your text/.test(h.text));
+
+  ok(!!missing, 'a component whose anchor was NOT found says so on the page, outside any disclosure');
+  ok(!!found && !/Anchored to:/.test(found.text) && !/Bound by the source:/.test(found.text)
+     && !/Common context/.test(found.text) && !/The text\'s own stance:/.test(found.text),
+     'a component whose anchor WAS found keeps the machinery out of the reader\'s way: '
+     + JSON.stringify(found && found.text.slice(0, 120)));
+  ok(!!found && /how this was pulled out of your text/.test(found.summary),
+     'and names what it put away, rather than simply dropping it: ' + JSON.stringify(found && found.summary));
+  ok(!!found && found.open === false, 'the machinery disclosure starts closed');
+
+  // NOTHING WAS DELETED. Opening it has to bring it all back, or this block
+  // traded a confusing page for a dishonest one.
+  const reopened = await page.evaluate(() => {
+    [...document.querySelectorAll('#result-area details.case')].forEach(d => { d.open = true; });
+    return document.getElementById('result-area').innerText;
+  });
+  ok(/Anchored to:/.test(reopened) && /Bound by the source:/.test(reopened)
+     && /Common context/.test(reopened),
+     'opening the disclosure brings the anchor and the constraint back — collapsed, not dropped');
+
+  // 114b: and the record has to still hold them a day later. This is the
+  // same page, reached the way Recent reaches it: from the stored snapshot,
+  // not from the run. It used to arrive with six fields out of thirteen.
+  ok(/shown in the text|a reading — one interpretation among others/.test(reopened),
+     'the reopened run still knows whether a component was shown in the text or read into it');
+
   ok(errs.length === 0, 'no page errors across the epistemic journey: ' + JSON.stringify(errs));
   await browser.close();
   finish('epistemic');

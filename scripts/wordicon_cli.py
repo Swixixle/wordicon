@@ -6580,8 +6580,27 @@ def run_decompose(text: str, gateway: Gateway, interactive: bool = True,
            "trace_id": parent_trace_id}
     # block 104: the parent run's own receipt, in the canonical vocabulary,
     # with the component runs' trace ids stripped to what a receipt holds.
-    _groups_for_record = [{"label": g.get("label", ""), "gist": g.get("gist", ""),
-                           "anchor": g.get("anchor", ""), "anchor_verified": g.get("anchor_verified", False),
+    #
+    # block 114: this projection was ALSO the result snapshot, and it carried
+    # six fields where the live run carries thirteen. Everything else was
+    # dropped on the way to disk — including the grounding tag, the source
+    # check's verdict, and all three mechanical warnings. So a run whose
+    # component was flagged "your passage DENIES this" showed that warning
+    # while it ran, and showed a clean page when it was reopened from Recent.
+    # The absence read as a pass, which is the one thing this project has
+    # spent every block refusing to let happen.
+    #
+    # The stripping had a real reason: each live group carries `result`, the
+    # component's ENTIRE run, and embedding that in the parent would duplicate
+    # every candidate inside its own parent. So the projection stays a
+    # projection — it just carries what the page renders now, and the heavy
+    # nested run stays out, reachable by its own trace id.
+    _CARRY = ("label", "gist", "grounding", "anchor", "anchor_verified",
+              "anchor_near_miss", "neighbors", "constraints", "background",
+              "stance", "source_check", "recurrence_unsupported",
+              "constraint_beyond_anchor", "summary", "failure_explanation",
+              "error", "forge_input")
+    _groups_for_record = [{**{k: g[k] for k in _CARRY if k in g},
                            "trace_id": (g.get("result") or {}).get("trace_id", ""),
                            "failed": bool(g.get("failed"))} for g in groups]
     out.update(record_composite_run("decompose", {"groups": _groups_for_record, "gateway": gateway.name},

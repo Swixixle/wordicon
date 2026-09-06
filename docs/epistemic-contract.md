@@ -79,3 +79,22 @@ rests on, and a fact nobody observed is printed as a word, never as a number.
    established it, the craft verdict must say which of the two questions it
    answered. "No decisive objection" standing alone beside an empty warrant row
    reads as an endorsement, and did.
+
+## 8. What a reader sees first (block 114)
+
+**A passing check may be quiet. A failing check may not.** This is §7's rule
+about absences read the other way round: an absence may never render as a pass,
+and a pass was never required to shout. A check that succeeded may collapse
+behind a disclosure that names what it holds. A check that failed, refuted, or
+could not be run stays on the page.
+
+**Nothing is collapsed that was not stored.** A warning shown while a run
+executes must be in the record that run leaves behind, or reopening it shows a
+clean page for a run that was not clean. The persisted projection carries every
+field the surface renders; that correspondence is checked by derivation from the
+surface, not maintained by hand in two places.
+
+**One record per thing, and a door to it.** A parent run does not copy its
+components' work into itself. It names each component, carries what it needs to
+render the component honestly, and links to the run where that work lives — so a
+judgment recorded once cannot be invisible to a second copy.

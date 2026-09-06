@@ -1257,10 +1257,15 @@ def main() -> int:
     for needle in ("function backgroundHtml", "Common context", "backgroundHtml(g.background)"):
         if needle not in webapp_src4:
             failures.append(f"webapp missing background rendering piece: {needle!r}")
-    if webapp_src4.count("backgroundHtml(g.background)") < 2:
-        failures.append("webapp background block not wired into both decompose and deep views")
-    if "g.grounding === 'reading'" not in webapp_src4.split("function buildDeepHtml")[1]:
-        failures.append("buildDeepHtml missing the grounding tag decompose already had")
+    # block 114 deduplicated the two component headers into one function, so
+    # "appears twice" is no longer the invariant and counting occurrences would
+    # now punish the fix. What must hold is that BOTH views delegate to that
+    # one function and that the function still carries the piece.
+    _hdr4 = webapp_src4.split("function componentHeaderHtml(")[1].split("\n}")[0]
+    if "backgroundHtml(g.background)" not in _hdr4:
+        failures.append("the shared component header no longer renders the recalled background")
+    if "g.grounding === 'reading'" not in _hdr4:
+        failures.append("the shared component header no longer carries the grounding tag")
 
     # 22. on-demand Verify: fires as many times as the owner wants, checks
     # Friction's OWN already-made claims against live search, and is
@@ -1688,8 +1693,9 @@ def main() -> int:
                    "already named", "contradicted"):
         if needle not in idx6:
             failures.append(f"index.html missing surfaced piece: {needle!r}")
-    if idx6.count("g.recurrence_unsupported") < 2:
-        failures.append("recurrence warning not wired into both decompose and deep views")
+    _hdr6 = idx6.split("function componentHeaderHtml(")[1].split("\n}")[0]
+    if "g.recurrence_unsupported" not in _hdr6:
+        failures.append("the shared component header no longer carries the recurrence warning")
     srv6 = (Path(__file__).resolve().parents[1] / "server.py").read_text()
     for needle in ('"recurrence_unsupported"', '"failure_explanation"'):
         if needle not in srv6:
@@ -8273,7 +8279,8 @@ console.log(out.join('\\n'));
         failures.append(f"a component carries a verdict outside the vocabulary: {_grp['source_check']}")
 
     # the verdict is shown on the COMPONENT, and says it is model-answered
-    if "function sourceCheckHtml" not in idx11 or "${sourceCheckHtml(g.source_check)}" not in idx11:
+    _hdr11 = idx11.split("function componentHeaderHtml(")[1].split("\n}")[0]
+    if "function sourceCheckHtml" not in idx11 or "sourceCheckHtml(sc)" not in _hdr11:
         failures.append("the component verdict is computed but never shown on the component")
     if "not a mechanical check" not in idx11:
         failures.append("the component check is being presented as mechanical")
@@ -17612,6 +17619,129 @@ console.log(out.join('\\n'));
             failures.append("112: the Reader's stand-in returns nothing the mechanical check would "
                             "drop, so the journey's drop check proves nothing")
     _pass112()
+
+    # ---- block 114: the result comes first ----------------------------------
+    #
+    # Shown to another person for the first time, a run opened with a
+    # paragraph about how the extractor had parsed the question — the anchor
+    # it chose, the constraint it derived, the background it recalled, the
+    # stance it read — and the answer was somewhere below that. Every one of
+    # those lines was added by a block that was right to add it. The sum was
+    # a report about the machine.
+    #
+    # THE RULE: A PASSING CHECK MAY BE QUIET. A FAILING CHECK MAY NOT.
+    #
+    # Which is "silence is not success" read the other way round: that rule
+    # forbids an ABSENCE from rendering as a pass, and never said a pass has
+    # to shout. The danger in the fix is obvious and is what these checks are
+    # for — collapse one warning by accident and the app is hiding findings
+    # while looking tidier.
+    _i114 = (Path(__file__).resolve().parents[1] / "webapp" / "index.html").read_text()
+    _hdr114 = _i114.split("function componentHeaderHtml(")[1].split("\n}")[0]
+    if "const findings = [" not in _hdr114 or "const quiet = [" not in _hdr114:
+        failures.append("114: the component header no longer separates findings from machinery, so "
+                        "there is nothing keeping a warning out of the disclosure")
+    _findings = _hdr114.split("const findings = [")[1].split("].join('')")[0]
+    _quiet = _hdr114.split("const quiet = [")[1].split("].join('')")[0]
+
+    # EVERY WARNING IS OUTSIDE THE DISCLOSURE. Named one at a time, because
+    # "some warnings are outside it" is what a partial regression looks like.
+    for _w, _what in (("recurrence_unsupported", "the anchor-recurs-but-appears-once warning"),
+                      ("constraint_beyond_anchor", "the anchor-cannot-carry-its-constraint warning"),
+                      ("anchorFailed ? anchorLineHtml(g)", "a failed anchor"),
+                      ("scIsFinding ? sourceCheckHtml(sc)", "a source check that found something")):
+        if _w not in _findings:
+            failures.append(f"114: {_what} is no longer rendered outside the disclosure — a finding "
+                            "was collapsed, which is the exact failure this block risked")
+        if _w in _quiet:
+            failures.append(f"114: {_what} was moved INTO the disclosure")
+
+    # AND THE PASSING CASES ARE INSIDE IT, or the block did nothing.
+    for _q, _what in (("g.constraints", "the derived constraint"),
+                      ("backgroundHtml(g.background)", "the recalled background"),
+                      ("g.stance", "the stance read from the passage"),
+                      ("g.neighbors", "the recalled neighbours")):
+        if _q not in _quiet:
+            failures.append(f"114: {_what} is back above the results — the run opens on the "
+                            "extractor again")
+
+    # THE ANCHOR IS ON EXACTLY ONE SIDE PER OUTCOME. A found anchor is quiet,
+    # a missing one is not, and the same line must not render twice.
+    if "anchorFailed ? '' : anchorLineHtml(g)" not in _quiet:
+        failures.append("114: a verified anchor is no longer collapsed, or is rendered on both sides")
+
+    # BOTH VIEWS DELEGATE. The two headers were separate copies of one markup
+    # and every correction had to be made twice; one of them always lagged.
+    for _view in ("buildDecomposeHtml", "buildDeepHtml"):
+        _body = _i114.split(f"function {_view}(")[1].split("\n}")[0]
+        if "componentHeaderHtml(g," not in _body:
+            failures.append(f"114: {_view} builds its own component header again")
+
+    # THE CRITIQUE OF HIS INPUT COLLAPSES ONLY WHEN IT FOUND NOTHING.
+    _deep114 = _i114.split("function buildDeepHtml(")[1].split("\n}")[0]
+    if "const attackQuiet = v === 'keep';" not in _deep114:
+        failures.append("114: the input critique is collapsed on some verdict other than 'no "
+                        "objection' — an objection the owner has to scroll past is an objection "
+                        "he will miss, and every candidate below it inherits the problem")
+    if "? `<details" not in _deep114 or ": attackBody}" not in _deep114:
+        failures.append("114: the input critique is no longer conditional at all — either always "
+                        "hidden or always shouting, and one of those is a lie about what happened")
+
+    # ---- block 114b: the reopened run must carry what the run showed --------
+    #
+    # Found while writing the journey for the rule above, and it is the worse
+    # of the two problems. The parent decompose snapshot was written from the
+    # RECEIPT projection — six fields, where the live run carries thirteen. So
+    # a component flagged "your passage DENIES this", or one whose anchor could
+    # not carry its own constraint, showed that warning while the run was on
+    # screen and showed a clean page when the run was reopened from Recent.
+    # Collapsing a warning would have been bad; never storing one is worse,
+    # and the two were about to ship in the same block.
+    #
+    # The pin is DERIVED, not written down twice: it reads which fields the
+    # component header actually renders and requires the persisted projection
+    # to carry every one of them. A field added to the header tomorrow fails
+    # this check until it is also carried, which is the only version of this
+    # guard that cannot go stale.
+    import re as _re114
+    _hdr_src = "".join(
+        _i114.split(f"function {_f}(")[1].split("\n}")[0]
+        for _f in ("anchorLineHtml", "componentHeaderHtml"))
+    _rendered = set(_re114.findall(r"\bg\.([a-z_]+)", _hdr_src))
+    _cli114 = (Path(__file__).resolve().parents[1] / "scripts" / "wordicon_cli.py").read_text()
+    _carry = set(_re114.findall(r'"([a-z_]+)"', _cli114.split("_CARRY = (")[1].split(")")[0]))
+    _missing = sorted(f for f in _rendered if f not in _carry)
+    if _missing:
+        failures.append(f"114: the component header renders {_missing} and the parent snapshot does "
+                        "not carry them, so reopening the run loses them — an absence that reads "
+                        "as a pass")
+
+    # THE CONSTITUTION SAYS THE RULE TOO. A shipped change to what the owner
+    # sees first is a change to what the app claims about itself.
+    # Whitespace-normalised: the constitution is wrapped prose, so a sentence
+    # that spans a line break is not a contiguous substring of the file. The
+    # first version of this check failed on its own correct text.
+    _const114 = " ".join(_i114.split('section-label">What comes back</div>')[1][:4000].split())
+    for _need in ("A passing check may be quiet", "failing check may not",
+                  "shows the same warnings it showed while it"):
+        if _need not in _const114:
+            failures.append(f"114: the constitution no longer states {_need!r} — the code has the "
+                            "rule and the ruling does not")
+
+    # And the round trip, run for real rather than argued from source.
+    _rt = cli.run_decompose("A passage about pretending while poor, and guilt at arriving.",
+                             cli.MockGateway(), interactive=False)
+    _rt_snap = _json2.loads((cli.RESULTS_DIR / f"{_rt['trace_id']}.json").read_text())
+    for _live, _saved in zip(_rt.get("groups") or [], _rt_snap.get("groups") or []):
+        _lost = sorted(f for f in _rendered if f in _live and f not in _saved)
+        if _lost:
+            failures.append(f"114: reopening the run loses {_lost} from component "
+                            f"{_live.get('label')!r} — it was on the page and is not in the record")
+    # the heavy nested component run must still stay OUT, or the parent
+    # duplicates every candidate inside itself
+    if any("result" in g for g in _rt_snap.get("groups") or []):
+        failures.append("114: the parent snapshot now embeds each component's entire run, so every "
+                        "candidate exists twice and the two copies can disagree")
 
     # ---- block 113: the acquisition record ---------------------------------
     # Hoisted out of main() and run at the top of it. The checks are pure and

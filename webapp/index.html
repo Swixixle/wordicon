@@ -1076,6 +1076,14 @@
       measurement and no measurement was taken. The reviewer's own account of its work is labelled a
       model self-report; where it disagrees with the record, the record wins.</p>
 
+      <p class="body">And a run opens on the work, not on the machinery. How a component was
+      pulled out of your text — the anchor, the constraint, the context recalled — folds behind
+      one line that says what it holds. <strong>A passing check may be quiet; a failing check may
+      not.</strong> An anchor that was not found in your text, a constraint the anchor cannot
+      carry, a passage that denies its own component: those stay on the page, and they are in the
+      record too, so reopening the run a month later shows the same warnings it showed while it
+      ran.</p>
+
       <details style="margin:10px 0">
         <summary style="cursor:pointer;color:var(--muted);font-size:12.5px;font-weight:600">The four buttons on a card</summary>
         <div style="margin-top:8px">
@@ -2645,6 +2653,24 @@ async function loadPastResult(traceId, shelf, label, restoring) {
       </div>` + buildDeepHtml(d);
     return;
   }
+  // block 114: a decompose run had no branch here at all. It fell into the
+  // generic candidate list below, which reads `d.candidates` — a key the
+  // parent snapshot does not have, because a decompose parent holds GROUPS
+  // and each group's candidates live in that component's own run. So
+  // reopening a decompose run rendered the input text, the word "decompose",
+  // a timestamp, and nothing else. Every component, every candidate, every
+  // warning: not lost from the record, never asked for. The deep branch
+  // directly above has had this since block 103; decompose never got it.
+  if (d.mode === 'decompose' && (d.groups || []).length) {
+    lastSubmission = null;
+    area.innerHTML = `
+      <div class="card" style="border-left:3px solid var(--accent, #888)">
+        <div class="section-label" style="margin-top:0">From the record — a decompose run · ${escapeHtml(d.completion || (d.partial ? 'partial' : 'complete'))}</div>
+        <p class="body">${escapeHtml(d.input_text || d.source_text || '')}</p>
+        <p class="body muted" style="font-size:13px">decompose · ${(d.groups || []).length} component(s) · ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}</p>
+      </div>` + buildDecomposeHtml(d);
+    return;
+  }
   if (['forge','crack','decompose','riff','play'].includes(d.mode)) {
     lastSubmission = {mode: d.mode, input_text: d.input_text};
     seenAttempts = (d.candidates || []).filter(c => c.title).map(c => ({
@@ -2840,6 +2866,78 @@ function backgroundHtml(background) {
     </div>`;
 }
 
+// ---- the component header ----------------------------------------------
+//
+// A run used to open with the machinery. The anchor the extractor chose,
+// the constraint it derived from that anchor, the background it recalled,
+// the stance it read in the passage — all of it true, all of it earned by
+// a block that was right to add it, and all of it standing between the
+// person who asked a question and the answer. Shown to somebody else for
+// the first time, the page read as a report about the extractor.
+//
+// THE RULE: A PASSING CHECK MAY BE QUIET. A FAILING CHECK MAY NOT.
+//
+// That is "silence is not success" read the other way round. The original
+// rule forbids an ABSENCE from rendering as a pass — a review that
+// searched nothing must say so. It never said a pass has to shout. So an
+// anchor that was found collapses and an anchor that was not found stays
+// on the page; a source check that came back supported collapses and one
+// that came back contradicted does not. Nothing is deleted, nothing moves
+// out of reach, and the disclosure names what is inside it.
+//
+// One function for both views. These headers were two copies of the same
+// markup and every correction to them has had to be made twice.
+function anchorLineHtml(g) {
+  if (!g.anchor) return '';
+  const tag = g.anchor_verified
+    ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0">quote found in your text — support checked per candidate below</span>`
+    : g.anchor_near_miss
+      ? `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">close to your text but not exact — likely fused or paraphrased</span>`
+      : `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">not found in your text</span>`;
+  return `<p class="body muted" style="font-size:12.5px"><em>Anchored to:</em> "${escapeHtml(g.anchor)}" ${tag}</p>`;
+}
+
+function componentHeaderHtml(g, opts) {
+  const o = opts || {};
+  const anchorFailed = !!g.anchor && !g.anchor_verified;
+  const sc = g.source_check;
+  // sourceCheckHtml already renders 'supported' and 'reading' as a quiet
+  // line and everything else as a bordered warning. Key on the same two
+  // verdicts here so the two functions cannot drift into disagreeing about
+  // what counts as a finding.
+  const scIsFinding = !!(sc && sc.verdict && sc.verdict !== 'supported' && sc.verdict !== 'reading');
+
+  // FINDINGS — never behind a disclosure.
+  const findings = [
+    anchorFailed ? anchorLineHtml(g) : '',
+    g.recurrence_unsupported ? `<p class="body" style="font-size:12.5px;border-left:3px solid var(--bad);padding-left:10px;color:var(--bad)">⚠ This constraint claims the anchor recurs later in your text, but the anchor appears exactly once. Checked mechanically against your source, not judged by the model — any candidate built on that second appearance is built on something that isn't there.</p>` : '',
+    scIsFinding ? sourceCheckHtml(sc) : '',
+    (g.constraint_beyond_anchor || []).length ? `<p class="body" style="font-size:12.5px;border-left:3px solid #d9a441;padding-left:10px">⚠ <strong>This anchor can't carry its own constraint.</strong> The constraint requires ${g.constraint_beyond_anchor.map(w => `<strong>${escapeHtml(w)}</strong>`).join(', ')} — words your text contains but this anchor does not. Checked mechanically against your source; it is a word count, not a judgment. Every candidate below is measured against a span missing that, so a "partly supported" verdict there is the extraction's fault before it is the candidate's. Whether to move the anchor or narrow the constraint is yours.</p>` : '',
+  ].join('');
+
+  // MACHINERY — one click away, and the summary says what it is.
+  const quiet = [
+    anchorFailed ? '' : anchorLineHtml(g),
+    g.neighbors ? `<p class="body muted" style="font-size:12.5px"><em>Existing neighbors (recall, unverified):</em> ${escapeHtml(g.neighbors)}</p>` : '',
+    g.constraints ? `<p class="body muted" style="font-size:12.5px"><em>Bound by the source:</em> ${escapeHtml(g.constraints)}</p>` : '',
+    scIsFinding ? '' : sourceCheckHtml(sc),
+    backgroundHtml(g.background),
+    g.stance ? `<p class="body muted" style="font-size:12.5px"><em>The text's own stance:</em> ${escapeHtml(g.stance)} — a candidate that reads against this is a counter-reading; Friction labels those under “Beyond the source.”</p>` : '',
+  ].join('');
+
+  return `
+      <div class="card" style="border-left:3px solid var(--accent, #888)">
+        <div class="section-label" style="margin-top:0">${escapeHtml(o.kind || 'Concept')}
+          ${g.grounding === 'reading' ? `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">a reading — one interpretation among others</span>`
+            : g.grounding === 'explicit' ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0">shown in the text</span>` : ''}
+        </div>
+        <div class="result-title">${escapeHtml(g.label)}</div>
+        <p class="body muted">${escapeHtml(g.gist)}</p>
+        ${findings}
+        ${quiet ? `<details class="case" style="margin-top:6px"><summary>how this was pulled out of your text — the anchor, the constraint, and the context it recalled</summary>${quiet}</details>` : ''}
+      </div>`;
+}
+
 function buildDecomposeHtml(d) {
   const globalBanner = d.global_constraints
     ? `<div class="card" style="border-left:3px solid var(--accent, #888);background:transparent">
@@ -2883,23 +2981,20 @@ function buildDecomposeHtml(d) {
     const summaryHtml = g.summary
       ? `<div class="muted" style="font-size:13px;margin:6px 0 12px">${escapeHtml(g.summary)} · every candidate below, none hidden</div>`
       : '';
-    const cards = g.candidates.map(cand => renderCandidateCard(cand, g.trace_id, {anchor: g.anchor, background: g.background})).join('');
-    return `
-      <div class="card" style="border-left:3px solid var(--accent, #888)">
-        <div class="section-label" style="margin-top:0">Concept
-          ${g.grounding === 'reading' ? `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">a reading — one interpretation among others</span>`
-            : g.grounding === 'explicit' ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0">shown in the text</span>` : ''}
-        </div>
-        <div class="result-title">${escapeHtml(g.label)}</div>
-        <p class="body muted">${escapeHtml(g.gist)}</p>
-        ${g.anchor ? `<p class="body muted" style="font-size:12.5px"><em>Anchored to:</em> "${escapeHtml(g.anchor)}" ${g.anchor_verified ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0">quote found in your text — support checked per candidate below</span>` : g.anchor_near_miss ? `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">close to your text but not exact — likely fused or paraphrased</span>` : `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">not found in your text</span>`}</p>` : ''}
-        ${g.constraints ? `<p class="body muted" style="font-size:12.5px"><em>Bound by the source:</em> ${escapeHtml(g.constraints)}</p>` : ''}
-        ${g.recurrence_unsupported ? `<p class="body" style="font-size:12.5px;border-left:3px solid var(--bad);padding-left:10px;color:var(--bad)">⚠ This constraint claims the anchor recurs later in your text, but the anchor appears exactly once. Checked mechanically against your source, not judged by the model — any candidate built on that second appearance is built on something that isn't there.</p>` : ''}
-        ${sourceCheckHtml(g.source_check)}
-        ${(g.constraint_beyond_anchor || []).length ? `<p class="body" style="font-size:12.5px;border-left:3px solid #d9a441;padding-left:10px">⚠ <strong>This anchor can't carry its own constraint.</strong> The constraint requires ${g.constraint_beyond_anchor.map(w => `<strong>${escapeHtml(w)}</strong>`).join(', ')} — words your text contains but this anchor does not. Checked mechanically against your source; it is a word count, not a judgment. Every candidate below is measured against a span missing that, so a "partly supported" verdict there is the extraction's fault before it is the candidate's. Whether to move the anchor or narrow the constraint is yours.</p>` : ''}
-        ${backgroundHtml(g.background)}
-        ${g.stance ? `<p class="body muted" style="font-size:12.5px"><em>The text's own stance:</em> ${escapeHtml(g.stance)} — a candidate that reads against this is a counter-reading; Friction labels those under “Beyond the source.”</p>` : ''}
-      </div>
+    // A LIVE run carries each component's candidates inline. A REOPENED one
+    // does not, and must not: they live in that component's own run, with its
+    // own trace and its own receipt, and copying them into the parent would
+    // make every candidate exist twice in two records that can disagree. So
+    // the parent shows the component and a door to where the work is, rather
+    // than an empty component — which is what it showed before this branch
+    // existed at all. (`g.candidates.map` on a reopened run threw here, which
+    // is how the missing branch was found.)
+    const cards = (g.candidates || []).map(cand => renderCandidateCard(cand, g.trace_id, {anchor: g.anchor, background: g.background})).join('')
+      || (g.trace_id ? `<div class="muted" style="font-size:12.5px;margin:0 0 12px">
+           The candidates from this component live in their own run, with their own receipt —
+           <a href="#" style="color:var(--accent, inherit)" onclick="loadPastResult('${escapeJs(g.trace_id)}');return false">open it</a>.
+           They are not copied here, so there is only ever one record of them.</div>` : '');
+    return componentHeaderHtml(g, {kind: 'Concept'}) + `
       ${summaryHtml}
       ${cards}
     `;
@@ -2921,14 +3016,24 @@ function buildDeepHtml(d) {
     ? `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0;margin-left:6px">read as an artifact to dissect — the “already named” test does not apply</span>`
     : atk.input_kind === 'proposed_concept'
       ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0;margin-left:6px">read as a proposed concept</span>` : '';
+  // Same rule as the component header: a passing check may be quiet. When
+  // the critic raised nothing, its two paragraphs of reasoning collapse to
+  // the chip and the page opens on the work. When it DID object — "reject",
+  // or "already named" — the reasoning stays open, because that is the one
+  // thing worth reading before fifteen candidates built on the same input.
+  const attackQuiet = v === 'keep';
+  const attackBody = `
+      <p class="body">${escapeHtml(atk.hostile_read || '')}</p>
+      ${atk.redundancy_note ? `<p class="body muted"><em>Redundancy:</em> ${escapeHtml(atk.redundancy_note)}</p>` : ''}`;
   const attackCard = `
     <div class="card" style="border-left:3px solid var(--bad)">
       <div class="section-label" style="margin-top:0">Your input on trial — before any generation
         ${vLabel ? `<span class="decision-tag ${vClass}" style="text-transform:none;letter-spacing:0;margin-left:6px">${escapeHtml(vLabel)}</span>` : ''}
         ${kindTag}
       </div>
-      <p class="body">${escapeHtml(atk.hostile_read || '')}</p>
-      ${atk.redundancy_note ? `<p class="body muted"><em>Redundancy:</em> ${escapeHtml(atk.redundancy_note)}</p>` : ''}
+      ${attackQuiet
+        ? `<details class="case"><summary>what the critic looked for, and why it did not object</summary>${attackBody}</details>`
+        : attackBody}
     </div>`;
   const groupsHtml = (d.groups || []).map(g => {
     if (g.failed) {
@@ -2948,22 +3053,7 @@ function buildDeepHtml(d) {
       </div>`;
     }
     const cards = (g.candidates || []).map(cand => renderCandidateCard(cand, g.trace_id, {anchor: g.anchor, background: g.background})).join('');
-    return `
-      <div class="card" style="border-left:3px solid var(--accent, #888)">
-        <div class="section-label" style="margin-top:0">Component
-          ${g.grounding === 'reading' ? `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">a reading — one interpretation among others</span>`
-            : g.grounding === 'explicit' ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0">shown in the text</span>` : ''}
-        </div>
-        <div class="result-title">${escapeHtml(g.label)}</div>
-        <p class="body muted">${escapeHtml(g.gist)}</p>
-        ${g.neighbors ? `<p class="body muted" style="font-size:12.5px"><em>Existing neighbors (recall, unverified):</em> ${escapeHtml(g.neighbors)}</p>` : ''}
-        ${g.anchor ? `<p class="body muted" style="font-size:12.5px"><em>Anchored to:</em> "${escapeHtml(g.anchor)}" ${g.anchor_verified ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0">quote found in your text — support checked per candidate below</span>` : g.anchor_near_miss ? `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">close to your text but not exact — likely fused or paraphrased</span>` : `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">not found in your text</span>`}</p>` : ''}
-        ${g.constraints ? `<p class="body muted" style="font-size:12.5px"><em>Bound by the source:</em> ${escapeHtml(g.constraints)}</p>` : ''}
-        ${g.recurrence_unsupported ? `<p class="body" style="font-size:12.5px;border-left:3px solid var(--bad);padding-left:10px;color:var(--bad)">⚠ This constraint claims the anchor recurs later in your text, but the anchor appears exactly once. Checked mechanically against your source, not judged by the model — any candidate built on that second appearance is built on something that isn't there.</p>` : ''}
-        ${sourceCheckHtml(g.source_check)}
-        ${(g.constraint_beyond_anchor || []).length ? `<p class="body" style="font-size:12.5px;border-left:3px solid #d9a441;padding-left:10px">⚠ <strong>This anchor can't carry its own constraint.</strong> The constraint requires ${g.constraint_beyond_anchor.map(w => `<strong>${escapeHtml(w)}</strong>`).join(', ')} — words your text contains but this anchor does not. Checked mechanically against your source; it is a word count, not a judgment. Every candidate below is measured against a span missing that, so a "partly supported" verdict there is the extraction's fault before it is the candidate's. Whether to move the anchor or narrow the constraint is yours.</p>` : ''}
-        ${backgroundHtml(g.background)}
-      </div>
+    return componentHeaderHtml(g, {kind: 'Component'}) + `
       ${g.summary ? `<div class="muted" style="font-size:13px;margin-bottom:12px">${escapeHtml(g.summary)}</div>` : ''}
       ${cards}`;
   }).join('<div style="height:8px"></div>');

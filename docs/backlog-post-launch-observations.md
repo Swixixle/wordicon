@@ -180,3 +180,20 @@ unnamed or malformed component; a literal statement followed by an attractive
 unsupported interpretation; and a relationship between distant spans that is
 lost under independent decomposition. The owner's real passage stays outside
 Git.
+
+## Deep and decompose persist their parents differently (block 114)
+
+A **deep** parent snapshot embeds each component's full candidates. A
+**decompose** parent snapshot does not — it carries the component's display
+fields and a link to that component's own run, so each candidate exists in
+exactly one record.
+
+Deep's shape has worked since block 103 and its reopen path depends on it. The
+duplication is real though: the same candidate exists in the parent and in the
+component run, and the two copies can drift — a judgment recorded against one is
+invisible to the other. Unifying them is a schema migration with a real risk of
+breaking reopen for every deep run already on the shelf, so it is written down
+here rather than folded quietly into a block about presentation.
+
+The decompose direction is the one to converge on: one record per thing, and a
+door to it.

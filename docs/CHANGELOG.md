@@ -1,5 +1,67 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.8.0 — the result comes first (block 114)
+
+Shown to another person for the first time, a run opened with a paragraph about
+how the extractor had parsed the question — the anchor it chose, the constraint
+it derived from that anchor, the background it recalled, the stance it read —
+and the answer was somewhere below all of it. Every one of those lines was added
+by a block that was right to add it. The sum was a report about the machine.
+
+**The rule: a passing check may be quiet. A failing check may not.**
+
+That is *silence is not success* read the other way round. The original forbids
+an **absence** from rendering as a pass — a review that searched nothing has to
+say so. It never said a pass has to shout. So an anchor that was found collapses
+behind a disclosure that names what it holds; an anchor that was **not** found
+stays on the page. A source check that came back supported collapses; one that
+came back *contradicted* does not. The critic's read of the owner's own input
+collapses when it raised no objection and stays open when it did, because an
+objection he has to scroll past is one he will miss, and every candidate below
+it inherits the problem.
+
+The two component headers — decompose's and deep's — were separate copies of the
+same markup, and every correction to them has had to be made twice. They are one
+function now, and the suite pins that both views delegate to it rather than
+counting how many times a line appears.
+
+**Two defects found while writing the journey for that rule, both worse than it.**
+
+**The reopened run was not the run.** A decompose parent snapshot was written
+from the *receipt* projection — six fields, where the live run carries thirteen.
+The grounding tag, the source check's verdict, and all three mechanical warnings
+were dropped on the way to disk. A component flagged *your passage DENIES this*
+showed that warning while it ran and showed a clean page when it was reopened
+from Recent. Collapsing a warning would have been bad; never storing one is
+worse, and the two were about to ship in the same block. The pin for this is
+**derived, not restated**: it reads which fields the component header actually
+renders and requires the persisted projection to carry every one, so a field
+added tomorrow fails until it is carried.
+
+**And a reopened decompose run rendered nothing at all.** There was no branch
+for it in `loadPastResult`. It fell into the generic candidate list, which reads
+`d.candidates` — a key a decompose parent does not have, because a parent holds
+groups and each group's candidates live in that component's own run. So
+reopening a decompose run showed the input text, the word "decompose", a
+timestamp, and an empty page. The deep branch beside it has had this since block
+103. Decompose never got one. The candidates are still not copied into the
+parent — there is one record of them, in the component's own run, and the parent
+now shows a door to it rather than an empty component.
+
+**Stated plainly, and not fixed here:** deep and decompose now persist their
+parents differently — deep embeds each component's candidates, decompose links
+to them. Deep's copy has worked since block 103 and unifying the two is a
+separate change with its own risk, so it is recorded in the backlog rather than
+folded in quietly.
+
+Suite OK. Fourteen journeys, 443 checks — the epistemic journey now opens the reopened
+parent and reads `innerText`, because a closed disclosure contributes nothing to
+it and source review cannot tell a collapsed line from a deleted one. Five
+sabotage mutations, all caught by name: one drops a warning out of the findings
+list, one shrinks the persisted projection by a single field (the check names
+which field), one hides the critic's objection, one removes the reopen route,
+and one pulls the machinery back above the results.
+
 ## v1.7.0 — the Epistemic Presentation, phase 1 (block 113): what a call can say it acquired
 
 A census of the store found **3,781 citation rows across 470 result files, every
