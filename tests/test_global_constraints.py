@@ -17766,6 +17766,20 @@ console.log(out.join('\\n'));
                         "cannot be opened")
     else:
         _ps = _probe.read_text()
+        # THE CALL SITE MUST SATISFY THE REAL SIGNATURE. Checked against the
+        # factory itself, so a stub can never paper over it again.
+        if "cli.make_gateway(" not in _ps:
+            failures.append("117: the probe names a gateway class directly again instead of using "
+                            "the app's factory — a stub in a test can accept arguments the real "
+                            "class refuses, and that is exactly how this shipped broken")
+        try:
+            _ins113.signature(cli.make_gateway).bind("anthropic", "some-model")
+        except TypeError as _e:
+            failures.append(f"117: the probe's construction call no longer matches make_gateway: {_e}")
+        # ...and it runs BEFORE the behavioural drive below, because a probe
+        # that cannot construct a gateway raises inside that drive and the
+        # named failure never gets to speak. Caught by crash is the weaker
+        # outcome; the order is what makes it a name.
         # EXERCISED, NOT GREPPED. Every outcome string also appears in the
         # probe's own docstring, so a mutation that makes one unreachable
         # leaves it in the file and passes a presence check — the fourth time
@@ -17775,7 +17789,13 @@ console.log(out.join('\\n'));
         _cp = _il117.import_module("citation_probe")
         _envk = _os117.environ.get("ANTHROPIC_API_KEY")
         _envm = _os117.environ.get("WORDICON_MODEL")
-        _realgw = cli.AnthropicAPIGateway
+        # PATCH THE FACTORY, NOT THE CLASS. A stub class whose __init__ takes
+        # different arguments from the real one hides exactly the break that
+        # shipped here: the probe called the gateway class with no model and
+        # the stub accepted it. Replacing make_gateway means the probe's call
+        # site is exercised as written, and the real factory's signature is
+        # asserted separately below.
+        _realgw = cli.make_gateway
 
         class _NoCite:
             name = "stub"
@@ -17804,7 +17824,7 @@ console.log(out.join('\\n'));
             for _gw, _want in ((_NoCite, "ran_no_native_citation_observed"),
                                (_Cited, "native_citation_observed"),
                                (_Boom117, "not_run_missing_credential")):
-                cli.AnthropicAPIGateway = _gw
+                cli.make_gateway = (lambda _g: (lambda name, model: _g()))(_gw)
                 _got = _cp.probe().get("outcome")
                 if _got != _want:
                     failures.append(f"117: the probe reports {_got!r} where it must report "
@@ -17812,7 +17832,7 @@ console.log(out.join('\\n'));
                                     "difference between not looking and looking and finding "
                                     "nothing is the whole point of it")
         finally:
-            cli.AnthropicAPIGateway = _realgw
+            cli.make_gateway = _realgw
             for _k, _v in (("ANTHROPIC_API_KEY", _envk), ("WORDICON_MODEL", _envm)):
                 if _v is None:
                     _os117.environ.pop(_k, None)

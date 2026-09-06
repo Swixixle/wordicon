@@ -54,7 +54,12 @@ def probe() -> dict:
                    why="A key is present but WORDICON_MODEL is not set, and this "
                        "project never guesses a model. Set it and run again.")
         return out
-    gw = cli.AnthropicAPIGateway()
+    # Built through the app's OWN factory, not by naming a class here. The
+    # first version called AnthropicAPIGateway() with no arguments and the
+    # suite's stub took none either, so the test proved the probe's logic and
+    # nothing about how it constructs a gateway. It failed on the owner's
+    # machine at the first real run.
+    gw = cli.make_gateway("anthropic", model)
     out["gateway"] = getattr(gw, "name", "")
     try:
         text, citations = gw.complete_with_search(QUESTION)
