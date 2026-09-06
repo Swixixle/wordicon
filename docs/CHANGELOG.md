@@ -1,5 +1,79 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.11.0 — the stabilisation pass, part one (block 117)
+
+Four of the census findings, repaired. Not all of them: the ruling was one
+bounded pass, not a month of archaeology.
+
+**A row the owner did not author is nonfinal.** The audit ran read-only first,
+as ordered, and the premise turned out different from the ruling's assumption.
+The six `decision_source: "validator"` rows are **not** procedural rejections of
+malformed input. They are semantic craft verdicts a model wrote — *"the central
+axiom is false"*, *"decorative restatement"* — filed as `rejected` at confidence
+0.6, with no timestamp, from a code path that no longer exists anywhere in the
+repository. `latest_decisions()` never read `decision_source`, so the shelf has
+been showing all six as the owner's own rulings.
+
+They are preserved exactly as written, shown with *"Not your ruling"* and what
+the model said, and they no longer stand: the word goes back to unruled, which
+is what it has been all along. A model's verdict does not count as the owner
+coming back to something, and where he later ruled over one, his ruling wins and
+the model's is kept as context on his row. The counted panel counts them apart —
+a panel about how he rules that includes six decisions a model made is a panel
+that lies about him.
+
+**Storing is not reading.** A `paste` listener bound to the whole document sent
+any pasted file to `/api/upload`, which called the gateway. Text and PDF derive
+locally — no model, nothing to authorise. An image does not: reading it is a
+vision call, and it fired from a keystroke with the label saying a model had read
+it rendering afterwards. The artifact is now stored either way and **nothing is
+sent**; the card says so, and the vision call happens on a button that names its
+lane, its model, one call, and *cost unknown* — because the provider prices by
+image size and reply length, neither known in advance, and inventing a number
+would be worse than admitting the shape of what is unknown.
+
+**A mutating model route with no door refuses by name.** `/api/keeper/renarrate`
+spends a model call and nothing in the app presses it. It is not deleted — its
+contract is what an activated Keeper will need — and it now answers
+`keeper_inactive` / `no_owner_action_reaches_this` rather than staying quietly
+callable.
+
+**The shelf is derivable, or the claim is retracted.** Accepting and retracting
+have recorded definition events since block 104. The owner rewriting a meaning by
+hand did not — the one change he makes himself was the one the record could not
+account for. Now it does. Beside it, a dated **baseline** with a hash: the event
+log began at block 104, so everything accepted before it has no event and never
+will, and the honest repair is not to fabricate the missing history but to say
+*this is the state on this date* and account for everything after. Reconstruction
+is proved in a temporary store, never against the owner's corpus, and
+`verify_definition_projection()` returns named outcomes — `matches`,
+`no_baseline`, or `drift` naming the entries that differ.
+
+**And a timestamp trap, caught by its own check.** The first version decided
+which events were already inside the baseline by comparing timestamps, and
+`_now()` has one-second resolution — so an edit made in the same second as the
+baseline read as already included and the projection reported drift against
+itself. Membership is by **event id** now. This is the third time a whole-second
+clock has been asked to order two things it cannot.
+
+**A skip is a third outcome.** Two checks are gated on the owner's real corpus,
+which is gitignored — in CI they evaluated to nothing and the run printed OK,
+which is indistinguishable from passing. The suite now prints a SKIPPED section
+naming each one and why.
+
+**Two dead checks removed, and four claims that did not verify.** Two `if …:
+pass` blocks read like guards and were not; they are gone, with a note saying so.
+The census reported eight vacuous pins; on inspection **four of the eight did not
+hold** — two were legitimate `except: pass` and class bodies the collecting pass
+misread, one pins a comment that backs a behavioural pin directly above it, and
+one cited a byte-window match that does not exist in the file. Reported rather
+than "fixed", because repairing a check that was never broken is how a suite
+grows noise.
+
+Suite OK, 2 skipped. Fourteen journeys. Three sabotage mutations, all caught by
+name: one lets a model's verdict stand as the owner's, one lets a paste spend a
+vision call, one puts the baseline back on a whole-second clock.
+
 ## v1.10.0 — the mark, and the live door (block 116)
 
 Two changes, both about the same complaint: the page is exhausting to read and

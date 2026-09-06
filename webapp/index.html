@@ -4770,6 +4770,20 @@ let wordOpen = null;        // the name currently expanded
 
 function ruleOf(w) { return RULE_BY_DECISION[w.decision] || RULES[3]; }
 
+// block 117: six rows in the real corpus carry a verdict a MODEL wrote — not
+// procedural rejections of malformed input, but craft judgments ("the central
+// axiom is false") filed as `rejected` from a code path that no longer exists.
+// The shelf showed all six as his own rulings, because nothing read
+// decision_source. They are preserved exactly as written and they no longer
+// stand: the word is unruled, and the row says who actually said that.
+function nonfinalHtml(w) {
+  const nf = w && w.nonfinal;
+  if (!nf) return '';
+  return `<div class="body muted" style="font-size:11.5px;margin-top:3px;border-left:2px solid var(--rule-reworked);padding-left:8px">
+      <strong>Not your ruling.</strong> A model recorded “${escapeHtml(nf.would_have_been || '')}” on this
+      before you saw it${nf.reason ? `: ${escapeHtml(nf.reason)}` : ''}${whyHtml('Kept because the record is append-only and nothing is rewritten. It does not count as a ruling and it does not stand — only you can make a final judgment about meaning, so this word is still unruled.')}</div>`;
+}
+
 // Two bands, two questions. The ruling is his and final. Standing is what
 // the record says happened on the way in — never a competing verdict, and
 // never summed: two flags mean two separate things went a particular way,
@@ -4969,6 +4983,7 @@ function wordRowHtml(w, kin) {
       >${current ? '\u2713 ' : ''}${r[2]}</button>`;
   }).join('');
   return head + `<div class="w-open">
+    ${nonfinalHtml(w)}
     ${w.definition ? `<div class="body" style="font-size:13.5px">${escapeHtml(w.definition)}</div>`
                    : `<div class="history-meta">No meaning is recorded for this one.</div>`}
     ${(w.standing || []).map(f => `<div class="history-meta" style="margin-top:6px;font-size:12px;color:${
@@ -7025,6 +7040,8 @@ function renderLibrary(q) {
                'Nothing in the run argued against these. You set them aside on your own read.', '')}
       ${obsRow(obs.kept_unchecked.length, 'kept with nothing checked',
                'No critic verdict, no anchor, no support check is recorded for these — usually forged from a brief with no source, which is different from a check that ran and passed.', 'unchecked')}
+      ${obsRow((obs.model_authored || []).length, 'carry a verdict you did not write',
+               'A model recorded a decision on these before you saw them. Preserved as written, counted apart, and not standing as a ruling.', '')}
       ${obsRow(obs.n_undecided, 'still unruled',
                'Rendered once and never ruled on. Oldest first: ' + (obs.oldest_undecided || []).join(' \u00b7 '), 'undecided')}
     </div>`;
@@ -7104,10 +7121,66 @@ async function uploadFile(file) {
   scheduleDestinations();   // block 105: an attached file's text is words brought in — the chooser asks where they go
 }
 
+// block 117: reading the text off an image is a vision call, and it now
+// happens only here — on a press, from a button that named the lane and the
+// model before it was pressed. The paste and drop listeners store the file
+// and stop.
+async function representAttached() {
+  const id = ATTACHED && ATTACHED.artifact && ATTACHED.artifact.artifact_id;
+  if (!id) return;
+  const card = document.getElementById('source-card');
+  card.innerHTML = `<div class="card"><p class="body muted"><span class="spinner"></span>reading the text off it…</p></div>`;
+  try {
+    const r = await fetch(`/api/artifact/${encodeURIComponent(id)}/represent`, {method: 'POST'});
+    const d = await r.json();
+    if (d.error) { card.innerHTML = `<div class="card"><p class="error">${escapeHtml(d.error)}</p></div>`; return; }
+    ATTACHED = d;
+  } catch (e) {
+    card.innerHTML = `<div class="card"><p class="error">Couldn't reach the server.</p></div>`; return;
+  }
+  renderSourceCard();
+  scheduleDestinations();
+}
+
+// The price, before the press. Same source as the workup panel's — one
+// accessor, so the two cannot drift into quoting different models.
+async function representLine() {
+  try {
+    const r = await fetch('/api/config');
+    const c = await r.json();
+    const lane = c.gateway || 'unknown lane';
+    const model = c.model || 'unknown model';
+    return `<span class="muted">${escapeHtml(lane)} · ${escapeHtml(model)} · one call · cost unknown${
+      whyHtml('The provider prices a vision call by the size of the image and the length of what comes back, and neither is known before the call. The count of calls is exactly one.')}</span>`;
+  } catch (e) {
+    return `<span class="muted">lane and model unknown — the server did not answer</span>`;
+  }
+}
+
 function renderSourceCard() {
   const card = document.getElementById('source-card');
   if (!ATTACHED) { card.innerHTML = ''; return; }
   const {artifact: a, representation: rep} = ATTACHED;
+  // block 117: an image is stored and NOT read until this button is pressed.
+  // The card says what pressing it spends, before it is pressed.
+  if (ATTACHED.needs_model) {
+    card.innerHTML = `<div class="card" style="border-left:3px solid var(--accent, #888)">
+      <div class="section-label" style="margin-top:0">Your source</div>
+      <p class="body"><strong>${escapeHtml(a.original_filename || '(pasted)')}</strong>
+        <span class="muted">· ${escapeHtml(a.mime)} · ${Math.round(a.bytes/1024)} KB</span></p>
+      <p class="body">Stored, unchanged. <strong>Nothing has been sent anywhere.</strong>
+        ${escapeHtml(ATTACHED.why || '')}</p>
+      <p class="body" style="font-size:12.5px" id="represent-price">
+        <span class="muted">checking the lane…</span></p>
+      <button class="go-btn" onclick="representAttached()">Read the text off it — this calls a model</button>
+      <button class="judge-btn" style="margin-left:8px" onclick="ATTACHED=null;renderSourceCard();scheduleDestinations()">Drop it</button>
+    </div>`;
+    representLine().then(html => {
+      const el = document.getElementById('represent-price');
+      if (el) el.innerHTML = html;
+    });
+    return;
+  }
   card.innerHTML = `<div class="card" style="border-left:3px solid var(--accent, #888)">
     <div class="section-label" style="margin-top:0">Your source</div>
     <p class="body"><strong>${escapeHtml(a.original_filename || '(pasted)')}</strong>

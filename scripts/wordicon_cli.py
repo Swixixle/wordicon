@@ -938,7 +938,123 @@ def _load(path: Path):
 
 DEFINITION_EVENT_KINDS = ("defined", "retracted")
 DEFINITION_EVENT_ORIGINS = ("run", "bench", "recovery_review", "retraction",
-                            "baseline_snapshot", "reconstructed_recovery")
+                            "baseline_snapshot", "reconstructed_recovery",
+                            # block 117: the owner rewriting a kept word's
+                            # meaning. It wrote the shelf and appended nothing,
+                            # so the log could not account for the one change
+                            # the owner makes by hand.
+                            "owner_edit")
+DEFINITION_BASELINE_PATH = LOCAL_STATE / "definition_baseline.json"
+
+
+def _shelf_digest(rows: "list[dict]") -> str:
+    """A hash over (entry id, definition) pairs, sorted. Not over the whole
+    file: field order and unrelated keys change without the meanings moving,
+    and a digest that reports drift for a reordered key is a digest nobody
+    trusts twice."""
+    pairs = sorted(((r.get("id") or "").strip(), (r.get("definition") or "").strip())
+                   for r in rows or [])
+    return hashlib.sha256(json.dumps(pairs, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def write_definition_baseline(note: str = "") -> dict:
+    """Record the shelf AS IT STANDS as a dated baseline, once.
+
+    block 117. The event log began at block 104, so everything accepted
+    before that has no event behind it and never will. The honest repair is
+    not to fabricate the missing history — invented events are worse than an
+    admitted gap — but to say: THIS is the state on THIS date, with THIS
+    hash, and everything after it is accounted for by events.
+
+    Idempotent. A second baseline would silently redefine what 'accounted
+    for' means, so it refuses and says the first one still stands."""
+    if DEFINITION_BASELINE_PATH.exists():
+        try:
+            return {"written": False, "why": "a baseline already stands",
+                    "baseline": _load(DEFINITION_BASELINE_PATH)}
+        except Exception:
+            return {"written": False, "why": "a baseline file exists and could not be read"}
+    rows = load_accepted_concepts()
+    # WHICH EVENTS ARE ALREADY INSIDE THE BASELINE IS A MATTER OF IDENTITY,
+    # NOT TIME. The first version compared each event's timestamp against the
+    # baseline's, and _now() has one-second resolution — so an edit made in
+    # the same second as the baseline was read as already included and the
+    # projection reported drift against itself. This is the third time a
+    # whole-second clock has been asked to order two things it cannot. The
+    # baseline names the event ids it already accounts for; nothing else is
+    # skipped.
+    doc = {"kind": "definition_baseline.v1", "at": _now(),
+           "n_entries": len(rows), "digest": _shelf_digest(rows),
+           "known_events": [e.get("event_id", "") for e in load_definition_events()],
+           "note": (note or "")[:300], "epoch": current_epoch(),
+           "entries": [{"id": r.get("id", ""), "concept_id": r.get("concept_id", ""),
+                        "name": r.get("name", ""), "definition": r.get("definition", "")}
+                       for r in rows]}
+    LOCAL_STATE.mkdir(exist_ok=True)
+    DEFINITION_BASELINE_PATH.write_text(json.dumps(doc, indent=2, ensure_ascii=False))
+    return {"written": True, "baseline": doc}
+
+
+def rebuild_definitions(baseline: dict | None = None,
+                        events: "list[dict] | None" = None) -> dict:
+    """The shelf's meanings, derived from the baseline plus every event after
+    it. Pure — takes what it is given, reads nothing unless asked."""
+    base = baseline if baseline is not None else (
+        _load(DEFINITION_BASELINE_PATH) if DEFINITION_BASELINE_PATH.exists() else None)
+    if not base:
+        return {"ok": False, "state": "no_baseline",
+                "why": "nothing has been recorded as the starting state, so there is nothing "
+                       "to derive from. The shelf is currently the only copy."}
+    at = base.get("at") or ""
+    evs = events if events is not None else load_definition_events()
+    known = set(base.get("known_events") or [])
+    out = {(e.get("id") or ""): (e.get("definition") or "") for e in base.get("entries") or []}
+    applied = 0
+    for e in evs:
+        # Already inside the baseline — by ID, never by timestamp.
+        if (e.get("event_id") or "") in known:
+            continue
+        eid = (e.get("entry_id") or "").strip()
+        if not eid:
+            continue
+        if e.get("kind") == "retracted":
+            out.pop(eid, None)
+        else:
+            out[eid] = e.get("definition") or ""
+        applied += 1
+    return {"ok": True, "state": "derived", "definitions": out,
+            "from": at, "events_applied": applied,
+            "n_baseline": len(base.get("entries") or [])}
+
+
+def verify_definition_projection() -> dict:
+    """Does the shelf match what the baseline and the events say it should be?
+
+    Named outcomes, never a bare boolean: `matches`, `no_baseline`, or
+    `drift` with the entry ids that differ and which side each came from.
+    Drift is not automatically a bug — it is the app telling the owner that
+    something changed the shelf without leaving an event, which is exactly
+    the condition that made this function necessary."""
+    derived = rebuild_definitions()
+    if not derived.get("ok"):
+        return {"state": derived.get("state"), "why": derived.get("why")}
+    live = {(r.get("id") or ""): (r.get("definition") or "")
+            for r in load_accepted_concepts()}
+    want = derived["definitions"]
+    only_live = sorted(k for k in live if k not in want)
+    only_derived = sorted(k for k in want if k not in live)
+    differs = sorted(k for k in live if k in want and live[k].strip() != want[k].strip())
+    if not (only_live or only_derived or differs):
+        return {"state": "matches", "n": len(live), "from": derived["from"],
+                "events_applied": derived["events_applied"]}
+    return {"state": "drift", "from": derived["from"],
+            "events_applied": derived["events_applied"],
+            "on_shelf_not_derivable": only_live,
+            "derivable_not_on_shelf": only_derived,
+            "different_text": differs,
+            "why": "the shelf holds meanings the record cannot account for, or the record "
+                   "expects meanings the shelf does not hold. Something wrote the shelf "
+                   "without leaving an event."}
 
 
 def load_definition_events() -> "list[dict]":
@@ -1061,16 +1177,52 @@ def latest_decisions() -> dict:
         key = (j.get("candidate_text") or "").strip().lower()
         if not key:
             continue
+        # NOT EVERY ROW IN THIS LOG IS THE OWNER'S. Six rows in the real
+        # corpus carry decision_source "validator", and the audit that found
+        # them established what they actually are: not procedural rejections
+        # of malformed input, but SEMANTIC CRAFT VERDICTS written by a model
+        # — "the central axiom is false", "decorative restatement" — filed as
+        # `rejected` at confidence 0.6, with no timestamp, from a code path
+        # that no longer exists. This function read only `decision`, so the
+        # shelf has been showing all six as the owner's own rulings.
+        #
+        # The constitution says only the owner may make a final semantic
+        # judgment. So a row he did not author is NONFINAL: it is preserved
+        # exactly as written, it is shown, it is labelled, and it does not
+        # stand as the current ruling. The word goes back to unruled, which
+        # is what it has been all along.
+        if (j.get("decision_source") or "owner") != "owner":
+            prev = out.get(key)
+            if prev and prev.get("final"):
+                continue          # a real ruling already stands; leave it alone
+            out[key] = {
+                "decision": "undecided", "final": False,
+                "trace": j.get("originating_operation", ""),
+                "title": j.get("candidate_text", ""),
+                # `times` counts the owner coming back to something. A model's
+                # verdict is not him coming back to anything.
+                "times": (prev or {}).get("times", 0),
+                "changed": bool((prev or {}).get("changed")),
+                "nonfinal": {"source": j.get("decision_source") or "",
+                             "would_have_been": j.get("decision", ""),
+                             "reason": (j.get("reason") or "")[:400],
+                             "classification": "legacy_model_authored"},
+            }
+            continue
         prev = out.get(key)
         out[key] = {
             "decision": j.get("decision", ""),
+            "final": True,
             "trace": j.get("originating_operation", ""),
             "title": j.get("candidate_text", ""),
-            "times": (prev["times"] + 1) if prev else 1,
+            "times": ((prev["times"] + 1) if prev else 1),
             # Only true once a LATER ruling actually differs from an earlier
             # one. Re-affirming the same verdict is not changing your mind.
-            "changed": bool(prev and prev["decision"] != j.get("decision", "")) or
+            "changed": bool(prev and prev.get("final") and prev["decision"] != j.get("decision", "")) or
                        bool(prev and prev.get("changed")),
+            # A model's verdict that the owner later ruled over is kept as
+            # context on his row rather than dropped.
+            "nonfinal": (prev or {}).get("nonfinal"),
         }
     return out
 
@@ -7896,7 +8048,13 @@ def observed_rulings(words: list) -> dict:
     by_ruling = {"accepted": 0, "revised": 0, "rejected": 0, "undecided": 0}
     kept_over_objection, set_aside_unopposed, kept_unchecked = [], [], []
     undecided = []
+    # block 117: rows carrying a verdict the owner did not author. They are
+    # counted apart and never inside his tally — a panel about how he rules
+    # that includes six decisions a model made is a panel that lies about him.
+    model_authored = []
     for w in rows:
+        if w.get("nonfinal"):
+            model_authored.append(w.get("name", ""))
         d = w.get("decision") or "undecided"
         if d not in by_ruling:
             # An unknown ruling is counted apart rather than folded into
@@ -7918,6 +8076,7 @@ def observed_rulings(words: list) -> dict:
     return {
         "n": len(rows),
         "by_ruling": by_ruling,
+        "model_authored": model_authored,
         # The two directions of disagreement, kept apart. Collapsing them
         # into one "divergence" number would say a thing about him that
         # neither half says: overruling an objection and setting aside an
@@ -7984,6 +8143,16 @@ def persist_definition_edit(title: str, definition: str, reason: str = "") -> di
         c["grounding_reset_at"] = _now()
         c["version"] = int(c.get("version") or 1) + 1
         ACCEPTED_CONCEPTS_PATH.write_text(json.dumps(rows, indent=2))
+        # block 117: THE ONE WRITE THAT APPENDED NOTHING. Accepting and
+        # retracting have recorded an event since block 104; the owner
+        # rewriting a meaning did not, so the shelf could move and the log
+        # could not say why. The app claimed the shelf was a projection that
+        # could be rebuilt; on this path it was the only copy.
+        try:
+            record_definition_event("defined", c, origin="owner_edit",
+                                     note=(reason or "")[:300])
+        except Exception:
+            pass    # the record is best-effort; losing it must not lose his edit
         return {"changed": True, "was": old, "now": new,
                 "edits": sum(1 for h in history if h.get("source") == "owner")}
     return {"changed": False, "why": f"no kept word called {title!r}"}

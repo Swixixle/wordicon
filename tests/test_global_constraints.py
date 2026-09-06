@@ -92,6 +92,11 @@ import traceback as _traceback
 # what was already known. Nothing is swallowed — the traceback still goes
 # to stderr and the exit code is still non-zero.
 FAILURES: list = []
+# block 117: A CHECK THAT DID NOT RUN MUST SAY SO. Two checks in this suite
+# are gated on the owner's real corpus, which is gitignored — so in CI they
+# evaluate to nothing and the run prints OK, which is indistinguishable from
+# the check having passed. A skip is a third outcome and it is now reported.
+SKIPPED: list = []
 
 
 def _audit_scaffolding():
@@ -1612,8 +1617,9 @@ def main() -> int:
     sl = cli.summary_line(contra_run["private_receipt"], contra_run["candidates"])
     if "drew no objection from Friction" not in sl or "contradicting the source" not in sl:
         failures.append(f"summary line does not report contradictions separately: {sl!r}")
-    if not sl.startswith("0 public source(s)") and "0 survived" not in sl:
-        pass  # counts vary with fixtures; the assertion below is the real one
+    # (block 117: a dead `if ...: pass` stood here and read like a check. The
+    # real assertion is the one below; a no-op shaped like a guard is worse
+    # than no guard, because it makes the file look better covered than it is.)
     if "1 survived" in sl:
         failures.append("the contradicting candidate was still counted as a survivor")
 
@@ -2188,8 +2194,8 @@ def main() -> int:
         if cli.similar_accepted("Tide Ledger", "An unrelated idea about estuary silt timing."):
             failures.append("admission check fired on an unrelated definition")
         # a word never collides with itself (re-accepting must stay silent)
-        if cli.similar_accepted("tetrace", LADDER, exclude_title="tetrace"):
-            pass  # still sees the family, which is correct
+        # (block 117: another dead `if ...: pass` removed. Excluding a title
+        # still returns its family, which is correct and asserted below.)
         if any(h["name"] == "tetrace" for h in cli.similar_accepted("tetrace", LADDER)):
             failures.append("a word was reported as colliding with itself")
 
@@ -12057,6 +12063,9 @@ console.log(out.join('\\n'));
     # commit, never a silent wave-through; the grandfathered set was
     # reported to the owner in full, and he can order scrubs.
     _real_lex94 = _REAL_STATE / "accepted_concepts.json"
+    if not _real_lex94.exists():
+        SKIPPED.append("the private-corpus sanitization scan: it reads the owner's real "
+                       "accepted_concepts.json, which is gitignored, so this has never run in CI")
     if _real_lex94.exists():
         try:
             _rl94 = _j94.loads(_real_lex94.read_text())
@@ -12961,6 +12970,9 @@ console.log(out.join('\\n'));
     # 10. no corpus content, names, hospital material, or personal examples
     _acc98 = cli.ACCEPTED_CONCEPTS_PATH
     _real_acc = _REAL_STATE / "accepted_concepts.json"
+    if not _real_acc.exists():
+        SKIPPED.append("the corpus-titles-in-the-anatomy check: same gate, same reason — the "
+                       "owner's real shelf is not in the repository")
     if _real_acc.exists():
         try:
             _raw = _json98.loads(_real_acc.read_text())
@@ -17620,6 +17632,118 @@ console.log(out.join('\\n'));
                             "drop, so the journey's drop check proves nothing")
     _pass112()
 
+    # ---- block 117: the stabilisation pass ----------------------------------
+    #
+    # Four rulings, each with a check that can fail.
+
+    # 1. A ROW THE OWNER DID NOT AUTHOR IS NONFINAL. Six rows in the real
+    # corpus carry decision_source "validator". The audit established they are
+    # NOT procedural rejections of malformed input — they are semantic craft
+    # verdicts a model wrote ("the central axiom is false") filed as
+    # `rejected`, from a path that no longer exists. Only the owner may make a
+    # final judgment about meaning, so they are preserved, labelled, and do
+    # not stand.
+    _jl = cli.JUDGMENTS_LOG
+    _jl.parent.mkdir(parents=True, exist_ok=True)
+    _jl.write_text("\n".join(_json2.dumps(r) for r in [
+        {"candidate_text": "Model Said No", "decision": "rejected",
+         "decision_source": "validator", "reason": "decorative", "originating_operation": "t1"},
+        {"candidate_text": "His Own", "decision": "accepted",
+         "decision_source": "owner", "originating_operation": "t2"},
+        {"candidate_text": "Overruled", "decision": "rejected",
+         "decision_source": "validator", "reason": "model said no", "originating_operation": "t3"},
+        {"candidate_text": "Overruled", "decision": "accepted",
+         "decision_source": "owner", "originating_operation": "t4"},
+    ]), encoding="utf-8")
+    _dec = cli.latest_decisions()
+    if _dec["model said no"]["decision"] != "undecided" or _dec["model said no"].get("final") is not False:
+        failures.append(f"117: a verdict the owner did not write still stands as his ruling: "
+                        f"{_dec['model said no']}")
+    if not (_dec["model said no"].get("nonfinal") or {}).get("would_have_been"):
+        failures.append("117: the model's verdict was dropped instead of preserved — the record is "
+                        "append-only and nothing in it is rewritten")
+    if _dec["model said no"].get("times"):
+        failures.append("117: a model's verdict counts as the owner coming back to something")
+    if _dec["his own"]["decision"] != "accepted" or _dec["his own"].get("final") is not True:
+        failures.append("117: an ordinary owner ruling was disturbed")
+    if _dec["overruled"]["decision"] != "accepted" or not _dec["overruled"].get("nonfinal"):
+        failures.append("117: the owner's later ruling did not win, or the model's earlier verdict "
+                        "was dropped from his row instead of kept as context")
+    # and the counted panel does not fold them into his tally
+    _obs117 = cli.observed_rulings([
+        {"name": "M", "decision": "undecided", "standing": [], "nonfinal": {"source": "validator"}},
+        {"name": "H", "decision": "accepted", "standing": []}])
+    if _obs117["model_authored"] != ["M"] or _obs117["by_ruling"]["accepted"] != 1:
+        failures.append(f"117: the panel counts a model's decision as one of his: {_obs117}")
+
+    # 2. STORING IS NOT READING. An image must reach the store without
+    # reaching a model; the vision call happens on a press that named its
+    # price first.
+    _srv117 = (Path(__file__).resolve().parents[1] / "server.py").read_text()
+    _up = _srv117.split("def api_upload():")[1].split("\n@app.route")[0]
+    if 'needs_model = art["kind"] == "image"' not in _up or "if needs_model and not authorised:" not in _up:
+        failures.append("117: uploading an image calls the gateway again — a keystroke that spends "
+                        "money is not an owner action")
+    if "/api/artifact/<artifact_id>/represent" not in _srv117:
+        failures.append("117: there is no authorised door for reading an image")
+    _i117 = (Path(__file__).resolve().parents[1] / "webapp" / "index.html").read_text()
+    if "ATTACHED.needs_model" not in _i117 or "this calls a model" not in _i117:
+        failures.append("117: the card does not say that the button spends a model call")
+    if "function representLine" not in _i117 or "cost unknown" not in _i117:
+        failures.append("117: the price line is gone, or it invents a precision it does not have")
+
+    # 3. A MUTATING MODEL ROUTE WITH NO DOOR REFUSES BY NAME.
+    _rn = _srv117.split("def api_keeper_renarrate():")[1].split("\n@app.route")[0]
+    if "keeper_inactive" not in _rn or "no_owner_action_reaches_this" not in _rn:
+        failures.append("117: /api/keeper/renarrate is quietly callable again — it spends a model "
+                        "call and nothing in the app presses it")
+
+    # 4. THE SHELF IS DERIVABLE, OR THE CLAIM IS RETRACTED. Proved by
+    # rebuilding in a scratch store, never against the owner's corpus.
+    _b = _pathlib.Path(_tempfile.mkdtemp(prefix="defproj_"))
+    _keep = (cli.LOCAL_STATE, cli.ACCEPTED_CONCEPTS_PATH, cli.DEFINITION_EVENTS_LOG,
+             cli.DEFINITION_BASELINE_PATH)
+    try:
+        cli.LOCAL_STATE = _b
+        cli.ACCEPTED_CONCEPTS_PATH = _b / "accepted_concepts.json"
+        cli.DEFINITION_EVENTS_LOG = _b / "definition_events.jsonl"
+        cli.DEFINITION_BASELINE_PATH = _b / "definition_baseline.json"
+        cli.ACCEPTED_CONCEPTS_PATH.write_text(_json2.dumps(
+            [{"id": "acc_a", "name": "Alpha", "definition": "the first meaning"},
+             {"id": "acc_b", "name": "Beta", "definition": "the second meaning"}]))
+        if not cli.write_definition_baseline(note="suite")["written"]:
+            failures.append("117: no baseline could be recorded")
+        if cli.verify_definition_projection().get("state") != "matches":
+            failures.append("117: the shelf does not match its own baseline the moment it is taken")
+        if cli.write_definition_baseline().get("written"):
+            failures.append("117: a second baseline overwrote the first, silently redefining what "
+                            "'accounted for' means")
+        cli.persist_definition_edit("Alpha", "a meaning he wrote himself", reason="clearer")
+        _v = cli.verify_definition_projection()
+        # THE TIMESTAMP TRAP. _now() has one-second resolution, so an edit made
+        # in the same second as the baseline used to be read as already inside
+        # it and the projection reported drift against itself. Membership is by
+        # event id now. This check is the reason that is not a footnote.
+        if _v.get("state") != "matches" or _v.get("events_applied") != 1:
+            failures.append(f"117: an owner edit is not accounted for by the record — most likely "
+                            f"the baseline is ordering events by a whole-second clock again: {_v}")
+        _rows117 = _json2.loads(cli.ACCEPTED_CONCEPTS_PATH.read_text())
+        _rows117[1]["definition"] = "changed with no event"
+        cli.ACCEPTED_CONCEPTS_PATH.write_text(_json2.dumps(_rows117))
+        _d117 = cli.verify_definition_projection()
+        if _d117.get("state") != "drift" or _d117.get("different_text") != ["acc_b"]:
+            failures.append(f"117: the shelf was written behind the record's back and the check "
+                            f"did not notice: {_d117}")
+    finally:
+        (cli.LOCAL_STATE, cli.ACCEPTED_CONCEPTS_PATH, cli.DEFINITION_EVENTS_LOG,
+         cli.DEFINITION_BASELINE_PATH) = _keep
+        _shutil.rmtree(_b, ignore_errors=True)
+    # and the edit path records the event at all
+    if 'record_definition_event("defined", c, origin="owner_edit"' not in \
+            (Path(__file__).resolve().parents[1] / "scripts" / "wordicon_cli.py").read_text():
+        failures.append("117: the owner's definition edit appends no event again, so the shelf is "
+                        "the only copy of the one change he makes by hand")
+
     # ---- block 116: the mark, and the live door -----------------------------
     #
     # Fifteen blocks of honest labelling produced a page that teaches the same
@@ -17944,6 +18068,10 @@ console.log(out.join('\\n'));
         for f in failures:
             print(" -", f)
         return 1
+    if SKIPPED:
+        print(f"SKIPPED — {len(SKIPPED)} check(s) did not run; a skip is not a pass:")
+        for _s in SKIPPED:
+            print("  ~", _s)
     print(f"OK — {len(gen_prompts)} branch forge(s) all carried the global constraint; "
           "rubric bullets present; recall-honesty language present; server pass-through verified; "
           "absent-key degradation verified.")

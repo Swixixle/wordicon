@@ -341,8 +341,36 @@ def api_keeper_retry():
     return jsonify({"narrating": True})
 
 
+# block 117: A MUTATING MODEL CALL WITH NO DOOR. The census found this route
+# reachable and callable while nothing in the application presses it — so it
+# spends money on a request nobody can see the origin of. It is not deleted,
+# because its contract is the one the Keeper will need when the Keeper is
+# activated and has a visible, tested action. Until then it refuses BY NAME:
+# an inactive state a caller can read, not a silent 404 and not a silent call.
+def _keeper_inactive():
+    """Whether a Keeper action may run at all. The Keeper being off is the
+    owner's setting, and an off Keeper does not narrate."""
+    try:
+        st = keeper.status()
+    except Exception:
+        return {"reason": "the Keeper's own status could not be read"}
+    if not st.get("active"):
+        return {"reason": "the Keeper is not active"}
+    return None
+
+
 @app.route("/api/keeper/renarrate", methods=["POST"])
 def api_keeper_renarrate():
+    off = _keeper_inactive()
+    if off is not None:
+        return jsonify({
+            "error": "keeper_inactive",
+            "state": "no_owner_action_reaches_this",
+            "why": f"Re-narration is disabled: {off['reason']}. This endpoint spends a "
+                   "model call and no surface in the app presses it, so it refuses "
+                   "rather than remaining quietly callable. It is kept, not deleted — "
+                   "its contract is what an activated Keeper will use.",
+        }), 409
     data = request.get_json(force=True) or {}
     close_id = str(data.get("close_id") or "")
     if not _KEEPER_BUSY.acquire(blocking=False):
@@ -3246,8 +3274,41 @@ def api_upload():
                                  f"Markdown, PDF, and JPEG/PNG/GIF/WebP images. "
                                  f"A .docx needs saving as PDF or text first.",
                         "artifact": art}), 400
+    # block 117: STORING IS NOT READING. Text and PDF derive their text
+    # locally — no model, no cost, nothing to authorise. An IMAGE does not:
+    # reading it is a vision call, and this route used to make that call the
+    # instant a file arrived, including from the document-wide paste
+    # listener. A keystroke spent money and the label saying a model had read
+    # it rendered afterwards, which is not disclosure.
+    #
+    # So the artifact is stored either way, and the model call happens only
+    # when the owner presses the button that says it will. `represent_artifact`
+    # never overwrites, so nothing is written for the image here — a
+    # placeholder now would become the permanent answer.
+    needs_model = art["kind"] == "image"
+    authorised = str(request.form.get("represent", "")).strip() in ("1", "true", "yes")
+    if needs_model and not authorised:
+        return jsonify({"artifact": art, "representation": {},
+                        "needs_model": True,
+                        "why": "Reading the text off an image is a model call. "
+                               "The file is stored; nothing has been sent."})
     try:
         rep = cli.represent_artifact(art["artifact_id"], server_gateway())
+    except Exception as e:
+        return jsonify({"error": cli.explain_component_failure(str(e)), "artifact": art}), 500
+    return jsonify({"artifact": art, "representation": _rep_out(rep, art)})
+
+
+@app.route("/api/artifact/<artifact_id>/represent", methods=["POST"])
+def api_artifact_represent(artifact_id):
+    """Derive an artifact's text on an explicit owner press. The only path in
+    the app that may spend a vision call, and the button that reaches it says
+    so with its lane and model before it is pressed."""
+    art = cli.load_artifact(artifact_id)
+    if not art:
+        return jsonify({"error": "no such artifact"}), 404
+    try:
+        rep = cli.represent_artifact(artifact_id, server_gateway())
     except Exception as e:
         return jsonify({"error": cli.explain_component_failure(str(e)), "artifact": art}), 500
     return jsonify({"artifact": art, "representation": _rep_out(rep, art)})
@@ -4256,6 +4317,10 @@ def api_library():
         words.append({**w,
                       "definition": w["definition"] or (acc.get("definition") or ""),
                       "decision": d.get("decision", "") or "undecided",
+                      # block 117: a row the owner did not author is nonfinal.
+                      # It is preserved and shown, and it does not stand as
+                      # his ruling.
+                      "nonfinal": d.get("nonfinal") or None,
                       "rulings": d.get("times", 0),
                       "changed_mind": bool(d.get("changed")),
                       "in_lexicon": key in acc_by_name,
