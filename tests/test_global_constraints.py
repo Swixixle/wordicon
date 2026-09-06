@@ -17620,6 +17620,74 @@ console.log(out.join('\\n'));
                             "drop, so the journey's drop check proves nothing")
     _pass112()
 
+    # ---- block 115: what the record counted ---------------------------------
+    #
+    # The first tier of "remember me", and the tier that has to be provably
+    # dull: counts over rows he can already open, and nothing else. The
+    # danger is not that the arithmetic is wrong. It is that a panel about
+    # him starts recommending, and a recommendation is a claim about a person
+    # made by the machine that gains from him believing it — the same class
+    # as reviewer prose, which carries a label for exactly that reason.
+    _obs = cli.observed_rulings([
+        {"name": "Kept over objection", "decision": "accepted",
+         "standing": [{"key": "objected"}], "created_at": "2026-01-01"},
+        {"name": "Kept, already named", "decision": "accepted",
+         "standing": [{"key": "already-named"}], "created_at": "2026-01-02"},
+        {"name": "Kept clean", "decision": "accepted", "standing": [], "created_at": "2026-01-03"},
+        {"name": "Aside, unopposed", "decision": "rejected", "standing": [], "created_at": "2026-01-04"},
+        {"name": "Aside, objected", "decision": "rejected",
+         "standing": [{"key": "objected"}], "created_at": "2026-01-05"},
+        {"name": "Kept unchecked", "decision": "accepted",
+         "standing": [{"key": "unchecked"}], "created_at": "2026-01-06"},
+        {"name": "Older unruled", "decision": "undecided", "standing": [], "created_at": "2025-06-01"},
+        {"name": "Newer unruled", "decision": "", "standing": [], "created_at": "2026-02-01"},
+    ])
+    # THE TWO DISAGREEMENTS ARE COUNTED APART. Folding them into one number
+    # would assert something about him that neither half says: overruling an
+    # objection and setting aside an unopposed word are different acts.
+    if sorted(_obs["kept_over_objection"]) != ["Kept over objection", "Kept, already named"]:
+        failures.append(f"115: kept-over-an-objection is miscounted: {_obs['kept_over_objection']}")
+    if _obs["set_aside_unopposed"] != ["Aside, unopposed"]:
+        failures.append(f"115: a word set aside WITH an objection on record was counted as set aside "
+                        f"without one: {_obs['set_aside_unopposed']}")
+    if _obs["kept_unchecked"] != ["Kept unchecked"]:
+        failures.append(f"115: kept-with-nothing-checked is miscounted: {_obs['kept_unchecked']}")
+    # AN ABSENT RULING IS UNDECIDED, and undecided is oldest-first, because
+    # "waiting longest" is a fact and any other order is a priority.
+    if _obs["n_undecided"] != 2 or _obs["oldest_undecided"][0] != "Older unruled":
+        failures.append(f"115: the unruled backlog is not counted oldest-first: {_obs}")
+    if _obs["by_ruling"]["accepted"] != 4 or _obs["by_ruling"]["undecided"] != 2:
+        failures.append(f"115: the ruling tally is wrong: {_obs['by_ruling']}")
+    # AN UNKNOWN RULING IS NOT FOLDED INTO UNDECIDED — that would invent a
+    # ruling he never made.
+    _odd = cli.observed_rulings([{"name": "X", "decision": "escalated", "standing": []}])
+    if _odd["by_ruling"].get("escalated") != 1 or _odd["by_ruling"]["undecided"] != 0:
+        failures.append(f"115: an unrecognised ruling was folded into 'undecided': {_odd['by_ruling']}")
+
+    # NOTHING HERE RECOMMENDS. Checked on the function AND on the panel it
+    # feeds, because the tier that may advise has to arrive with a label and
+    # this is not that tier.
+    _obs_src = _ins113.getsource(cli.observed_rulings)
+    _i115 = (Path(__file__).resolve().parents[1] / "webapp" / "index.html").read_text()
+    _panel = _i115.split("const observedHtml =")[1].split("</div>`;")[0]
+    for _where, _src in (("the counting function", _obs_src), ("the panel", _panel)):
+        for _word in (" should ", "we recommend", "you might want", "consider ", "try "):
+            if _word in _src.lower():
+                failures.append(f"115: {_where} recommends something ({_word.strip()!r}) — an "
+                                "unlabelled claim about the owner, made by the machine that "
+                                "benefits from him accepting it")
+    if "Counting only" not in _panel:
+        failures.append("115: the panel no longer says it is only counting, so a reader has no way "
+                        "to tell it apart from a verdict")
+    # AND IT IS COUNTED ONCE. A second tally in the page would drift from the
+    # one the suite tests.
+    if "libraryData.observed" not in _i115:
+        failures.append("115: the page counts this itself instead of reading the server's count, so "
+                        "the number on screen and the number under test can disagree")
+    _srv115 = (Path(__file__).resolve().parents[1] / "server.py").read_text()
+    if '"observed": cli.observed_rulings(words)' not in _srv115:
+        failures.append("115: the library no longer serves the counts")
+
     # ---- block 114: the result comes first ----------------------------------
     #
     # Shown to another person for the first time, a run opened with a

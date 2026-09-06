@@ -1,5 +1,44 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.9.0 — what the record counted (block 115)
+
+The first tier of *it should remember me*, and deliberately the dull one.
+Every number in the new panel is a **count over rows already on the shelf**.
+Nothing is predicted, nothing is suggested, and the suite checks that — on the
+function and on the panel it feeds — because a recommendation is a claim about
+a person made by the machine that gains from him accepting it. That is the same
+class as reviewer prose, which carries `MODEL SELF-REPORT — UNVERIFIED` for
+exactly that reason. The tier that may advise arrives with a label; this is not
+that tier.
+
+What it counts that no single row shows is the **disagreements**, and the two
+directions are counted apart: words **kept over the critic's objection**, and
+words **set aside with no objection on record**. Folding them into one
+"divergence" number would assert something neither half says — overruling an
+objection and setting aside an unopposed word are different acts. Beside them:
+words **kept with nothing checked** (no critic verdict, no anchor, no support
+check — usually forged from a brief with no source, which is a different fact
+from a check that ran and passed), and the **unruled backlog**, oldest first,
+because *waiting longest* is a fact and every other ordering is a priority.
+
+An unrecognised ruling is counted under its own name rather than folded into
+"undecided", which would invent a ruling the owner never made.
+
+**Where it lives, and why not yet on Home.** The counts ride on `/api/library`,
+which is the only place the shelf is assembled — each row already carries the
+owner's ruling and the flags the run recorded, so this is arithmetic and not a
+new join. Putting it on Home would mean either scanning the whole store on
+every first paint (**7.5 MB across 480 result files today, growing linearly**)
+or extracting the shelf assembly out of a 150-line endpoint. That extraction is
+its own change with its own tests, and doing it under cover of a feature is how
+a Library gets refactored by accident. It is in the backlog with the number
+attached.
+
+Suite OK. Fourteen journeys, 446 checks — the epistemic journey opens the shelf and reads
+the panel's own text. Three sabotage mutations, all caught by name: one blurs
+the two disagreements into one count, one turns a sentence in the panel into
+advice, and one folds an unrecognised ruling into "undecided".
+
 ## v1.8.0 — the result comes first (block 114)
 
 Shown to another person for the first time, a run opened with a paragraph about

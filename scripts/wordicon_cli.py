@@ -7866,6 +7866,72 @@ def concept_standing(bff: dict) -> list:
     return out
 
 
+# ---- block 115: what the record counted ---------------------------------
+#
+# The first tier of "it should remember me", and deliberately the dull one.
+# Every number here is a COUNT OVER ROWS THE OWNER CAN ALREADY OPEN. Nothing
+# is inferred, nothing is predicted, and nothing is recommended: this
+# function may not contain the word "should" and the surface it feeds may
+# not either. A recommendation is a claim about a person, produced by the
+# same machine that would benefit from him accepting it, and this project
+# has spent every block refusing to let an unwarranted claim render as a
+# fact. That tier can exist later; it will carry a label, the way reviewer
+# prose does.
+#
+# What makes it worth having anyway: the numbers already exist and are
+# scattered across nine hundred rows behind a chip band nobody reads twice.
+# The interesting ones are the DISAGREEMENTS — where his ruling and the
+# critic's went opposite ways. Those are facts about him that no single row
+# shows, and they are the closest thing the record honestly holds to
+# knowing him.
+OBJECTION_KEYS = ("objected", "already-named")
+
+
+def observed_rulings(words: list) -> dict:
+    """Counts over the shelf. Pure: no I/O, no model, no advice.
+
+    `words` is the shelf as the Library assembles it — each row carrying
+    the owner's `decision` and the `standing` flags the run recorded."""
+    rows = list(words or [])
+    by_ruling = {"accepted": 0, "revised": 0, "rejected": 0, "undecided": 0}
+    kept_over_objection, set_aside_unopposed, kept_unchecked = [], [], []
+    undecided = []
+    for w in rows:
+        d = w.get("decision") or "undecided"
+        if d not in by_ruling:
+            # An unknown ruling is counted apart rather than folded into
+            # "undecided", which would silently invent a ruling he never made.
+            by_ruling.setdefault(d, 0)
+        by_ruling[d] += 1
+        keys = {f.get("key") for f in (w.get("standing") or [])}
+        objected = bool(keys & set(OBJECTION_KEYS))
+        name = w.get("name", "")
+        if d == "accepted" and objected:
+            kept_over_objection.append(name)
+        if d == "rejected" and not objected:
+            set_aside_unopposed.append(name)
+        if d == "accepted" and "unchecked" in keys:
+            kept_unchecked.append(name)
+        if d == "undecided":
+            undecided.append((w.get("created_at") or "", name))
+    undecided.sort()
+    return {
+        "n": len(rows),
+        "by_ruling": by_ruling,
+        # The two directions of disagreement, kept apart. Collapsing them
+        # into one "divergence" number would say a thing about him that
+        # neither half says: overruling an objection and setting aside an
+        # unopposed word are different acts.
+        "kept_over_objection": kept_over_objection,
+        "set_aside_unopposed": set_aside_unopposed,
+        "kept_unchecked": kept_unchecked,
+        # Oldest first, because "waiting longest" is the only ordering of an
+        # unruled backlog that is a fact rather than a priority.
+        "oldest_undecided": [n for _, n in undecided[:8]],
+        "n_undecided": len(undecided),
+    }
+
+
 def standing_keys() -> list:
     """Every flag this can produce, so the shelf can offer them all as
     filters without waiting for one to occur."""

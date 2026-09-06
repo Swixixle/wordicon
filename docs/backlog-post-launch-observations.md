@@ -197,3 +197,24 @@ here rather than folded quietly into a block about presentation.
 
 The decompose direction is the one to converge on: one record per thing, and a
 door to it.
+
+## The counted panel wants to be on Home, and can't be yet (block 115)
+
+The counts ride on `/api/library` because that endpoint is the only place the
+shelf is assembled — 150 lines that read every result snapshot, every receipt
+and the judgments log, interwoven with the runs list and the lineage graph.
+
+Home is deliberately light: it paints from `_home_concepts()` and does not even
+ask `/api/config` on load, and the suite pins that. Putting the counts there
+means one of two things:
+
+- scanning the whole store on every first paint — **7.5 MB across 480 result
+  files today**, and the scan is linear in runs; or
+- extracting the shelf assembly out of `api_library` into a function two
+  endpoints can call.
+
+The second is right and it is a real change: it needs its own tests, because
+every number on the Library page comes out of that block. Doing it inside a
+block about presentation would be refactoring the Library by accident.
+
+Until then the panel lives on the shelf, one click from Home.

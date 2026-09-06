@@ -6846,6 +6846,54 @@ function renderLibrary(q) {
       between them.</div>
     </div>` : '';
 
+  // ---- block 115: what the record counted ------------------------------
+  //
+  // The first tier of remembering him, and deliberately the dull one: every
+  // number is a count over rows already on this page. Nothing predicted,
+  // nothing suggested. The two DISAGREEMENTS are the point — where his
+  // ruling and the critic's went opposite ways is a fact about him that no
+  // single row shows, and it is the closest thing the record honestly holds
+  // to knowing somebody.
+  //
+  // The counts come from the server, not from a second pass here, so the
+  // number in this panel and the number the suite tests have one definition.
+  // No sentence in here may recommend anything: a recommendation is a claim
+  // about a person made by the machine that benefits from him believing it,
+  // and it would need the label reviewer prose carries. That tier is not
+  // this one.
+  const obs = libraryData.observed || null;
+  // `onclick` is the ruling filter for the unruled row and the standing
+  // filter for the rest — two different filters, so the door is named per
+  // row rather than guessed from the label.
+  const obsRow = (n, label, why, filterKey) => !n ? '' :
+    `<div style="display:flex;gap:10px;margin:5px 0;align-items:baseline">
+       <span style="flex:0 0 3.2em;text-align:right;font-weight:600">${n}</span>
+       <span>${filterKey ? `<a href="#" style="color:var(--accent, inherit)"
+            onclick="${filterKey === 'undecided' ? `setWordFilter('undecided')` : `setStandingFilter('${escapeJs(filterKey)}')`};return false">${escapeHtml(label)}</a>`
+          : escapeHtml(label)}
+         <span class="muted" style="display:block;font-size:11.5px">${escapeHtml(why)}</span></span>
+     </div>`;
+  // Nothing to count is not a finding — this is arithmetic, not a check, so
+  // an empty panel is noise rather than an honest absence. (The rule that an
+  // absence must be printed governs CHECKS: a review that searched nothing
+  // has to say so. A tally of zero disagreements has nothing to disclose.)
+  const obsAny = obs && (obs.kept_over_objection.length || obs.set_aside_unopposed.length
+    || obs.kept_unchecked.length || obs.n_undecided);
+  const observedHtml = !obsAny ? '' : `<div class="history-item" style="border-left:2px solid var(--accent, #888)">
+      <div class="history-title" style="font-size:13px">What the record counted</div>
+      <div class="history-meta" style="font-size:12px;margin-bottom:6px">Your rulings beside what the
+        runs recorded. Counting only — nothing here is a suggestion, and none of it is a second
+        verdict on anything you decided.</div>
+      ${obsRow(obs.kept_over_objection.length, 'kept over the critic\u2019s objection',
+               'Friction ruled against these and you kept them anyway. That is the arrangement working — it advises, you decide — and it is also a fact about how you rule.', 'objected')}
+      ${obsRow(obs.set_aside_unopposed.length, 'set aside with no objection on record',
+               'Nothing in the run argued against these. You set them aside on your own read.', '')}
+      ${obsRow(obs.kept_unchecked.length, 'kept with nothing checked',
+               'No critic verdict, no anchor, no support check is recorded for these — usually forged from a brief with no source, which is different from a check that ran and passed.', 'unchecked')}
+      ${obsRow(obs.n_undecided, 'still unruled',
+               'Rendered once and never ruled on. Oldest first: ' + (obs.oldest_undecided || []).join(' \u00b7 '), 'undecided')}
+    </div>`;
+
   const chipsHtml = `<div class="chips">` + RULES.map(r =>
     `<button class="chip${wordFilter === r[0] ? ' on' : ''}" style="--c:var(${r[3]})"
        onclick="setWordFilter('${r[0]}')"><span class="dot"></span>${r[2]} ${tally[r[0]]}</button>`
@@ -6870,7 +6918,7 @@ function renderLibrary(q) {
   document.getElementById('library-content').innerHTML = `
     <div class="section-label">Every word — ${shown.length}${
       shown.length !== allWords.length ? ` of ${allWords.length}` : ''}</div>
-    ${chipsHtml}${standingHtml}${hygieneHtml}${wordsHtml}
+    ${observedHtml}${chipsHtml}${standingHtml}${hygieneHtml}${wordsHtml}
     <details style="margin-top:22px">
       <summary class="section-label" style="cursor:pointer;margin:0">Everything else it came from</summary>
       ${sec('Rabbitholes — where a word led', rows(shelf.sprout), shelf.sprout.length)}

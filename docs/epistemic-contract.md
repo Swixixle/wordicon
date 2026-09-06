@@ -98,3 +98,24 @@ surface, not maintained by hand in two places.
 components' work into itself. It names each component, carries what it needs to
 render the component honestly, and links to the run where that work lives — so a
 judgment recorded once cannot be invisible to a second copy.
+
+## 9. What the record may say about the owner (block 115)
+
+The record holds a great deal about how the owner rules — what he keeps, what
+he sets aside, where his judgment and the critic's went opposite ways. It may
+report those, and the reporting is governed:
+
+1. **Counting is not advice.** A surface that reports on the owner states counts
+   over rows he can already open, in his own vocabulary, and stops there. It
+   does not recommend, prioritise, or predict. A recommendation is a claim about
+   a person produced by the machine that gains from him accepting it, and it
+   belongs to the labelled tier with reviewer prose, not to the mechanical one.
+2. **Disagreements are counted apart.** Overruling an objection and setting
+   aside an unopposed candidate are different acts. One number covering both
+   asserts something neither half says.
+3. **An unrecognised ruling keeps its own name.** Folding it into a known
+   category invents a ruling the owner never made.
+4. **Zero is not a finding here.** The rule that an absence must be printed
+   governs *checks* — a review that searched nothing has to say so. A tally with
+   nothing in it has nothing to disclose, and printing it anyway trains the
+   reader to skip the panel.

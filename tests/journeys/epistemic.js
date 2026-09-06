@@ -196,6 +196,22 @@ const SELF_REPORT = 'MODEL SELF-REPORT — UNVERIFIED';
   ok(/shown in the text|a reading — one interpretation among others/.test(reopened),
      'the reopened run still knows whether a component was shown in the text or read into it');
 
+  // ---- 8. block 115: what the record counted ---------------------------
+  // The panel is arithmetic over rows already on the shelf, so the only
+  // things worth proving in a browser are that it reaches the page at all
+  // and that it does not quietly become advice.
+  await page.goto(BASE + '/#concepts');
+  await page.waitForTimeout(2000);
+  const lib = await page.evaluate(() => {
+    const el = document.getElementById('library-content');
+    return {text: el ? el.innerText : '', has: !!(el && /What the record counted/.test(el.innerText))};
+  });
+  ok(lib.has, 'the counted panel reaches the shelf: ' + JSON.stringify(lib.text.slice(0, 160)));
+  ok(/Counting only/.test(lib.text),
+     'and says on the page that it is counting, not ruling');
+  ok(!/\bshould\b|\bconsider\b|\brecommend/i.test(lib.text.split('Counting only')[1].slice(0, 900)),
+     'the counted panel does not recommend anything');
+
   ok(errs.length === 0, 'no page errors across the epistemic journey: ' + JSON.stringify(errs));
   await browser.close();
   finish('epistemic');

@@ -4327,6 +4327,10 @@ def api_library():
     } for d in bench.get("words") or []]
 
     return jsonify({"documents": _library_documents_payload(),
+                     # block 115: counted here rather than in the page, so the
+                     # numbers have one definition and the suite can test them
+                     # without a browser.
+                     "observed": cli.observed_rulings(words),
                      "lexicon": lexicon, "words": words, "runs": runs, "bench": benched,
                     "standing_keys": cli.standing_keys(),
                     "inputs": cli.load_inputs(500),
