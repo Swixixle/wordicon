@@ -17909,9 +17909,33 @@ console.log(out.join('\\n'));
                                  "b": [{"cited_text": "words"}]})
         if sorted(_leak) != [".a.encrypted_index", ".b[0].cited_text"]:
             failures.append(f"117: the artifact's secret check does not find what it must: {_leak}")
-        if _cp._no_secrets({"a": {"n": 1, "citation_keys": ["url", "cited_text"]}}):
-            failures.append("117: the secret check fires on a KEY NAME rather than a value, so it "
-                            "will be switched off the first time it cries wolf")
+        # THE FALSE POSITIVE THAT ACTUALLY HAPPENED, and the one I had tested
+        # for. The first version checked key NAMES, so it refused to write on
+        # the probe's own sanitised summary — a dict KEYED by
+        # encrypted_content whose value is the integer 3 — after both paid
+        # calls had already been made. I had tested a forbidden name inside a
+        # list of names and never a dict keyed by one, which is the structure
+        # three functions up in the same file.
+        for _safe, _what in (
+                ({"a": {"n": 1, "citation_keys": ["url", "cited_text"]}}, "a list of key names"),
+                ({"a": {"opaque_fields_seen": {"encrypted_content": 3}}}, "a COUNT keyed by a forbidden name"),
+                ({"a": {"cited_text_lengths": [12, 40]}}, "a list of lengths"),
+                ({"a": {"encrypted_index": 0}}, "a zero"),
+        ):
+            if _cp._no_secrets(_safe):
+                failures.append(f"117: the secret check fires on {_what} rather than on a value "
+                                "that could be the payload — it will refuse to write a clean "
+                                "artifact and be switched off the first time it cries wolf")
+        # ...and still catches the real thing, by value
+        for _leaky in ({"a": {"encrypted_content": "AbCdEf"}},
+                       {"b": [{"cited_text": "the words it quoted"}]}):
+            if not _cp._no_secrets(_leaky):
+                failures.append(f"117: the secret check no longer finds a real payload: {_leaky}")
+        # AND A PAID MEASUREMENT SURVIVES A REFUSAL. The verdict carries no
+        # payload; refusing to print it discards two calls the owner paid for.
+        if _ps.index("VERDICT:") > _ps.index("REFUSING TO WRITE THE FILE"):
+            failures.append("117: the probe refuses before it reports, so a false positive in its "
+                            "own leak check throws away a measurement that cost real money")
         # and the verdict never widens past two calls
         _vv = _cp.verdict({"outcome": "ran_no_native_citation_observed"},
                           {"outcome": "native_citation_observed"})

@@ -290,16 +290,41 @@ def verdict(paraphrasing: dict, quoting: dict | None) -> dict:
                         "collector is at fault."}
 
 
+FORBIDDEN_KEYS = ("encrypted_content", "encrypted_index", "api_key",
+                  "authorization", "cited_text")
+
+
+def _carries_payload(v) -> bool:
+    """Whether a value could actually be the thing we must not carry.
+
+    A FORBIDDEN NAME IS NOT A LEAK. `{"encrypted_content": 3}` is a count of
+    how many opaque fields were seen; `{"encrypted_content": "AbCd…"}` is the
+    payload. The first version checked key names alone and refused to write on
+    the probe's own sanitised summary — after both paid calls had already been
+    made. It cried wolf on a structure three functions up in the same file.
+
+    Numbers, booleans and None cannot be the payload. Strings and anything
+    containing a string can be."""
+    if v is None or isinstance(v, (int, float, bool)):
+        return False
+    if isinstance(v, (str, bytes)):
+        return len(v) > 0
+    if isinstance(v, dict):
+        return any(_carries_payload(x) for x in v.values())
+    if isinstance(v, (list, tuple, set)):
+        return any(_carries_payload(x) for x in v)
+    return True
+
+
 def _no_secrets(doc) -> list:
     """Nothing leaves this machine that should not. Walks the artifact before
-    it is written and names any field that must never appear in it."""
+    it is written and names any field whose VALUE could be the payload."""
     bad = []
 
     def walk(node, path=""):
         if isinstance(node, dict):
             for k, v in node.items():
-                if k in ("encrypted_content", "encrypted_index", "api_key",
-                         "authorization", "cited_text"):
+                if k in FORBIDDEN_KEYS and _carries_payload(v):
                     bad.append(f"{path}.{k}")
                 walk(v, f"{path}.{k}")
         elif isinstance(node, list):
@@ -316,16 +341,9 @@ if __name__ == "__main__":
     doc = {"probe": "citation_capture.v2", "at": cli._now(),
            "paraphrasing": r, "quoting": r2, "verdict": v}
 
-    leaked = _no_secrets(doc)
-    if leaked:
-        # Refuse rather than write it. A probe that leaks the thing it was
-        # told not to carry is worse than a probe that did not run.
-        print("REFUSING TO WRITE: the artifact carries fields it must not: "
-              + ", ".join(leaked))
-        raise SystemExit(4)
-
-    print(json.dumps(doc, indent=2, ensure_ascii=False))
-    print()
+    # The verdict is authored text and carries no payload, so it is printed
+    # FIRST — the earlier version refused before printing anything and threw
+    # away two calls the owner had already paid for.
     print(f"paraphrasing call : {r.get('outcome')}")
     if r2:
         print(f"quote-demanding   : {r2.get('outcome')}")
@@ -334,6 +352,19 @@ if __name__ == "__main__":
     print(v.get("why", ""))
     print()
     print("What this licenses: " + v.get("licensed", ""))
+    print()
+
+    leaked = _no_secrets(doc)
+    if leaked:
+        # Refuse the WRITE, not the reading. A probe that leaks what it was
+        # told not to carry is worse than one that did not run; a probe that
+        # discards a paid measurement over its own false positive is just bad.
+        print("REFUSING TO WRITE THE FILE: the artifact carries fields whose values "
+              "must not leave this machine: " + ", ".join(leaked))
+        print("The verdict above stands — it carries no payload. Nothing was saved.")
+        raise SystemExit(4)
+
+    print(json.dumps(doc, indent=2, ensure_ascii=False))
     print()
     print("And what it never licenses, whatever it says — this is provenance, "
           "not verification: a provider-returned result "
