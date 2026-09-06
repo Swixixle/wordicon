@@ -1084,6 +1084,17 @@
       record too, so reopening the run a month later shows the same warnings it showed while it
       ran.</p>
 
+      <p class="body">And a page that explains itself on every card teaches the same lesson a
+      hundred times. So a <strong>fact</strong> stays on the face and the <strong>explanation of
+      the fact</strong> folds behind a small mark you press once — never a tooltip, which needs a
+      mouse and says nothing to a screen reader. A finding never goes behind it.</p>
+
+      <p class="body">Each card also names <strong>the one door that could change what it says</strong>,
+      and the others fold. Where nothing the app can do repairs a finding — a quote that is not in
+      your text was chosen when the passage was taken apart, and no button here re-runs that check —
+      it says so, rather than offering five actions that travel away from the problem while looking
+      like they address it.</p>
+
       <details style="margin:10px 0">
         <summary style="cursor:pointer;color:var(--muted);font-size:12.5px;font-weight:600">The four buttons on a card</summary>
         <div style="margin-top:8px">
@@ -2862,7 +2873,7 @@ function backgroundHtml(background) {
   if (!background) return '';
   return `<div class="body muted" style="font-size:12.5px;border-left:3px solid #d9a441;padding-left:10px;margin:6px 0">
       <em style="color:#d9a441">Common context — NOT the text itself:</em> ${escapeHtml(background)}
-      <span class="muted" style="display:block;font-size:11px;margin-top:2px">Recall, unverified — background a candidate may use, ignore, or push against; Friction will not treat diverging from this alone as a misreading of the source.</span>
+      <span class="muted" style="display:block;font-size:11px;margin-top:2px">Recall, unverified.${whyHtml('Background a candidate may use, ignore, or push against. Friction will not treat diverging from this alone as a misreading of the source.')}</span>
     </div>`;
 }
 
@@ -2910,9 +2921,9 @@ function componentHeaderHtml(g, opts) {
   // FINDINGS — never behind a disclosure.
   const findings = [
     anchorFailed ? anchorLineHtml(g) : '',
-    g.recurrence_unsupported ? `<p class="body" style="font-size:12.5px;border-left:3px solid var(--bad);padding-left:10px;color:var(--bad)">⚠ This constraint claims the anchor recurs later in your text, but the anchor appears exactly once. Checked mechanically against your source, not judged by the model — any candidate built on that second appearance is built on something that isn't there.</p>` : '',
+    g.recurrence_unsupported ? `<p class="body" style="font-size:12.5px;border-left:3px solid var(--bad);padding-left:10px;color:var(--bad)">⚠ This constraint claims the anchor recurs later in your text, but the anchor appears exactly once.${whyHtml('Checked mechanically against your source, not judged by the model \u2014 any candidate built on that second appearance is built on something that is not there.')}</p>` : '',
     scIsFinding ? sourceCheckHtml(sc) : '',
-    (g.constraint_beyond_anchor || []).length ? `<p class="body" style="font-size:12.5px;border-left:3px solid #d9a441;padding-left:10px">⚠ <strong>This anchor can't carry its own constraint.</strong> The constraint requires ${g.constraint_beyond_anchor.map(w => `<strong>${escapeHtml(w)}</strong>`).join(', ')} — words your text contains but this anchor does not. Checked mechanically against your source; it is a word count, not a judgment. Every candidate below is measured against a span missing that, so a "partly supported" verdict there is the extraction's fault before it is the candidate's. Whether to move the anchor or narrow the constraint is yours.</p>` : '',
+    (g.constraint_beyond_anchor || []).length ? `<p class="body" style="font-size:12.5px;border-left:3px solid #d9a441;padding-left:10px">⚠ <strong>This anchor can't carry its own constraint.</strong> The constraint requires ${g.constraint_beyond_anchor.map(w => `<strong>${escapeHtml(w)}</strong>`).join(', ')} — words your text contains but this anchor does not.${whyHtml('Checked mechanically against your source; it is a word count, not a judgment. Every candidate below is measured against a span missing that, so a \u201cpartly supported\u201d verdict there is the extraction\u2019s fault before it is the candidate\u2019s. Whether to move the anchor or narrow the constraint is yours.')}</p>` : '',
   ].join('');
 
   // MACHINERY — one click away, and the summary says what it is.
@@ -3206,7 +3217,7 @@ function renderCandidateCard(cand, traceId, extra) {
       <p class="body muted">${escapeHtml(bff.friction.hostile_read || '')}</p>
       ${bff.friction.redundancy_note ? `<p class="body muted"><em>Redundancy:</em> ${escapeHtml(bff.friction.redundancy_note)}</p>` : ''}
       ${bff.friction.source_contradiction ? `<p class="body" style="border-left:3px solid var(--bad);padding-left:10px;background:rgba(224,138,138,0.08);border-radius:4px"><strong style="color:var(--bad)">Contradicts the anchor:</strong> ${escapeHtml(bff.friction.source_contradiction)}
-        <span class="muted" style="display:block;font-size:11.5px;margin-top:3px">This is different from “Beyond the source” below. Drift means the candidate claims more than the anchor licenses — a matter of degree you weigh. This means the candidate asserts something the anchor's own words deny: an error about the quoted text, not interpretive latitude. Your judgment still decides.</span></p>` : ''}
+        ${whyHtml('This is different from \u201cBeyond the source\u201d below. Drift means the candidate claims more than the anchor licenses \u2014 a matter of degree you weigh. This means the candidate asserts something the anchor\u2019s own words deny: an error about the quoted text, not interpretive latitude. Your judgment still decides.')}</p>` : ''}
       ${bff.friction.source_fidelity_note ? `<p class="body muted"><em>Beyond the source:</em> ${escapeHtml(bff.friction.source_fidelity_note)}</p>` : ''}
       </details>
 
@@ -3224,12 +3235,20 @@ function renderCandidateCard(cand, traceId, extra) {
       <div id="admit-area-${i}"></div>
       <input class="note" id="judge-note-${i}" placeholder="optional — only needed if the chips above don't cover it">
       <button class="submit-judgment" id="submit-judgment-${i}" onclick="submitJudgment(${i}, '${escapeJs(bff.title)}')">Record judgment</button>
-      <button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="startSproutFromCard(${i}, '${escapeJs(bff.title)}')">⤷ Sprout — travel laterally from this one</button>
-      <button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="startRefractFromCard(${i}, '${escapeJs(bff.title)}')">⇄ Refract — the same idea in other languages</button>
-      <button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="startArchetypeFromCard(${i}, '${escapeJs(bff.title)}')">◈ Archetype — the figure this concept implies</button>
-      ${(bff.friction && (bff.friction.redundancy_note || bff.friction.hostile_read || bff.friction.source_fidelity_note)) ? `
-      <button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="startVerifyFromCard(${i})">✓ Verify — check Friction's own claims against live sources, as many times as you want</button>` : ''}
-      <button class="judge-btn" style="margin-top:8px;font-size:12.5px" onclick="openBenchFromCard('${escapeJs(bff.title)}', '${escapeJs(bff.concept_id || '')}')">⚒ Take it to the Bench — refine its structure, or explore names</button>
+      ${(() => { const D = liveDoor(bff); const hasClaims = !!(bff.friction && (bff.friction.redundancy_note || bff.friction.hostile_read || bff.friction.source_fidelity_note)); return `
+      <div class="door-head">${escapeHtml(D.label)}${whyHtml(D.why)}</div>
+      ${(D.key === 'verify' || D.key === 'verify-not-anchor') && hasClaims
+        ? `<button class="judge-btn live" style="margin-top:6px;font-size:12.5px" onclick="startVerifyFromCard(${i})">✓ Verify — test Friction's own claims${D.key === 'verify-not-anchor' ? ', not the anchor' : ''}</button>` : ''}
+      ${D.key === 'none'
+        ? `<button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="openBenchFromCard('${escapeJs(bff.title)}', '${escapeJs(bff.concept_id || '')}')">⚒ Take it to the Bench — structure and names, not the anchor</button>` : ''}
+      <details class="case" style="margin-top:8px"><summary>${D.key === 'travel' ? 'Where you can travel from it' : 'The other doors — none of them change the rows above'}</summary>
+        <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startSproutFromCard(${i}, '${escapeJs(bff.title)}')">⤷ Sprout — travel laterally from this one</button>
+        <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startRefractFromCard(${i}, '${escapeJs(bff.title)}')">⇄ Refract — the same idea in other languages</button>
+        <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startArchetypeFromCard(${i}, '${escapeJs(bff.title)}')">◈ Archetype — the figure this concept implies</button>
+        ${hasClaims && D.key !== 'verify' && D.key !== 'verify-not-anchor'
+          ? `<button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startVerifyFromCard(${i})">✓ Verify — test Friction's own claims against live sources</button>` : ''}
+        ${D.key === 'none' ? '' : `<button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="openBenchFromCard('${escapeJs(bff.title)}', '${escapeJs(bff.concept_id || '')}')">⚒ Take it to the Bench — refine its structure, or explore names</button>`}
+      </details>`; })()}
       <details class="case" style="margin-top:10px"><summary>Naming — the handle, not the concept; optional, and sometimes rightly never</summary>
         ${(() => { const nn = namingNote(bff); return `
         <div class="vrow v-${nn[0]}" style="margin-top:6px">
@@ -3427,7 +3446,7 @@ function twoTierHtml(bff) {
     <div style="margin:8px 0;border:1px solid var(--border);border-radius:8px;padding:9px 11px">
       <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:5px">Grounding — did this source establish it? (separate from craft, above)</div>
       <p class="body muted" style="font-size:12.5px;margin:2px 0"><strong>1 · Is the quote there?</strong> ${t1Tag}
-        <span style="display:block;font-size:11px;margin-top:2px">${escapeHtml(t1.method || '')}${t1.occurrences ? ` · appears ${t1.occurrences}×` : ''}${t1.locator && t1.locator.line ? ` · line ${t1.locator.line}` : ''}. Mechanical, reproducible, and it proves only this.</span></p>
+        <span style="display:block;font-size:11px;margin-top:2px">${escapeHtml(t1.method || '')}${t1.occurrences ? ` · appears ${t1.occurrences}×` : ''}${t1.locator && t1.locator.line ? ` · line ${t1.locator.line}` : ''}.${whyHtml('Mechanical and reproducible, and it proves only this: that the quote is present. It says nothing about whether the quote supports any claim built on it.')}</span></p>
       <p class="body muted" style="font-size:12.5px;margin:6px 0 2px"><strong>2 · Does the quote support the claim?</strong> ${supTag}
         ${t2 && t2.note ? `<span style="display:block;font-size:11.5px;margin-top:3px;color:var(--text)">${escapeHtml(t2.note)}</span>` : ''}
         ${t2 && t2.deciding_anchor_words ? `<span style="display:block;font-size:11px;margin-top:2px">turns on — anchor: “${escapeHtml(t2.deciding_anchor_words)}” · claim: “${escapeHtml(t2.deciding_claim_words || '')}”</span>` : ''}
@@ -3444,6 +3463,110 @@ function safeHref(u) {
   const s = String(u || '').trim();
   if (!/^https?:\/\//i.test(s)) return '';
   return s.replace(/"/g, '%22');
+}
+
+// ---- the mark: a fact on the face, its explanation one press away -------
+//
+// Fifteen blocks of honest labelling produced a page where a reader meets
+// four sentences of instruction before the first fact. Each sentence was
+// written for the run that needed it and then stayed forever, so the
+// hundredth card teaches the same lesson as the first.
+//
+// THE SPLIT, and it is not the same as hiding a finding: the FACT stays on
+// the face. The EXPLANATION OF THE FACT goes behind a mark. "The quote is
+// not in your text" is a fact. "Checked mechanically against your source,
+// not judged by the model" is a lesson about what kind of fact it is — true,
+// worth having, and not worth re-reading on every card forever.
+//
+// Not a tooltip. A tooltip needs a pointer, dies on a phone, and its content
+// never enters the accessible text — which would make this the third time
+// this project has shipped meaning a screen reader cannot reach. It is a
+// button and a sibling element, both real text, both in the DOM, keyboard
+// reachable, and the mark says which state it is in.
+let whyN = 0;
+function whyHtml(text) {
+  const t = String(text || '').trim();
+  if (!t) return '';
+  const id = 'why' + (++whyN);
+  return `<button type="button" class="why-mark" aria-expanded="false" aria-controls="${id}"
+      onclick="toggleWhy(this, '${id}')" title="why this is here">?</button><span
+      class="why-body" id="${id}" hidden> ${escapeHtml(t)}</span>`;
+}
+function toggleWhy(btn, id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const open = el.hasAttribute('hidden');
+  if (open) el.removeAttribute('hidden'); else el.setAttribute('hidden', '');
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  btn.textContent = open ? '×' : '?';
+}
+
+// ---- the live door ------------------------------------------------------
+//
+// Eight buttons render on every card, identically, whatever the card is.
+// Fifteen cards is a hundred and twenty buttons and no order among them.
+// The card already knows which of them could change its own rows, so it can
+// say so — and this is arithmetic on values already rendered above, not a
+// preference inferred about anybody.
+//
+// What was checked before writing this, rather than assumed: Verify's prompt
+// takes Friction's OWN recorded claims (redundancy_note, hostile_read,
+// source_fidelity_note) and tests them, so it is genuinely the door that can
+// overturn a craft objection. Sprout, Refract and Archetype travel FROM a
+// candidate and change nothing about it — block 111's inherited-verdict
+// machinery exists precisely because they carry the problem forward.
+//
+// And the finding this turned up: check_anchor_integrity is called from
+// exactly one place, inside run(), and NOTHING on a card re-runs it. Revise
+// freezes the Flesh and re-forges only the word-form; the Bench works on
+// structure and names. So a candidate whose anchor was not found in the
+// source has NO door here that repairs it, and the honest thing is to say
+// that rather than offer five buttons none of which can.
+function liveDoor(bff) {
+  const f = bff.friction || {};
+  const ci = bff.anchor_integrity || {};
+  const cs = bff.claim_support || {};
+  const hasClaims = !!(f.redundancy_note || f.hostile_read || f.source_fidelity_note);
+  const anchorBroken = ci.status === 'not_found' || ci.status === 'near'
+    || cs.support === 'contradicted' || cs.support === 'topical';
+  // BOTH ROWS CAN BE BROKEN AT ONCE, and they take different doors. The
+  // first version checked the anchor first and stopped, so a card with a
+  // failed warrant AND a craft objection was told "nothing repairs this" and
+  // had Verify folded away — true of the warrant, false of the objection.
+  // Naming one problem and burying the door to the other is the same error
+  // as offering a door that cannot do the job, pointed the other way.
+  if (anchorBroken && hasClaims
+      && (f.verdict === 'reject' || f.verdict === 'contradicted' || f.verdict === 'existing')) {
+    return {key: 'verify-not-anchor',
+      label: 'Nothing here repairs the warrant. Verify can still test the objection.',
+      why: 'Two different rows are failing and they do not take the same door. The anchor was ' +
+           'chosen when your text was taken apart and the check that placed it runs once, ' +
+           'during the run — no button here re-runs it. Friction\u2019s objection is separate, ' +
+           'and Verify tests the exact claims it recorded. Moving that row leaves the warrant ' +
+           'row exactly where it is.'};
+  }
+  if (anchorBroken) {
+    return {key: 'none',
+      label: 'Nothing on this card repairs the warrant.',
+      why: 'The anchor was chosen when your text was taken apart, and the check that ' +
+           'placed it runs once, during the run. Revise re-forges the word and keeps the ' +
+           'meaning frozen; the Bench works on structure and names; Sprout, Refract and ' +
+           'Archetype travel away from this candidate and carry the problem with them. ' +
+           'What changes this row is a different anchor, which means going back to the ' +
+           'component and running it again.'};
+  }
+  if (hasClaims && (f.verdict === 'reject' || f.verdict === 'contradicted' || f.verdict === 'existing')) {
+    return {key: 'verify',
+      label: 'Verify is the door that can move this.',
+      why: 'Friction recorded specific claims against this candidate, and Verify is the ' +
+           'one action that tests those exact claims against live sources. Every other ' +
+           'button travels away from the objection rather than at it.'};
+  }
+  return {key: 'travel',
+    label: 'Nothing here is contested — the doors below travel.',
+    why: 'No objection and no broken anchor is recorded, so there is nothing on this card ' +
+         'to repair. Sprout, Refract and Archetype go somewhere new from it; the Bench ' +
+         'works on its structure.'};
 }
 
 // ---- invented examples -------------------------------------------------
@@ -4988,6 +5111,18 @@ function printDoc(title, bodyHtml) {
   if (!w) { alert('Your browser blocked the print window. Allow pop-ups for this page.'); return; }
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
     <style>
+    /* block 116: the mark. A button, not a tooltip — a tooltip needs a
+       pointer, dies on a phone, and its text never enters the accessible
+       tree. Sized to sit inside a line of prose without breaking it. */
+    .why-mark { display:inline-flex; align-items:center; justify-content:center;
+      width:15px; height:15px; margin-left:4px; padding:0; vertical-align:baseline;
+      border:1px solid var(--muted); border-radius:50%; background:transparent;
+      color:var(--muted); font-size:10px; line-height:1; cursor:pointer; }
+    .why-mark:hover, .why-mark:focus-visible { color:var(--text); border-color:var(--text); }
+    .why-body { color:var(--muted); }
+    .door-head { margin-top:12px; font-size:12.5px; color:var(--text); }
+    .judge-btn.live { border-color:var(--accent, #888); }
+
       @page { margin: 22mm 18mm; }
       body { font: 12pt/1.6 "Iowan Old Style", Palatino, Georgia, serif; color: #111; max-width: 42em; margin: 0 auto; }
       h1 { font-size: 20pt; margin: 0 0 4pt; }

@@ -17620,6 +17620,105 @@ console.log(out.join('\\n'));
                             "drop, so the journey's drop check proves nothing")
     _pass112()
 
+    # ---- block 116: the mark, and the live door -----------------------------
+    #
+    # Fifteen blocks of honest labelling produced a page that teaches the same
+    # lesson on the hundredth card as on the first. The split is not the same
+    # as hiding a finding, and the whole risk of this block is that it becomes
+    # one: THE FACT STAYS ON THE FACE, THE EXPLANATION OF THE FACT GOES BEHIND
+    # A MARK. "The quote is not in your text" is a fact. "Checked mechanically
+    # against your source, not judged by the model" is a lesson about what
+    # kind of fact it is.
+    #
+    # NOTE ON WHAT THIS CHECK CAN AND CANNOT SEE. Moving a sentence into a
+    # whyHtml('...') argument leaves it in index.html, so every older pin that
+    # greps for that sentence still passes and can no longer tell the face
+    # from the mark. That is the vacuous-pin shape again in a new costume.
+    # This check reads the whyHtml ARGUMENTS specifically; the journey is what
+    # proves the rendered result, because only a browser can tell a hidden
+    # element from a deleted one.
+    import re as _re116
+    _i116 = (Path(__file__).resolve().parents[1] / "webapp" / "index.html").read_text()
+    _why_args = _re116.findall(r"whyHtml\('((?:[^'\\]|\\.)*)'\)", _i116)
+    _why_blob = " ".join(_why_args)
+    # Without the arguments, what is left is what the page says on its face.
+    _face = _i116
+    for _a in _why_args:
+        _face = _face.replace(_a, "")
+
+    # THE LESSONS ARE BEHIND THE MARK.
+    for _lesson in ("not judged by the model",
+                    "it is a word count, not a judgment",
+                    "Friction will not treat diverging from this alone",
+                    "a matter of degree you weigh",
+                    "it proves only this"):
+        if _lesson not in _why_blob:
+            failures.append(f"116: {_lesson!r} is back on the face of every card — the mark exists "
+                            "so a lesson is available once, not repeated forever")
+
+    # AND THE FACTS ARE NOT. Each of these is a finding, and block 114 ruled
+    # that a failing check may not be quiet. A mark is quieter than a
+    # disclosure, so this is the same rule with a sharper edge.
+    for _fact in ("This constraint claims the anchor recurs later in your text",
+                  "can't carry its own constraint",
+                  "Recall, unverified",
+                  "Contradicts the anchor:",
+                  "not found in your text"):
+        if _fact not in _face:
+            failures.append(f"116: the finding {_fact!r} was moved behind the mark — the mark is "
+                            "for explanations, and a finding is not an explanation")
+        if _fact in _why_blob:
+            failures.append(f"116: the finding {_fact!r} is inside a mark's own text")
+
+    # THE MARK IS A BUTTON, NOT A TOOLTIP. A title attribute is not accessible
+    # text, needs a pointer, and does not exist on a phone — this project has
+    # already shipped meaning a screen reader could not reach and does not
+    # intend to do it again.
+    _why_fn = _i116.split("function whyHtml(")[1].split("\n}")[0]
+    for _need in ("<button", "aria-expanded", "aria-controls"):
+        if _need not in _why_fn:
+            failures.append(f"116: the mark is no longer a real, announced control ({_need!r} gone)")
+
+    # THE CONSTITUTION SAYS BOTH RULES. Whitespace-normalised: it is wrapped
+    # prose, and a sentence spanning a line break is not a contiguous string.
+    _c116 = " ".join(_i116.split('section-label">What comes back</div>')[1][:6000].split())
+    for _need in ("A finding never goes behind it",
+                  "the one door that could change what it says",
+                  "never a tooltip"):
+        if _need not in _c116:
+            failures.append(f"116: the constitution no longer states {_need!r}")
+
+    # THE LIVE DOOR IS COMPUTED, NOT GUESSED, and it may not offer a door that
+    # cannot do the job. check_anchor_integrity is called from exactly one
+    # place — inside run() — so nothing on a card re-runs it, and a candidate
+    # whose anchor failed has no repair here. Saying otherwise would be the
+    # app claiming a capability it does not have.
+    _cli116 = (Path(__file__).resolve().parents[1] / "scripts" / "wordicon_cli.py").read_text()
+    # (Lookbehind excludes the definition line itself — the first version of
+    # this used [^f] and counted `def check_anchor_integrity(` as a caller.)
+    if len(_re116.findall(r"(?<!def )check_anchor_integrity\(", _cli116)) != 1:
+        failures.append("116: the anchor check is now called from more than one place — the live "
+                        "door tells the owner nothing on a card can repair an anchor, and that "
+                        "sentence is only true while this is true")
+    _door = _i116.split("function liveDoor(")[1].split("\n}")[0]
+    if "Nothing on this card repairs the warrant" not in _door:
+        failures.append("116: a candidate with a broken anchor is offered a repair the app cannot "
+                        "perform")
+    # AND A DOOR THAT MOVES A DIFFERENT ROW IS NOT BURIED. Naming one broken
+    # row and folding away the door to the other is the same error as offering
+    # a door that cannot do the job, pointed the other way.
+    if "verify-not-anchor" not in _door:
+        failures.append("116: a card with BOTH a failed warrant and a craft objection is told only "
+                        "that nothing repairs the warrant, and the door that does move the other "
+                        "row is folded away")
+    if "not the anchor" not in _i116:
+        failures.append("116: Verify is offered on a broken-anchor card without saying which row "
+                        "it can and cannot move")
+    for _k in ("anchorBroken", "hasClaims"):
+        if _k not in _door:
+            failures.append(f"116: the live door no longer reads {_k!r} off the card, so it is "
+                            "recommending rather than reporting")
+
     # ---- block 115: what the record counted ---------------------------------
     #
     # The first tier of "remember me", and the tier that has to be provably

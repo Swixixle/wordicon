@@ -119,3 +119,29 @@ report those, and the reporting is governed:
    governs *checks* — a review that searched nothing has to say so. A tally with
    nothing in it has nothing to disclose, and printing it anyway trains the
    reader to skip the panel.
+
+## 10. The face, the mark, and the door (block 116)
+
+**A fact stays on the face; the explanation of the fact may go behind a mark.**
+*The quote is not in your text* is a fact and stays. *Checked mechanically
+against your source, not judged by the model* is a lesson about what kind of
+fact it is, and belongs behind a mark that any reader can press once. A finding
+never goes behind the mark, and §8's rule governs: a failing check may not be
+quiet, and a mark is quieter than a disclosure.
+
+**The mark is a control, not a hint.** It is announced, keyboard reachable, and
+its text is in the document. A `title` tooltip is none of those and does not
+exist on a touch screen.
+
+**A door is offered only if it can do the job.** An action presented beside a
+problem implies it bears on that problem. Where nothing the system can do
+repairs a finding, it says so plainly and names why, rather than offering
+actions that travel away from the problem while appearing to address it. An
+unearned capability claim is the same class of error as a number nobody
+measured.
+
+**What is offered is computed from the record, never inferred about the owner.**
+Which door is live follows from values already rendered on the surface. The
+moment a proposal rests on a pattern in his behaviour rather than on the state
+of the thing in front of him, it becomes a claim about a person and needs the
+label §7 gives model self-report.

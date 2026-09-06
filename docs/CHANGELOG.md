@@ -1,5 +1,76 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.10.0 — the mark, and the live door (block 116)
+
+Two changes, both about the same complaint: the page is exhausting to read and
+it never tells you what to do next.
+
+**The mark.** Fifteen blocks of honest labelling produced a card that teaches
+the same lesson on the hundredth reading as on the first. The split is not the
+same as hiding a finding, and the entire risk of this block was that it became
+one: **the fact stays on the face, the explanation of the fact goes behind a
+mark.** *The quote is not in your text* is a fact. *Checked mechanically against
+your source, not judged by the model* is a lesson about what kind of fact it is
+— true, worth having once, and not worth re-reading forever.
+
+The mark is a button with `aria-expanded` and `aria-controls`, not a `title`
+tooltip. A tooltip needs a pointer, does not exist on a phone, and its text
+never enters the accessible tree; this project has already shipped meaning a
+screen reader could not reach and is not doing it again.
+
+**The live door.** Eight buttons rendered on every card, identically, whatever
+the card was — fifteen cards is a hundred and twenty buttons with no order among
+them. The card already knows which of them could change its own rows, so it says
+so, and the rest fold behind one line. This is arithmetic on values already
+rendered above it, not a preference inferred about anybody.
+
+What was checked rather than assumed: Verify's prompt takes Friction's **own**
+recorded claims and tests them, so it genuinely is the door that can overturn a
+craft objection. Sprout, Refract and Archetype travel *from* a candidate and
+change nothing about it — block 111's inherited-verdict machinery exists
+precisely because they carry the problem forward.
+
+**And the finding that fell out of building it.** `check_anchor_integrity` is
+called from exactly one place, inside `run()`, and **nothing on a card re-runs
+it**. Revise freezes the meaning and re-forges only the word-form. The Bench
+works on structure and names. So a candidate whose anchor is not in the source
+has **no door here that repairs it**, and the card now says that instead of
+offering five buttons none of which can. A door that cannot do the job is a
+capability claim the app cannot honour, which is the same failure as a number
+nobody measured.
+
+**Two vacuous checks of my own, caught before they shipped.** The suite pin for
+this split greps `index.html` — and moving a sentence into a `whyHtml('…')`
+argument leaves it in `index.html`, so every older pin for those sentences still
+passes and can no longer tell the face from the mark. The new pin reads the
+`whyHtml` arguments specifically. And the first journey check named three
+lessons that all live inside a closed `show the case` disclosure, so `innerText`
+excluded them whether the mark worked or not — a check that could not fail. It
+now names the live door's own explanation, which sits in the card with nothing
+above it.
+
+**A correction from GPT's review, taken before this shipped.** The warning was
+that a suggested door must genuinely repair the card's present problem. The
+anchor branch already satisfied it — Verify is never offered as an anchor
+repair — but the review exposed the case pointed the other way: a card can carry
+a failed warrant **and** a craft objection at once, and those take different
+doors. The first version named the warrant, said nothing repairs it, and folded
+Verify away — true of the warrant, false of the objection. Burying the door to
+the second row is the same error as offering a door for the first. It now says
+both, and Verify's own label says which row it cannot move.
+
+The suite could not catch that. Its pin asked whether the branch existed, and a
+mutation that makes the branch unreachable leaves its text in the file — the
+third time this project has shipped a pin checking presence rather than
+reachability. The journey now calls `liveDoor()` directly across every
+combination, which is the only thing that can tell reachable from present.
+
+Suite OK. Fourteen journeys, 460 checks. Six sabotage mutations, all caught by name: one
+turns the mark into a tooltip, one moves a finding behind it, one stops it
+hiding anything, one has the door promise a repair the app cannot perform, one
+pulls a lesson back onto the face, and one makes the both-rows branch
+unreachable — which only the journey saw.
+
 ## v1.9.0 — what the record counted (block 115)
 
 The first tier of *it should remember me*, and deliberately the dull one.

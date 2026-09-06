@@ -196,6 +196,110 @@ const SELF_REPORT = 'MODEL SELF-REPORT — UNVERIFIED';
   ok(/shown in the text|a reading — one interpretation among others/.test(reopened),
      'the reopened run still knows whether a component was shown in the text or read into it');
 
+  // ---- 9. block 116: the mark, and the live door -----------------------
+  // Every older pin for these sentences greps index.html, and moving a
+  // sentence into a whyHtml('...') argument leaves it in index.html. So the
+  // suite can no longer tell the face from the mark and this is the only
+  // place that can.
+  await page.evaluate(t => loadPastResult(t), IDS.groupFailed);
+  await page.waitForTimeout(1400);
+  const mk = await page.evaluate(() => {
+    const el = document.getElementById('result-area');
+    const marks = [...el.querySelectorAll('.why-mark')];
+    return {text: el.innerText, n: marks.length,
+            expanded: marks.map(m => m.getAttribute('aria-expanded')),
+            isButton: marks.every(m => m.tagName === 'BUTTON'),
+            controls: marks.every(m => !!document.getElementById(m.getAttribute('aria-controls')))};
+  });
+  ok(mk.n > 0, 'the card carries marks: ' + mk.n);
+  ok(mk.isButton && mk.controls && mk.expanded.every(x => x === 'false'),
+     'each mark is a real control, announced closed, pointing at an element that exists');
+  // NAMED ON A LESSON THAT IS GENUINELY ON THE CARD. The first version of
+  // this listed three lessons that all live inside a closed `show the case`
+  // disclosure, so innerText excluded them whether the mark worked or not —
+  // a check that could not fail. This one is the live door's own
+  // explanation, which sits directly in the card with nothing above it.
+  ok(!/the check that placed it runs once/.test(mk.text),
+     'the live door explains itself only when asked, not on every card forever');
+
+  // THE FINDING IS STILL THERE. This is block 114's rule with a sharper
+  // edge: a mark is quieter than a disclosure, and a finding may not be quiet.
+  // These are the findings THIS page actually carries — the verdict rows.
+  // (The first version of this check looked for findings the fixture does not
+  // produce, which would have passed the day the rows were emptied.)
+  ok(/the quote is not in your text/.test(mk.text) && /source warrant FAILED/.test(mk.text),
+     'the findings themselves are still on the face: '
+     + JSON.stringify(mk.text.slice(0, 100)));
+
+  // AND NOTHING WAS DELETED — pressing a mark brings its sentence back.
+  const pressed = await page.evaluate(() => {
+    // A mark that is NOT inside a closed disclosure — unhiding a body whose
+    // ancestor <details> is shut changes innerText by nothing, and the first
+    // version of this measured exactly that and concluded the mark was broken.
+    const m = document.querySelector('#result-area .door-head .why-mark');
+    m.click();
+    return {text: document.getElementById('result-area').innerText,
+            expanded: m.getAttribute('aria-expanded'), label: m.textContent};
+  });
+  ok(pressed.expanded === 'true' && pressed.label === '\u00d7',
+     'pressing a mark announces itself open and says so in its own label');
+  ok(pressed.text.length > mk.text.length,
+     'pressing a mark brings text back onto the page — the lesson is hidden, not dropped');
+
+  // ---- the live door, called directly ----------------------------------
+  // The suite can only see that a branch EXISTS. A mutation that makes the
+  // branch unreachable leaves its text in the file and passes every source
+  // pin — which is the failure this project has already shipped three times.
+  // Calling the function is the only thing that can tell reachable from
+  // present.
+  const doors = await page.evaluate(() => {
+    const D = (ai, cs, verdict, note) => liveDoor({
+      friction: {verdict, hostile_read: note ? 'x' : ''},
+      anchor_integrity: ai ? {status: ai} : undefined,
+      claim_support: cs ? {support: cs} : undefined});
+    return {
+      bothBroken: D('not_found', 'not_run', 'reject', true).key,
+      anchorOnly: D('not_found', 'not_run', 'keep', false).key,
+      objectionOnly: D('exact', 'supported', 'existing', true).key,
+      clean: D('exact', 'supported', 'keep', false).key,
+      // an objection with nothing recorded to test is not a Verify case
+      objectionNoClaims: D('exact', 'supported', 'reject', false).key,
+    };
+  });
+  ok(doors.bothBroken === 'verify-not-anchor',
+     'a card with BOTH a failed warrant and a craft objection names the door that moves the '
+     + 'objection instead of burying it: ' + doors.bothBroken);
+  ok(doors.anchorOnly === 'none',
+     'a failed warrant with no objection is told plainly that nothing here repairs it: ' + doors.anchorOnly);
+  ok(doors.objectionOnly === 'verify', 'an objection on a sound warrant routes to Verify: ' + doors.objectionOnly);
+  ok(doors.clean === 'travel', 'an uncontested card is told the doors travel: ' + doors.clean);
+  ok(doors.objectionNoClaims === 'travel',
+     'an objection with no recorded claims does not offer Verify, which would have nothing to '
+     + 'test: ' + doors.objectionNoClaims);
+
+  // ---- the live door ---------------------------------------------------
+  const door = await page.evaluate(() => {
+    const el = document.getElementById('result-area');
+    const sums = [...el.querySelectorAll('details.case > summary')].map(x => x.textContent.trim());
+    return {text: el.innerText, sums,
+            heads: [...el.querySelectorAll('.door-head')].map(x => x.textContent.trim())};
+  });
+  // These candidates were built on an anchor that is not in the source, and
+  // nothing on a card re-runs the anchor check — so the honest answer is that
+  // there is no door, and the app says it rather than offering five that
+  // cannot do the job.
+  ok(door.heads.some(h => /Nothing on this card repairs the warrant/.test(h)),
+     'a candidate with a broken warrant is told plainly that no door here repairs it: '
+     + JSON.stringify(door.heads.slice(0, 2)));
+  ok(!/Sprout — travel laterally/.test(door.text),
+     'the doors that cannot change this card are not competing with the one that can');
+  const opened = await page.evaluate(() => {
+    [...document.querySelectorAll('#result-area details.case')].forEach(d => { d.open = true; });
+    return document.getElementById('result-area').innerText;
+  });
+  ok(/Sprout — travel laterally/.test(opened) && /Refract/.test(opened) && /Archetype/.test(opened),
+     'and they are one press away, not removed');
+
   // ---- 8. block 115: what the record counted ---------------------------
   // The panel is arithmetic over rows already on the shelf, so the only
   // things worth proving in a browser are that it reaches the page at all
