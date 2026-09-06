@@ -17807,10 +17807,18 @@ console.log(out.join('\\n'));
             def __init__(self, **k):
                 self.__dict__.update(k)
 
+        class _Usage117:
+            input_tokens = 11
+            output_tokens = 22
+
         class _Resp117:
-            def __init__(self, content):
+            def __init__(self, content, dump=None):
                 self.content = content
                 self.stop_reason = "end_turn"
+                self.usage = _Usage117()
+                self._dump = dump if dump is not None else {"content": []}
+            def model_dump(self):
+                return self._dump
 
         def _searched(*urls):
             return _Blk117(type="web_search_tool_result",
@@ -17825,10 +17833,23 @@ console.log(out.join('\\n'));
 
         class _Cited(_NoCite):
             def _create(self, prompt, tools=None):
-                return _Resp117([_searched("https://x.test/a"),
-                                 _Blk117(text="prose that quotes",
-                                         citations=[_Blk117(url="https://x.test/a", title="A",
-                                                            cited_text="the quoted words")])])
+                return _Resp117(
+                    [_searched("https://x.test/a"),
+                     _Blk117(text="prose that quotes",
+                             citations=[_Blk117(url="https://x.test/a", title="A",
+                                                cited_text="the quoted words")])],
+                    dump={"content": [{"type": "text", "citations": [
+                        {"url": "https://x.test/a", "cited_text": "the quoted words"}]}]})
+
+        # THE FIFTH OUTCOME: the serialized response carries citations and the
+        # collector returns none. That is conclusively a defect HERE, and it
+        # must never be filed as a finding about the provider.
+        class _CollectorBlind(_NoCite):
+            def _create(self, prompt, tools=None):
+                return _Resp117(
+                    [_searched("https://x.test/a"), _Blk117(text="prose", citations=[])],
+                    dump={"content": [{"type": "text", "citations": [
+                        {"url": "https://x.test/a", "cited_text": "words the collector missed"}]}]})
 
         class _Boom117(_NoCite):
             def _create(self, prompt, tools=None):
@@ -17843,6 +17864,7 @@ console.log(out.join('\\n'));
             _os117.environ["WORDICON_MODEL"] = "stub-model"
             for _gw, _want in ((_NoCite, "ran_no_native_citation_observed"),
                                (_Cited, "native_citation_observed"),
+                               (_CollectorBlind, "collector_defect"),
                                (_Boom117, "not_run_missing_credential")):
                 cli.make_gateway = (lambda _g: (lambda name, model: _g()))(_gw)
                 _got = _cp.probe().get("outcome")
@@ -17870,6 +17892,48 @@ console.log(out.join('\\n'));
             failures.append("117: the probe reports citations by one access path only, so a "
                             "collector that cannot see them is indistinguishable from a provider "
                             "that sent none")
+        # THE THIRD ACCESS FORM, AND THE CAP, AND THE REDACTION.
+        if "_serialized_view" not in _ps or "model_dump" not in _ps:
+            failures.append("117: the probe inspects only attribute and key access — citations "
+                            "present in the serialized response but missed by the collector is "
+                            "the one reading that is conclusive, and it cannot be reached")
+        if "max_uses=1" not in _ps:
+            failures.append("117: the probe no longer caps each call at one web search, so it "
+                            "cannot quote an honest price for itself")
+        if "_no_secrets" not in _ps or "REFUSING TO WRITE" not in _ps:
+            failures.append("117: the probe writes its artifact without checking it first — a "
+                            "probe that leaks what it was told not to carry is worse than one "
+                            "that did not run")
+        # the artifact-level redaction actually works
+        _leak = _cp._no_secrets({"a": {"encrypted_index": "x", "ok": 1},
+                                 "b": [{"cited_text": "words"}]})
+        if sorted(_leak) != [".a.encrypted_index", ".b[0].cited_text"]:
+            failures.append(f"117: the artifact's secret check does not find what it must: {_leak}")
+        if _cp._no_secrets({"a": {"n": 1, "citation_keys": ["url", "cited_text"]}}):
+            failures.append("117: the secret check fires on a KEY NAME rather than a value, so it "
+                            "will be switched off the first time it cries wolf")
+        # and the verdict never widens past two calls
+        _vv = _cp.verdict({"outcome": "ran_no_native_citation_observed"},
+                          {"outcome": "native_citation_observed"})
+        if _vv["verdict"] != "capability_confirmed_prompt_sensitive" or \
+                "NOT licensed" not in _vv.get("licensed", ""):
+            failures.append(f"117: the verdict widens a two-call result into a provider rule: {_vv}")
+        # THE BOUNDARY OUTLIVES THE PROBE. Whatever it reports, a provider
+        # citation is provenance and never verification, and that has to be in
+        # the contract rather than only in a script that may be deleted.
+        # Whitespace-normalised: the contract is wrapped prose and a sentence
+        # spanning a line break is not a contiguous substring.
+        _ec117 = " ".join((Path(__file__).resolve().parents[1] / "docs"
+                           / "epistemic-contract.md").read_text().split())
+        for _need in ("discovery and provenance metadata",
+                      "bound to an exact Library anchor",
+                      "would not move a single claim across the boundary"):
+            if _need not in _ec117:
+                failures.append(f"117: the contract no longer states {_need!r} — the day the probe "
+                                "comes back green is the day this boundary is under most pressure")
+        if "provenance" not in _ps or "not verification" not in _ps:
+            failures.append("117: the probe stopped saying that its own best possible result is "
+                            "still not verification")
         if "QUOTING_QUESTION" not in _ps:
             failures.append("117: the probe asks only the paraphrasing question, which cannot tell "
                             "'this account emits no citations' from 'the model had nothing quoted "

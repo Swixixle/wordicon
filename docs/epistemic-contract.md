@@ -145,3 +145,26 @@ Which door is live follows from values already rendered on the surface. The
 moment a proposal rests on a pattern in his behaviour rather than on the state
 of the thing in front of him, it becomes a claim about a person and needs the
 label §7 gives model self-report.
+
+## 11. Provider citations are provenance, never verification (block 117)
+
+A result the provider's search returned, and a native citation the provider
+attached to generated text, are **discovery and provenance metadata**. They say
+where something may have come from. They do not say that it is so.
+
+**A claim becomes Nikodemus-verified only after the source is admitted,
+retrieved through Nikodemus, and bound to an exact Library anchor.** That
+sequence is the verification; nothing before it is.
+
+This holds whatever the citation probe reports. Perfect native citation
+capture would mean the provider tells us more about its own retrieval — a
+better provenance record, and a better starting point for admission. It would
+not move a single claim across the boundary. A surface that renders a native
+citation as though it were an anchor has crossed it, and no measurement of the
+provider can license that.
+
+The probe's own readings are bounded the same way. Two calls establish what
+those two calls did. They do not establish a provider rule — in particular,
+citations appearing only on a question that demanded a verbatim quotation
+establishes that this probe's result was prompt-sensitive, and nothing about
+when the provider does or does not attach citations in general.
