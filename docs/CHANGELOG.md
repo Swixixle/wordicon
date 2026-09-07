@@ -1,5 +1,59 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.12.0 — one search, and the provider's own numbers (block 118)
+
+The probe closed its gate and turned up two things. One of them I read wrong.
+
+**The code-execution blocks are expected, and I overstated them.** I called
+them a second tool firing unasked. They are the provider running its own code
+to filter its own search results — from `web_search_20260209` onward
+`allowed_callers` defaults to `["code_execution_20260120"]`, and Nikodemus
+configures no override. Inspected and confirmed: the tool is
+`web_search_20260318`, and `allowed_callers` appears nowhere in the codebase.
+They are recorded as **`provider_internal_dynamic_filtering`** — counted and
+typed, never parsed as evidence. Not local execution, not an undeclared
+capability, not something Nikodemus gathered.
+
+**The cost is the real finding.** Two capped calls consumed **39,865 and
+63,359 input tokens** for a one-sentence answer and a one-sentence quote,
+because search-result content counts toward input. The app allowed five
+searches per ordinary review stage. It now allows **one**. A Research
+operation that genuinely needs more discloses and confirms its maximum,
+its model and its provider first; it does not inherit a higher default from
+an ordinary review.
+
+**What gets recorded is what the provider reported.** `web_search_requests`,
+input, output and cache tokens, the tool version, and whether dynamic
+filtering ran — carried into every search-enabled run's snapshot. Where the
+response reports no usage, the record says so instead of filling in a zero.
+And the count of code-execution blocks is **never** read as a count of
+billable calls: that number is the provider filtering its own results, and
+only the usage fields say how many searches happened.
+
+**Two wording corrections, both mine.** The collector is exonerated **for
+these two observed calls**, not universally across every provider, model and
+configuration. And encrypted search content means **opaque provider search
+state** was returned so the provider can carry it across turns — it never
+means Nikodemus fetched, read or anchored the underlying pages.
+
+**The durable law**, in the contract rather than in a probe that may be
+deleted: provider search results are **leads**; native citations, when
+present, are **provenance metadata**; a claim becomes Nikodemus-verified only
+after the source is admitted through Nikodemus and tied to an exact Library
+anchor.
+
+**And a seventh self-matching check, caught in its own first run.** The new
+pin for "no `allowed_callers` override without a ruling" greped for the word
+and fired on the comment explaining why it is not set. It looks for the key
+now. Seven times in three days; the pattern is no longer a surprise, it is a
+review step.
+
+Suite OK, 2 skipped. Five sabotage mutations caught by name — one restores
+five searches, one renders unreported usage as zero, one stops recording the
+acquisition, one drops the sentence forbidding the billable-call inference,
+and one reads the block count as the search count (that last caught by crash,
+then by name).
+
 ## v1.11.1 — the stabilisation pass, part two (block 117)
 
 The rest of the ruling. After this, the building stops.

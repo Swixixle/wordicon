@@ -17751,6 +17751,76 @@ console.log(out.join('\\n'));
         failures.append("117: the owner's definition edit appends no event again, so the shelf is "
                         "the only copy of the one change he makes by hand")
 
+    # ---- block 118: one search, and the provider's own numbers --------------
+    #
+    # Measured on the owner's machine: two capped calls consumed 39,865 and
+    # 63,359 input tokens for a one-sentence answer and a one-sentence quote,
+    # because search-result content counts toward input. Five uses on an
+    # ordinary review stage is a bill nobody authorised and nobody could see.
+    if cli.AnthropicAPIGateway.WEB_SEARCH_TOOL.get("max_uses") != 1:
+        failures.append("118: an ordinary web-enabled stage may search more than once again — a "
+                        "Research operation that needs more discloses and confirms its maximum, "
+                        "it does not raise the default for every review")
+
+    # THE PROVIDER'S OWN NUMBERS, NEVER OURS. The count of code-execution
+    # blocks is the provider filtering its own results; it is not a count of
+    # billable calls, and reading it as one would invent a measurement.
+    class _U118:
+        input_tokens = 39865
+        output_tokens = 1124
+        class server_tool_use:  # noqa: N801
+            web_search_requests = 1
+
+    class _R118:
+        usage = _U118()
+        content = [type("B", (), {"type": "server_tool_use"})(),
+                   type("B", (), {"type": "web_search_tool_result"})(),
+                   type("B", (), {"type": "code_execution_tool_result"})(),
+                   type("B", (), {"type": "code_execution_tool_result"})(),
+                   type("B", (), {"type": "text"})()]
+
+    _au = cli.acquisition_usage(_R118(), tool_version="web_search_20260318", max_uses=1)
+    if _au.get("web_search_requests") != 1:
+        failures.append(f"118: the search count no longer comes from the provider's usage: {_au}")
+    if _au.get("input_tokens") != 39865 or not _au.get("usage_reported"):
+        failures.append("118: the provider's token counts are not recorded")
+    _df = _au.get("provider_internal_dynamic_filtering") or {}
+    if _df.get("blocks") != 2 or not _df.get("observed"):
+        failures.append(f"118: dynamic filtering is not counted as what it is: {_df}")
+    if "not a count of billable calls" not in (_df.get("what") or "").lower():
+        failures.append("118: nothing stops the next reader treating code-execution blocks as "
+                        "billable calls, which is the one inference the measurement forbids")
+    if _au.get("cost") != "unknown":
+        failures.append("118: a cost is being asserted where the provider reported none")
+
+    # A RESPONSE THAT REPORTS NOTHING SAYS SO, rather than filling in zeros.
+    _bare = cli.acquisition_usage(type("R", (), {"content": []})())
+    if _bare.get("usage_reported") is not False or _bare.get("input_tokens") is not None:
+        failures.append(f"118: an unreported usage is rendered as zero: {_bare}")
+
+    # AND IT REACHES THE RECORD.
+    _cli118 = (Path(__file__).resolve().parents[1] / "scripts" / "wordicon_cli.py").read_text()
+    if _cli118.count('"acquisition_usage": getattr(gateway, "last_acquisition", None),') < 4:
+        failures.append("118: a search-enabled run no longer records what the provider reported "
+                        "about the acquisition")
+    # Looks for the KEY, not the word: the first version greped for
+    # "allowed_callers" and fired on the comment that explains why it is not
+    # set. Seventh time a check has matched its own explanation.
+    if '"allowed_callers"' in _cli118 or "'allowed_callers'" in _cli118:
+        failures.append("118: an allowed_callers override appeared without a ruling — the default "
+                        "is what the probe measured, and changing it changes what the provider "
+                        "does with its own results")
+
+    # THE LAW OUTLIVES THE MEASUREMENT.
+    _ec118 = " ".join((Path(__file__).resolve().parents[1] / "docs"
+                       / "epistemic-contract.md").read_text().split())
+    for _need in ("Provider search results are leads",
+                  "provider_internal_dynamic_filtering",
+                  "never read as a number of billable calls",
+                  "opaque provider state"):
+        if _need not in _ec118:
+            failures.append(f"118: the contract no longer states {_need!r}")
+
     # ---- block 117c: the probe, the routes, the denominators ----------------
     _i117b = (Path(__file__).resolve().parents[1] / "webapp" / "index.html").read_text()
     _srv117 = (Path(__file__).resolve().parents[1] / "server.py").read_text()

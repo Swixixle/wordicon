@@ -77,6 +77,10 @@ def _count_citations_in_dump(node, out) -> None:
     it. Nothing from the dump is stored — only counts, types and lengths."""
     if isinstance(node, dict):
         for k, v in node.items():
+            # OPAQUE PROVIDER SEARCH STATE. Counted and measured, never read.
+            # Its presence means the provider returned its own search context
+            # so it can carry that state across turns. It does NOT mean
+            # Nikodemus fetched, read or anchored the underlying pages.
             if k in ("encrypted_content", "encrypted_index"):
                 out["opaque_fields_seen"][k] = out["opaque_fields_seen"].get(k, 0) + 1
                 out["opaque_lengths"].append(len(str(v)))
@@ -285,9 +289,10 @@ def verdict(paraphrasing: dict, quoting: dict | None) -> dict:
     return {"verdict": "ran_no_native_citation_observed",
             "why": "Neither call produced a citation object in the serialized response by any "
                    "access path.",
-            "licensed": "A finding about this account and model on these two questions. NOT "
-                        "licensed: that the provider never emits citations, or that the "
-                        "collector is at fault."}
+            "licensed": "A finding about this account and model on these two questions. The "
+                        "collector is exonerated FOR THESE TWO OBSERVED CALLS — not universally "
+                        "across every provider, model and configuration. NOT licensed: that the "
+                        "provider never emits citations, or that the collector is at fault."}
 
 
 FORBIDDEN_KEYS = ("encrypted_content", "encrypted_index", "api_key",

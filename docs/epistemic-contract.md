@@ -168,3 +168,40 @@ those two calls did. They do not establish a provider rule — in particular,
 citations appearing only on a question that demanded a verbatim quotation
 establishes that this probe's result was prompt-sensitive, and nothing about
 when the provider does or does not attach citations in general.
+
+## 12. The research law, and what the provider's machinery is (block 118)
+
+**Provider search results are leads.** Provider-native citations, when present,
+are **provenance metadata**. A claim becomes Nikodemus-verified only after the
+source is admitted through Nikodemus and tied to an exact Library anchor. This
+is §11 stated as the durable rule rather than as a consequence of one probe.
+
+**Provider-internal dynamic filtering is not a Nikodemus capability.** From
+`web_search_20260209` onward the provider defaults `allowed_callers` to
+`["code_execution_20260120"]` and runs its own code to filter its own search
+results. Nikodemus configures no override, so those blocks are expected. They
+are recorded as `provider_internal_dynamic_filtering` — counted and typed,
+never parsed as evidence. They are not local execution, not an undeclared
+capability, and not something Nikodemus gathered.
+
+**Encrypted search content is opaque provider state.** It lets the provider
+carry search context across turns. Its presence never means Nikodemus fetched,
+read, or anchored the underlying pages, and its bytes are never retained or
+printed — only presence, count and length.
+
+**Cost and authorisation, measured rather than assumed.**
+
+1. An ordinary web-enabled stage searches **once**. Two probe calls at one
+   search each consumed 39,865 and 63,359 input tokens, because search-result
+   content counts toward input tokens.
+2. A Research operation that needs more discloses and confirms its maximum
+   searches, model, provider and estimated token range **before** the first
+   call. It does not inherit a higher default.
+3. What is recorded is what the provider reported: `web_search_requests`,
+   input, output and cache tokens, the tool version, and whether dynamic
+   filtering ran.
+4. **The number of code-execution blocks is never read as a number of billable
+   calls.** Only the provider's usage fields say how many searches were made.
+5. Where cost cannot be calculated it is displayed as `cost unknown`, never
+   omitted and never estimated from tokens or elapsed time.
+6. The owner can always cancel before the first call.

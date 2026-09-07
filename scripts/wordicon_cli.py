@@ -3139,7 +3139,25 @@ class AnthropicAPIGateway(Gateway):
     # every Sonnet 5 build. If the model rejects the tool, complete_with_
     # search() raises a clear, actionable error naming that possibility
     # instead of surfacing a confusing downstream JSON-parse failure.
-    WEB_SEARCH_TOOL = {"type": "web_search_20260318", "name": "web_search", "max_uses": 5}
+    # block 118: ONE SEARCH PER ORDINARY STAGE.
+    #
+    # Measured, not guessed: two probe calls at max_uses=1 consumed 39,865 and
+    # 63,359 input tokens for a one-sentence answer and a one-sentence quote.
+    # Search-result content counts toward input tokens, so five uses on an
+    # ordinary review stage is a bill nobody authorised and nobody could see.
+    # A Research operation that genuinely needs more must disclose and confirm
+    # its maximum first; it does not inherit a higher default from here.
+    #
+    # `allowed_callers` is deliberately NOT set. From web_search_20260209
+    # onward the provider defaults it to ["code_execution_20260120"] and runs
+    # its own code to filter results dynamically — which is what produced the
+    # CodeExecutionToolResult blocks the probe saw. That is PROVIDER-INTERNAL
+    # DYNAMIC FILTERING. It is not Nikodemus-local execution, not an
+    # undeclared local capability, and not evidence gathered by Nikodemus.
+    # Its blocks are counted and typed, never parsed as evidence.
+    WEB_SEARCH_TOOL = {"type": "web_search_20260318", "name": "web_search", "max_uses": 1}
+    SEARCH_TOOL_VERSION = "web_search_20260318"
+    DYNAMIC_FILTERING_DEFAULT = "code_execution_20260120"
 
     def complete_with_search(self, prompt: str) -> "tuple[str, list[dict]]":
         import anthropic
@@ -3168,6 +3186,13 @@ class AnthropicAPIGateway(Gateway):
                 print(f"  [gateway] search call failed after {waited:.0f}s ({type(e).__name__}) — "
                       f"retry {attempt + 1}/{attempts - 1} in {backoff:.0f}s...")
                 time.sleep(backoff)
+        # block 118: THE PROVIDER'S OWN NUMBERS, never ours. The count of
+        # code-execution blocks is NOT a count of billable calls — it is a
+        # count of times the provider filtered its own results. Search
+        # requests come from usage.server_tool_use, tokens from usage.
+        self.last_acquisition = acquisition_usage(
+            response, tool_version=self.SEARCH_TOOL_VERSION,
+            max_uses=self.WEB_SEARCH_TOOL.get("max_uses"))
         text, citations = collect_citations(response.content)
         if not text.strip():
             block_types = [type(b).__name__ for b in response.content]
@@ -3336,6 +3361,53 @@ def acquisition_counts(citations) -> "dict":
             cited += 1
     return {"sources": len(citations or []), "returned": returned,
             "cited": cited, "unrecorded": unrecorded}
+
+
+def acquisition_usage(response, tool_version: str = "", max_uses=None) -> dict:
+    """What the PROVIDER reported about one search-enabled call.
+
+    block 118. Everything here comes from the response's own usage fields or
+    from counting block types. Nothing is inferred: in particular the number
+    of code-execution blocks is never treated as a number of billable calls —
+    those are the provider filtering its own search results, and only
+    `server_tool_use.web_search_requests` says how many searches were made.
+
+    When the response reports no usage at all, this says so rather than
+    filling in a zero."""
+    u = getattr(response, "usage", None)
+    out = {"tool_version": tool_version, "max_uses_requested": max_uses,
+           "web_search_requests": None, "input_tokens": None,
+           "output_tokens": None, "cache_creation_input_tokens": None,
+           "cache_read_input_tokens": None, "usage_reported": False,
+           "cost": "unknown",
+           "cost_why": "the provider does not price a call in its response, and this "
+                       "client does not guess one from tokens or elapsed time"}
+    if u is not None:
+        for k in ("input_tokens", "output_tokens", "cache_creation_input_tokens",
+                  "cache_read_input_tokens"):
+            v = getattr(u, k, None)
+            if v is not None:
+                out[k] = v
+                out["usage_reported"] = True
+        stu = getattr(u, "server_tool_use", None)
+        if stu is not None:
+            out["web_search_requests"] = getattr(stu, "web_search_requests", None)
+    blocks = getattr(response, "content", None) or []
+    kinds = {}
+    for b in blocks:
+        k = getattr(b, "type", None) or type(b).__name__
+        kinds[k] = kinds.get(k, 0) + 1
+    out["block_types"] = kinds
+    # PROVIDER-INTERNAL DYNAMIC FILTERING, recorded as what it is.
+    n_code = kinds.get("code_execution_tool_result", 0)
+    out["provider_internal_dynamic_filtering"] = {
+        "observed": bool(n_code), "blocks": n_code,
+        "what": "the provider ran its own code to filter its own search results. Not "
+                "Nikodemus-local execution, not an undeclared local capability, and not "
+                "evidence gathered by Nikodemus. The block count is NOT a count of "
+                "billable calls.",
+    }
+    return out
 
 
 def collect_citations(blocks) -> "tuple[str, list[dict]]":
@@ -7369,6 +7441,10 @@ def run_sprout(candidate: dict, gateway: Gateway,
                        if t.get("anchor_name")]))[:60],
         "threads": threads, "doors": doors, "summary": summary,
         "citations": review_citations,
+            # block 118: what the provider reported about the acquisition —
+            # its own usage numbers, never ours, and "unknown" where it
+            # reported nothing.
+            "acquisition_usage": getattr(gateway, "last_acquisition", None),
     }, indent=2))
 
     return {"trace_id": trace_id, "mode": "sprout",
@@ -7380,6 +7456,10 @@ def run_sprout(candidate: dict, gateway: Gateway,
             "inherited_verdict": candidate.get("inherited_verdict", ""),
             "inherited_note": candidate.get("inherited_note", ""),
             "citations": review_citations,
+            # block 118: what the provider reported about the acquisition —
+            # its own usage numbers, never ours, and "unknown" where it
+            # reported nothing.
+            "acquisition_usage": getattr(gateway, "last_acquisition", None),
             "summary": summary, "receipt_id": private_receipt["receipt_id"]}
 
 
@@ -8656,6 +8736,10 @@ def run_refract(candidate: dict, gateway: Gateway,
         "fossil_check": fossil_check,
         "fossil_verdict": fossil_verdict, "fossil_note": fossil_note,
         "summary": summary, "citations": review_citations,
+            # block 118: what the provider reported about the acquisition —
+            # its own usage numbers, never ours, and "unknown" where it
+            # reported nothing.
+            "acquisition_usage": getattr(gateway, "last_acquisition", None),
     }, indent=2))
 
     return {"trace_id": trace_id, "mode": "refract",
@@ -8664,6 +8748,10 @@ def run_refract(candidate: dict, gateway: Gateway,
             "english_fossil": english_fossil, "fossil_check": fossil_check,
             "fossil_verdict": fossil_verdict, "fossil_note": fossil_note,
             "citations": review_citations,
+            # block 118: what the provider reported about the acquisition —
+            # its own usage numbers, never ours, and "unknown" where it
+            # reported nothing.
+            "acquisition_usage": getattr(gateway, "last_acquisition", None),
             "summary": summary, "receipt_id": private_receipt["receipt_id"]}
 
 
