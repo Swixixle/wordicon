@@ -1,5 +1,121 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.13.0 — a partial workup may not impersonate a whole reading (block 119)
+
+The owner ran his own writing through a deep workup and argued with the
+result: it read as fixated on one word and blind to what was underneath.
+He was right about the page and wrong about the cause, and the page is why.
+
+**One component of six completed. Five never ran.** The four that would have
+carried what was underneath — the reinterpreted hell, the critique of moral
+performance, the labor-and-complicity thread, the slow descent — are exactly
+the ones that died on the model call. What read as a lopsided judgment was
+one surviving component doing all the work, and the page did nothing to say
+so. It said the opposite: a coverage line at the top claiming every part of
+the passage had been assigned to a concept, the surviving component's own
+summary beneath it, and only then, third, a reassurance that five had failed
+but nothing was lost.
+
+Three different things had been allowed to blur into one. **Extraction
+coverage** — how much of the passage was split into components; the extractor
+claimed all of it and was right. **Analysis completion** — how many of those
+components were actually forged and judged; one of six. **Custody** — what
+survived the failure; everything, and irrelevant to whether a reading exists.
+The old banner reported custody in the place where completion belonged, and
+reported it last. Every sentence on that page was locally true. Together they
+composed a claim no part of the system had made.
+
+So partiality now renders **first**, above every coverage and result banner,
+in the page's own voice:
+
+> PARTIAL WORKUP — 1 of 6 components completed. No overall reading exists.
+
+Not behind a mark. Block 116 put the *explanation* of a fact behind a
+disclosure control; this is the fact, and a fact that changes what the whole
+page means is not something a reader should have to open something to find.
+The coverage line no longer speaks for the analysis ("six components were
+proposed from the passage; one completed analysis"), every component count
+says how many were analysed, failed components keep their cards and their
+own retry doors, and the trial's verdict on the input is scoped in words to
+the input — never suppressed, because an objection that was raised stays
+raised, but never again readable as a verdict on a workup that did not happen.
+
+**The run could not say what had happened to it.** Asked to classify the five
+failures, the record could answer five of twelve questions. The failing
+stage, the attempt number, the exception class, the elapsed time, the call
+count, whether attempts overlapped, and whether any usage was billed on a
+failed call were stored nowhere: the retry loop printed them to the server's
+stdout and discarded them.
+
+Worse, the one number that looked like a call count was not one.
+`prompt_identities[].calls` counted prompt **renders** — a retried call
+renders once and attempts three times — and it lived on `threading.local()`.
+The adversarial and anchor-support passes build their prompts inside pool
+workers, so those renders landed in each worker's own ledger and never
+reached the parent. Proven, not inferred: three adversarial renders through
+a three-worker pool, and the parent drained `[('attack', 1)]`. The two stages
+that fan out, and therefore most of the traffic, were structurally invisible
+to the run's own record. A count that cannot name its population is the
+defect block 117 already ruled on; this was the same defect one layer down.
+
+**So: one event per real HTTP attempt, at the gateway boundary.** Run and
+component identity, stage, provider and model, attempt number, start time and
+duration, outcome, exception class, sanitized message, provider status,
+`Retry-After`, usage on success, and whether another attempt was in flight
+during its interval — derived from the timestamps, not asserted. The ledger
+is a locked list on the gateway, which is the one thing every worker thread
+already shares, so a pool worker three frames down still lands in the
+parent's record exactly once. A failed attempt flushes its event **before**
+the exception leaves, because a run that produced nothing is precisely the
+run whose attempts nobody can otherwise reconstruct. What may never enter an
+event: the prompt, the passage, the API key, or the provider's payload — a
+closed whitelist, enforced against a real forge driving the real passage
+through, and credential-shaped runs are scrubbed from provider messages
+rather than hoped against.
+
+`prompt_identities[].calls` remains what it always was and is never again
+read as a count of requests.
+
+**A rate limit is no longer treated as transient.** Three attempts at three
+and six seconds cannot honour a per-minute limit: a bucket that refills on
+the minute is untouched nine seconds later, so the old loop's only effect on
+a 429 was to spend the whole budget inside a window the limit could not have
+cleared, and then report a failure it had helped cause. Now: if the provider
+supplies `Retry-After` and it fits the disclosed budget, Nikodemus waits
+exactly that long, once. Otherwise the run stops and says so, and the retry
+belongs to the owner — who is the only one who can decide whether the work is
+still worth the money, given that a timed-out request may have cost money
+without returning an answer.
+
+**What this block deliberately does not do.** It does not touch anchor
+selection or candidate judgment. The malformed evidence packet on the one
+component that ran is proven — its constraint required a word its own anchor
+did not contain, which is the documented failure mode where every candidate
+underneath is measured against a span too short to carry it — but whether
+those candidates *also* overreached on their own is unresolved, and answering
+it means reading the stored verdicts, not changing how anchors are picked.
+`scripts/inspect_component.py` reads them, and refuses to print if the
+owner's passage reaches its own output.
+
+It also does not act on the theory that a shared client connection caused the
+five failures. That theory has no evidence. The rate-limit defect above is
+independent of it and true on its own, and instrumentation comes before
+diagnosis.
+
+**The historical run stays unclassified** unless the server's scrollback
+survives. `APITimeoutError` stringifies to a message that conflates a network
+timeout, a dropped connection and a request cancellation — the SDK says so
+itself — so even a recovered exception class cannot separate provider
+timeout from client concurrency without the elapsed times. Reconstructing it
+from anything less would be inventing the finding.
+
+**A failure to run is not a finding.** Nothing on that page judged the five
+components that never completed, in either direction, and the banner now says
+so. The owner's observation stands as recorded: the visible output felt
+disproportionately fixated on one description and failed to engage what was
+underneath. The execution failure explains that experience. It does not
+invalidate it.
+
 ## v1.12.0 — one search, and the provider's own numbers (block 118)
 
 The probe closed its gate and turned up two things. One of them I read wrong.

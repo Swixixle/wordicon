@@ -237,15 +237,83 @@ def seed_epistemic():
     return ids
 
 
+def seed_partial():
+    """A REAL partial deep run (block 119), through the real path.
+
+    Not hand-authored JSON, for the reason stated above: the last
+    hand-authored fixture here described a shape the server never emits and
+    thirty-one checks passed against it. This drives run_deep with a
+    gateway that answers the first component and dies on every one after —
+    which is the shape of the run that prompted this block — so what the
+    browser opens is what a real partial run writes, completion state,
+    scoped counts, retry seeds and all."""
+
+    class _DiesAfterOne(cli.MockGateway):
+        name = "mock"
+
+        def __init__(self):
+            self.gen = 0
+
+        def complete(self, prompt):
+            if str(prompt).startswith("You are the generation stage"):
+                self.gen += 1
+                if self.gen > 1:
+                    raise RuntimeError("Request timed out or interrupted.")
+            return super().complete(prompt)
+
+    r = cli.run_deep(
+        "A passage about pretending while poor, and guilt at arriving, and the slow "
+        "descent that follows, and what the word demon was doing in it.",
+        _DiesAfterOne(), interactive=False)
+    # The server's own shaping, imported rather than imitated. The rule at
+    # the top of this file is that a fixture must not describe a shape the
+    # server never emits — a hand-rolled candidate list broke exactly that
+    # way here, and the journey crashed inside renderCandidateCard on a
+    # key the real path always supplies.
+    import server as _srv
+    groups = []
+    for g in r["groups"]:
+        base = {k: g.get(k) for k in
+                ("label", "gist", "anchor", "anchor_verified", "anchor_near_miss",
+                 "recurrence_unsupported", "constraint_beyond_anchor", "source_check",
+                 "constraints", "background", "grounding")}
+        if g.get("failed"):
+            groups.append({**base, "failed": True, "error": g.get("error", ""),
+                           "failure_explanation": g.get("failure_explanation", ""),
+                           "forge_input": g.get("forge_input", "")})
+            continue
+        res = g["result"]
+        groups.append({**base, "trace_id": res["trace_id"],
+                       "candidates": _srv._shape_candidates(res),
+                       "receipt_id": res["private_receipt"]["receipt_id"],
+                       "summary": cli.summary_line(res["private_receipt"], res["candidates"]),
+                       "metrics": res.get("metrics", {})})
+    result = {"mode": "deep", "source_text": r["source_text"], "attack": r["attack"],
+              "gesture": r.get("gesture", "trial"), "partial": r["partial"],
+              "n_failed": r["n_failed"], "n_components": r["n_components"],
+              "n_completed": r["n_completed"],
+              "attempts": r.get("attempts") or [],
+              "attempt_summary": r.get("attempt_summary") or {},
+              "groups": groups, "trace_id": r["trace_id"], "gateway": "mock"}
+    rec = cli.record_composite_run("deep", result, r["source_text"],
+                                   trace_id=r["trace_id"])
+    ids = {"deepPartial": r["trace_id"], "recorded": bool(rec.get("recorded")),
+           "n_components": r["n_components"], "n_completed": r["n_completed"]}
+    assert r["n_failed"] >= 1 and r["n_completed"] >= 1, (
+        f"the partial fixture is not partial: {ids}")
+    (DIR / "partial.json").write_text(json.dumps(ids))
+    return ids
+
+
 if __name__ == "__main__":
     marker = STATE / ".seeded"
     if marker.exists():
         print(json.dumps({"entrance": "already seeded", "pre_wiring": seed_pre_wiring(),
-                          "epistemic": seed_epistemic(),
+                          "epistemic": seed_epistemic(), "partial": seed_partial(),
                           "vault_states": seed_vault_states()}))
     else:
         out = seed_entrance()
         marker.write_text("1")
         print(json.dumps({"entrance": out, "pre_wiring": seed_pre_wiring(),
-                          "epistemic": seed_epistemic(),
+                          "epistemic": seed_epistemic(), "partial": seed_partial(),
                           "vault_states": seed_vault_states()}))

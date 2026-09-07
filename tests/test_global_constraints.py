@@ -83,6 +83,10 @@ import hashlib as _hashlib
 import pathlib as _pathlib
 import inspect as _ins113
 import traceback as _traceback
+import types as _types
+import time as _time
+import json as _json
+import concurrent.futures as _futures
 
 # The report is printed at the END of the run, which means an exception
 # anywhere throws away every named failure found before it. The block-113
@@ -366,11 +370,302 @@ def _check_acquisition_record():
     return failures
 
 
+# ---- block 119: the attempt ledger ----------------------------------------
+#
+# Hoisted above main() and run FIRST, for the block-113 reason: these are
+# pure checks on pure machinery, and a check that can only run after the
+# thing it tests has already worked is not a check.
+#
+# The defect these pin: prompt_identities[].calls looked like a call count
+# and was not one. It counted prompt RENDERS (a retried call renders once
+# and attempts three times) and it lived on threading.local(), so the
+# adversarial and anchor-support passes — the two stages that fan out to
+# worker threads, and therefore most of the traffic — never reached the
+# parent's record at all. A run that completed one component of six could
+# not say how many requests it had made or what killed the other five.
+#
+# Every drive below goes through the REAL loop on the REAL base class. A
+# fixture names its own exception classes through _retryable(); it does
+# not re-implement the loop, because a second implementation is a second
+# thing to drift.
+
+class _LedgerRate(Exception):
+    def __init__(self, retry_after=None, status=429):
+        super().__init__("429 rate_limit_error")
+        self.response = _types.SimpleNamespace(
+            status_code=status,
+            headers={} if retry_after is None else {"retry-after": str(retry_after)})
+
+
+class _LedgerTimeout(Exception):
+    def __init__(self):
+        super().__init__("Request timed out or interrupted.")
+
+
+class _LedgerGateway(cli.Gateway):
+    """Synthetic. Drives the production attempt loop with no network."""
+    name = "ledger-fixture"
+    model = "fixture-model-1"
+    is_external = True
+    BACKOFF_BASE_S = 0.0
+
+    def __init__(self, script=(), delay=0.0):
+        self.script = list(script)
+        self.delay = delay
+        self.i = 0
+        self.seen = []
+
+    def _retryable(self):
+        return ((_LedgerRate,), (_LedgerTimeout,))
+
+    def _create(self, prompt, tools=None):
+        self.seen.append(str(prompt))
+        if self.delay:
+            _time.sleep(self.delay)
+        item = self.script[self.i] if self.i < len(self.script) else "ok"
+        self.i += 1
+        if isinstance(item, BaseException):
+            raise item
+        return _types.SimpleNamespace(
+            content=[], stop_reason="end_turn",
+            usage=_types.SimpleNamespace(input_tokens=11, output_tokens=7,
+                                         cache_creation_input_tokens=0,
+                                         cache_read_input_tokens=0))
+
+
+def _check_attempt_ledger():
+    out = []
+
+    # -- 4 & 5. retries increment ACTUAL attempts, and the failures are named
+    g = _LedgerGateway([_LedgerTimeout(), _LedgerTimeout(), "ok"])
+    led, own = cli.open_attempt_ledger(g, run_id="r-retry")
+    if not own:
+        out.append("block 119: the first opener of a ledger must own it")
+    g._call_with_attempts("generation", lambda: g._create("p"))
+    evs = led.events()
+    if len(evs) != 3:
+        out.append(f"block 119: two retries then a success must leave THREE attempt "
+                   f"events, got {len(evs)} — a retried call is not one call")
+    if [e["attempt"] for e in evs] != [1, 2, 3]:
+        out.append(f"block 119: attempt numbers not recorded in order: {[e['attempt'] for e in evs]}")
+    if [e["outcome"] for e in evs] != ["error", "error", "ok"]:
+        out.append(f"block 119: outcomes not recorded: {[e['outcome'] for e in evs]}")
+    if {e["exception"] for e in evs if e["outcome"] == "error"} != {"_LedgerTimeout"}:
+        out.append("block 119: the exception CLASS of a failed attempt was not recorded — "
+                   "a stored message alone cannot separate a timeout from a dropped "
+                   "connection, which is the distinction the failed run needed")
+    if not any(e["message"] for e in evs if e["outcome"] == "error"):
+        out.append("block 119: a failed attempt recorded no provider message")
+    if evs[-1]["usage"] != {"input_tokens": 11, "output_tokens": 7,
+                            "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}:
+        out.append(f"block 119: usage not recorded on a successful attempt: {evs[-1]['usage']}")
+    summ = cli.attempt_summary(cli.derive_overlap(evs))
+    if summ.get("http_attempts") != 3 or summ.get("retries") != 2:
+        out.append(f"block 119: the summary miscounts attempts/retries: {summ}")
+    if not summ.get("population"):
+        out.append("block 119: an attempt count that does not name its population is "
+                   "the defect block 117 already ruled on")
+    cli.close_attempt_ledger(g)
+
+    # -- 8. a rate limit may NOT be spent inside the old three/six-second loop
+    for label, retry_after, expect_attempts in (("no Retry-After", None, 1),
+                                                ("a 900s Retry-After", 900.0, 1),
+                                                ("a 0s Retry-After", 0.0, 3)):
+        gr = _LedgerGateway([_LedgerRate(retry_after=retry_after)] * 5)
+        ledr, _ = cli.open_attempt_ledger(gr, run_id="r-429")
+        t0 = _time.monotonic()
+        raised = None
+        try:
+            gr._call_with_attempts("generation", lambda: gr._create("p"))
+        except BaseException as e:  # noqa: BLE001
+            raised = e
+        elapsed = _time.monotonic() - t0
+        n = len(ledr.events())
+        if n != expect_attempts:
+            out.append(f"block 119: a 429 with {label} made {n} attempt(s), expected "
+                       f"{expect_attempts} — three tries inside nine seconds cannot "
+                       f"honour a per-minute limit and must not be spent trying")
+        if not isinstance(raised, cli.RateLimited):
+            out.append(f"block 119: a 429 with {label} did not stop with RateLimited "
+                       f"(got {type(raised).__name__}) — the retry belongs to the owner")
+        if elapsed > 2.0:
+            out.append(f"block 119: a 429 with {label} burned {elapsed:.1f}s before stopping")
+        if raised is not None and ("rate limit" not in str(raised).lower()):
+            out.append("block 119: the rate-limit stop must say so in words the "
+                       "component explainer can read")
+        if ledr.events() and ledr.events()[0].get("status_code") != 429:
+            out.append("block 119: the provider status code was not recorded on a 429")
+        if retry_after is not None and ledr.events() and \
+                ledr.events()[0].get("retry_after_s") != retry_after:
+            out.append(f"block 119: Retry-After {retry_after} was not recorded")
+        cli.close_attempt_ledger(gr)
+
+    # the old loop, stated as the thing that is now forbidden: three
+    # attempts at three and six seconds. If ATTEMPTS ever drives a 429
+    # again, the count above changes and this says which knob moved.
+    if cli.AnthropicAPIGateway.RETRY_AFTER_BUDGET_S <= 0:
+        out.append("block 119: the automatic rate-limit budget must be a real, "
+                   "disclosed number")
+
+    # -- 3 & 6. WORKER-THREAD attempts reach the parent, and overlap is derived
+    gw = _LedgerGateway(delay=0.04)
+    ledw, _ = cli.open_attempt_ledger(gw, run_id="r-pool")
+    with cli.attempt_scope(gw, component="reinterpreted hell", run_id="r-pool"):
+        gw._call_with_attempts("generation", lambda: gw._create("p"))
+
+        def _worker(_i):
+            with cli.attempt_scope(gw, stage="adversarial"):
+                return gw._call_with_attempts("x", lambda: gw._create("p"))
+
+        with _futures.ThreadPoolExecutor(max_workers=4) as pool:
+            list(pool.map(_worker, range(4)))
+    wevs = cli.derive_overlap(ledw.events())
+    if len(wevs) != 5:
+        out.append(f"block 119: {len(wevs)} of 5 attempts reached the PARENT ledger — "
+                   f"worker-thread traffic must not vanish the way prompt renders did")
+    if {e["component"] for e in wevs} != {"reinterpreted hell"}:
+        out.append(f"block 119: a pool worker lost its component label: "
+                   f"{sorted({e['component'] for e in wevs})}")
+    if sorted({e["stage"] for e in wevs}) != ["adversarial", "generation"]:
+        out.append(f"block 119: a pool worker did not record its own stage: "
+                   f"{sorted({e['stage'] for e in wevs})}")
+    fanned = [e for e in wevs if e["stage"] == "adversarial"]
+    lone = [e for e in wevs if e["stage"] == "generation"]
+    if not all(e["overlapped"] for e in fanned):
+        out.append("block 119: four concurrent attempts were not derivable as overlapping "
+                   "— saturation cannot be diagnosed without this")
+    if any(e["overlapped"] for e in lone):
+        out.append("block 119: a lone sequential attempt was reported as overlapping, so "
+                   "the overlap field distinguishes nothing")
+    cli.close_attempt_ledger(gw)
+
+    # the contrast that names the original defect: the SAME fan-out, through
+    # the prompt ledger, drains empty at the parent.
+    _m = cli.prompt_ledger_mark()
+    with _futures.ThreadPoolExecutor(max_workers=3) as pool:
+        list(pool.map(lambda _i: cli.build_adversarial_prompt(
+            {"title": "T", "definition": "D", "supporting_fragments": []}, {}, "a", "s"), range(3)))
+    if cli.prompt_identities_since(_m, None):
+        out.append("block 119: the prompt ledger now sees worker threads — if that is "
+                   "real, this check's premise changed and the attempt ledger's "
+                   "justification must be re-read, not silently kept")
+
+    # -- 7. NO PRIVATE INPUT may enter an attempt event
+    passage = ("I am loving when I am given attention and monstrous when I am "
+               "deprived of it, and I have called that second thing a demon "
+               "because naming it kept me from having to own it.")
+    gp = _LedgerGateway()
+    ledp, _ = cli.open_attempt_ledger(gp, run_id="r-priv")
+    with cli.attempt_scope(gp, component="conditional self-description", run_id="r-priv"):
+        gp._call_with_attempts("generation", lambda: gp._create(passage))
+    if passage not in "".join(gp.seen):
+        out.append("block 119: the privacy check did not actually send the passage, so "
+                   "it proves nothing")
+    blob = _json.dumps(cli.derive_overlap(ledp.events()), ensure_ascii=False)
+    words = " ".join(passage.split())
+    for i in range(0, len(words) - 30, 30):
+        if words[i:i + 30] in blob:
+            out.append("block 119: the owner's passage reached an attempt event")
+            break
+    for e in ledp.events():
+        extra = set(e) - set(cli.ATTEMPT_EVENT_KEYS)
+        if extra:
+            out.append(f"block 119: an attempt event carries unwhitelisted keys {sorted(extra)} "
+                       f"— the event is metadata ABOUT a request, never what travelled in one")
+    cli.close_attempt_ledger(gp)
+
+    # a credential in a provider error string is still a credential
+    # Split, like the two credential fixtures already in this file: a
+    # key-SHAPED literal here would trip scan_secrets.py on every run, and a
+    # scanner that cries wolf on its own test data is a scanner people learn
+    # to ignore.
+    scrubbed = cli.sanitize_attempt_message(
+        "401 unauthorized for x-api-key: sk-" + "ant-api03-" + "A" * 32)
+    if "sk-ant" in scrubbed or "AAAABBBB" in scrubbed:
+        out.append(f"block 119: a credential survived message sanitisation: {scrubbed!r}")
+    if "401" not in scrubbed:
+        out.append("block 119: sanitisation destroyed the diagnostic part of the message")
+
+    # -- the record must carry attempts, and must not let the old number
+    #    stand in for them.
+    gcomp = _LedgerGateway()
+    rec = cli.record_composite_run(
+        "deep",
+        {"groups": [{"label": "a", "failed": False}, {"label": "b", "failed": True}],
+         "attempts": [{"attempt": 1, "outcome": "ok", "duration_s": 1.0,
+                       "started_mono": 0.0, "finished_mono": 1.0}],
+         "gateway": "ledger-fixture"},
+        "a synthetic passage for the record check", gateway=gcomp,
+        trace_id="trace_deep_ledgercheck")
+    _p = cli.RESULTS_DIR / "trace_deep_ledgercheck.json"
+    if not _p.exists():
+        out.append(f"block 119: the composite record was not written ({rec})")
+    else:
+        _d = _json.loads(_p.read_text())
+        if len(_d.get("attempts") or []) != 1:
+            out.append("block 119: the parent record did not receive the run's attempts")
+        if (_d.get("attempt_summary") or {}).get("http_attempts") != 1:
+            out.append("block 119: the parent record carries no attempt summary")
+        if _d.get("n_components") != 2 or _d.get("n_completed") != 1:
+            out.append(f"block 119: the record must scope its counts — "
+                       f"n_components={_d.get('n_components')} n_completed={_d.get('n_completed')}")
+    # -- the component inspector may not print the owner's passage.
+    #    The guard is checked against the RECORD, not against a list of
+    #    keys someone remembered to skip, so a future field that carries
+    #    the passage under a new name is caught by the same check.
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location(
+        "inspect_component", str(_pathlib.Path(cli.__file__).parent / "inspect_component.py"))
+    _ic = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_ic)
+    _passage = ("I am loving when I am given attention and monstrous when I am deprived "
+                "of it, and I called that second thing a demon because the name kept me "
+                "from having to own it.")
+    _rec = {"input_text": _passage, "mode": "deep", "trace_id": "t",
+            "groups": [{"label": "conditional self-description", "gist": _passage,
+                        "anchor": "monstrous when I am deprived", "candidates": []}]}
+    if _ic.refuse_if_passage_leaked("a report that quotes nothing", _rec) is not None:
+        out.append("block 119: the inspector's leak guard fires on clean output")
+    if _ic.refuse_if_passage_leaked("report: " + _passage, _rec) is None:
+        out.append("block 119: the inspector's leak guard did not catch the owner's "
+                   "passage in its own output — a guard that cannot fail is not a guard")
+    _rendered = _ic.render(_rec)
+    if _ic.refuse_if_passage_leaked(_rendered, _rec) is not None:
+        out.append("block 119: the inspector's own render leaks the passage")
+    if "conditional self-description" not in _rendered or "monstrous when I am deprived" not in _rendered:
+        out.append("block 119: the inspector printed neither the component nor its anchor, "
+                   "so it answers nothing")
+    # -- the constitution must carry the wing that shipped (standing law).
+    #    Pinned on the ABOUT PROSE, not on the renderer, because the
+    #    renderer already has its own journey: this asks whether the page
+    #    tells the reader the rule before they meet it.
+    _about = (_pathlib.Path(cli.__file__).resolve().parents[1] / "webapp" / "index.html").read_text()
+    _about_only = _about[:_about.index("function partialWorkupBanner")] if \
+        "function partialWorkupBanner" in _about else _about
+    for _needle, _why in (
+            ("A partial workup is not a reading",
+             "that a partial run is not a reading"),
+            ("Coverage is not completion",
+             "that extraction coverage is not analysis completion"),
+            ("A failure to run is not a finding",
+             "that a component which never ran was not judged"),
+            ("in requests rather than renders",
+             "that what a run cost is counted in HTTP attempts, not prompt renders"),
+            ("hands the retry back to you",
+             "that a rate limit stops rather than being outwaited automatically")):
+        if _needle not in _about_only:
+            out.append(f"block 119: the constitution does not tell the reader {_why} "
+                       f"(missing {_needle!r}) — a wing that ships amends the constitution "
+                       f"in the same block")
+    return out
+
+
 def main() -> int:
     failures = FAILURES
     # block 113, hoisted: pure checks on a pure function, before anything
     # that could crash on a broken one.
     failures.extend(_check_acquisition_record())
+    failures.extend(_check_attempt_ledger())
     _state_before = _real_state_snapshot()
     gw = CapturingMock()
     result = cli.run_decompose("A passage about pretending while poor, and guilt at arriving.",

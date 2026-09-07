@@ -2412,9 +2412,417 @@ def route_input(text: str) -> tuple[str, str]:
 
 # ---- Gateways: the only thing that changes between "mock" and "real" ---
 
+# ---- the attempt ledger (block 119) ---------------------------------------
+#
+# Block 118 recorded prompt IDENTITIES, and with them a per-stage `calls`
+# number. That number was never a count of HTTP requests, and it was wrong
+# in two directions at once:
+#
+#   1. It counted prompt RENDERS. A retried call reuses the prompt it
+#      already built, so three attempts against one dead connection
+#      incremented it exactly once.
+#   2. It lived on threading.local(). The adversarial and anchor-support
+#      passes build their prompts inside ThreadPoolExecutor workers, so
+#      those renders landed in each worker's own ledger and were never
+#      drained by the parent. The two stages that fan out — and therefore
+#      most of the traffic — were structurally invisible to the run's own
+#      record. Proven, not inferred: three adversarial renders through a
+#      three-worker pool, and the parent drained [('attack', 1)].
+#
+# The run that exposed this completed one component of six. Nothing on
+# disk could say how many requests it had made, how long any of them ran,
+# or what class of error killed the other five: the retry loop printed all
+# of that to the server's stdout and stored none of it. A count that
+# cannot name its own population is the defect block 117 already ruled on;
+# this is the same defect one layer down.
+#
+# So: ONE EVENT PER REAL HTTP ATTEMPT, written at the gateway boundary
+# into a run-scoped list guarded by a lock. The list lives on the gateway
+# object, which is the one thing every worker thread already shares — no
+# thread-local, no context propagation, nothing to lose in a pool. A
+# failed attempt flushes its event BEFORE the exception leaves, because an
+# attempt that raised is the exact attempt the record most needs.
+#
+# What may never enter an event: the prompt, the passage, the API key, any
+# authorization material, or the provider's payload. An attempt event is
+# metadata ABOUT a request — identity, timing, outcome — and nothing that
+# travelled inside one. ATTEMPT_EVENT_KEYS is the closed whitelist, and
+# the suite drives a real forge through a capturing gateway and asserts
+# that nothing outside it ever appears.
+
+ATTEMPT_EVENT_KEYS = (
+    "run_id", "component", "stage", "provider", "model", "attempt",
+    "started_at", "started_mono", "finished_mono", "duration_s",
+    "outcome", "exception", "message", "status_code", "retry_after_s",
+    "usage", "overlapped",
+)
+
+# Keys that may appear inside an event's `usage` sub-object. The provider's
+# usage object carries more than this over time; we copy only integers we
+# name, so a future field carrying an opaque blob cannot ride in.
+ATTEMPT_USAGE_KEYS = ("input_tokens", "output_tokens",
+                      "cache_creation_input_tokens", "cache_read_input_tokens")
+
+ATTEMPT_OUTCOMES = ("ok", "error")
+
+# A provider message is short and diagnostic, but it is still provider text
+# and it is the one free-form field in the event. It is truncated hard, and
+# anything shaped like a credential is removed rather than trusted to be
+# absent — an api key in an error string is still an api key in the record.
+_SECRET_SHAPES = re.compile(
+    r"(sk-[A-Za-z0-9_\-]{8,}|Bearer\s+\S+|x-api-key[:=]\s*\S+|"
+    r"[A-Za-z0-9_\-]{32,})", re.IGNORECASE)
+
+
+def sanitize_attempt_message(text: object, limit: int = 300) -> str:
+    """The message field, made safe to store. Credential-shaped runs are
+    replaced, not merely hoped against; the result is truncated."""
+    s = text if isinstance(text, str) else str(text or "")
+    s = _SECRET_SHAPES.sub("[redacted]", s)
+    s = " ".join(s.split())
+    return s[:limit]
+
+
+class AttemptLedger:
+    """Run-scoped, concurrency-safe. Every thread that touches the gateway
+    writes here, including pool workers — that is the whole point of it
+    living on the gateway rather than on threading.local()."""
+
+    def __init__(self, run_id: str = "", default_label: "dict | None" = None):
+        self.run_id = run_id
+        self.default_label = dict(default_label or {})
+        self._events: "list[dict]" = []
+        self._lock = threading.Lock()
+
+    def record(self, event: dict) -> None:
+        with self._lock:
+            self._events.append({k: event.get(k) for k in ATTEMPT_EVENT_KEYS})
+
+    def events(self) -> "list[dict]":
+        with self._lock:
+            return [dict(e) for e in self._events]
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._events)
+
+
+# The LABEL stack is per-thread on purpose and is not the ledger: it says
+# which stage this thread is currently inside, and a thread genuinely has
+# its own answer to that. A worker that opens no scope of its own inherits
+# the ledger's default label, so an unlabelled call still produces a valid
+# event — an event is never dropped for want of a name.
+_ATTEMPT_LABEL = threading.local()
+
+
+def _current_label(ledger: "AttemptLedger | None") -> dict:
+    stack = getattr(_ATTEMPT_LABEL, "stack", None) or []
+    if stack:
+        return dict(stack[-1])
+    return dict(getattr(ledger, "default_label", None) or {})
+
+
+class attempt_scope:
+    """Name the stage and component a block of calls belongs to. Used as a
+    context manager, including INSIDE pool workers — the two fan-out sites
+    open their own scope so an adversarial attempt is recorded as
+    'adversarial' rather than as whatever the main thread was doing."""
+
+    def __init__(self, gateway=None, stage: str = "", component: str = "",
+                 run_id: str = ""):
+        self.label = {"stage": stage, "component": component, "run_id": run_id}
+        self.gateway = gateway
+
+    def __enter__(self):
+        stack = getattr(_ATTEMPT_LABEL, "stack", None)
+        if stack is None:
+            stack = _ATTEMPT_LABEL.stack = []
+        ledger = getattr(self.gateway, "attempts", None)
+        inherited = _current_label(ledger)
+        merged = {k: (self.label.get(k) or inherited.get(k) or "") for k in
+                  ("stage", "component", "run_id")}
+        stack.append(merged)
+        # A component scope also PUBLISHES itself to the ledger, because a
+        # pool worker starts with an empty thread-local stack and would
+        # otherwise record an unlabelled component — which is precisely the
+        # attribution the failed run needed and did not have. Components
+        # are forged one at a time and every call a component's pools make
+        # belongs to that component, so the published label is unambiguous
+        # for as long as it is installed. The stage is NOT published: a
+        # worker names its own, and inheriting the parent's would relabel
+        # adversarial traffic as whatever the main thread last did.
+        self._restore = None
+        if ledger is not None and self.label.get("component"):
+            with ledger._lock:
+                self._restore = dict(ledger.default_label)
+                ledger.default_label = {"run_id": merged["run_id"],
+                                        "component": merged["component"], "stage": ""}
+        return self
+
+    def __exit__(self, *exc):
+        stack = getattr(_ATTEMPT_LABEL, "stack", None) or []
+        if stack:
+            stack.pop()
+        ledger = getattr(self.gateway, "attempts", None)
+        if ledger is not None and getattr(self, "_restore", None) is not None:
+            with ledger._lock:
+                ledger.default_label = self._restore
+            self._restore = None
+        return False
+
+
+def open_attempt_ledger(gateway, run_id: str = "", component: str = "") -> "tuple[AttemptLedger, bool]":
+    """Install a ledger on the gateway if it has none, and say whether THIS
+    caller owns it. Nested runs (a component forge inside a deep run) get
+    the ledger already there and own=False, so the outermost run drains it
+    once and the parent record receives every worker event exactly once."""
+    if gateway is None:
+        return AttemptLedger(run_id), False
+    existing = getattr(gateway, "attempts", None)
+    if isinstance(existing, AttemptLedger):
+        return existing, False
+    ledger = AttemptLedger(run_id, {"run_id": run_id, "component": component, "stage": ""})
+    try:
+        gateway.attempts = ledger
+    except Exception:  # noqa: BLE001 — a gateway that refuses attributes still runs
+        return ledger, False
+    return ledger, True
+
+
+def close_attempt_ledger(gateway) -> None:
+    if gateway is not None and isinstance(getattr(gateway, "attempts", None), AttemptLedger):
+        try:
+            del gateway.attempts
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def derive_overlap(events: "list[dict]") -> "list[dict]":
+    """Whether another attempt was in flight during this one's interval,
+    derived from the timestamps rather than asserted by the caller. This is
+    what distinguishes a run that fanned out from one that queued, and it
+    is the fact a saturation diagnosis needs."""
+    out = [dict(e) for e in events]
+    spans = []
+    for i, e in enumerate(out):
+        a, b = e.get("started_mono"), e.get("finished_mono")
+        spans.append((i, a, b) if isinstance(a, (int, float)) and isinstance(b, (int, float)) else (i, None, None))
+    for i, a, b in spans:
+        if a is None:
+            out[i]["overlapped"] = None
+            continue
+        hit = False
+        for j, c, d in spans:
+            if j == i or c is None:
+                continue
+            if c < b and a < d:
+                hit = True
+                break
+        out[i]["overlapped"] = hit
+    return out
+
+
+class RateLimited(RuntimeError):
+    """The provider refused this attempt for rate reasons and the wait it
+    asked for does not fit the disclosed budget. This is a STOP, not a
+    failure to try hard enough: the retry belongs to the owner, who is the
+    only one who can decide whether the work is still worth the money."""
+
+    def __init__(self, message: str, retry_after_s: "float | None" = None):
+        super().__init__(message)
+        self.retry_after_s = retry_after_s
+
+
+def _now_precise() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _status_code_of(exc) -> "int | None":
+    code = getattr(exc, "status_code", None)
+    if isinstance(code, int):
+        return code
+    resp = getattr(exc, "response", None)
+    code = getattr(resp, "status_code", None)
+    return code if isinstance(code, int) else None
+
+
+def _retry_after_of(exc) -> "float | None":
+    """The provider's own Retry-After, in seconds, when it supplied one.
+    Never a guess: absent means absent, and absent is the case the policy
+    below refuses to paper over."""
+    resp = getattr(exc, "response", None)
+    headers = getattr(resp, "headers", None)
+    if headers is None:
+        return None
+    for key in ("retry-after", "Retry-After", "anthropic-ratelimit-requests-reset"):
+        try:
+            raw = headers.get(key)
+        except Exception:  # noqa: BLE001 — a header bag that misbehaves is not a crash
+            raw = None
+        if raw is None:
+            continue
+        try:
+            val = float(str(raw).strip())
+        except (TypeError, ValueError):
+            continue
+        if val >= 0:
+            return val
+    return None
+
+
+def _usage_fields(usage) -> "dict | None":
+    """Only the integers we name. The provider's usage object grows over
+    time and an unnamed field could carry anything; a whitelist cannot."""
+    if usage is None:
+        return None
+    out = {}
+    for k in ATTEMPT_USAGE_KEYS:
+        v = getattr(usage, k, None)
+        if v is None and isinstance(usage, dict):
+            v = usage.get(k)
+        if isinstance(v, int):
+            out[k] = v
+    return out or None
+
+
+def attempt_summary(events: "list[dict]") -> dict:
+    """The population this count names, said out loud. `http_attempts` is
+    every attempt including retries; `calls_succeeded` is the subset that
+    returned. Neither is a prompt-render count and neither may be read as
+    one."""
+    evs = list(events or [])
+    ok = [e for e in evs if e.get("outcome") == "ok"]
+    failed = [e for e in evs if e.get("outcome") == "error"]
+    durations = [e.get("duration_s") for e in evs if isinstance(e.get("duration_s"), (int, float))]
+    classes: "dict[str, int]" = {}
+    for e in failed:
+        k = str(e.get("exception") or "unknown")
+        classes[k] = classes.get(k, 0) + 1
+    return {
+        "population": "every HTTP attempt this run made at the gateway boundary, retries included",
+        "http_attempts": len(evs),
+        "attempts_succeeded": len(ok),
+        "attempts_failed": len(failed),
+        "retries": sum(1 for e in evs if (e.get("attempt") or 1) > 1),
+        "failure_classes": classes,
+        "total_seconds": round(sum(durations), 3) if durations else 0.0,
+        "any_overlap": any(e.get("overlapped") for e in evs),
+        "not_a_prompt_render_count": True,
+    }
+
+
 class Gateway:
     name = "base"
     is_external = False
+
+    def _retryable(self) -> tuple:
+        """(rate-limit classes, transient classes) for THIS provider. The
+        base gateway makes no HTTP calls and so has neither; a provider
+        subclass names its own, and a fixture names synthetic ones — which
+        is how the attempt loop can be proven without a network and
+        without a second implementation of itself to drift from."""
+        return ((), ())
+
+    # block 119. Three attempts at three and six seconds cannot honour a
+    # per-minute rate limit: a bucket that refills on the minute is
+    # untouched nine seconds later, so the old loop's only effect on a 429
+    # was to spend the entire budget before the limit could possibly have
+    # cleared, and then report a failure it had helped cause. A rate limit
+    # is therefore no longer "transient". If the provider says how long to
+    # wait and that wait fits the disclosed budget, we wait exactly that
+    # long, once. Otherwise the run STOPS and says so, and the retry
+    # belongs to the owner.
+    #
+    # Deliberately NOT a fix for the connection-reuse theory about the run
+    # that prompted this block. That theory has no evidence yet. This
+    # defect is independent of it and true on its own.
+    RETRY_AFTER_BUDGET_S = 30.0
+    ATTEMPTS = 3
+    BACKOFF_BASE_S = 3.0
+
+    def _record_attempt(self, *, stage, attempt, started_at, t0, t1,
+                        outcome, exc=None, usage=None) -> None:
+        ledger = getattr(self, "attempts", None)
+        if not isinstance(ledger, AttemptLedger):
+            return
+        label = _current_label(ledger)
+        ledger.record({
+            "run_id": label.get("run_id") or ledger.run_id,
+            "component": label.get("component") or "",
+            "stage": label.get("stage") or stage,
+            "provider": self.name,
+            # NOT self.model: a gateway that names no model is a gateway
+            # whose name IS the answer, and the base class must not grow an
+            # empty attribute that changes what other subsystems stamp.
+            "model": getattr(self, "model", "") or self.name,
+            "attempt": attempt,
+            "started_at": started_at,
+            "started_mono": t0,
+            "finished_mono": t1,
+            "duration_s": round(t1 - t0, 3),
+            "outcome": outcome,
+            "exception": type(exc).__name__ if exc is not None else "",
+            "message": sanitize_attempt_message(exc) if exc is not None else "",
+            "status_code": _status_code_of(exc),
+            "retry_after_s": _retry_after_of(exc),
+            "usage": _usage_fields(usage),
+            "overlapped": None,
+        })
+
+    def _call_with_attempts(self, stage: str, make_call):
+        """THE gateway boundary. Every HTTP attempt this gateway makes goes
+        through here, and every attempt leaves an event before control
+        leaves — the failing ones especially, because a run that produced
+        nothing is exactly the run whose attempts nobody can otherwise
+        reconstruct."""
+        rate_limited, transient = self._retryable()
+        attempt = 0
+        while True:
+            attempt += 1
+            started_at = _now_precise()
+            t0 = time.monotonic()
+            try:
+                response = make_call()
+            except rate_limited as e:
+                self._record_attempt(stage=stage, attempt=attempt, started_at=started_at,
+                                     t0=t0, t1=time.monotonic(), outcome="error", exc=e)
+                wait = _retry_after_of(e)
+                if (wait is not None and wait <= self.RETRY_AFTER_BUDGET_S
+                        and attempt < self.ATTEMPTS):
+                    print(f"  [gateway] rate limit — the provider asked for {wait:.0f}s; "
+                          f"waiting exactly that, once (attempt {attempt})")
+                    time.sleep(wait)
+                    continue
+                asked = (f"the provider asked for {wait:.0f}s" if wait is not None
+                         else "the provider named no wait")
+                raise RateLimited(
+                    f"The provider applied a rate limit and nothing was judged — {asked}, "
+                    f"which is outside this run's {self.RETRY_AFTER_BUDGET_S:.0f}s automatic "
+                    f"budget. Nikodemus stopped instead of spending the rest of the attempt "
+                    f"budget inside a window the limit could not have cleared. Retry when "
+                    f"you're ready; completed components are already saved.",
+                    retry_after_s=wait) from e
+            except transient as e:
+                t1 = time.monotonic()
+                self._record_attempt(stage=stage, attempt=attempt, started_at=started_at,
+                                     t0=t0, t1=t1, outcome="error", exc=e)
+                if attempt >= self.ATTEMPTS:
+                    raise
+                backoff = self.BACKOFF_BASE_S * attempt
+                print(f"  [gateway] call failed after {t1 - t0:.0f}s ({type(e).__name__}) — "
+                      f"retry {attempt}/{self.ATTEMPTS - 1} in {backoff:.0f}s...")
+                time.sleep(backoff)
+                continue
+            except BaseException as e:  # noqa: BLE001 — record, then re-raise unchanged
+                self._record_attempt(stage=stage, attempt=attempt, started_at=started_at,
+                                     t0=t0, t1=time.monotonic(), outcome="error", exc=e)
+                raise
+            self._record_attempt(stage=stage, attempt=attempt, started_at=started_at,
+                                 t0=t0, t1=time.monotonic(), outcome="ok",
+                                 usage=getattr(response, "usage", None))
+            return response
+
+
 
     def complete(self, prompt: str) -> str:
         raise NotImplementedError
@@ -3101,25 +3509,14 @@ class AnthropicAPIGateway(Gateway):
                                            max_retries=0)
         self.model = model
 
-    def complete(self, prompt: str) -> str:
+    def _retryable(self) -> tuple:
         import anthropic
-        transient = (anthropic.APITimeoutError, anthropic.APIConnectionError,
-                     anthropic.RateLimitError, anthropic.InternalServerError)
-        attempts = 3
-        response = None
-        for attempt in range(attempts):
-            started = time.monotonic()
-            try:
-                response = self._create(prompt)
-                break
-            except transient as e:
-                waited = time.monotonic() - started
-                if attempt == attempts - 1:
-                    raise
-                backoff = 3.0 * (attempt + 1)
-                print(f"  [gateway] call failed after {waited:.0f}s ({type(e).__name__}) — "
-                      f"retry {attempt + 1}/{attempts - 1} in {backoff:.0f}s...")
-                time.sleep(backoff)
+        return ((anthropic.RateLimitError,),
+                (anthropic.APITimeoutError, anthropic.APIConnectionError,
+                 anthropic.InternalServerError))
+
+    def complete(self, prompt: str) -> str:
+        response = self._call_with_attempts("complete", lambda: self._create(prompt))
         text = "".join(block.text for block in response.content if hasattr(block, "text"))
         if not text.strip():
             block_types = [type(b).__name__ for b in response.content]
@@ -3161,15 +3558,10 @@ class AnthropicAPIGateway(Gateway):
 
     def complete_with_search(self, prompt: str) -> "tuple[str, list[dict]]":
         import anthropic
-        transient = (anthropic.APITimeoutError, anthropic.APIConnectionError,
-                     anthropic.RateLimitError, anthropic.InternalServerError)
-        attempts = 3
-        response = None
-        for attempt in range(attempts):
-            started = time.monotonic()
+
+        def _one():
             try:
-                response = self._create(prompt, tools=[self.WEB_SEARCH_TOOL])
-                break
+                return self._create(prompt, tools=[self.WEB_SEARCH_TOOL])
             except anthropic.BadRequestError as e:
                 raise RuntimeError(
                     f"The model rejected the web_search tool ({e}). This usually means "
@@ -3178,14 +3570,9 @@ class AnthropicAPIGateway(Gateway):
                     f"every Sonnet 5 build. Point --model / WORDICON_MODEL at a confirmed slug, "
                     f"or fall back to complete() (unsearched review) for this gateway."
                 ) from e
-            except transient as e:
-                waited = time.monotonic() - started
-                if attempt == attempts - 1:
-                    raise
-                backoff = 3.0 * (attempt + 1)
-                print(f"  [gateway] search call failed after {waited:.0f}s ({type(e).__name__}) — "
-                      f"retry {attempt + 1}/{attempts - 1} in {backoff:.0f}s...")
-                time.sleep(backoff)
+
+        response = self._call_with_attempts("search", _one)
+
         # block 118: THE PROVIDER'S OWN NUMBERS, never ours. The count of
         # code-execution blocks is NOT a count of billable calls — it is a
         # count of times the provider filtered its own results. Search
@@ -5177,6 +5564,7 @@ def record_composite_run(kind: str, result: dict, input_text: str, gateway=None,
         raise ValueError("a composite run is deep or decompose")
     trace_id = (trace_id or result.get("trace_id") or "").strip() or f"trace_{kind}_" + uuid.uuid4().hex[:12]
     groups = result.get("groups") or []
+    attempts = result.get("attempts") or []
     completion, n_failed = composite_completion(groups)
     components = []
     for g in groups:
@@ -5226,8 +5614,17 @@ def record_composite_run(kind: str, result: dict, input_text: str, gateway=None,
                             "anchor_verified": g.get("anchor_verified", False), "trace_id": g.get("trace_id", ""),
                             "failed": bool(g.get("failed"))} for g in groups],
             "groups": groups, "completion": completion, "partial": bool(n_failed), "n_failed": n_failed,
+            "n_components": len(groups), "n_completed": len(groups) - n_failed,
             "gateway": gw_name, "epoch": composite["epoch"],
             "prompt_identities": receipt.get("prompt_identities", []),
+            # block 119: the run's real HTTP attempts, one event each,
+            # retries included. prompt_identities[].calls is a count of
+            # PROMPT RENDERS and is not interchangeable with this — a
+            # retried call renders once and attempts three times, and the
+            # two fan-out stages render on worker threads that the prompt
+            # ledger never sees at all.
+            "attempts": list(attempts or []),
+            "attempt_summary": attempt_summary(attempts or []),
         }, ensure_ascii=False))
         out["recorded"] = True
     except Exception as e:  # noqa: BLE001 — reported in the result, never raised into the job
@@ -5339,6 +5736,12 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
 
     trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
     _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
+    # block 119: the HTTP attempts this run makes. A NESTED forge (one
+    # component inside a deep run) inherits the ledger its parent opened
+    # and does not drain it, so every worker event reaches the parent's
+    # record exactly once instead of being split across records that can
+    # disagree about how many requests were made.
+    _ledger, _owns_ledger = open_attempt_ledger(gateway, run_id=trace_id)
 
     # Riff is Forge with a material-first generation prompt and a
     # wordplay-appropriate Friction rubric; everything else — Bone
@@ -5450,12 +5853,17 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
     progress("friction", f"Friction on {len(candidates)} candidate(s), in parallel…")
 
     def _adversarial(c: dict) -> dict:
-        return _extract_json(gateway.complete(build_adversarial_prompt(
-            c, riff=is_riff, play=is_play,
-            task=None if wordplay else input_text,
-            anchor=None if wordplay else anchor,
-            stance=None if wordplay else stance,
-            background=None if wordplay else background)))
+        # block 119: a pool worker names its own stage. Without this the
+        # attempt lands under whatever the MAIN thread was last doing, and
+        # the two stages that fan out are exactly the ones whose traffic
+        # nobody could account for.
+        with attempt_scope(gateway, stage="adversarial"):
+            return _extract_json(gateway.complete(build_adversarial_prompt(
+                c, riff=is_riff, play=is_play,
+                task=None if wordplay else input_text,
+                anchor=None if wordplay else anchor,
+                stance=None if wordplay else stance,
+                background=None if wordplay else background)))
 
     t_fric = time.monotonic()
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(candidates))) as pool:
@@ -5475,11 +5883,12 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
         progress("support", f"Checking whether the anchor supports {len(candidates)} candidate(s)…")
         t_sup = time.monotonic()
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(candidates))) as pool:
-            supports = list(pool.map(
-                lambda c: check_claim_support(c, anchor, gateway,
+            def _support(c):
+                with attempt_scope(gateway, stage="anchor_support"):
+                    return check_claim_support(c, anchor, gateway,
                                                source_context=source_text or "",
-                                               constraints=constraints or ""),
-                candidates))
+                                               constraints=constraints or "")
+            supports = list(pool.map(_support, candidates))
         metrics.record("support", time.monotonic() - t_sup, calls=len(candidates))
     else:
         skip_reason = ("no anchor was supplied" if not anchor else
@@ -5685,10 +6094,15 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
         if decisions:
             print(f"\nAll judgments accumulate in {_pretty_path(JUDGMENTS_LOG)}")
 
+    _attempts = derive_overlap(_ledger.events()) if _owns_ledger else []
+    if _owns_ledger:
+        close_attempt_ledger(gateway)
     return {"trace_id": trace_id, "candidates": results,
             "private_receipt": private_receipt, "public_receipt": public_receipt,
             "metrics": metrics.as_dict(),
-            "decisions": decisions}
+            "decisions": decisions,
+            "attempts": _attempts,
+            "attempt_summary": attempt_summary(_attempts) if _owns_ledger else {}}
 
 
 # ---- decompose: find the separate nameable ideas in a longer passage,
@@ -6615,6 +7029,9 @@ def run_decompose(text: str, gateway: Gateway, interactive: bool = True,
     # edges its components record can cite the parent's receipt.
     parent_trace_id = "trace_decompose_" + uuid.uuid4().hex[:12]
     _pmark = prompt_ledger_mark()
+    # block 119: the composite run owns the ledger. Its component forges
+    # inherit it, so a pool worker three frames down still lands here.
+    _ledger, _owns_ledger = open_attempt_ledger(gateway, run_id=parent_trace_id)
     progress("decomposing", "Identifying distinct concepts in the passage…")
     # The source's claim about ITSELF, checked before anything is built on
     # it. Advisory by construction — it annotates the source card and never
@@ -6730,15 +7147,16 @@ def run_decompose(text: str, gateway: Gateway, interactive: bool = True,
         # forge packet so it can be retried alone, and every other concept
         # completes normally.
         try:
-            result = run("forge", forge_input, gateway, interactive=interactive,
-                         on_progress=concept_progress if on_progress else None,
-                         avoid_titles=run_avoid or None, prior_attempts=prior_attempts,
-                         anchor=c.get("anchor") or None,
-                         stance=c.get("stance") or None,
-                         background=c.get("background") or None,
-                         match_text=c["gist"],
-                         source_text=text,
-                         constraints=c.get("constraints") or None)
+            with attempt_scope(gateway, component=c["label"], run_id=parent_trace_id):
+                result = run("forge", forge_input, gateway, interactive=interactive,
+                             on_progress=concept_progress if on_progress else None,
+                             avoid_titles=run_avoid or None, prior_attempts=prior_attempts,
+                             anchor=c.get("anchor") or None,
+                             stance=c.get("stance") or None,
+                             background=c.get("background") or None,
+                             match_text=c["gist"],
+                             source_text=text,
+                             constraints=c.get("constraints") or None)
         except Exception as e:  # noqa: BLE001
             print(f"  [decompose] concept {c['label']!r} FAILED ({e}) — "
                   f"continuing with the remaining concepts; this one can be retried alone")
@@ -6827,7 +7245,14 @@ def run_decompose(text: str, gateway: Gateway, interactive: bool = True,
     _groups_for_record = [{**{k: g[k] for k in _CARRY if k in g},
                            "trace_id": (g.get("result") or {}).get("trace_id", ""),
                            "failed": bool(g.get("failed"))} for g in groups]
-    out.update(record_composite_run("decompose", {"groups": _groups_for_record, "gateway": gateway.name},
+    _attempts = derive_overlap(_ledger.events()) if _owns_ledger else []
+    if _owns_ledger:
+        close_attempt_ledger(gateway)
+    out["attempts"] = _attempts
+    out["attempt_summary"] = attempt_summary(_attempts)
+    out.update(record_composite_run("decompose",
+                                    {"groups": _groups_for_record, "gateway": gateway.name,
+                                     "attempts": _attempts},
                                     text, gateway=gateway, trace_id=parent_trace_id,
                                     prompt_identities=prompt_identities_since(_pmark, gateway)))
     return out
@@ -11274,6 +11699,9 @@ def run_deep(text: str, gateway: Gateway, interactive: bool = True,
     # own receipt, and the stages it uses are drained into that receipt.
     deep_trace_id = "trace_deep_" + uuid.uuid4().hex[:12]
     _pmark = prompt_ledger_mark()
+    # block 119: the composite run owns the ledger. Its component forges
+    # inherit it, so a pool worker three frames down still lands here.
+    _ledger, _owns_ledger = open_attempt_ledger(gateway, run_id=deep_trace_id)
     print(f"[{gateway.name}] dissecting the input...")
     progress("dissecting", "Dissecting the input into components…")
     parsed = _extract_json(gateway.complete(build_dissect_prompt(text)))
@@ -11345,14 +11773,18 @@ def run_deep(text: str, gateway: Gateway, interactive: bool = True,
         # Same soft-fail as decompose: one dead call loses one component,
         # never the run.
         try:
-            result = run("forge", forge_input, gateway, interactive=interactive,
-                         match_text=c.get("gist", "") or None,
-                         on_progress=comp_progress if on_progress else None,
-                         avoid_titles=run_avoid or None, prior_attempts=prior_attempts,
-                         anchor=c.get("anchor") or None,
-                         background=c.get("background") or None,
-                         source_text=text,
-                         constraints=c.get("constraints") or None)
+            # block 119: every attempt under this component — including the
+            # ones its Friction and anchor-support pools make on worker
+            # threads — is stamped with the component it belongs to.
+            with attempt_scope(gateway, component=label, run_id=deep_trace_id):
+                result = run("forge", forge_input, gateway, interactive=interactive,
+                             match_text=c.get("gist", "") or None,
+                             on_progress=comp_progress if on_progress else None,
+                             avoid_titles=run_avoid or None, prior_attempts=prior_attempts,
+                             anchor=c.get("anchor") or None,
+                             background=c.get("background") or None,
+                             source_text=text,
+                             constraints=c.get("constraints") or None)
         except Exception as e:  # noqa: BLE001
             print(f"  [deep] component {label!r} FAILED ({e}) — continuing")
             groups.append({"label": label, "gist": c.get("gist", ""),
@@ -11393,10 +11825,15 @@ def run_deep(text: str, gateway: Gateway, interactive: bool = True,
                          producer=edge_producer("receipt", f"receipt_{result['trace_id']}"))
 
     n_failed = sum(1 for g in groups if g.get("failed"))
+    _attempts = derive_overlap(_ledger.events()) if _owns_ledger else []
+    if _owns_ledger:
+        close_attempt_ledger(gateway)
     return {"source_text": text, "attack": attack, "groups": groups,
             "gesture": gesture,
             "partial": bool(n_failed), "n_failed": n_failed,
+            "n_completed": len(groups) - n_failed, "n_components": len(groups),
             "trace_id": deep_trace_id,
+            "attempts": _attempts, "attempt_summary": attempt_summary(_attempts),
             "prompt_identities": prompt_identities_since(_pmark, gateway)}
 
 

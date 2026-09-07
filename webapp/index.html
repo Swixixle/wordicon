@@ -1328,6 +1328,26 @@
       silence is the good state. An entry reading “<strong>Friction: reject · you: accepted</strong>”
       is a word the critic argued against and you kept, which is a normal outcome and not a conflict
       to resolve.</p>
+      <p class="body"><strong>A partial workup is not a reading.</strong> A deep run splits your
+      passage into components and forges each one separately. When some of them fail — a dead model
+      call, a rate limit, a provider that never answered — the page says so <strong>first</strong>,
+      before anything else on it: <em>PARTIAL WORKUP — n of m components completed. No overall
+      reading exists.</em> That line is a fact, not an explanation, so it is never folded behind a
+      mark. <strong>Coverage is not completion</strong>: the extractor may account for every part of
+      your passage and still have analysed one component of six, and the page states both numbers
+      rather than letting the first speak for the second. Every count is scoped to what actually
+      completed. <strong>A failure to run is not a finding</strong> — nothing judged the components
+      that did not complete, in either direction — and each of them keeps its own retry, which
+      disturbs nothing that finished.</p>
+      <p class="body"><strong>What a run cost, in requests rather than renders.</strong> Every real
+      HTTP attempt a run makes is recorded once — which component, which stage, which attempt, how
+      long, what came back, and whether another call was in flight beside it. A retried call is
+      three attempts, not one. Attempts that failed are recorded too, because a run that produced
+      nothing is exactly the run whose history you need. What is never recorded: your passage, the
+      prompt, or any credential. And a rate limit is not something Nikodemus tries to outwait in
+      nine seconds — if the provider names a wait that fits the run's disclosed budget it waits
+      exactly that once, and otherwise it stops and hands the retry back to you, because a call that
+      times out may still have cost money.</p>
       <p class="body">Friction's verdict is about <strong>craft</strong> — is this a well-made word.
       The support box below it is about <strong>grounding</strong> — did the quoted passage establish
       this. <strong>They answer different questions</strong>, so a word can survive on craft while
@@ -2678,7 +2698,7 @@ async function loadPastResult(traceId, shelf, label, restoring) {
       <div class="card" style="border-left:3px solid var(--accent, #888)">
         <div class="section-label" style="margin-top:0">From the record — a decompose run · ${escapeHtml(d.completion || (d.partial ? 'partial' : 'complete'))}</div>
         <p class="body">${escapeHtml(d.input_text || d.source_text || '')}</p>
-        <p class="body muted" style="font-size:13px">decompose · ${(d.groups || []).length} component(s) · ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}</p>
+        <p class="body muted" style="font-size:13px">decompose · ${componentCountLine(d)} · ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}</p>
       </div>` + buildDecomposeHtml(d);
     return;
   }
@@ -2949,6 +2969,66 @@ function componentHeaderHtml(g, opts) {
       </div>`;
 }
 
+// block 119. A run that completed one component of six rendered a
+// "full coverage" line at the top, a per-component summary on the one
+// card that finished, and a reassurance BELOW both saying five had
+// failed but nothing was lost. Every one of those statements was
+// locally true, and together they read as a whole reading of the
+// passage — the owner took the surviving sixth as Nikodemus's verdict
+// on his writing and argued with it, which is exactly what a partial
+// workup impersonating a complete one is for.
+//
+// Three separate things had been allowed to blur:
+//   EXTRACTION coverage — how much of the passage was assigned to a
+//     component. The extractor claimed all of it, and was right.
+//   ANALYSIS completion — how many of those components were actually
+//     forged and judged. One of six.
+//   CUSTODY — what survived the failure. All of it, and irrelevant to
+//     whether a reading exists.
+// The old banner reported custody in the place where completion
+// belonged, and reported it last.
+//
+// So: partiality renders FIRST, above every coverage or result banner,
+// in the page's own voice and not behind a mark. Block 116 put the
+// explanation of a fact behind a disclosure control; this is the fact,
+// and a fact that changes what the whole page means may not be a fact
+// you have to open something to find.
+function componentCountLine(d) {
+  const groups = d.groups || [];
+  const n = (typeof d.n_components === 'number' && d.n_components) || groups.length;
+  const failed = (typeof d.n_failed === 'number') ? d.n_failed : groups.filter(g => g.failed).length;
+  return failed ? `${n - failed} of ${n} component(s) analysed` : `${n} component(s)`;
+}
+
+function partialWorkupBanner(d) {
+  const groups = d.groups || [];
+  const n = (typeof d.n_components === 'number' && d.n_components) || groups.length;
+  const failed = (typeof d.n_failed === 'number') ? d.n_failed : groups.filter(g => g.failed).length;
+  const done = (typeof d.n_completed === 'number') ? d.n_completed : (n - failed);
+  if (!n || !failed) return '';
+  const names = groups.filter(g => g.failed).map(g => g.label).filter(Boolean);
+  return `<div class="card" style="border-left:3px solid var(--bad, #c0605f);background:rgba(224,138,138,0.08)">
+      <div class="result-title" style="margin:0">PARTIAL WORKUP — ${done} of ${n} components completed. No overall reading exists.</div>
+      <p class="body" style="margin:8px 0 0">${failed} component${failed === 1 ? '' : 's'} never ran, so nothing below is a reading of your passage as a whole. What you can see is ${done === 1 ? 'one component' : `${done} components`} judged in isolation, and every count on this page is scoped to ${done === 1 ? 'that one' : 'those'}.</p>
+      ${names.length ? `<p class="body muted" style="margin:6px 0 0;font-size:12.5px">Not analysed: ${names.map(escapeHtml).join(' · ')}. Each keeps its own retry below; retrying one does not disturb what completed.</p>` : ''}
+      <p class="body muted" style="margin:6px 0 0;font-size:11.5px">A failure to run is not a finding about your writing. Nothing here judged the components that did not complete, in either direction.</p>
+    </div>`;
+}
+
+// EXTRACTION COVERAGE, said as extraction and never as completion. The
+// old line — "The extractor claims full coverage — every part of your
+// text assigned to a concept" — was true about the split and silent
+// about the analysis, and printed directly above a run that analysed a
+// sixth of it.
+function coverageLine(d) {
+  const groups = d.groups || [];
+  const n = (typeof d.n_components === 'number' && d.n_components) || groups.length;
+  const failed = (typeof d.n_failed === 'number') ? d.n_failed : groups.filter(g => g.failed).length;
+  const done = n - failed;
+  if (!n) return '';
+  return `<div class="muted" style="font-size:11.5px;margin:0 0 10px">${n} component${n === 1 ? ' was' : 's were'} proposed from the passage; ${done} completed analysis. Coverage describes the split, not the reading — if you can name something the extractor skipped, that claim is wrong; run it again.</div>`;
+}
+
 function buildDecomposeHtml(d) {
   const globalBanner = d.global_constraints
     ? `<div class="card" style="border-left:3px solid var(--accent, #888);background:transparent">
@@ -2964,14 +3044,12 @@ function buildDecomposeHtml(d) {
          <p class="body muted" style="font-size:11.5px">The extractor accounts for the whole passage: anything not assigned to a concept is listed here with its reason, so a dropped idea is a visible choice you can overrule (run again, or forge it directly) — never a silent omission.</p>
        </div>`
     : (d.groups && d.groups.length)
-      ? `<div class="muted" style="font-size:11.5px;margin:0 0 10px">The extractor claims full coverage — every part of your text assigned to a concept. If you can name something it skipped, that claim is wrong; run it again.</div>`
+      ? coverageLine(d)
       : '';
-  const partialBanner = d.partial
-    ? `<div class="card" style="border-left:3px solid var(--danger, #c0605f)">
-         <p class="body" style="margin:0">${escapeHtml(String(d.n_failed || 0))} concept(s) failed mid-run — but the rest completed and are saved below. Nothing finished was lost; each failed concept has its own retry button.</p>
-       </div>`
-    : '';
-  return globalBanner + uncoveredBanner + partialBanner + d.groups.map(g => {
+  // FIRST, before the global constraint and before any coverage line:
+  // this one changes what every statement under it means.
+  const partialBanner = partialWorkupBanner(d);
+  return partialBanner + globalBanner + uncoveredBanner + d.groups.map(g => {
     if (g.failed) {
       const rid = 'retry' + (++retrySeedN);
       retrySeeds[rid] = {forge_input: g.forge_input || g.gist || '',
@@ -3036,6 +3114,15 @@ function buildDeepHtml(d) {
   const attackBody = `
       <p class="body">${escapeHtml(atk.hostile_read || '')}</p>
       ${atk.redundancy_note ? `<p class="body muted"><em>Redundancy:</em> ${escapeHtml(atk.redundancy_note)}</p>` : ''}`;
+  // block 119: this check ran BEFORE any component, so it is still true on
+  // a partial run — but on a partial run the page must say what it is a
+  // verdict ON. It is never suppressed: an objection that was raised stays
+  // raised (block 114), and scoping it is not the same as hiding it.
+  const _n = (typeof d.n_components === 'number' && d.n_components) || (d.groups || []).length;
+  const _failed = (typeof d.n_failed === 'number') ? d.n_failed : (d.groups || []).filter(g => g.failed).length;
+  const attackScope = _failed
+    ? `<p class="body" style="margin:8px 0 0;font-size:12.5px;border-left:3px solid var(--bad);padding-left:10px">This judged your input as given, before any component ran. It is not a verdict on the workup and not a reading of the passage — ${_n - _failed} of ${_n} components completed.</p>`
+    : '';
   const attackCard = `
     <div class="card" style="border-left:3px solid var(--bad)">
       <div class="section-label" style="margin-top:0">Your input on trial — before any generation
@@ -3045,6 +3132,7 @@ function buildDeepHtml(d) {
       ${attackQuiet
         ? `<details class="case"><summary>what the critic looked for, and why it did not object</summary>${attackBody}</details>`
         : attackBody}
+      ${attackScope}
     </div>`;
   const groupsHtml = (d.groups || []).map(g => {
     if (g.failed) {
@@ -3068,7 +3156,7 @@ function buildDeepHtml(d) {
       ${g.summary ? `<div class="muted" style="font-size:13px;margin-bottom:12px">${escapeHtml(g.summary)}</div>` : ''}
       ${cards}`;
   }).join('<div style="height:8px"></div>');
-  return attackCard + groupsHtml + expansionCard(d);
+  return partialWorkupBanner(d) + attackCard + groupsHtml + expansionCard(d);
 }
 
 // The one secondary action the workup is allowed, and it is a door with its

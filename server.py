@@ -658,6 +658,12 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
                        "gesture": cli_result.get("gesture", "trial"),
                        "partial": cli_result.get("partial", False),
                        "n_failed": cli_result.get("n_failed", 0),
+                       # block 119: the counts the page must scope its
+                       # aggregates to, and the run's real HTTP attempts.
+                       "n_components": cli_result.get("n_components", 0),
+                       "n_completed": cli_result.get("n_completed", 0),
+                       "attempts": cli_result.get("attempts") or [],
+                       "attempt_summary": cli_result.get("attempt_summary") or {},
                        "groups": groups, "gateway": gateway.name,
                        # block 104: the identity the run minted before its first
                        # model call (its edges already cite it), the stages it used,
