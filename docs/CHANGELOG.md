@@ -71,7 +71,14 @@ under the exact rule are produced by `python3 scripts/map_focus.py --census
 --state ⟨local_state⟩`, which prints them with their populations, its method,
 the date and the store hash before and after (read-only by construction);
 they belong in `docs/nikodemus-capability-census.md` §8 and here, never in
-the constitution.
+the constitution. Measured on the owner's record on 2026-09-08T18:30:10Z
+(read-only; store hash unchanged), population the 1,606 legacy rows: derived
+from snapshot 680, derived by writer invariant 245, issuer not recorded 681
+— of the last, 372 are split roads of composite runs whose record was never
+written and 297 are `produced` rows keyed by title before commit `07fb977`
+moved the writer to concept ids; a dated pre-`07fb977` constructor would
+reproduce those 297 (and 92 now by invariant) exactly and is left for a
+ruling (census §8).
 
 **Four standings, apart.** Each road carries `provenance` (receipt ▸ its run;
 snapshot; *producer receipt cited · file not found* with *run snapshot

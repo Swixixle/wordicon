@@ -441,17 +441,48 @@ rows are untouched and render as *producer receipt cited · file not found*
 with no snapshot claimed.
 
 **Issuers under the exact rule.** The counts belong here and in the changelog,
-never in the constitution. They are produced, with their populations, the
-method, the date and the store hash before and after, by
-`python3 scripts/map_focus.py --census --state ⟨local_state⟩`; paste its output
-below when it is run on the owner's record, and keep the date.
+never in the constitution. Produced by `python3 scripts/map_focus.py --census
+--state ⟨local_state⟩` on the owner's record on **2026-09-08T18:30:10Z**, read-only
+(store hash `8affc20e…4a6b` before and after). Method: `derive_issuer` per road
+under `issuer-derivation/1` — the row's recorded identity against its run's
+snapshot or a composite listing it, exact; the writer invariant only for rows
+created at or after 2026-08-29T23:43:11Z. The reconnaissance figures
+1,481 / 32 / 93 were counted under a label-prefix rule and are superseded.
 
-*Population: rows in edges.jsonl without a recorded origin; roads in the
-served map (recorded and reconstructed). Method: derive_issuer per road under
-issuer-derivation/1 — exact recorded identity against the run's snapshot or a
-composite listing it; the writer invariant only for rows created at or after
-2026-08-29T23:43:11Z. The reconnaissance figures 1,481 / 32 / 93 were counted
-under a label-prefix rule and are superseded.*
+*Population: the 1,606 rows in `edges.jsonl` without a recorded origin (of
+1,883 rows).* Derived from snapshot **680** · derived by writer invariant
+**245** · issuer not recorded **681**. By relation — `produced` 24 / 92 / 297;
+`forged_as` 0 / 96 / 279; `decomposed_into` 0 / 32 / 93; `parallels` 256 / 10 / 0;
+`translated_as` 181 / 11 / 0; `compressed_as` 57 / 0 / 6; `continued_from`
+53 / 0 / 0; `renamed_as` 45 / 0 / 0; `english_fossil` 35 / 2 / 0;
+`archetype_of` 29 / 2 / 0; `reworked_into` 0 / 0 / 6.
+
+*Population: the 2,949 roads in the served map (recorded and reconstructed).*
+recorded · pipeline 178 · recorded · model proposal 99 · derived from snapshot ·
+pipeline 1,052 (1,066 of the served roads are reconstructions, all of which
+name their snapshot) · · model stage (sprout) 385 · · (refract) 280 · ·
+(archetype) 29 · derived by writer invariant · pipeline 188 · · (dissect) 32 ·
+· (refract) 13 · · (sprout) 10 · · (archetype) 2 · issuer not recorded 681.
+Provenance: receipt resolves 254 · result snapshot resolves 5 · reconstruction
+resolves 1,066 · no citation recorded, run snapshot available 1,606 ·
+producer receipt cited, file not found 18 (no snapshot claimed). Places 2,253;
+33 with twelve or more direct roads; the highest 38.
+
+**Where the 681 come from, and a question for a ruling.** 372 are the split
+roads of CLI deep and decompose runs whose composite record was never written
+(`forged_as` 279, `decomposed_into` 93): nothing exists to reproduce them from,
+and they stay *issuer not recorded* by the rule. 297 are `produced` rows from
+2026-08-26 onward whose forge snapshots hold the candidate — but the road was
+written when `run()` keyed candidates by **title** (`node_word`), and commit
+`07fb977` (2026-09-01T20:58:49Z) moved the writer to concept ids, so today's
+constructor reproduces `concept:…` where the row says `word:…`. Exact
+reproduction under the constructor in force at the row's own time — dated by
+that commit, inside the tracked history — would move 389 rows
+(297 not recorded + 92 by invariant) to *derived from snapshot · pipeline*,
+giving 1,069 / 153 / 384. It is not done: it derives from a title-keyed
+identity, which sits close to the identity law, and the ruling is the
+owner's. The remaining 12 are `compressed_as` (6) and `reworked_into` (6)
+rows whose revise snapshots predate the fields they would need.
 
 **The Map's names, resolved.** The header's **Map** opens *Map · focus*
 (`/map`); *Map · trails* (`/map/trails`) and *Map · world* (`/map/world`) are
