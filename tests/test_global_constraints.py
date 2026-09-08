@@ -185,6 +185,29 @@ def _surfaces_text() -> str:
     return (root / "index.html").read_text(encoding="utf-8") + "\n" + _canon_source()
 
 
+def _canon_regions() -> "dict[str, str]":
+    """Every addressable region of the constitution, as flat text. Block 121b.
+
+    Movements are addressable as well as sections: the last movement carries
+    a thousand words of its own body before its only section label, and a
+    claim living there has no `<section class="cl">` to point at. Bounded at
+    the page footer so the last region cannot run on into the page's own
+    script — which is how the first version of this matched its own code."""
+    src = _canon_source()
+    end = src.index('<p class="foot" style="margin-top:36px">')
+    marks = [("intro", "what-it-is", src.index('<section id="what-it-is">'))]
+    marks += [("movement", m.group(1), m.start())
+              for m in _re.finditer(r'<div class="about-movement" id="([^"]+)"', src)]
+    marks += [("section", m.group(1), m.start())
+              for m in _re.finditer(r'<section class="cl" id="([^"]+)"', src)]
+    marks.sort(key=lambda x: x[2])
+    out = {}
+    for i, (_kind, sid, pos) in enumerate(marks):
+        nxt = marks[i + 1][2] if i + 1 < len(marks) else end
+        out[sid] = " ".join(_re.sub(r"<[^>]+>", " ", src[pos:nxt]).split())
+    return out
+
+
 def _canon_section(title: str) -> str:
     """One canonical section's body, located by its OWN structure rather
     than by a byte count: the <section> whose summary carries this label,
@@ -195,7 +218,9 @@ def _canon_section(title: str) -> str:
         return ""
     start = src.rindex('<section class="cl"', 0, src.index(needle))
     nxt = src.find('<section class="cl"', start + 1)
-    return src[start:nxt if nxt != -1 else len(src)]
+    if nxt == -1:
+        nxt = src.index('<p class="foot" style="margin-top:36px">')
+    return src[start:nxt]
 
 
 def _about_panel(idx: str) -> str:
@@ -1075,6 +1100,24 @@ def _check_constitution_split():
             out.append(f"121: a panel clause points at {_dc!r}, which is not a section of "
                        f"the constitution — a pointer to nothing is a paraphrase with a "
                        f"link on it")
+    # block 121b: a destination proves correspondence of LOCATION, not of
+    # MEANING. The first cut of this panel wrote five refusals in its own
+    # words and pinned only that their anchors existed — which passed while
+    # one of them pointed at a section that did not contain the claim, and
+    # while all five were paraphrase. A summary line must therefore be a
+    # VERBATIM excerpt of the region it names. Then drift is mechanical: if
+    # the law's wording changes, this fails.
+    regions = _canon_regions()
+    for _m in _re.finditer(r'<a class="canon-link" data-canon="([^"]+)"[^>]*>(.*?)</a>',
+                           panel, _re.S):
+        _dc, _vis = _m.group(1), " ".join(_re.sub(r"<[^>]+>", " ", _m.group(2)).split())
+        if _dc not in regions:
+            out.append(f"121b: {_dc!r} is not an addressable region of the constitution")
+        elif _vis not in regions[_dc]:
+            out.append(f"121b: a panel line is not a verbatim excerpt of the clause it "
+                       f"names ({_dc}): {_vis[:70]!r}. A summary in its own words is a "
+                       f"miniature second constitution whose accuracy depends on "
+                       f"editorial judgment")
 
     # -- STATE did not follow the explanation onto the inert page
     for _sid in RUNTIME_STATE_IDS:

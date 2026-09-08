@@ -79,7 +79,36 @@ shrinking their guarded region every time the prose above them grew; they are
 now bounded by the section's own structure. That class of pin is not to be used
 again.
 
-The compact panel can drift from the law in wording, and no test can catch
-paraphrase drift in prose. The structural answer is that it does not paraphrase:
-it points. If a future edit turns a pointer back into a restatement, the panel
-becomes a second constitution and this ADR is the thing it violates.
+## Amendment, same day: pointing is not enough
+
+The first build pinned only that each panel line's `data-canon` destination
+existed. The reviewer's objection: **a destination proves correspondence of
+location, not correspondence of meaning.** He was right, and the demonstration
+was worse than the objection. All five refusal lines were written in the
+panel's own words rather than the law's, and one of them pointed at a section
+that did not contain the claim at all — the check passed anyway, because the
+anchor existed.
+
+So a panel line must now be a **verbatim excerpt** of the region it names.
+Every one is checked word for word against that region, and the suite fails on
+either drift mode: an excerpt reworded, or a correct excerpt pointed at the
+wrong clause. Both were sabotaged; both fail by name.
+
+Regions are addressable at movement level as well as section level, because the
+last movement carries a thousand words of its own body before its only section
+label, and a clause living there had nothing to point at.
+
+The panel may therefore contain navigation labels and verbatim excerpts of the
+law. It may not contain a summary of the law in its own words. That is not a
+style preference: a summary's accuracy depends on editorial judgment, no test
+can check editorial judgment, and an unfalsifiable summary of binding text is a
+second constitution wearing a link.
+
+## A finding left visible rather than resolved
+
+Blocks 119 and 120 amended the constitution by appending near a convenient
+paragraph rather than a semantically right one, so the partial-workup law, the
+attempt-ledger law and the retry-authority law all sit inside **The Library —
+where kept things live**. They are correctly stated and correctly pinned, and
+they are filed under the wrong heading. Moving them is restructuring, which
+this block was told not to do. Reported here rather than quietly fixed.
