@@ -81,6 +81,7 @@ import recovery  # noqa: E402  (the Recovery Review — block 103; reads the que
 import speech  # noqa: E402  (Speak to Nikodemus — block 106; the transcription adapter, local only)
 import federation  # noqa: E402  (connected instruments — block 107; Open Case and EthicalAlt behind the membrane, manual pull only)
 import carry  # noqa: E402  (Carry Back — block 123; the bridge from a workup to the writing room. No model, no network)
+import map_focus  # noqa: E402  (Map · focus — one place's ring, read-only. No model, no network, no write)
 import inquiry  # noqa: E402  (the Inquiry — block 111 phase 1; a question kept, branched and returnable. Zero model calls)
 from wordicon_corpus.objects import Judgment  # noqa: E402
 
@@ -1028,6 +1029,36 @@ def api_map_route_analyze():
     except Exception as e:
         return jsonify({"error": cli.explain_component_failure(str(e))}), 500
     return jsonify(result)
+
+
+# ---- Map · focus (read-only) -----------------------------------------------
+#
+# One place in focus: its direct roads, each with its issuer (recorded, or
+# derived only from exact custody evidence), its provenance basis, its
+# review standing, its owner standing and its evidence support, kept apart.
+# These two routes read the record and return a projection; they import no
+# gateway, post nothing, and write nothing — not even a Wayfinder event.
+# The store is hashed around them in the suite.
+@app.route("/api/map/focus")
+def api_map_focus():
+    key = str(request.args.get("key") or "").strip()[:300]
+    if not key:
+        return jsonify({"error": "a focus needs a key — choose a place first",
+                        "picker": "/api/map/places"}), 400
+    expand = str(request.args.get("expand") or "").strip()[:80]
+    filters = {k: str(request.args.get(k) or "").strip()[:120] for k in ("rel", "issuer", "standing")}
+    filters = {k: v for k, v in filters.items() if v}
+    view = map_focus.focus_view(key, expand=expand, filters=filters)
+    if view.get("error"):
+        return jsonify(view), 404
+    return jsonify(view)
+
+
+@app.route("/api/map/places")
+def api_map_places():
+    """Every place a focus can be put on, ordered by label — a picker, so a
+    focus is chosen and never assumed."""
+    return jsonify(map_focus.places())
 
 
 @app.route("/api/map/log", methods=["POST"])

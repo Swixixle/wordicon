@@ -1723,6 +1723,83 @@ def _check_map_focus():
     return out
 
 
+
+def _check_map_focus_routes(server, paired):
+    """The two Focus routes are reads: the whole scratch store is hashed
+    before and after every call, the Wayfinder log is compared byte for
+    byte, the route block reaches for no gateway, and the doors answer by
+    name — no key is a 400 that points at the picker, an unknown key is a
+    404 that says so, and a POST is refused."""
+    out = []
+    import hashlib as _hl
+    def store_hash():
+        h = _hl.sha256()
+        root = cli.LOCAL_STATE
+        for f in sorted(p for p in root.rglob("*") if p.is_file()):
+            h.update(str(f.relative_to(root)).encode()); h.update(f.read_bytes())
+        return h.hexdigest()
+    c = paired(server.app.test_client())
+    wf_before = cli.WAYFINDER_LOG.read_bytes() if cli.WAYFINDER_LOG.exists() else b""
+    h0 = store_hash()
+    pl = c.get("/api/map/places")
+    if pl.status_code != 200 or not isinstance(pl.get_json(), dict) or "places" not in pl.get_json():
+        out.append(f"focus route: /api/map/places did not answer with places (HTTP {pl.status_code})")
+        return out
+    places = pl.get_json()["places"]
+    if pl.get_json().get("population") is None or pl.get_json().get("order") is None:
+        out.append("focus route: the picker does not name its population and order")
+    with_roads = [p for p in places if p.get("degree", 0) > 0]
+    if not with_roads:
+        out.append("focus route: no place in the scratch store has a road to focus on")
+        return out
+    key = with_roads[0]["key"]
+    r = c.get("/api/map/focus", query_string={"key": key})
+    if r.status_code != 200:
+        out.append(f"focus route: a known key answered HTTP {r.status_code}: {r.get_data(as_text=True)[:200]}")
+        return out
+    v = r.get_json()
+    for k in ("focus", "roads", "burden", "presentation", "facets", "facets_total", "standing_rule",
+              "derivation_version", "tracked_since", "limits", "expanded", "filters"):
+        if k not in v:
+            out.append(f"focus route: the response lacks {k!r}")
+    if v.get("focus", {}).get("key") != key or "verdict" in v.get("focus", {}):
+        out.append("focus route: the focus is not the requested place, or carries a verdict")
+    if v["roads"]:
+        e0 = v["roads"][0]["edge_id"]
+        r2 = c.get("/api/map/focus", query_string={"key": key, "expand": e0, "rel": v["roads"][0]["rel"]})
+        v2 = r2.get_json() if r2.status_code == 200 else {}
+        if r2.status_code != 200 or not v2.get("expanded") or v2["expanded"].get("from_edge_id") != e0:
+            out.append(f"focus route: expanding one road through the route did not return a ring (HTTP {r2.status_code})")
+        if v2.get("filters") != {"rel": v["roads"][0]["rel"]}:
+            out.append(f"focus route: the filters are not echoed back as applied: {v2.get('filters')}")
+        if any(x["rel"] != v["roads"][0]["rel"] for x in v2.get("roads", [])):
+            out.append("focus route: a relation filter passed through the route did not narrow the ring")
+    nk = c.get("/api/map/focus")
+    if nk.status_code != 400 or "picker" not in (nk.get_json() or {}):
+        out.append(f"focus route: no key answered HTTP {nk.status_code} without pointing at the picker")
+    uk = c.get("/api/map/focus", query_string={"key": "concept:concept_no_such_place_zz"})
+    if uk.status_code != 404 or "no place" not in (uk.get_json() or {}).get("error", ""):
+        out.append(f"focus route: an unknown key answered HTTP {uk.status_code} instead of a named 404")
+    for path in ("/api/map/focus", "/api/map/places"):
+        if c.post(path, json={"key": key}).status_code != 405:
+            out.append(f"focus route: {path} accepts a POST — a read-only door has one verb")
+    if store_hash() != h0:
+        out.append("focus route: reading a focus CHANGED the store")
+    wf_after = cli.WAYFINDER_LOG.read_bytes() if cli.WAYFINDER_LOG.exists() else b""
+    if wf_after != wf_before:
+        out.append("focus route: opening a focus wrote a Wayfinder event")
+    src = Path(server.__file__).read_text(encoding="utf-8")
+    i = src.find("# ---- Map · focus (read-only)")
+    j = src.find('@app.route("/api/map/log"', i)
+    block = src[i:j] if i != -1 and j != -1 else ""
+    if not block:
+        out.append("focus route: the route block is not where the server says it is")
+    elif "server_gateway" in block or "make_gateway" in block or "log_wayfinder" in block or "record_" in block:
+        out.append("focus route: the route block reaches for a gateway or a writer")
+    if 'methods=' in block:
+        out.append("focus route: a focus route declares a verb other than GET")
+    return out
+
 def _check_write_order():
     """Gate 0 of the Map Focus build: no road is ever persisted citing a
     receipt or snapshot that does not exist. Eighteen roads in the owner's
@@ -2255,6 +2332,7 @@ def main() -> int:
     shaped = server._shape_operation_result("decompose", gw.name, result)
     if shaped.get("global_constraints") != gc:
         failures.append("server did not pass global_constraints through")
+    failures.extend(_check_map_focus_routes(server, _paired))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key
