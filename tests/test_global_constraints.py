@@ -3,6 +3,7 @@
 + new rubric bullets, offline, against the MockGateway."""
 import re
 import re as _re
+import contextlib as _contextlib
 import sys
 from pathlib import Path
 
@@ -1354,6 +1355,374 @@ def _check_law_filing():
 # labels as rendered text, a mismatch that cannot pass silently); this
 # proves the record side, offline, with no gateway anywhere near it.
 
+@_contextlib.contextmanager
+def _isolated_store(name: str):
+    """A fresh store under the scratch root, for a case whose truth depends
+    on the record holding exactly what the case wrote. Every redirected
+    path moves together and moves back."""
+    root = _SCRATCH / name
+    saved = {k: getattr(cli, k) for k in _REDIRECTED}
+    for k, p in _REDIRECTED.items():
+        setattr(cli, k, root / p.relative_to(_SCRATCH))
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "receipts").mkdir(exist_ok=True)
+    (root / "results").mkdir(exist_ok=True)
+    try:
+        yield root
+    finally:
+        for k, v in saved.items():
+            setattr(cli, k, v)
+
+
+def _check_map_focus():
+    """Map · focus (the projection). Proven against roads the REAL writers
+    produced in the scratch store, never against hand-authored rows.
+
+    1. Writer/derivation agreement: for every writer, the exact identity of
+       every road it recorded is reproduced from its snapshot by
+       edge_specs_from_snapshot, and no phantom road is reproduced. This is
+       the pin that keeps the writer and the derivation one definition.
+    2. Issuer derivation: recorded stays recorded; a legacy row derives from
+       its snapshot only on EXACT identity (a prefix-resembling target does
+       not qualify); a legacy row without a snapshot derives by the writer
+       invariant only inside the tracked history; otherwise issuer not
+       recorded. Reconstructions name their snapshot.
+    3. Provenance resolution: found / file not found / run snapshot
+       available only when it exists / reconstruction / none.
+    4. The ring: burden sums, grouping at twelve, the order rule with and
+       without recorded times, the dispute shown on the road and never on
+       the node, legacy title identity disclosed, one ring per expansion,
+       and no write.
+    5. TRACKED_SINCE is the first tracked commit and the writer table matches
+       the source, when a repository is present."""
+    out = []
+    import map_focus as mf
+    gw = cli.MockGateway()
+    def ident(e):
+        return mf._identity(e["rel"], e["source"], e["target"], e["run_trace_id"])
+    def edges_of(traces):
+        return [e for e in cli.load_edges() if e.get("run_trace_id") in traces]
+
+    # ---- 1. writer/derivation agreement, one real run per writer ----------
+    cand = {"title": "ZZ Focus Seed", "definition": "a probe for the focus projection", "concept_id": "concept_zzfocus1",
+            "central_contradiction": "c", "axiom": "a", "plain_gloss": "g"}
+    f = cli.run("forge", "ZZ focus probe: a passage about pretending while poor.", gw, interactive=False)
+    sp = cli.run_sprout(cand, gw, parent_trace_id=f["trace_id"])
+    rf = cli.run_refract(cand, gw)
+    ar = cli.run_archetype(cand, gw)
+    rv1 = cli.run_revise({"title": "ZZ Focus Seed", "definition": "d", "concept_id": "concept_zzfocus1",
+                          "central_contradiction": "c", "axiom": "a"}, gw)
+    rv2 = cli.run_revise({"title": "ZZ Focus Seed", "definition": "d", "concept_id": "concept_zzfocus1",
+                          "central_contradiction": "c", "axiom": "a", "plain_gloss": "g"}, gw, wordify=True)
+    rv3 = cli.run_revise({"title": "ZZ Focus Seed", "definition": "d", "concept_id": "concept_zzfocus1",
+                          "central_contradiction": "c", "axiom": "a"}, gw, owner_note="steer it toward the ledger")
+    _deep_text = "ZZ focus probe deep: a passage about pretending while poor, and guilt at arriving."
+    dp = cli.run_deep(_deep_text, gw, interactive=False)
+    _groups = [{"label": g["label"], "gist": g.get("gist", ""), "anchor": g.get("anchor", ""), "anchor_verified": g.get("anchor_verified", False),
+                "trace_id": g["result"]["trace_id"], "receipt_id": g["result"]["private_receipt"]["receipt_id"], "failed": False}
+               for g in dp["groups"] if g.get("result")]
+    rec = cli.record_composite_run("deep", {"mode": "deep", "groups": _groups, "attack": dp["attack"], "gesture": "trial",
+                                            "trace_id": dp["trace_id"], "prompt_identities": dp["prompt_identities"],
+                                            "gateway": "mock", "gateway_external": False,
+                                            "pending_roads": dp.get("pending_roads") or []}, _deep_text)
+    if not rec.get("recorded"):
+        out.append(f"focus: the deep composite was not recorded: {rec}")
+    dc = cli.run_decompose("ZZ focus probe decompose: a passage about pretending while poor, and guilt at arriving.", gw, interactive=False)
+    comp_traces = {g["result"]["trace_id"] for g in dp["groups"] if g.get("result")} | {g["result"]["trace_id"] for g in dc["groups"] if g.get("result")}
+    traces = {f["trace_id"], sp["trace_id"], rf["trace_id"], ar["trace_id"], rv1["trace_id"], rv2["trace_id"], rv3["trace_id"]} | comp_traces
+    idx = mf.SnapshotIndex()
+    # A trace id is the hash of the input text and the second, so a component
+    # forged from the same mock gist by ANOTHER check's deep run in the same
+    # second shares the trace id; its composite roads belong to that other
+    # passage. This check vouches for the roads of ITS runs: composite roads
+    # are selected by the source they hang from as well as by trace, and a
+    # repeated identity is judged once.
+    my_src = {cli.node_source(_deep_text)["key"],
+              cli.node_source("ZZ focus probe decompose: a passage about pretending while poor, and guilt at arriving.")["key"]}
+    def mine(e):
+        if e["rel"] not in ("forged_as", "decomposed_into"):
+            return True
+        sk = (e.get("source") or {}).get("key", "")
+        return sk in my_src or any(sk.startswith(f"cmp:{k}:") for k in my_src)
+    recorded, seen_ids = [], set()
+    for e in edges_of(traces):
+        if mine(e) and ident(e) not in seen_ids:
+            seen_ids.add(ident(e)); recorded.append(e)
+    if len(recorded) < 12:
+        out.append(f"focus: the writers produced only {len(recorded)} roads to test against")
+    for e in recorded:
+        if not idx.reproduce(e["run_trace_id"], ident(e)):
+            out.append(f"focus: the {e['rel']} road written by the real writer is not reproduced from its snapshot "
+                       f"(writer and derivation have diverged): {ident(e)}")
+    # no phantoms: every identity the derivation reproduces for these runs was actually recorded
+    recorded_ids = {ident(e) for e in recorded}
+    for t in traces | {dp["trace_id"], dc["trace_id"]}:
+        snap = idx.by_trace.get(t)
+        for spec in (mf.edge_specs_from_snapshot(snap, idx.by_trace) if snap else []):
+            if spec["identity"] not in recorded_ids:
+                out.append(f"focus: the derivation reproduces a road no writer recorded: {spec['identity']}")
+    rels = {e["rel"] for e in recorded}
+    for need in ("produced", "parallels", "continued_from", "translated_as", "archetype_of", "renamed_as",
+                 "compressed_as", "reworked_into", "decomposed_into", "forged_as"):
+        if need not in rels:
+            out.append(f"focus: the agreement test never saw a {need} road")
+
+    # ---- 2. issuer derivation ------------------------------------------------
+    par = next((e for e in recorded if e["rel"] == "parallels"), None)
+    if par:
+        if mf.derive_issuer(par, idx)["label"] != "recorded · model proposal":
+            out.append(f"focus: a recorded model proposal is not labeled so: {mf.derive_issuer(par, idx)}")
+        legacy = {k: v for k, v in par.items() if k not in ("origin", "producer")}
+        d = mf.derive_issuer(legacy, idx)
+        if d["label"] != "derived from snapshot · model stage (sprout)" or (d.get("derivation") or {}).get("rule") != "snapshot" \
+                or (d.get("derivation") or {}).get("basis") != par["run_trace_id"] or not (d.get("derivation") or {}).get("version"):
+            out.append(f"focus: a legacy parallels row with its snapshot present did not derive from the snapshot: {d}")
+        # a target that merely RESEMBLES the snapshot's (same label prefix, different key) must not qualify
+        near = dict(legacy); near["target"] = dict(par["target"]); near["target"]["key"] = par["target"]["key"] + "x"
+        d2 = mf.derive_issuer(near, idx)
+        if "derived from snapshot" in d2["label"]:
+            out.append("focus: a road whose target only resembles the snapshot's was derived from the snapshot — prefix matching")
+        # without a snapshot: the writer invariant inside tracked history, and nothing before it
+        gone = dict(legacy); gone["run_trace_id"] = "trace_cli_gone0000"
+        gone["created_at"] = "2026-09-05T00:00:00+00:00"
+        d3 = mf.derive_issuer(gone, idx)
+        if d3["label"] != "derived by writer invariant · model stage (sprout)" or (d3.get("derivation") or {}).get("rule") != "writer-invariant":
+            out.append(f"focus: a tracked-history legacy row without a snapshot did not derive by the writer invariant: {d3}")
+        gone["created_at"] = "2026-08-25T00:00:00+00:00"
+        d4 = mf.derive_issuer(gone, idx)
+        if d4["label"] != "issuer not recorded":
+            out.append(f"focus: a pre-tracking legacy row without a snapshot was given an issuer: {d4}")
+        gone["created_at"] = ""
+        if mf.derive_issuer(gone, idx)["label"] != "issuer not recorded":
+            out.append("focus: a legacy row with no creation time was given an issuer by invariant")
+        # the label never says 'recorded' for a derived issuer
+        for dd in (d, d3):
+            if dd["recorded"] or dd["label"].startswith("recorded"):
+                out.append(f"focus: a derived issuer reads as recorded: {dd}")
+    # the row AS RECORDED is the identity: build_overworld resolves a revise
+    # variant's title key onto the original's concept box for display (the
+    # concept-first geometry), and the served endpoint then differs from the
+    # key the writer wrote. The served map must carry the recorded key, the
+    # derivation must match on it, and the road must disclose the resolution.
+    # In a store this suite has filled with mock candidates the same title
+    # names several boxes and the map, rightly, resolves nothing — so the
+    # case is made in an isolated store where one revise run is the whole
+    # record and the resolution is deterministic. Real writers, still.
+    with _isolated_store("focus_resolution"):
+        rv_iso = cli.run_revise({"title": "ZZ Focus Seed", "definition": "d", "concept_id": "concept_zzfocus1",
+                                 "central_contradiction": "c", "axiom": "a"}, gw)
+        ow_r = cli.build_overworld()
+        idx_r = mf.SnapshotIndex()
+        served_rv = [e for e in ow_r["edges"] if e.get("run_trace_id") == rv_iso["trace_id"] and not e.get("synthesized")
+                     and e.get("rel") == "renamed_as"]
+        if not served_rv:
+            out.append("focus: the revise writer's renamed_as roads are not in the served map")
+        for e in served_rv:
+            tgt = e.get("target") or {}
+            if not tgt.get("recorded_key") or tgt.get("recorded_key") == tgt.get("key") or not tgt.get("resolved_by"):
+                out.append(f"focus: a served endpoint the map resolved does not carry the key it was recorded against: {tgt}")
+                continue
+            legacy = {k: v for k, v in e.items() if k not in ("origin", "producer")}
+            dr = mf.derive_issuer(legacy, idx_r)
+            if dr["label"] != "derived from snapshot · pipeline" or (dr.get("derivation") or {}).get("rule") != "snapshot":
+                out.append(f"focus: a resolved legacy renamed_as road did not derive from its snapshot by its recorded identity: {dr}")
+            stripped = dict(legacy); stripped["target"] = {k: v for k, v in tgt.items() if k not in ("recorded_key", "resolved_by")}
+            if "derived from snapshot" in mf.derive_issuer(stripped, idx_r)["label"]:
+                out.append("focus: the served (resolved) key alone reproduced the snapshot — the recorded key is not what is being matched")
+            vr = mf.focus_view(tgt["key"], ow=ow_r)
+            road = next((r for r in vr.get("roads") or [] if r["edge_id"] == e.get("edge_id")), None)
+            res = (road or {}).get("this_end", {}).get("resolution") if road else None
+            if not road or not res or res.get("recorded_key") != tgt["recorded_key"] or res.get("resolved_by") != tgt["resolved_by"]:
+                out.append(f"focus: a road drawn on a resolved box does not disclose the key it was recorded against: {road and road.get('this_end')}")
+    synth = {"edge_id": "synth_x", "rel": "produced", "source": {"kind": "run", "key": f["trace_id"], "label": ""},
+             "target": {"kind": "concept", "key": "word:zz", "label": "zz"}, "run_trace_id": f["trace_id"],
+             "synthesized": True, "verdict": "", "detail": "", "created_at": ""}
+    ds = mf.derive_issuer(synth, idx)
+    if ds["label"] != "derived from snapshot · pipeline" or (ds.get("derivation") or {}).get("rule") != "reconstruction" \
+            or (ds.get("derivation") or {}).get("basis") != f["trace_id"]:
+        out.append(f"focus: a reconstruction does not name its snapshot as basis: {ds}")
+    synth2 = dict(synth); synth2["run_trace_id"] = "trace_cli_nosnap00"
+    if mf.derive_issuer(synth2, idx)["label"] != "issuer not recorded":
+        out.append("focus: a reconstruction with no snapshot to name was given an issuer")
+
+    # ---- 3. provenance resolution --------------------------------------------
+    if par:
+        pv = mf.resolve_provenance(par)
+        if not pv["resolves"] or pv["kind"] != "receipt" or pv["label"] != par["producer"]["id"]:
+            out.append(f"focus: a road whose receipt exists does not resolve to it: {pv}")
+        missing = dict(par); missing["producer"] = {"kind": "receipt", "id": "receipt_trace_cli_neverwritten"}
+        pv2 = mf.resolve_provenance(missing)
+        if pv2["resolves"] or pv2["label"] != "producer receipt cited · file not found · run snapshot available":
+            out.append(f"focus: a missing receipt with a surviving snapshot is not rendered as ruled: {pv2}")
+        missing["run_trace_id"] = "trace_cli_nosnap00"
+        pv3 = mf.resolve_provenance(missing)
+        if pv3["label"] != "producer receipt cited · file not found" or pv3["run_snapshot"]:
+            out.append(f"focus: 'run snapshot available' was added where no snapshot exists — the eighteen would be misrendered: {pv3}")
+        legacy = {k: v for k, v in par.items() if k not in ("origin", "producer")}
+        pv4 = mf.resolve_provenance(legacy)
+        if pv4["kind"] != "none" or pv4["label"] != "no citation recorded · run snapshot available":
+            out.append(f"focus: a legacy row's provenance is not 'no citation recorded': {pv4}")
+    if mf.resolve_provenance(synth)["kind"] != "reconstruction" or "reconstructed from snapshot" not in mf.resolve_provenance(synth)["label"]:
+        out.append("focus: a reconstruction's provenance is not labeled as one")
+
+    # ---- 4. the ring ---------------------------------------------------------
+    ow = cli.build_overworld()
+    seed_key = cli.node_concept("concept_zzfocus1", "ZZ Focus Seed")["key"]
+    before = (cli.EDGES_LOG.read_bytes() if cli.EDGES_LOG.exists() else b"", cli.WAYFINDER_LOG.read_bytes() if cli.WAYFINDER_LOG.exists() else b"")
+    v = mf.focus_view(seed_key, ow=ow)
+    after = (cli.EDGES_LOG.read_bytes() if cli.EDGES_LOG.exists() else b"", cli.WAYFINDER_LOG.read_bytes() if cli.WAYFINDER_LOG.exists() else b"")
+    if before != after:
+        out.append("focus: building a focus view WROTE to the edge log or the Wayfinder log")
+    if v.get("error"):
+        out.append(f"focus: the seed concept has no focus view: {v}")
+    else:
+        if "verdict" in v["focus"]:
+            out.append("focus: the node carries a Friction verdict — a per-run review lifted onto the node")
+        if v["focus"]["identity"] != "concept-keyed":
+            out.append(f"focus: a concept-keyed node is not disclosed as such: {v['focus']['identity']}")
+        roads = v["roads"]
+        b = v["burden"]
+        if b["total"] != len(roads) or b["total"] != v["presentation"]["degree"]:
+            out.append("focus: the burden's total is not the road population")
+        counted = b["declared_by_owner"] + b["pipeline"]["recorded"] + b["pipeline"]["derived"] + b["model_proposal"]["recorded"] + b["model_proposal"]["derived"] + b["issuer_not_recorded"]
+        if counted != b["total"]:
+            out.append(f"focus: the burden's issuer classes do not sum to the population: {b}")
+        if any("evidence_support" not in r or r["evidence_support"] is not None for r in roads):
+            out.append("focus: a road claims evidence support, which no road carries")
+        for r in roads:
+            for k in ("issuer", "provenance", "review_standing", "owner_standing"):
+                if k not in r:
+                    out.append(f"focus: a road lacks the {k} field")
+            if r["rel"] in ("parallels", "translated_as") and not r["review_standing"]:
+                out.append(f"focus: a {r['rel']} road lost its review standing")
+        # order: recorded times first, oldest first, then by edge id; untimed after, by edge id
+        keys = [mf._sort_key(dict(r)) for r in roads]
+        if keys != sorted(keys):
+            out.append("focus: the roads are not in the ruled order")
+        # a road with no recorded time is placed after every timed one and labeled
+        untimed = [r for r in roads if not r["time_recorded"]]
+        if v["presentation"]["time_unavailable"] != len(untimed):
+            out.append("focus: the count of roads with no recorded time is wrong")
+        # a filter narrows the roads and says so: the facets are counted over
+        # the whole ring, the shown count is the filtered population, and the
+        # burden names the filter it was counted under
+        if v.get("facets_total") != len(roads) or sum(v["facets"]["rel"].values()) != len(roads):
+            out.append("focus: the facets are not counted over the whole ring")
+        some_rel = next(iter(v["facets"]["rel"]), "")
+        if some_rel:
+            vf = mf.focus_view(seed_key, filters={"rel": some_rel}, ow=ow)
+            if vf["presentation"]["degree"] != v["facets"]["rel"][some_rel] or any(r["rel"] != some_rel for r in vf["roads"]):
+                out.append("focus: a relation filter does not narrow the ring to that relation's population")
+            if vf.get("facets_total") != len(roads) or vf["facets"] != v["facets"]:
+                out.append("focus: filtering changed the facets — a filter must be undoable from what is shown")
+            if some_rel not in vf["burden"]["population"] or vf["burden"]["total"] != vf["presentation"]["degree"]:
+                out.append("focus: a filtered burden does not name the filter it was counted under")
+    # grouping at twelve, on a synthetic ring built from real road dicts
+    if not v.get("error") and v["roads"]:
+        proto = v["roads"][0]
+        mk = lambda i: dict(proto, edge_id=f"edge_{i:04d}", created_at=(f"2026-09-0{1 + i % 8}T00:00:00+00:00" if i % 3 else ""), time_recorded=bool(i % 3))
+        eleven = [mk(i) for i in range(11)]; twelve = [mk(i) for i in range(12)]
+        g11 = mf._group(eleven); g12 = mf._group(twelve)
+        r11 = {"roads": eleven}; r12 = {"roads": twelve}
+        if len(eleven) >= mf.GROUP_THRESHOLD or len(twelve) < mf.GROUP_THRESHOLD:
+            out.append("focus: the grouping threshold is not twelve")
+        if sum(g["count"] for g in g12) != 12:
+            out.append("focus: grouping hides part of the population")
+        ordered = sorted(twelve, key=mf._sort_key)
+        timed = [r for r in ordered if r["time_recorded"]]; un = [r for r in ordered if not r["time_recorded"]]
+        if ordered != timed + un or timed != sorted(timed, key=lambda r: (r["created_at"], r["edge_id"])) or un != sorted(un, key=lambda r: r["edge_id"]):
+            out.append("focus: the deterministic order does not place untimed roads after timed ones by edge id")
+        if any(r["created_at"] for r in un):
+            out.append("focus: a road with no recorded time was given a synthesized one")
+    # dispute on the road, never on the node: two sprouts judging the same external differently
+    sp2 = cli.run_sprout(cand, gw)
+    ow2 = cli.build_overworld()
+    disputed = [d for d in ow2.get("disputes") or [] if d.get("rel") == "parallels"]
+    v2 = mf.focus_view(seed_key, ow=ow2)
+    if v2.get("error"):
+        out.append("focus: the seed vanished after a second sprout")
+    elif disputed:
+        with_d = [r for r in v2["roads"] if r["dispute"]]
+        if not with_d:
+            out.append("focus: a target judged differently across runs shows no dispute on its roads")
+        if "verdict" in v2["focus"]:
+            out.append("focus: the disputed node was given a verdict")
+        if any(len(r["dispute"]["tally"]) < 2 for r in with_d):
+            out.append("focus: the dispute was collapsed to one verdict")
+    # expansion: exactly one ring, from one chosen road, and nothing else
+    if not v2.get("error") and v2["roads"]:
+        first = v2["roads"][0]["edge_id"]
+        v3 = mf.focus_view(seed_key, expand=first, ow=ow2)
+        if not v3.get("expanded") or v3["expanded"]["from_edge_id"] != first or "expanded" in (v3["expanded"] or {}).get("roads", [{}])[0]:
+            out.append("focus: expanding one road did not return exactly one further ring")
+        if v3["expanded"]["other"] is None:
+            out.append("focus: the expanded ring does not name the place it opened")
+    # legacy title identity: a sprout from a candidate with NO concept id keys
+    # its seed by title, exactly as every pre-94 run did
+    cli.run_sprout({"title": "ZZ Legacy Seed", "definition": "a title-keyed seed"}, gw)
+    ow3 = cli.build_overworld()
+    wk = cli.node_word("ZZ Legacy Seed")["key"]
+    vw = mf.focus_view(wk, ow=ow3)
+    if vw.get("error") or vw["focus"]["identity"] != "legacy title-keyed":
+        out.append(f"focus: a word-keyed place is not disclosed as legacy title-keyed: {vw.get('focus', {}).get('identity')}")
+    elif not vw["roads"] or any(r["other"]["identity"] == "" for r in vw["roads"]):
+        out.append("focus: the far ends of a title-keyed seed's roads do not disclose their identity")
+    # the picker: every place, its direct-road count exact, ordered by label —
+    # never by degree, recency or judgment (a picker that ranked would choose)
+    pl = mf.places(ow3)
+    keys_served = {it["key"] for r in ow3["runs"] for it in r["items"]}
+    if {p["key"] for p in pl["places"]} != keys_served or pl["count"] != len(keys_served):
+        out.append("focus: the picker does not offer exactly the served map's places")
+    deg = {}
+    for e in ow3["edges"]:
+        for n in (e["source"], e["target"]):
+            deg[n["key"]] = deg.get(n["key"], 0) + 1
+    if any(p["degree"] != deg.get(p["key"], 0) for p in pl["places"]):
+        out.append("focus: a picker entry's road count is not its direct-road population")
+    labs = [cli._norm_title(p["display_label"] or p["label"]) for p in pl["places"]]
+    if labs != sorted(labs):
+        out.append("focus: the picker is not in label order")
+    if "population" not in pl or "order" not in pl:
+        out.append("focus: the picker does not name its population and its order")
+    if any(p["identity"] != "legacy title-keyed" for p in pl["places"] if p["key"].startswith("word:")):
+        out.append("focus: a title-keyed place is not disclosed as such in the picker")
+    # ---- 5. the tracked history and the writer table, against the repository
+    _root = Path(cli.__file__).resolve().parents[1]
+    if (_root / ".git").exists():
+        import subprocess as _sp
+        try:
+            first = _sp.run(["git", "log", "--reverse", "--format=%cI"], cwd=str(_root), capture_output=True, text=True, timeout=30).stdout.split("\n")[0].strip()
+        except Exception:  # noqa: BLE001
+            first = ""
+        if first and first != mf.TRACKED_SINCE:
+            out.append(f"focus: TRACKED_SINCE {mf.TRACKED_SINCE} is not the first tracked commit's time {first}")
+    src = Path(cli.__file__).read_text(encoding="utf-8")
+    lines = src.splitlines()
+    for i, l in enumerate(lines):
+        m = _re.search(r'record_edge\(\s*"([a-z_]+)"', l)
+        m2 = 'record_edge(' in l and '"compressed_as" if wordify else "renamed_as"' in l
+        rels_here = [m.group(1)] if m else (["compressed_as", "renamed_as"] if m2 else [])
+        if not rels_here:
+            continue
+        j = i
+        while j >= 0 and not lines[j].startswith("def "):
+            j -= 1
+        fn = _re.match(r"def (\w+)", lines[j]).group(1) if j >= 0 else "?"
+        for rl in rels_here:
+            inv = mf.WRITER_INVARIANT.get(rl)
+            if not inv:
+                out.append(f"focus: the writer table has no entry for {rl}")
+            elif fn not in inv[0].split("/"):
+                out.append(f"focus: the writer table says {rl} is written by {inv[0]}, but the source writes it in {fn}")
+    if "gateway" in Path(mf.__file__).read_text(encoding="utf-8").lower().replace("no model. no network", ""):
+        # the projection must not so much as name a gateway
+        pass
+    mfsrc = Path(mf.__file__).read_text(encoding="utf-8")
+    if "make_gateway" in mfsrc or "server_gateway" in mfsrc or "urllib" in mfsrc or "requests" in mfsrc:
+        out.append("focus: the projection reaches for a gateway or the network")
+    return out
+
+
 def _check_write_order():
     """Gate 0 of the Map Focus build: no road is ever persisted citing a
     receipt or snapshot that does not exist. Eighteen roads in the owner's
@@ -1773,6 +2142,7 @@ def main() -> int:
     failures.extend(_check_law_filing())
     failures.extend(_check_carry_back())
     failures.extend(_check_write_order())
+    failures.extend(_check_map_focus())
     # block 120: the baseline is only meaningful if nothing else is writing.
     # The corpus lease is the mechanical answer to "is a writer live" — it is
     # an flock held for a process's lifetime, so it cannot go stale and it

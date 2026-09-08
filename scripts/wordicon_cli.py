@@ -5613,12 +5613,19 @@ def build_overworld() -> dict:
                 continue
             cid = endp.get("concept_id")
             if cid and cid in cid2key:
+                # Map Focus: the key the row was RECORDED against rides along
+                # with the rule that moved it, so a reader can derive from the
+                # row as written and say out loud that the display resolved it
+                endp["recorded_key"] = endp.get("key", "")
+                endp["resolved_by"] = "recorded concept id"
                 endp["key"] = cid2key[cid]
                 continue
             k = endp.get("key", "")
             if k.startswith("word:"):
                 cands = norm2keys.get(k[5:], set()) - {k}
                 if len(cands) == 1:
+                    endp["recorded_key"] = k
+                    endp["resolved_by"] = "unambiguous title match"
                     endp["key"] = next(iter(cands))
     dnames = concept_display_names()
     for r in runs:
@@ -7634,6 +7641,11 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
     (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
         "trace_id": trace_id, "mode": "revise", "input_text": input_text,
         "created_at": _now(),
+        # The original the roads leave from, by the identity the roads use
+        # (Map Focus): a snapshot that names it lets the served map derive
+        # each road's exact identity from the snapshot alone.
+        "source": {"title": original.get("title", ""), "concept_id": original.get("concept_id", "") or "",
+                   "steered": steered, "wordify": bool(wordify)},
         "candidates": [{"title": r["bff"]["title"], "bff": r["bff"],
                          "claims_detail": r["claims_detail"]} for r in results],
         "summary": summary_line(private_receipt, results),
@@ -8019,6 +8031,8 @@ def run_sprout(candidate: dict, gateway: Gateway,
         "created_at": _now(), "source": {
             **{k: candidate.get(k, "") for k in
                ("title", "definition", "central_contradiction", "axiom")},
+            # the identity the roads use (Map Focus)
+            "concept_id": candidate.get("concept_id", "") or "",
             # What this hop inherited, visibly — the Victoria chain built
             # five new threads on ground its own parent review had
             # already called "essentially the opposite of the clinical
@@ -9207,7 +9221,8 @@ def run_archetype(candidate: dict, gateway: Gateway,
     (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
         "trace_id": trace_id, "mode": "archetype", "input_text": input_text,
         "created_at": _now(),
-        "source": {k: candidate.get(k, "") for k in ("title", "definition", "plain_gloss")},
+        "source": {**{k: candidate.get(k, "") for k in ("title", "definition", "plain_gloss")},
+                   "concept_id": candidate.get("concept_id", "") or ""},   # the identity the roads use (Map Focus)
         "archetype": arch, "near_existing": [c.get("name", "") for c in near],
         "summary": summary,
     }, indent=2))
@@ -9334,8 +9349,9 @@ def run_refract(candidate: dict, gateway: Gateway,
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
         "trace_id": trace_id, "mode": "refract", "input_text": input_text,
-        "created_at": _now(), "source": {k: candidate.get(k, "") for k in
+        "created_at": _now(), "source": {**{k: candidate.get(k, "") for k in
             ("title", "definition", "plain_gloss")},
+            "concept_id": candidate.get("concept_id", "") or ""},   # the identity the roads use (Map Focus)
         "refractions": refractions, "missing_languages": missing_langs,
         "english_fossil": english_fossil,
         "fossil_check": fossil_check,
