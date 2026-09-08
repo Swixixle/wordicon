@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nikodemus — Trails</title>
+<title>Nikodemus — Map · trails</title>
 <meta name="theme-color" content="#11161d">
 <style>
   :root {
@@ -22,6 +22,8 @@
     background: rgba(17,22,29,0.96); backdrop-filter: blur(6px); }
   header h1 { font-size: 16px; margin: 0; font-weight: 700; }
   header a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; font-size: 13px; }
+  nav.views { display: flex; gap: 10px; }
+  nav.views a[aria-current="page"] { color: var(--text); text-decoration: none; font-weight: 600; }
   main { max-width: 760px; margin: 0 auto; padding: 14px 16px 80px; }
   .sub { color: var(--muted); font-size: 12.5px; }
   input[type=search] { width: 100%; background: var(--panel-2); color: var(--text);
@@ -115,11 +117,15 @@
 <body>
 
 <header>
-  <h1>Trails</h1>
+  <h1>Map</h1>
+  <nav class="views" aria-label="the Map's views">
+    <a href="/map" title="one place in focus, with its direct roads">Map · focus</a>
+    <a href="/map/trails" aria-current="page">Map · trails</a>
+    <a href="/map/world" title="the spatial map, where the Wayfinder lives">Map · world</a>
+  </nav>
   <a href="/">← back to <span data-brand>Nikodemus</span></a>
   <span class="sub" id="counts" style="margin-left:auto"></span>
   <button id="warp-toggle" onclick="toggleWarps()"></button>
-  <a href="/map/world" title="the spatial map, where the Wayfinder lives">the spatial map →</a>
 </header>
 
 <main>

@@ -865,10 +865,23 @@ def api_overworld():
 
 
 # "Map" is the label now; Overworld the label is dead, the old URLs live on
-# for bookmarks. /map = the trails list (same default as /overworld),
-# /map/world = the spatial map, where the Wayfinder lives.
+# for bookmarks. Three views: /map (and /map/focus) = Map · focus, one place
+# in focus with its direct roads — the door the header opens; /map/trails
+# (and the old /trails, /overworld) = Map · trails, every recorded link
+# grouped into trails; /map/world = Map · world, the spatial map, where the
+# Wayfinder lives.
 @app.route("/map")
 def map_page():
+    return send_from_directory(WEBAPP_DIR, "focus.html")
+
+
+@app.route("/map/focus")
+def map_focus_page():
+    return send_from_directory(WEBAPP_DIR, "focus.html")
+
+
+@app.route("/map/trails")
+def map_trails_page():
     return send_from_directory(WEBAPP_DIR, "trails.html")
 
 

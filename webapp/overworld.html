@@ -49,6 +49,8 @@
     backdrop-filter: blur(6px); }
   header h1 { font-size: 16px; margin: 0; font-weight: 700; }
   header a { color: var(--accent); text-decoration: none; font-size: 13px; }
+  nav.views { display: flex; gap: 10px; }
+  nav.views a[aria-current="page"] { color: var(--text); font-weight: 600; }
   .toggles { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; }
   .toggles label { display: flex; align-items: center; gap: 5px; cursor: pointer;
     color: var(--muted); user-select: none; }
@@ -210,6 +212,11 @@
 
 <header>
   <h1>Map</h1>
+  <nav class="views" aria-label="the Map's views">
+    <a href="/map" title="one place in focus, with its direct roads">Map · focus</a>
+    <a href="/map/trails" title="every recorded link, grouped into trails">Map · trails</a>
+    <a href="/map/world" aria-current="page">Map · world</a>
+  </nav>
   <a href="/">← back to <span data-brand>Wordicon</span></a>
   <div class="toggles" id="toggles"></div>
   <div id="wayfinder">

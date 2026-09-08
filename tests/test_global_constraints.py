@@ -1634,21 +1634,47 @@ def _check_map_focus():
             out.append("focus: the deterministic order does not place untimed roads after timed ones by edge id")
         if any(r["created_at"] for r in un):
             out.append("focus: a road with no recorded time was given a synthesized one")
-    # dispute on the road, never on the node: two sprouts judging the same external differently
-    sp2 = cli.run_sprout(cand, gw)
+    # dispute on the road, never on the node: two sprouts judging the same
+    # external differently. The second sprout's reviewer reads Cassandra as
+    # strained, so the dispute is a certainty of the case, not of the store.
+    class _ReviewsDifferently(cli.MockGateway):
+        def complete(self, prompt: str) -> str:
+            res = super().complete(prompt)
+            if prompt.startswith("You are the sprout-review stage"):
+                d = _json.loads(res)
+                for rv in d.get("reviews") or []:
+                    if rv.get("index") == 0:
+                        rv["verdict"] = "strained"
+                return _json.dumps(d)
+            return res
+    import time as _time
+    _was = cli._now()
+    while cli._now() == _was:      # a trace id is the input and the second; the first sprout is seconds old but say so
+        _time.sleep(0.05)
+    sp2 = cli.run_sprout(cand, _ReviewsDifferently())
     ow2 = cli.build_overworld()
     disputed = [d for d in ow2.get("disputes") or [] if d.get("rel") == "parallels"]
     v2 = mf.focus_view(seed_key, ow=ow2)
     if v2.get("error"):
         out.append("focus: the seed vanished after a second sprout")
-    elif disputed:
+    elif not disputed:
+        out.append("focus: two sprouts reviewing the same parallel differently raised no dispute in the served map")
+    else:
         with_d = [r for r in v2["roads"] if r["dispute"]]
         if not with_d:
             out.append("focus: a target judged differently across runs shows no dispute on its roads")
         if "verdict" in v2["focus"]:
             out.append("focus: the disputed node was given a verdict")
-        if any(len(r["dispute"]["tally"]) < 2 for r in with_d):
-            out.append("focus: the dispute was collapsed to one verdict")
+        if any(len(r["dispute"]["tally"]) < 2 or set(r["dispute"]["tally"]) != {"holds", "strained"} for r in with_d):
+            out.append(f"focus: the dispute was collapsed to one verdict: {[r['dispute']['tally'] for r in with_d]}")
+        if any(r["dispute"].get("population") != "runs whose review reached this target" for r in with_d):
+            out.append("focus: the dispute does not name its population")
+        # a reconstructed road has no recorded time, and none is invented for it
+        recon = [r for r in v2["roads"] if r["provenance"]["kind"] == "reconstruction"]
+        if not recon:
+            out.append("focus: the seed's ring holds no reconstructed road to test the time rule against")
+        if any(r["time_recorded"] or r["created_at"] for r in recon):
+            out.append("focus: a reconstructed road was given a recorded time it does not have")
     # expansion: exactly one ring, from one chosen road, and nothing else
     if not v2.get("error") and v2["roads"]:
         first = v2["roads"][0]["edge_id"]
@@ -1724,6 +1750,77 @@ def _check_map_focus():
 
 
 
+
+def _check_map_focus_page():
+    """Map · focus, the page, read off its source beside the journey that
+    proves it in a browser: the ruled names, the states it must render by
+    name, the doors it must not have (no POST, no paid route, no browser
+    storage, no score), the three views named the same on all three pages,
+    and the shell's table."""
+    out = []
+    root = Path(cli.__file__).resolve().parents[1]
+    fx = (root / "webapp" / "focus.html").read_text(encoding="utf-8")
+    tr = (root / "webapp" / "trails.html").read_text(encoding="utf-8")
+    ow = (root / "webapp" / "overworld.html").read_text(encoding="utf-8")
+    idx = (root / "webapp" / "index.html").read_text(encoding="utf-8")
+    srv = (root / "server.py").read_text(encoding="utf-8")
+    if "<title>Nikodemus — Map</title>" not in fx or 'id="stage"' not in fx:
+        out.append("focus page: not titled Map, or has no stage")
+    for page, name in ((fx, "focus.html"), (tr, "trails.html"), (ow, "overworld.html")):
+        for view in ("Map · focus", "Map · trails", "Map · world"):
+            if view not in page:
+                out.append(f"focus page: {name} does not name the view {view!r}")
+        if 'href="/map/world"' not in page or 'href="/map/trails"' not in page or 'href="/map"' not in page:
+            out.append(f"focus page: {name} lacks a door to one of the three views")
+        if "Overworld" in page:
+            out.append(f"focus page: {name} says Overworld")
+    for need, why in (("Nothing is in focus until you choose it", "the picker does not say a focus is chosen, never assumed"),
+                      ("recorded time unavailable", "a missing time has no name"),
+                      ("legacy title-keyed", "a title-keyed identity has no name"),
+                      ("never welds them", "the no-welding rule is not stated"),
+                      ("jump", "the navigation warp is not called jump"),
+                      ("appears again", "recurrence is not called appears again"),
+                      ("quoted span", "the candidate anchor is not called a quoted span"),
+                      ("Library anchor", "the Library anchor is not named"),
+                      ("external: 'source'", "the external sprout anchor is not called a source"),
+                      ("one ring only", "the expansion does not say it is one ring"),
+                      ("a group opens only when you open it", "the grouping rule is not stated"),
+                      ("neither verdict is chosen", "a dispute does not say it chooses nothing"),
+                      ("aria-label=", "road rows carry no accessible name"),
+                      ('tabindex="0"', "road rows are not reachable by keyboard"),
+                      ('class="pill missing"', "the missing-receipt state has no rendering of its own"),
+                      ("(cited ", "a missing citation is not shown with what was cited"),
+                      ("run snapshot available:", "the snapshot-available state is not rendered by its name"),
+                      ("derivation_version", "the derivation version is not shown"),
+                      ("rule: ", "the derivation rule is not shown on the road"),
+                      ("standing_rule", "the standing rule is not on the page"),
+                      ("being on the map is not a ruling", "absent owner standing is not stated as absence"),
+                      ("recorded against", "a resolved endpoint is not disclosed")):
+        if need not in fx:
+            out.append(f"focus page: {why}")
+    for bad, why in (("method: 'POST'", "the page posts"), ("method:'POST'", "the page posts"), ("localStorage", "the page writes browser storage"),
+                     ("sessionStorage", "the page writes browser storage"), ("/api/map/roads/suggest", "the page reaches a paid route"),
+                     ("/api/map/route/analyze", "the page reaches a paid route"), ("/api/map/road'", "the page can declare a road"),
+                     ("/api/map/log", "the page logs to the Wayfinder"), ("confidence", "a confidence appears"), ("score", "a score appears")):
+        if bad in fx:
+            out.append(f"focus page: {why} ({bad!r})")
+    if fx.count("fetch(") != 1 or "'/api/map/focus?'" not in fx or "'/api/map/places'" not in fx:
+        out.append("focus page: the network surface is not one reader with exactly the focus read and the picker read")
+    # the header door opens Focus; the old URLs stay
+    if 'send_from_directory(WEBAPP_DIR, "focus.html")' not in srv.split('@app.route("/map")')[1].split("@app.route")[0]:
+        out.append("focus page: /map does not serve Map · focus")
+    for route in ('@app.route("/map/focus")', '@app.route("/map/trails")', '@app.route("/trails")', '@app.route("/overworld")', '@app.route("/overworld/map")'):
+        if route not in srv:
+            out.append(f"focus page: route missing: {route}")
+    tbl = idx[idx.index("const PLACES = {"):]
+    tbl = tbl[:tbl.index("\n};") + 3]
+    for place in ("'/map/focus'", "'/map/trails'", "'/map/world'"):
+        if place not in tbl:
+            out.append(f"focus page: the shell's table lacks {place}")
+    if "if (dest || trace) openDestination(dest || ('run:' + trace), trace);" not in idx:
+        out.append("focus page: a door pressed inside a pane no longer opens its destination in Home")
+    return out
+
 def _check_map_focus_routes(server, paired):
     """The two Focus routes are reads: the whole scratch store is hashed
     before and after every call, the Wayfinder log is compared byte for
@@ -1783,6 +1880,11 @@ def _check_map_focus_routes(server, paired):
     for path in ("/api/map/focus", "/api/map/places"):
         if c.post(path, json={"key": key}).status_code != 405:
             out.append(f"focus route: {path} accepts a POST — a read-only door has one verb")
+    for path, needle in (("/map", "Nothing is in focus until you choose it"), ("/map/focus", "Nothing is in focus until you choose it"),
+                         ("/map/trails", "Map · trails"), ("/trails", "Map · trails"), ("/overworld", "Map · trails"), ("/map/world", "Wayfinder")):
+        rp = c.get(path)
+        if rp.status_code != 200 or needle not in rp.get_data(as_text=True):
+            out.append(f"focus route: {path} does not serve its view (HTTP {rp.status_code})")
     if store_hash() != h0:
         out.append("focus route: reading a focus CHANGED the store")
     wf_after = cli.WAYFINDER_LOG.read_bytes() if cli.WAYFINDER_LOG.exists() else b""
@@ -2220,6 +2322,7 @@ def main() -> int:
     failures.extend(_check_carry_back())
     failures.extend(_check_write_order())
     failures.extend(_check_map_focus())
+    failures.extend(_check_map_focus_page())
     # block 120: the baseline is only meaningful if nothing else is writing.
     # The corpus lease is the mechanical answer to "is a writer live" — it is
     # an flock held for a process's lifetime, so it cannot go stale and it
@@ -18318,8 +18421,18 @@ console.log(out.join('\\n'));
             _fS2("a place's own navigation pushes a second history entry instead of replacing the one it made")
         if "STANDALONE.indexOf(path) !== -1) { window.location.href" not in _loadS2:
             _fS2("a ruled standalone document reached from inside a place would be drawn inside the frame")
-        if "if (path === '/') { closePlace(); return; }" not in _loadS2:
+        # Map Focus build: the way home still closes the pane and never draws
+        # Home in the frame — and a typed door pressed inside a place
+        # (/?trace=, /?dest=) now opens its destination in the one Home
+        # instead of being dropped with the pane.
+        _homeS2 = ""
+        if "if (path === '/') {" in _loadS2:
+            _homeS2 = _loadS2[_loadS2.index("if (path === '/') {"):]
+            _homeS2 = _homeS2[:_homeS2.index("placeLoading(false)")] if "placeLoading(false)" in _homeS2 else _homeS2
+        if not _homeS2 or "closePlace();" not in _homeS2 or "return;" not in _homeS2:
             _fS2("a place's own way home would load Home inside the frame")
+        if "if (dest || trace) openDestination(dest || ('run:' + trace), trace);" not in _homeS2:
+            _fS2("a typed door pressed inside a place would close the pane and drop its destination")
         if "d.querySelectorAll('a[href=\"/\"]').forEach" not in _loadS2:
             _fS2("a place inside the shell still shows its own 'back to Nikodemus' — a way out of "
                  "somewhere you never left, beside the bar that is the real one")

@@ -53,15 +53,15 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit carry wayfinder; do
+for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit carry wayfinder map; do
   echo "== journey: $j"
-  if [ "$j" = quiet ] || [ "$j" = speak ]; then before=$(digest); fi
+  if [ "$j" = quiet ] || [ "$j" = speak ] || [ "$j" = map ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
   rc=$?
   cat "$JOURNEY_OUT/$j.log"
   if [ $rc -ne 0 ]; then echo "== $j: FAILED (exit $rc)"; status=1; fi
   if ! grep -q "^JOURNEY $j OK" "$JOURNEY_OUT/$j.log"; then echo "== $j: did not reach its final line — not a pass"; status=1; fi
-  if [ "$j" = quiet ] || [ "$j" = speak ]; then
+  if [ "$j" = quiet ] || [ "$j" = speak ] || [ "$j" = map ]; then
     after=$(digest)
     if [ -z "$before" ] || [ "$before" != "$after" ]; then echo "== $j: the store changed during a journey that must write nothing ($before -> $after)"; status=1; else echo "ok   $j: the store is byte-identical ($before)"; fi
   fi
@@ -103,6 +103,14 @@ done
 # before the answer — invisible to source review, silent in the log.
 for need in "no request left the page before the owner answered" "the panel says exactly one call" "the panel names the lane and model" "cancelling sent nothing" "after confirmation exactly one proposal request left" "no analysis request left before the answer" "exactly one analysis request left after confirmation"; do
   grep -qF "ok   $need" "$JOURNEY_OUT/wayfinder.log" || { echo "== wayfinder: missing check: $need"; status=1; }
+done
+# Map · focus: named individually because each is a rendering that could
+# quietly become a claim — a derived issuer reading as recorded, a missing
+# receipt rendered blank, a snapshot claimed where none is, a verdict on the
+# node, a dispute collapsed, a title welded, a group open by itself, a total
+# hidden, a second ring, a synthesized time, a write from a read.
+for need in "the Map opens on a picker: nothing is in focus until chosen" "no focus was requested before a place was chosen" "the node carries no review verdict — a verdict belongs to a road in a run" "the title-keyed twin is disclosed beside the concept-keyed box, never welded" "the grouped list keeps the total visible" "no group is open until opened" "a road citing a receipt that is not there says so by name" "a road whose receipt AND snapshot are gone claims no snapshot — the eighteen render as this" "no provenance cell is blank" "a target judged differently across runs shows both verdicts on the road and chooses neither" "a legacy row derives from its snapshot with rule, basis and version on the road" "a derived issuer never reads as recorded" "a row from before the tracked history with no snapshot says issuer not recorded — nothing is inferred from its relation" "a declared road carries owner standing with its verb and declaration id" "a road the map resolved onto this box discloses the key it was recorded against" "a reconstruction with no recorded time says so — no time is synthesized" "expanding one road opens exactly one further ring" "no other road expanded" "reload restores the open groups and the one expansion from the URL" "reload restores focus, expansion and filter from the URL" "tabbing reaches a road and its accessible name carries relation, issuer and provenance" "no paid or writing map route was touched" "no request but GET left the page" "and what opens is the picker — Focus is the Map's door" "and lands on that run in Home — a door that goes somewhere"; do
+  grep -qF "ok   $need" "$JOURNEY_OUT/map.log" || { echo "== map: missing check: $need"; status=1; }
 done
 grep -q "^ok   anatomy: no request left the scratch origin" "$JOURNEY_OUT/anatomy.log" || { echo "== anatomy: the off-origin guard did not run"; status=1; }
 grep -q "^ok   dormant after" "$JOURNEY_OUT/anatomy.log" || { echo "== anatomy: the stillness check did not run"; status=1; }

@@ -387,6 +387,25 @@ def _resolution(endp: dict) -> "dict | None":
     return None
 
 
+def _dispute_by_run(d: dict) -> dict:
+    """The served map's dispute, counted by RUN. build_overworld tallies
+    roads, and a sprout from a concept-keyed candidate is drawn twice there
+    (once recorded from the concept box, once reconstructed from the
+    snapshot's title-keyed seed), so a road tally counts one review twice.
+    One run reviewed the target once; that is the population named."""
+    by_run: "dict[str, dict]" = {}
+    for e in d.get("entries") or []:
+        t = e.get("run_trace_id") or ""
+        if t not in by_run:
+            by_run[t] = {"run_trace_id": t, "verdict": e.get("verdict", ""), "source_label": e.get("source_label", "")}
+    tally: "dict[str, int]" = {}
+    for e in by_run.values():
+        tally[e["verdict"]] = tally.get(e["verdict"], 0) + 1
+    return {"rel": d.get("rel", ""), "target_key": d.get("target_key", ""), "tally": tally,
+            "population": "runs whose review reached this target", "entries": list(by_run.values())[:20],
+            "road_tally": d.get("tally", {})}
+
+
 def _road(edge: dict, focus_key: str, index: SnapshotIndex, disputes: list) -> dict:
     out_dir = (edge.get("source") or {}).get("key") == focus_key
     other = edge.get("target") if out_dir else edge.get("source")
@@ -418,8 +437,7 @@ def _road(edge: dict, focus_key: str, index: SnapshotIndex, disputes: list) -> d
                             if verdict else None),
         "evidence_support": None,   # explicit: no road carries evidence support today
         "owner_standing": owner,
-        "dispute": ({"rel": dispute["rel"], "target_key": dispute["target_key"], "tally": dispute["tally"],
-                     "entries": dispute.get("entries", [])[:20]} if dispute else None),
+        "dispute": _dispute_by_run(dispute) if dispute else None,
     }
 
 
@@ -473,18 +491,44 @@ def _node_facts(key: str, ow: dict) -> "dict | None":
                             "owner_standing": None, "boxed": False}
         return None
     items.sort(key=lambda ri: ri[0].get("created_at") or "")
+    first_run, first = items[0]
     latest_run, latest = items[-1]
     history = [{"run_trace_id": r.get("trace_id", ""), "at": r.get("created_at", ""), "judgment": it.get("judgment", "")}
                for r, it in items if it.get("judgment")]
     owner = None
     if history:
         owner = {"judgment": history[-1]["judgment"], "ruled_in": history[-1]["run_trace_id"], "history": history}
-    return {"kind": latest.get("kind", ""), "key": key, "label": latest.get("label", ""),
-            "display_label": latest.get("display_label") or latest.get("label", ""),
-            "names": latest.get("names") or [], "concept_id": latest.get("concept_id", ""),
-            "short_def": latest.get("short_def", ""),
+    # The name on the box: the primary name the owner recorded when there is
+    # one; otherwise the label the place was FIRST boxed under. Revise
+    # variants share the original's box (the concept-first geometry) and
+    # their titles ride along as other written forms, never as the name.
+    primary = next((it.get("display_label") for _r, it in items if it.get("display_label")), "")
+    forms: "list[str]" = []
+    for _r, it in items:
+        for n in [it.get("label", "")] + list(it.get("names") or []):
+            if n and n not in forms:
+                forms.append(n)
+    # Other places carrying this same title — a concept-keyed box and its
+    # title-keyed twin from before ids, or two concepts that share a word —
+    # are named here with their identities, and never merged.
+    norm = cli._norm_title(first.get("label", ""))
+    same_title = []
+    seen_same = set()
+    for r in ow.get("runs") or []:
+        for it in r.get("items") or []:
+            k2 = it.get("key")
+            if k2 and k2 != key and k2 not in seen_same and cli._norm_title(it.get("label", "")) == norm:
+                seen_same.add(k2)
+                same_title.append({"key": k2, "kind": it.get("kind", ""), "identity": _identity_words(k2),
+                                   "short_def": it.get("short_def", ""), "concept_id": it.get("concept_id", "")})
+    return {"kind": first.get("kind", ""), "key": key, "label": first.get("label", ""),
+            "display_label": primary or first.get("label", ""),
+            "same_title": same_title,
+            "named_by": "recorded primary name" if primary else f"the run that first boxed it ({first_run.get('trace_id', '')})",
+            "names": forms, "concept_id": latest.get("concept_id", "") or first.get("concept_id", ""),
+            "short_def": first.get("short_def", "") or latest.get("short_def", ""),
             "identity": _identity_words(key),
-            "shared_title": bool(latest.get("shared_title")),
+            "shared_title": any(it.get("shared_title") for _r, it in items),
             "owner_standing": owner, "boxed": True,
             "appears_in_runs": len({r.get("trace_id") for r, _ in items})}
 
@@ -596,14 +640,124 @@ def places(ow: "dict | None" = None) -> dict:
                 p = seen[k] = {"key": k, "kind": it.get("kind", ""), "label": it.get("label", ""),
                                "display_label": it.get("display_label") or it.get("label", ""),
                                "identity": _identity_words(k), "concept_id": it.get("concept_id", ""),
+                               "short_def": it.get("short_def", ""),
                                "shared_title": bool(it.get("shared_title")), "degree": degree.get(k, 0),
                                "runs": 0}
             p["runs"] += 1
             if it.get("display_label"):
                 p["display_label"] = it["display_label"]
+            if it.get("short_def") and not p["short_def"]:
+                p["short_def"] = it["short_def"]
             if it.get("shared_title"):
                 p["shared_title"] = True
     out = sorted(seen.values(), key=lambda p: (cli._norm_title(p["display_label"] or p["label"]), p["key"]))
     return {"population": "every distinct key among the served runs' items",
             "count": len(out), "places": out,
             "order": "by label, then key — not by degree, recency or judgment"}
+
+
+# ---------------------------------------------------------------------------
+# the census, from the command line — read-only, every count with its population
+# ---------------------------------------------------------------------------
+
+def census() -> dict:
+    """The served map counted under the exact derivation rule: issuers,
+    provenance resolution, degree. Read-only; the store is hashed before and
+    after so the report itself proves nothing was written. For the census
+    document and the changelog — never for the constitution."""
+    import hashlib
+    from datetime import datetime, timezone
+
+    def store_hash() -> str:
+        h = hashlib.sha256()
+        root = Path(cli.LOCAL_STATE)
+        for f in sorted(p for p in root.rglob("*") if p.is_file()):
+            h.update(str(f.relative_to(root)).encode()); h.update(f.read_bytes())
+        return h.hexdigest()
+
+    before = store_hash()
+    ow = cli.build_overworld()
+    index = SnapshotIndex()
+    edges = ow.get("edges") or []
+    raw = cli.load_edges()
+    issuers: "dict[str, int]" = {}
+    by_rel_legacy: "dict[str, dict[str, int]]" = {}
+    prov: "dict[str, int]" = {}
+    for e in edges:
+        d = derive_issuer(e, index)
+        issuers[d["label"]] = issuers.get(d["label"], 0) + 1
+        if not e.get("synthesized") and (e.get("origin") not in cli.EDGE_ORIGINS or e.get("origin") == "legacy_unknown"):
+            rule = (d.get("derivation") or {}).get("rule") or "none"
+            by_rel_legacy.setdefault(e.get("rel", ""), {})
+            by_rel_legacy[e["rel"]][rule] = by_rel_legacy[e["rel"]].get(rule, 0) + 1
+        p = resolve_provenance(e)
+        if p["resolves"]:
+            pk = p["kind"] + " · resolves"
+        elif p["kind"] == "reconstruction":
+            pk = "reconstruction · snapshot not found"
+        else:
+            pk = p["label"]          # the state, in the words the page uses
+        prov[pk] = prov.get(pk, 0) + 1
+    degree: "dict[str, int]" = {}
+    for e in edges:
+        for n in (e.get("source"), e.get("target")):
+            if isinstance(n, dict) and n.get("key"):
+                degree[n["key"]] = degree.get(n["key"], 0) + 1
+    high = sorted(degree.values(), reverse=True)
+    after = store_hash()
+    legacy_rows = sum(1 for r in raw if r.get("origin") not in cli.EDGE_ORIGINS or r.get("origin") == "legacy_unknown")
+    return {
+        "date": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "method": "scripts/map_focus.py census: build_overworld() served map, derive_issuer per road under "
+                  + DERIVATION_VERSION + " (exact recorded identity against the run's snapshot or a composite listing "
+                  "it; writer invariant only for rows created at or after TRACKED_SINCE); resolve_provenance per road",
+        "derivation_version": DERIVATION_VERSION, "tracked_since": TRACKED_SINCE,
+        "store": str(cli.LOCAL_STATE), "store_hash_before": before, "store_hash_after": after,
+        "read_only": before == after,
+        "populations": {
+            "rows in edges.jsonl": len(raw),
+            "rows in edges.jsonl without a recorded origin (legacy)": legacy_rows,
+            "roads in the served map (recorded and reconstructed)": len(edges),
+            "places (distinct endpoint keys in the served map)": len(degree),
+        },
+        "issuers (population: roads in the served map)": dict(sorted(issuers.items(), key=lambda kv: -kv[1])),
+        "legacy rows by relation and derivation rule (population: rows in edges.jsonl without a recorded origin)":
+            {k: dict(sorted(v.items())) for k, v in sorted(by_rel_legacy.items())},
+        "provenance (population: roads in the served map)": dict(sorted(prov.items(), key=lambda kv: -kv[1])),
+        "degree (population: places in the served map)": {
+            "places with 12 or more direct roads": sum(1 for d in high if d >= GROUP_THRESHOLD),
+            "highest": high[0] if high else 0,
+        },
+    }
+
+
+def rebind_state(root: "str | Path") -> None:
+    """Point every store path the CLI holds at another root (the way the
+    suite and the journeys' scratch server do) — so the census can be run
+    against a store other than the repository's own, read-only."""
+    root = Path(root)
+    for name in ("JUDGMENTS_LOG", "RECEIPTS_DIR", "RESULTS_DIR", "ACCEPTED_CONCEPTS_PATH", "EDGES_LOG", "WARPS_LOG",
+                 "WARP_NOTES_LOG", "BENCH_CORRECTIONS", "CONCEPT_NAMES_LOG", "BENCH_DIR", "INPUTS_LOG", "WAYFINDER_LOG",
+                 "DEFINITION_EVENTS_LOG", "ENCOUNTER_SWITCH_LOG", "ENCOUNTERS_LOG", "OPEN_QUESTIONS_LOG", "CARRIES_LOG"):
+        if hasattr(cli, name):
+            setattr(cli, name, root / Path(str(getattr(cli, name))).name)
+    cli.LOCAL_STATE = root
+
+
+if __name__ == "__main__":
+    import argparse
+    import os
+    ap = argparse.ArgumentParser(description="Map · focus — read-only projections of the served map")
+    ap.add_argument("--state", default=os.environ.get("WORDICON_STATE", ""),
+                    help="the local_state directory to read (default: the repository's own, or WORDICON_STATE)")
+    ap.add_argument("--census", action="store_true", help="count the served map under the exact derivation rule and print JSON")
+    ap.add_argument("--focus", default="", help="print the focus view for one key")
+    args = ap.parse_args()
+    if args.state:
+        rebind_state(args.state)
+    if args.census:
+        print(json.dumps(census(), indent=2, ensure_ascii=False))
+    elif args.focus:
+        print(json.dumps(focus_view(args.focus), indent=2, ensure_ascii=False))
+    else:
+        ap.print_help()

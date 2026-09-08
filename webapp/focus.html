@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nikodemus — Map</title>
+<meta name="theme-color" content="#11161d">
+<style>
+  :root {
+    --bg: #11161d; --panel: #181f29; --panel-2: #1f2833; --border: #2a3441;
+    --text: #e7ecf3; --muted: #8b98a9; --accent: #78aaff;
+    --good: #6fcf97; --bad: #e08a8a; --warn: #d9a441;
+    --word: #3987e5; --lang: #199e70; --story: #d95926; --source: #d766a6; --derived: #b98bf0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-text-size-adjust: 100%; }
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 5;
+    background: rgba(17,22,29,0.96); backdrop-filter: blur(6px); }
+  header h1 { font-size: 16px; margin: 0; font-weight: 700; }
+  header a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; font-size: 13px; }
+  nav.views { display: flex; gap: 10px; }
+  nav.views a[aria-current="page"] { color: var(--text); text-decoration: none; font-weight: 600; }
+  main { max-width: 800px; margin: 0 auto; padding: 14px 16px 80px; }
+  a { color: #8cc8ff; text-decoration: underline; text-underline-offset: 2px; }
+  a:visited { color: #d9b3ff; }
+  a:hover, a:focus-visible { color: #ffe08a; }
+  a:focus-visible, li:focus-visible, select:focus-visible, input:focus-visible, button:focus-visible {
+    outline: 2px solid #ffe08a; outline-offset: 2px; border-radius: 3px; }
+  .sub, .note { color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 12px 14px; margin-bottom: 12px; }
+  h2 { font-size: 21px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h3 { font-size: 13px; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .line { font-size: 13.5px; line-height: 1.5; margin: 2px 0; }
+  .pill { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 20px; border: 1px solid var(--border);
+    color: var(--muted); vertical-align: 1px; white-space: nowrap; }
+  .pill.recorded { color: var(--good); border-color: rgba(111,207,151,0.5); }
+  .pill.derived { color: var(--derived); border-color: rgba(185,139,240,0.5); }
+  .pill.unknown { color: var(--warn); border-color: rgba(217,164,65,0.5); }
+  .pill.legacy { color: var(--warn); }
+  .pill.you { color: var(--good); }
+  .pill.missing { color: var(--bad); border-color: rgba(224,138,138,0.5); }
+  .pill.dispute { color: var(--bad); }
+  input[type=search], select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 10px; font-size: 14px; font-family: inherit; }
+  input[type=search] { width: 100%; margin-bottom: 12px; }
+  .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 8px 0 4px; }
+  .filters label { font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  ol.roads, ul.places, ul.groups { list-style: none; margin: 0; padding: 0; }
+  ol.roads > li { border-top: 1px solid var(--border); padding: 10px 0; }
+  ol.roads > li:first-child { border-top: none; }
+  .road-head { font-size: 14.5px; line-height: 1.5; }
+  .road-head .kind { color: var(--muted); font-size: 12px; }
+  .road-head .word { color: var(--text); font-weight: 600; }
+  .road-head .external { color: var(--story); }
+  .road-head .translation { color: var(--lang); }
+  .road-head .source { color: var(--source); }
+  .road-head .component, .road-head .run { color: var(--muted); }
+  .fields { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; font-size: 12.5px;
+    margin-top: 6px; line-height: 1.5; }
+  .fields dt { color: var(--muted); margin: 0; }
+  .fields dd { margin: 0; }
+  .detail { font-size: 12.5px; color: var(--muted); font-style: italic; margin-top: 4px; }
+  .doors { font-size: 12px; margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .ring2 { margin: 10px 0 0 14px; padding-left: 12px; border-left: 2px dotted var(--derived); }
+  ul.groups li, ul.places li { padding: 7px 0; border-top: 1px solid var(--border); font-size: 13.5px; }
+  ul.groups li:first-child, ul.places li:first-child { border-top: none; }
+  .count { color: var(--muted); font-size: 12px; }
+  .burden { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  .burden b { color: var(--text); font-weight: 600; }
+  .empty { color: var(--muted); padding: 20px 0; text-align: center; font-size: 14px; }
+  .spinner { display: inline-block; width: 12px; height: 12px; margin-right: 8px;
+    border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hist { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Map</h1>
+  <nav class="views" aria-label="the Map's views">
+    <a href="/map" aria-current="page">Map · focus</a>
+    <a href="/map/trails" title="every recorded link, grouped into trails">Map · trails</a>
+    <a href="/map/world" title="the spatial map, where the Wayfinder lives">Map · world</a>
+  </nav>
+  <a href="/">← back to <span data-brand>Nikodemus</span></a>
+  <span class="sub" id="counts" style="margin-left:auto"></span>
+</header>
+
+<main>
+  <div id="stage"><p class="sub"><span class="spinner"></span>reading the record…</p></div>
+</main>
+
+<script>
+// Map · focus. One place in focus; its direct roads, each with who drew it,
+// what record it rests on, what a reviewing stage said of it, and what you
+// ruled — four things kept apart. Read-only: this page fetches, it never
+// posts, and nothing here calls a model. The whole state — focus, filters,
+// which groups are open, which one road is expanded — lives in the URL, so
+// reload, Back and a copied link all restore the same view.
+const P = new URLSearchParams(location.search);
+const STATE = {
+  key: P.get('key') || '', expand: P.get('expand') || '',
+  rel: P.get('rel') || '', issuer: P.get('issuer') || '', standing: P.get('standing') || '',
+  open: (P.get('open') || '').split(',').filter(Boolean), kinds: P.get('kinds') || 'words',
+};
+let VIEW = null, PLACES = null;
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function href(changes) {
+  const q = new URLSearchParams();
+  const st = Object.assign({}, STATE, changes || {});
+  if (st.key) q.set('key', st.key);
+  if (st.expand) q.set('expand', st.expand);
+  for (const k of ['rel', 'issuer', 'standing']) if (st[k]) q.set(k, st[k]);
+  if (st.open && st.open.length) q.set('open', st.open.join(','));
+  if (st.kinds && st.kinds !== 'words') q.set('kinds', st.kinds);
+  const s = q.toString();
+  return '/map' + (s ? '?' + s : '');
+}
+// a fresh focus on another place: no filters, no expansion, no open groups
+function jumpHref(key) { return '/map?key=' + encodeURIComponent(key); }
+function runHref(trace) { return '/?trace=' + encodeURIComponent(trace); }
+
+// what a place is, in words — the anchor names the Map uses: an external
+// work a sprout reached is a source; a passage is a passage
+const KIND_WORDS = { word: 'word', concept: 'word', external: 'source', translation: 'foreign term',
+                     source: 'passage', component: 'component', run: 'run' };
+function kindWord(kind) { return KIND_WORDS[kind] || kind || 'place'; }
+function identityPill(identity) {
+  return identity === 'legacy title-keyed'
+    ? `<span class="pill legacy" title="known by its title, not by a concept id — a later run may key the same title by id, and the Map never welds the two">legacy title-keyed</span>`
+    : (identity === 'concept-keyed' ? `<span class="pill">concept-keyed</span>` : '');
+}
+
+async function getJson(url) {
+  const r = await fetch(url);
+  const text = await r.text();
+  let d = null;
+  try { d = JSON.parse(text); } catch (e) { return { error: `the server answered but not with the map (HTTP ${r.status})`, status: r.status }; }
+  if (!r.ok && d && !d.error) d.error = `HTTP ${r.status}`;
+  return d;
+}
+
+// ---- the picker: a focus is chosen, never assumed ------------------------
+async function loadPicker() {
+  PLACES = await getJson('/api/map/places');
+  if (!PLACES || PLACES.error) {
+    document.getElementById('stage').innerHTML = `<p class="empty">${esc((PLACES && PLACES.error) || "couldn't reach the server")}</p>`;
+    return;
+  }
+  document.getElementById('counts').textContent = `${PLACES.count} places · ${PLACES.population}`;
+  document.getElementById('stage').innerHTML = `
+    <div class="card">
+      <h2>Choose a place to put in focus</h2>
+      <p class="note">Nothing is in focus until you choose it. The list is ${esc(PLACES.order)}; the number beside each
+      place is its direct roads in the served map, there to be read, not to rank by.</p>
+      <input type="search" id="q" placeholder="find a place…" aria-label="find a place" oninput="renderPicker()">
+      <p class="sub">${STATE.kinds === 'all'
+        ? `showing every kind · <a href="${href({kinds: 'words'})}">show only your words</a>`
+        : `showing your words · <a href="${href({kinds: 'all'})}">show every kind (sources, passages, components, foreign terms, runs)</a>`}</p>
+      <ul class="places" id="places" aria-label="places"></ul>
+    </div>`;
+  renderPicker();
+}
+function renderPicker() {
+  const q = ((document.getElementById('q') || {}).value || '').trim().toLowerCase();
+  const all = STATE.kinds === 'all';
+  const hit = PLACES.places.filter(p => (all || p.kind === 'word' || p.kind === 'concept') &&
+    (!q || (p.display_label || '').toLowerCase().includes(q) || (p.label || '').toLowerCase().includes(q)));
+  const shown = hit.slice(0, 400);
+  document.getElementById('places').innerHTML = shown.length ? shown.map(p => `<li>
+      <a href="${jumpHref(p.key)}">${esc(p.display_label || p.label)}</a>
+      <span class="count">${esc(kindWord(p.kind))} · ${p.degree} direct road${p.degree === 1 ? '' : 's'}${p.runs > 1 ? ` · appears again (${p.runs} runs)` : ''}</span>
+      ${identityPill(p.identity)}${p.shared_title ? ` <span class="pill" title="another place carries this same title; each is its own box">shares its title</span>` : ''}
+      ${p.shared_title || p.short_def ? `<div class="sub">${p.short_def ? esc(p.short_def) : 'no short definition on this box'}${p.concept_id ? ` · ${esc(p.concept_id)}` : ''}</div>` : ''}
+    </li>`).join('') + (hit.length > shown.length ? `<li class="count">${hit.length - shown.length} more match — narrow the search</li>` : '')
+    : `<li class="count">no place matches that</li>`;
+}
+
+// ---- the focus -------------------------------------------------------------
+async function loadFocus() {
+  const q = new URLSearchParams();
+  q.set('key', STATE.key);
+  if (STATE.expand) q.set('expand', STATE.expand);
+  for (const k of ['rel', 'issuer', 'standing']) if (STATE[k]) q.set(k, STATE[k]);
+  VIEW = await getJson('/api/map/focus?' + q.toString());
+  if (!VIEW || VIEW.error) {
+    document.getElementById('stage').innerHTML = `<p class="empty">${esc((VIEW && VIEW.error) || "couldn't reach the server")}
+      — <a href="/map">choose a place</a></p>`;
+    return;
+  }
+  render();
+}
+
+function issuerHtml(iss) {
+  const cls = iss.recorded ? 'recorded' : (iss.label === 'issuer not recorded' ? 'unknown' : 'derived');
+  let basis = '';
+  if (iss.derivation) {
+    const d = iss.derivation;
+    basis = ` <span class="sub">rule: ${esc(d.rule)} · basis: ${esc(d.basis || '—')} · ${esc(d.version)}${d.note ? ' · ' + esc(d.note) : ''}</span>`;
+  }
+  return `<span class="pill ${cls}">${esc(iss.label)}</span>${basis}`;
+}
+function provenanceHtml(pv, road) {
+  if (pv.kind === 'receipt' || pv.kind === 'result_snapshot') {
+    if (pv.resolves) {
+      const trace = pv.kind === 'receipt' ? pv.id.replace(/^receipt_/, '') : pv.id;
+      return `${esc(pv.kind === 'receipt' ? 'receipt' : 'snapshot')} <a href="${runHref(trace)}">${esc(pv.id)}</a>${pv.stage ? ` <span class="sub">· stage ${esc(pv.stage)}</span>` : ''}`;
+    }
+    return `<span class="pill missing">${esc(pv.label.split(' · run snapshot available')[0])}</span>` +
+      (pv.run_snapshot ? ` <span class="sub">· run snapshot available: <a href="${runHref(pv.run_snapshot)}">${esc(pv.run_snapshot)}</a></span>` : '') +
+      ` <span class="sub">(cited ${esc(pv.id)})</span>`;
+  }
+  if (pv.kind === 'reconstruction')
+    return `reconstructed from snapshot ${pv.resolves ? `<a href="${runHref(pv.id)}">${esc(pv.id)}</a>` : `<span class="pill missing">${esc(pv.id)} · snapshot not found</span>`}`;
+  if (pv.kind === 'none')
+    return `<span class="pill unknown">no citation recorded</span>` +
+      (pv.run_snapshot ? ` <span class="sub">· run snapshot available: <a href="${runHref(pv.run_snapshot)}">${esc(pv.run_snapshot)}</a></span>` : '');
+  return `${esc(pv.kind.replace('_', ' '))} ${esc(pv.id)}${pv.note ? ` <span class="sub">· ${esc(pv.note)}</span>` : ''}`;
+}
+function reviewHtml(rs) {
+  if (!rs) return `<span class="sub">none recorded on this road</span>`;
+  return `<b>${esc(rs.verdict)}</b> <span class="sub">— by ${esc(rs.by)}, ${esc(rs.population)}; a stage's word about this road, not a ruling</span>`;
+}
+function ownerHtml(os) {
+  if (!os) return `<span class="sub">none — being on the map is not a ruling</span>`;
+  return `<span class="pill you">you declared this road</span> ${esc(os.verb)}${os.note ? ` — ${esc(os.note)}` : ''}
+    <span class="sub">· declaration ${esc(os.declaration_id || '—')} · proposed by ${esc(os.proposed_by)}</span>`;
+}
+function disputeHtml(d) {
+  if (!d) return '';
+  const tally = Object.entries(d.tally || {}).map(([v, n]) => `${esc(v)} ×${n}`).join(' · ');
+  return `<dt>dispute</dt><dd><span class="pill dispute">this target judged differently across runs</span> ${tally}
+    <span class="sub">— population: ${esc(d.population || 'runs whose review reached this target')}; neither verdict is chosen. The runs: ${(d.entries || []).map(e => `<a href="${runHref(e.run_trace_id)}">${esc(e.run_trace_id)}</a> (${esc(e.verdict)})`).join(', ')}</span></dd>`;
+}
+function resolutionHtml(r, whose) {
+  if (!r) return '';
+  return `<dt>recorded against</dt><dd>${esc(r.recorded_key)} <span class="sub">(${esc(r.recorded_identity)}${whose ? ', ' + whose : ''}) — resolved onto this box by ${esc(r.resolved_by)}; the row holds the key, the box is the map's reading of it</span></dd>`;
+}
+function ariaFor(r) {
+  return `${r.rel_words} ${r.other.label} — issuer ${r.issuer.label} — provenance ${r.provenance.label}`;
+}
+function roadHtml(r, opts) {
+  opts = opts || {};
+  const o = r.other;
+  const other = `<a class="${esc(o.kind)}" href="${jumpHref(o.key)}" title="jump: put ${esc(o.label)} in focus">${esc(o.label)}</a>
+    <span class="kind">${esc(kindWord(o.kind))}</span> ${identityPill(o.identity)}`;
+  const head = r.direction === 'out'
+    ? `<span class="word">this</span> — ${esc(r.rel_words)} → ${other}`
+    : `${other} — ${esc(r.rel_words)} → <span class="word">this</span>`;
+  const when = r.time_recorded ? esc(String(r.created_at).slice(0, 10)) : '<span class="pill unknown">recorded time unavailable</span>';
+  const expanded = opts.canExpand && STATE.expand === r.edge_id;
+  return `<li tabindex="0" data-edge="${esc(r.edge_id)}" aria-label="${esc(ariaFor(r))}">
+    <div class="road-head">${head}</div>
+    <dl class="fields">
+      <dt>issuer</dt><dd>${issuerHtml(r.issuer)}</dd>
+      <dt>provenance</dt><dd>${provenanceHtml(r.provenance, r)}</dd>
+      <dt>review standing</dt><dd>${reviewHtml(r.review_standing)}</dd>
+      <dt>evidence support</dt><dd><span class="sub">none — no road carries a quoted span or a Library anchor today</span></dd>
+      <dt>owner standing</dt><dd>${ownerHtml(r.owner_standing)}</dd>
+      ${disputeHtml(r.dispute)}
+      ${resolutionHtml(r.this_end && r.this_end.resolution, 'this place')}
+      ${resolutionHtml(o.resolution, 'the far end')}
+      <dt>recorded</dt><dd>${when} <span class="sub">· run <a href="${runHref(r.run_trace_id)}">${esc(r.run_trace_id)}</a> · road ${esc(r.edge_id)}</span></dd>
+    </dl>
+    ${r.detail ? `<div class="detail">recorded with the road: “${esc(r.detail)}”</div>` : ''}
+    ${opts.canExpand ? `<div class="doors">${expanded
+        ? `<a href="${href({expand: ''})}">close the next ring</a>`
+        : `<a href="${href({expand: r.edge_id})}" title="one ring only: the direct roads of ${esc(o.label)}">show next ring →</a>`}</div>` : ''}
+    ${expanded && VIEW.expanded ? ring2Html(VIEW.expanded) : ''}
+  </li>`;
+}
+function ring2Html(x) {
+  const n = x.other || {};
+  const p = x.presentation || {};
+  return `<div class="ring2" aria-label="next ring">
+    <div class="line"><b>next ring:</b> ${esc(n.display_label || n.label || x.from_edge_id)} <span class="kind">${esc(kindWord(n.kind))}</span> ${identityPill(n.identity)}
+      <span class="sub">— ${p.degree} direct road${p.degree === 1 ? '' : 's'} · one ring only; <a href="${jumpHref(n.key)}">jump</a> to go further</span></div>
+    ${p.bounded
+      ? `<p class="sub">${p.degree} direct roads · ${(x.groups || []).length} groups (threshold ${p.threshold}) — the groups open when this place is in focus</p>
+         <ul class="groups">${(x.groups || []).map(g => `<li>${esc(g.rel_words)} <span class="pill ${g.issuer_label.startsWith('recorded') ? 'recorded' : (g.issuer_label === 'issuer not recorded' ? 'unknown' : 'derived')}">${esc(g.issuer_label)}</span> <span class="count">${g.count}</span></li>`).join('')}</ul>`
+      : `<ol class="roads">${(x.roads || []).map(r => roadHtml(r, {canExpand: false})).join('')}</ol>`}
+  </div>`;
+}
+function groupId(g) { return g.rel + '|' + g.issuer_label; }
+
+function render() {
+  const v = VIEW, f = v.focus, b = v.burden, p = v.presentation;
+  document.getElementById('counts').textContent = `${p.degree} direct road${p.degree === 1 ? '' : 's'} · ${v.derivation_version}`;
+  const os = f.owner_standing;
+  const facets = v.facets || {rel: {}, issuer: {}, standing: {}};
+  const opt = (name, cur, entries, words) => `<label>${esc(name)} <select aria-label="filter by ${esc(name)}" onchange="location.href=this.value">
+      <option value="${href({[name]: ''})}"${cur ? '' : ' selected'}>all</option>
+      ${Object.entries(entries).map(([k, n]) => `<option value="${href({[name]: k})}"${cur === k ? ' selected' : ''}>${esc(words ? (words[k] || k) : k)} (${n})</option>`).join('')}
+    </select></label>`;
+  const relWords = {}; (v.roads || []).forEach(r => { relWords[r.rel] = r.rel_words; });
+  Object.keys(facets.rel || {}).forEach(k => { if (!relWords[k]) relWords[k] = (v.rel_words || {})[k] || k; });
+  const filtered = STATE.rel || STATE.issuer || STATE.standing;
+
+  let list;
+  if (p.bounded) {
+    const byId = {}; (v.roads || []).forEach(r => { byId[r.edge_id] = r; });
+    list = `<p class="sub"><b style="color:var(--text)">${p.degree} direct roads · ${v.groups.length} groups</b> — at ${p.threshold} or more, roads are grouped by relation and issuer;
+        the total is the population, and a group opens only when you open it. Within a group: ${esc(p.order)}.</p>
+      <ul class="groups" aria-label="groups of roads">${v.groups.map(g => {
+        const id = groupId(g), isOpen = STATE.open.includes(id);
+        const cls = g.issuer_label.startsWith('recorded') ? 'recorded' : (g.issuer_label === 'issuer not recorded' ? 'unknown' : 'derived');
+        return `<li>${esc(g.rel_words)} <span class="pill ${cls}">${esc(g.issuer_label)}</span> <span class="count">${g.count} road${g.count === 1 ? '' : 's'}</span>
+          · ${isOpen ? `<a href="${href({open: STATE.open.filter(x => x !== id)})}">close</a>` : `<a href="${href({open: STATE.open.concat([id])})}">open</a>`}
+          ${isOpen ? `<ol class="roads" aria-label="${esc(g.rel_words + ' · ' + g.issuer_label)}">${g.edge_ids.map(id2 => byId[id2]).filter(Boolean).map(r => roadHtml(r, {canExpand: true})).join('')}</ol>` : ''}
+        </li>`; }).join('')}</ul>`;
+  } else {
+    list = `<p class="sub">${p.degree} direct road${p.degree === 1 ? '' : 's'} — oldest first: ${esc(p.order)}${p.time_unavailable ? ` · ${p.time_unavailable} with recorded time unavailable` : ''}.</p>
+      <ol class="roads" aria-label="direct roads">${(v.roads || []).map(r => roadHtml(r, {canExpand: true})).join('')}</ol>`;
+  }
+
+  document.getElementById('stage').innerHTML = `
+    <div class="card">
+      <p class="sub"><a href="/map">← choose another place</a></p>
+      <h2>${esc(f.display_label || f.label)}</h2>
+      <div class="line"><span class="kind sub">${esc(kindWord(f.kind))}</span> ${identityPill(f.identity)}
+        ${f.concept_id ? `<span class="sub">· ${esc(f.concept_id)}</span>` : ''}
+        ${f.shared_title ? ` <span class="pill" title="another place carries this same title; each is its own box and the short definition tells them apart">shares its title with another place</span>` : ''}
+        ${f.appears_in_runs > 1 ? ` <span class="pill" title="the same recorded identity in more than one run">appears again · ${f.appears_in_runs} runs</span>` : ''}
+        ${f.boxed === false ? ` <span class="sub">· known only as the end of a road; no run boxed it</span>` : ''}</div>
+      ${f.identity === 'legacy title-keyed' ? `<p class="note">This place is keyed by its title, as every run before concept ids did. If a later run keyed the same title by id, that is a different box; the Map discloses the two and never welds them.</p>` : ''}
+      ${(f.same_title || []).length ? `<p class="sub" id="same-title">same title, other places (each its own box, never merged): ${f.same_title.map(t =>
+          `<a href="${jumpHref(t.key)}" title="jump">${esc(f.label)}</a> <span class="pill ${t.identity === 'legacy title-keyed' ? 'legacy' : ''}">${esc(t.identity)}</span>${t.short_def ? ` <span class="sub">— ${esc(t.short_def)}</span>` : ''}`).join(' · ')}</p>` : ''}
+      ${f.short_def ? `<p class="line">${esc(f.short_def)}</p>` : ''}
+      ${(f.names || []).filter(n => n !== (f.display_label || f.label)).length ? `<p class="sub">also written as: ${f.names.filter(n => n !== (f.display_label || f.label)).map(esc).join(' · ')} <span title="${esc(f.named_by || '')}">· named by ${esc(f.named_by || '')}</span></p>` : ''}
+      <div class="line">owner standing: ${os
+        ? `<span class="pill you">you: ${esc(os.judgment)}</span> <span class="sub">ruled in run <a href="${runHref(os.ruled_in)}">${esc(os.ruled_in)}</a>${os.history.length > 1 ? ` · ${os.history.length} rulings on record` : ''}</span>`
+        : `<span class="sub">no ruling recorded for this place</span>`}</div>
+      ${os && os.history.length > 1 ? `<div class="hist">${os.history.map(h => `${esc(h.judgment)} in <a href="${runHref(h.run_trace_id)}">${esc(h.run_trace_id)}</a>${h.at ? ' · ' + esc(String(h.at).slice(0, 10)) : ''}`).join(' → ')}</div>` : ''}
+    </div>
+
+    <div class="card">
+      <h3>What this ring rests on</h3>
+      <p class="burden">population: ${esc(b.population)} — <b>${b.total}</b> ·
+        declared by you <b>${b.declared_by_owner}</b> ·
+        pipeline: recorded <b>${b.pipeline.recorded}</b>, derived <b>${b.pipeline.derived}</b> ·
+        model proposal: recorded <b>${b.model_proposal.recorded}</b>, derived <b>${b.model_proposal.derived}</b> ·
+        issuer not recorded <b>${b.issuer_not_recorded}</b> ·
+        reconstructed from snapshots <b>${b.reconstructed}</b> ·
+        citation not found <b>${b.citation_not_found}</b> ·
+        disputes <b>${b.disputes}</b><br>
+        evidence support — quoted spans and Library anchors: <b>${b.evidence_support.count}</b> (population: ${esc(b.evidence_support.population)})</p>
+      <p class="note">${esc(v.standing_rule)}.</p>
+    </div>
+
+    <div class="card">
+      <h3>Direct roads</h3>
+      <div class="filters">
+        ${opt('rel', STATE.rel, facets.rel || {}, relWords)}
+        ${opt('issuer', STATE.issuer, facets.issuer || {})}
+        ${opt('standing', STATE.standing, facets.standing || {})}
+        ${filtered ? `<a href="${href({rel: '', issuer: '', standing: ''})}">clear filters</a>` : ''}
+      </div>
+      ${filtered ? `<p class="sub">filtered — ${p.degree} of ${v.facets_total} direct roads shown; the counts above are for what is shown</p>` : ''}
+      ${p.degree ? list : `<p class="empty">No direct road${filtered ? ' matches these filters' : ' — this place is on the map but nothing recorded links it'}.</p>`}
+    </div>
+
+    <p class="note">${(v.limits || []).map(esc).join(' ')} Tracked history begins ${esc(v.tracked_since)}.</p>`;
+}
+
+(STATE.key ? loadFocus() : loadPicker());
+</script>
+<script src="/brand.js"></script>
+</body>
+</html>

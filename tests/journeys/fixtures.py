@@ -343,15 +343,124 @@ def seed_partial():
     return ids
 
 
+def seed_map():
+    """The record the Map · focus journey opens — every road written by the
+    real road writers against the offline gateway, so what the browser reads
+    is what the real path writes. Two manipulations, each the only honest
+    way to manufacture a state the writers can no longer produce:
+
+      · a pre-104 row: one real parallels road has its origin and producer
+        keys removed after the write (that is what a legacy row IS);
+      · the eighteen's state: one real sprout's receipt is deleted after
+        the write, so its roads cite a receipt that is not there; for a
+        second sprout the snapshot is deleted as well, which is exactly the
+        state of the eighteen roads in the owner's record.
+
+    And one pre-tracking row: a real road whose created_at is moved before
+    the tracked history, so the page has an "issuer not recorded" road to
+    render — the fixture's date, never the page's; the page synthesizes no
+    time and this fixture is the only place a time is written by hand."""
+    g = cli.MockGateway()
+    ids = {}
+    text = "A passage for the map: a lantern kept lit for a debt nobody named, and the quiet after the naming."
+    f = cli.run("forge", text, g, interactive=False)
+    ids["forge"] = f["trace_id"]
+    snap = json.loads((cli.RESULTS_DIR / f"{f['trace_id']}.json").read_text())
+    bff = (snap["candidates"][0].get("bff") or {})
+    cand = {"title": bff.get("title", ""), "definition": (bff.get("flesh") or {}).get("definition", ""),
+            "concept_id": bff.get("concept_id", ""), "central_contradiction": (bff.get("bone") or {}).get("central_contradiction", "c"),
+            "axiom": (bff.get("bone") or {}).get("axiom", "a"), "plain_gloss": (bff.get("flesh") or {}).get("plain_gloss", "g")}
+    assert cand["title"] and cand["concept_id"], f"the offline forge no longer yields a concept-keyed candidate: {cand}"
+    ids["seedTitle"] = cand["title"]
+    ids["seedKey"] = cli.node_concept(cand["concept_id"], cand["title"])["key"]
+    # the seed's ring: two sprouts (the second reviews Cassandra differently,
+    # so the same target carries two verdicts — a dispute), two refracts (the
+    # same terms reached again), an archetype, a revise, and a declared road
+
+    class _ReviewsDifferently(cli.MockGateway):
+        def complete(self, prompt: str) -> str:
+            out = super().complete(prompt)
+            if prompt.startswith("You are the sprout-review stage"):
+                d = json.loads(out)
+                for r in d.get("reviews") or []:
+                    if r.get("index") == 0:
+                        r["verdict"] = "strained"; r["note"] = "On a second reading the attribution leans on the divergence more than the resemblance."
+                return json.dumps(d)
+            return out
+    # A trace id is the hash of the input text and the SECOND (wordicon_cli
+    # _now() has no finer grain), so two runs on one candidate inside one
+    # second share an id and the second overwrites the first's receipt and
+    # snapshot. This fixture waits for the clock; the defect is reported in
+    # the Map Focus build report, not repaired here.
+    def next_second():
+        import time as _t
+        was = cli._now()
+        while cli._now() == was:
+            _t.sleep(0.05)
+    next_second()   # the partial fixture sprouts this same mock title moments earlier
+    sp1 = cli.run_sprout(cand, g, parent_trace_id=f["trace_id"])
+    next_second(); sp2 = cli.run_sprout(cand, _ReviewsDifferently())
+    rf1 = cli.run_refract(cand, g)
+    next_second(); rf2 = cli.run_refract(cand, g)
+    ar = cli.run_archetype(cand, g)
+    rv = cli.run_revise(dict(cand), g)
+    ids.update({"sprout1": sp1["trace_id"], "sprout2": sp2["trace_id"], "refract1": rf1["trace_id"],
+                "refract2": rf2["trace_id"], "archetype": ar["trace_id"], "revise": rv["trace_id"]})
+    ow = cli.build_overworld()
+    keys = {it["key"] for r in ow["runs"] for it in r["items"]}
+    cassandra = cli.node_external("Cassandra", "Greek myth (Aeschylus, Agamemnon)")
+    assert cassandra["key"] in keys, "the offline sprout no longer reaches Cassandra"
+    decl = cli.declare_road({"kind": "concept", "key": ids["seedKey"], "label": cand["title"]},
+                            {"kind": "external", "key": cassandra["key"], "label": cassandra["label"]},
+                            "answers", "the lantern is kept lit for what the prophecy names", keys)
+    ids["declaredId"] = decl["declaration_id"]
+    ids["disputeTargetKey"] = cassandra["key"]
+    # a legacy title-keyed place: a sprout from a candidate with no concept id
+    lg = cli.run_sprout({"title": "Lantern Debt", "definition": "a debt kept lit rather than paid"}, g)
+    ids["legacySprout"] = lg["trace_id"]
+    ids["legacyKey"] = cli.node_word("Lantern Debt")["key"]
+    # the eighteen's state, twice: a sprout whose receipt is gone, and one
+    # whose receipt and snapshot are both gone
+    next_second(); sp3 = cli.run_sprout(cand, g)
+    (cli.RECEIPTS_DIR / f"receipt_{sp3['trace_id']}.json").unlink()
+    ids["missingReceipt"] = sp3["trace_id"]
+    next_second(); sp4 = cli.run_sprout(cand, g)
+    (cli.RECEIPTS_DIR / f"receipt_{sp4['trace_id']}.json").unlink()
+    (cli.RESULTS_DIR / f"{sp4['trace_id']}.json").unlink()
+    ids["missingBoth"] = sp4["trace_id"]
+    # a pre-104 row and a pre-tracking row, from real rows of the first sprout
+    rows = [json.loads(l) for l in cli.EDGES_LOG.read_text().splitlines() if l.strip()]
+    par = [r for r in rows if r.get("run_trace_id") == sp1["trace_id"] and r.get("rel") == "parallels"
+           and (r.get("source") or {}).get("key") == ids["seedKey"]]
+    assert len(par) >= 2, "the first sprout wrote fewer than two parallels"
+    legacy_id, pretrack_id = par[0]["edge_id"], par[1]["edge_id"]
+    out_rows = []
+    for r in rows:
+        if r.get("edge_id") == legacy_id:
+            r = {k: v for k, v in r.items() if k not in ("origin", "producer")}
+        elif r.get("edge_id") == pretrack_id:
+            r = {k: v for k, v in r.items() if k not in ("origin", "producer")}
+            r["run_trace_id"] = "trace_cli_gone_" + r["run_trace_id"][-6:]   # its snapshot is not there either
+            r["created_at"] = "2026-08-20T12:00:00+00:00"                     # before the tracked history
+        out_rows.append(r)
+    cli.EDGES_LOG.write_text("".join(json.dumps(r) + "\n" for r in out_rows))
+    ids["legacyEdge"] = legacy_id
+    ids["pretrackEdge"] = pretrack_id
+    assert len({sp1["trace_id"], sp2["trace_id"], sp3["trace_id"], sp4["trace_id"], rf1["trace_id"], rf2["trace_id"]}) == 6, \
+        "two runs shared a trace id — the fixture's clock wait failed"
+    (DIR / "map.json").write_text(json.dumps(ids))
+    return ids
+
+
 if __name__ == "__main__":
     marker = STATE / ".seeded"
     if marker.exists():
         print(json.dumps({"entrance": "already seeded", "pre_wiring": seed_pre_wiring(),
                           "epistemic": seed_epistemic(), "partial": seed_partial(),
-                          "vault_states": seed_vault_states()}))
+                          "vault_states": seed_vault_states(), "map": seed_map()}))
     else:
         out = seed_entrance()
         marker.write_text("1")
         print(json.dumps({"entrance": out, "pre_wiring": seed_pre_wiring(),
                           "epistemic": seed_epistemic(), "partial": seed_partial(),
-                          "vault_states": seed_vault_states()}))
+                          "vault_states": seed_vault_states(), "map": seed_map()}))

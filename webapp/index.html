@@ -5695,10 +5695,12 @@ function closeCompose() { closeWorkspace(); }
 // anatomy is its own constitutional document, and a pairing screen that
 // rendered inside an unpaired page would be a lie about what is locked.
 const PLACES = {
-  '/map':           {name: 'Map',            why: 'your runs, each item a typed door'},
-  '/map/world':     {name: 'Map · the world', why: 'the same record laid out in space, with the Wayfinder'},
-  '/overworld':     {name: 'Map',            why: 'your runs, each item a typed door'},
-  '/trails':        {name: 'Trails',         why: 'your runs, each item a typed door'},
+  '/map':           {name: 'Map',            why: 'one place in focus — where it came from, what it touched, who drew each road'},
+  '/map/focus':     {name: 'Map · focus',    why: 'one place in focus — where it came from, what it touched, who drew each road'},
+  '/map/trails':    {name: 'Map · trails',   why: 'your runs, each item a typed door'},
+  '/map/world':     {name: 'Map · world',    why: 'the same record laid out in space, with the Wayfinder'},
+  '/overworld':     {name: 'Map · trails',   why: 'your runs, each item a typed door'},
+  '/trails':        {name: 'Map · trails',   why: 'your runs, each item a typed door'},
   '/bench':         {name: 'The Bench',      why: 'reworking a word you already kept'},
   '/clinic':        {name: 'Clinic',         why: 'authorities admitted by role, never blended'},
   '/recovery':      {name: 'Recovery Review', why: 'acceptances that survived without a definition'},
@@ -5867,7 +5869,17 @@ window.addEventListener('popstate', function (e) {
     if (!loc || !loc.pathname || loc.href === 'about:blank') return;
     const path = loc.pathname;
     if (STANDALONE.indexOf(path) !== -1) { window.location.href = path + loc.search; return; }
-    if (path === '/') { closePlace(); return; }
+    if (path === '/') {
+      // A typed door pressed inside a place (a run, a concept, a source —
+      // Trails and Map · focus are made of them) lands in the ONE Home:
+      // the pane closes and the destination opens here. It used to close
+      // the pane and drop the destination on the floor, a door to nowhere.
+      let dest = '', trace = '';
+      try { const q = new URLSearchParams(loc.search || ''); dest = q.get('dest') || ''; trace = q.get('trace') || ''; } catch (err) {}
+      closePlace();
+      if (dest || trace) openDestination(dest || ('run:' + trace), trace);
+      return;
+    }
     placeLoading(false);
     // A place's own "← back to Nikodemus" is true when the place is the whole
     // window and false inside the shell: you never left. The bar above is the
