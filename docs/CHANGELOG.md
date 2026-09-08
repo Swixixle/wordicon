@@ -1,5 +1,55 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.16.0 — anchor fit, drawn as five things (block 122)
+
+A run over the owner's own writing produced three candidates that all silently
+narrowed a **mid-day** interval into an after-school-to-dinner one the anchor
+never contained. The tier that exists to catch exactly that *did* catch it —
+and said so in the same row it says almost everything in.
+
+A census of 539 candidate rows in the real corpus: `partial` 54.2%, `topical`
+25.0%, `not_run` 11.5%, `supported` 6.3%, `contradicted` 2.4%, `undetermined`
+0.6%. A first reading of that called the evaluator nearly vacuous. **That
+reading was wrong and is corrected here**: a five-state distribution with a
+large modal class establishes no such thing. The evaluator, its thresholds, its
+prompts and its stored vocabulary are untouched by this block. What failed was
+the drawing.
+
+**The row is named for what it measures.** It was `GROUNDED`, which claims
+grounding in the source, or in the world. It compares one claim against **one
+quoted span** and nothing else. It is `ANCHOR FIT` now.
+
+**Five states, five marks.** `supported`, `partial`, `topical`, `contradicted`
+and `not_run` each say something different and each draw something different.
+Before, `contradicted` — the strongest negative the tier can produce — shared a
+hollow circle with `topical`, which merely means off-target. The first cut of
+this repair gave it the same *filled* circle as `supported` and coloured it
+red, which draws the worst result as the best one for anyone not seeing colour;
+the journey caught it because the check reads the drawn mark rather than the
+state token. A state table can be five-valued underneath and four-valued on the
+screen.
+
+**The deciding difference is on the card.** For `partial`, `topical` and
+`contradicted`, one compact line names what the claim adds or what is missing —
+the reviewer's recorded reason where one exists, otherwise the words it keyed
+on, labelled as *words the reviewer selected, not a mechanical proof*. On the
+owner's run this would have read: *the reviewer keyed on "mid-day, cradle" in
+the anchor and "school, dinner" in the claim.* The methodology and the full
+note stay behind the disclosure. Hide explanation; never hide state.
+
+**Advisory, said once.** A first-time reader of this interface asked for a
+"speculative mode that lets you play with ideas before they are grounded" —
+which is the only mode there is; nothing here has ever blocked a ruling. A row
+of circles had read as a gate. The non-gating status is now stated once above
+the cards rather than repeated into wallpaper, and the browser proves that
+partial, topical and contradicted candidates all still offer Keep, Set aside
+and Revise.
+
+The synthetic fixture carries the same structural failure as the run that
+prompted this — a broad midday interval narrowed to a school boundary — and the
+owner's paragraph is not in the repository. Generation, anchors, owner rulings
+and candidate ranking are unchanged.
+
 ## v1.15.2 — four laws filed under the wrong heading (block 121c)
 
 Relocation only. Not one word of any law changed, and their attribution to the

@@ -828,6 +828,36 @@ def _check_attempt_ledger():
             out.append(f"block 119: the constitution does not tell the reader {_why} "
                        f"(missing {_needle!r}) — a wing that ships amends the constitution "
                        f"in the same block")
+    # -- block 122: the constitution says what anchor fit is, since the row
+    #    was renamed and its five states are now drawn as five things.
+    _canon122 = " ".join(_canon_source().split())
+    for _n122, _w122 in (
+            ("Anchor fit is one narrow question",
+             "what the anchor-fit row actually measures"),
+            ("not against your whole text, and not against the world",
+             "that anchor fit is not grounding and never was"),
+            ("drawn as five different things",
+             "that its five states are distinguishable on sight"),
+            ("never blocks a ruling",
+             "that the row advises and does not gate")):
+        if _n122 not in _canon122:
+            out.append(f"122: the constitution does not tell the reader {_w122} "
+                       f"(missing {_n122!r})")
+    # the row must not have quietly gone back to claiming grounding
+    _idx122 = (_pathlib.Path(__file__).resolve().parents[1] / "webapp"
+               / "index.html").read_text(encoding="utf-8")
+    if "rows.push(['Grounded'" in _idx122:
+        out.append("122: the card row calls itself Grounded again — it compares a claim "
+                   "with one quoted span, which is not grounding")
+    _dot = _re.search(r"const DOT = \{([^}]*)\}", _idx122)
+    if not _dot:
+        out.append("122: the mark table is gone")
+    else:
+        _marks = _re.findall(r"'((?:\\u[0-9A-Fa-f]{4})+)'", _dot.group(1))
+        if len(set(_marks)) != len(_marks):
+            out.append(f"122: two anchor-fit states share a mark ({_marks}) — a state "
+                       f"table can be five-valued underneath and four-valued on screen, "
+                       f"and the screen is what the reader has")
     return out
 
 
@@ -8333,7 +8363,7 @@ console.log(out.join('\\n'));
         if not _node:
             # No node here: fall back to checking the invariants that live in
             # the source text, and say plainly that the behaviour went unrun.
-            for _needle in ("rows.push(['Grounded'", "rows.push(['Well-made'",
+            for _needle in ("rows.push(['Anchor fit'", "rows.push(['Well-made'",
                             "function namingNote"):
                 if _needle not in _src:
                     failures.append(f"56: {_needle} missing — a concept row "
@@ -8349,7 +8379,7 @@ console.log(out.join('\\n'));
                 "  const rows = verdictRows(bff, {});\n"
                 "  const got = rows.map(r => r[1]);\n"
                 "  const labels = rows.map(r => r[0]);\n"
-                "  if (JSON.stringify(labels) !== '[\"Grounded\",\"Well-made\"]')\n"
+                "  if (JSON.stringify(labels) !== '[\"Anchor fit\",\"Well-made\"]')\n"
                 "    bad.push(name + ': rows moved or vanished (' + labels.join(',') + ')');\n"
                 "  if (JSON.stringify(got) !== JSON.stringify(want))\n"
                 "    bad.push(name + ': got ' + got.join(',') + ' wanted ' + want.join(','));\n"

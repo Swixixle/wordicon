@@ -103,3 +103,33 @@ reworks a kept word; `webapp/clinic.html` is the Clinic;
 investigation lane; and `webapp/anatomy.html` draws the whole organism — every organ,
 what constrains it, and what is not built yet — as its own constitutionally isolated
 document.
+
+## The anchor-fit census (block 122)
+
+Diagnostic evidence, not a performance threshold, and not a recalibration.
+
+**Population:** every candidate row carrying an anchor-fit verdict in the
+owner's `local_state/results/*.json` at the time of the census — 539 rows.
+Rows were counted per candidate as stored, so a candidate that appears in both
+a component's own run and its parent's projection counts once per stored row,
+and a rerun of the same input counts as new rows. Composite parents and their
+component runs were both walked. The evaluator, its thresholds, its prompts and
+its five-state stored vocabulary were unchanged by this and by block 122.
+
+| anchor fit | rows | share |
+| --- | ---: | ---: |
+| `partial` | 292 | 54.2% |
+| `topical` | 135 | 25.0% |
+| `not_run` | 62 | 11.5% |
+| `supported` | 34 | 6.3% |
+| `contradicted` | 13 | 2.4% |
+| `undetermined` | 3 | 0.6% |
+
+Tier 1 anchor integrity over the same rows: `exact` 462 (85.7%), `absent` 56
+(10.4%), `normalized` 15 (2.8%), `near` 6 (1.1%).
+
+**What this does and does not establish.** It establishes a five-state
+distribution with a large modal class. It does **not** establish that the
+evaluator is uninformative, and the first reading of it that said so was wrong
+and was corrected. The failure it motivated is a presentation failure: five
+materially different results were being drawn as one row.

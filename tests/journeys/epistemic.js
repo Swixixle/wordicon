@@ -36,7 +36,9 @@ const SELF_REPORT = 'MODEL SELF-REPORT — UNVERIFIED';
                              anchor_integrity: ai ? {status: ai} : undefined,
                              claim_support: cs ? {support: cs} : undefined,
                              flesh: {}, bone: {}});
-      const grounded = r.find(x => x[0] === 'Grounded');
+      // block 122: the row is ANCHOR FIT now — it compares the claim with
+      // the one quoted span, which is not grounding and never was.
+      const grounded = r.find(x => x[0] === 'Anchor fit');
       const made = r.find(x => x[0] === 'Well-made');
       return {g: grounded[1], gWhy: grounded[2], m: made[1], mWhy: made[2]};
     };
@@ -48,6 +50,7 @@ const SELF_REPORT = 'MODEL SELF-REPORT — UNVERIFIED';
       exactNotRun: g('exact', 'not_run', 'keep'),
       nothing: g('', '', 'keep'),
       contradicted: g('exact', 'contradicted', 'keep'),
+      topical: g('exact', 'topical', 'keep'),
     };
   });
   // The defect this journey was written for: an anchor that was CHECKED and
@@ -62,9 +65,15 @@ const SELF_REPORT = 'MODEL SELF-REPORT — UNVERIFIED';
      'no anchor offered reads as nothing checked, not as a refuted quote: ' + JSON.stringify(rows.absent));
   ok(rows.near.g === 'no', 'a near miss is still a failed warrant: ' + JSON.stringify(rows.near));
   ok(rows.exactSupported.g === 'yes', 'quote present and licensing the claim is the only "yes"');
-  ok(rows.exactNotRun.g === 'none' && /support check did not run/.test(rows.exactNotRun.gWhy),
-     'a present quote with no support check is not a warrant: ' + JSON.stringify(rows.exactNotRun));
-  ok(rows.contradicted.g === 'no', 'an anchor that denies the claim is a failed warrant');
+  // block 122 renamed the row and split its five states apart. The PROPERTY
+  // each of these pins was written for is unchanged and is what they check
+  // now: an unrun check is not a warrant, and a denying anchor is a failure
+  // that is no longer drawn the same as merely-off-target.
+  ok(rows.exactNotRun.g === 'none' && /not checked/.test(rows.exactNotRun.gWhy),
+     'a present quote with no anchor-fit check is not a warrant: ' + JSON.stringify(rows.exactNotRun));
+  ok(['no', 'deny'].includes(rows.contradicted.g) && rows.contradicted.g !== rows.topical.g,
+     'an anchor that denies the claim is a failed warrant, and not the same failure as topical: '
+     + JSON.stringify([rows.contradicted.g, rows.topical.g]));
 
   // ---- 2. warrant dominates craft --------------------------------------
   ok(/warrant ABSENT/.test(rows.absent.mWhy) && /warrant ABSENT/.test(rows.exactNotRun.mWhy),

@@ -453,6 +453,9 @@
      this thing, and fourteen flat headings are a wall. These five name the
      order rather than merely imposing it. Unnumbered on purpose — the
      system is not a pipeline and you may enter at any of them. */
+  .anchor-fit-why { margin: 2px 0 8px; font-size: 12.5px;
+    border-left: 3px solid var(--border); padding-left: 10px }
+  .v-deny .vdot { color: var(--bad) }
   .refusals { margin: 4px 0 0; padding-left: 18px }
   .refusals li { margin: 5px 0 }
   .refusals a.canon-link { text-decoration: none }
@@ -2277,7 +2280,7 @@ function buildCandidatesHtml(candidates, summary, traceId, metrics) {
   const summaryHtml = summary
     ? `<div class="muted" style="font-size:13px;margin-bottom:4px">${escapeHtml(summary)} · every candidate below, none hidden</div>`
     : '';
-  return summaryHtml + metricsHtml(metrics) + candidates.map(cand => renderCandidateCard(cand, traceId)).join('');
+  return summaryHtml + metricsHtml(metrics) + anchorFitNoticeHtml(candidates) + candidates.map(cand => renderCandidateCard(cand, traceId)).join('');
 }
 
 function renderCandidates(candidates, summary, traceId, metrics) {
@@ -2482,7 +2485,7 @@ function buildDecomposeHtml(d) {
     // than an empty component — which is what it showed before this branch
     // existed at all. (`g.candidates.map` on a reopened run threw here, which
     // is how the missing branch was found.)
-    const cards = (g.candidates || []).map(cand => renderCandidateCard(cand, g.trace_id, {anchor: g.anchor, background: g.background})).join('')
+    const cards = anchorFitNoticeHtml(g.candidates) + (g.candidates || []).map(cand => renderCandidateCard(cand, g.trace_id, {anchor: g.anchor, background: g.background})).join('')
       || (g.trace_id ? `<div class="muted" style="font-size:12.5px;margin:0 0 12px">
            The candidates from this component live in their own run, with their own receipt —
            <a href="#" style="color:var(--accent, inherit)" onclick="loadPastResult('${escapeJs(g.trace_id)}');return false">open it</a>.
@@ -2555,7 +2558,7 @@ function buildDeepHtml(d) {
         <div id="retry-area-${rid}"></div>
       </div>`;
     }
-    const cards = (g.candidates || []).map(cand => renderCandidateCard(cand, g.trace_id, {anchor: g.anchor, background: g.background})).join('');
+    const cards = anchorFitNoticeHtml(g.candidates) + (g.candidates || []).map(cand => renderCandidateCard(cand, g.trace_id, {anchor: g.anchor, background: g.background})).join('');
     return componentHeaderHtml(g, {kind: 'Component'}) + `
       ${g.summary ? `<div class="muted" style="font-size:13px;margin-bottom:12px">${escapeHtml(g.summary)}</div>` : ''}
       ${cards}`;
@@ -2636,6 +2639,26 @@ function renderDecomposeGroups(d) {
   appendRetryCard();
 }
 
+// block 122: SAID ONCE, NOT ON EVERY CARD.
+//
+// An intelligent first-time reader looked at this interface and asked for a
+// "speculative mode that lets you play with ideas before they are fully
+// grounded". That mode is the only mode there is — nothing here has ever
+// blocked a ruling — so what actually happened is that a row of circles read
+// as a gate. Repeating a disclaimer on every card would make it wallpaper;
+// saying it once, above the cards, is what a reader takes in.
+function anchorFitNoticeHtml(candidates) {
+  const any = (candidates || []).some(c => {
+    const b = c.bone_flesh_friction || c.bff || c;
+    return ((b.claim_support || {}).support || '') !== '';
+  });
+  if (!any) return '';
+  return `<p class="foot" style="margin:0 0 10px;border-left:3px solid var(--border);padding-left:10px">
+    <strong>Anchor fit is advisory.</strong> It compares each claim against the one quoted span,
+    not against your whole text and not against the world. It never blocks Keep, Set aside or
+    Revise \u2014 your ruling is the only thing that decides.</p>`;
+}
+
 function renderCandidateCard(cand, traceId, extra) {
   const i = cardIndex++;
   cardTraceId[i] = traceId;
@@ -2694,6 +2717,7 @@ function renderCandidateCard(cand, traceId, extra) {
       ${bff.flesh.boundary ? `<p class="body muted"><em>Boundary:</em> ${escapeHtml(bff.flesh.boundary)}</p>` : ''}
 
       ${verdictHeadHtml(bff, extra)}
+      ${anchorFitLine(bff)}
 
       <details class="case"><summary>show the case \u2014 the evidence behind those rows</summary>
 
@@ -2804,7 +2828,17 @@ function escapeJs(s) {
 // Nothing here is computed from a model — every row is a re-reading of a verdict
 // some stage already recorded, and where a stage recorded nothing the row says
 // so instead of vanishing.
-const DOT = {yes: '\u25CF', part: '\u25D0', no: '\u25CB', none: '\u25CC'};
+// block 122: `deny` is new. Five anchor-fit states were being drawn with
+// four glyphs, so `contradicted` — the strongest negative the mechanical
+// tier can produce — shared a hollow circle with `topical`, which is merely
+// off-target. The reason strings differed; the thing a reader scans did not.
+const DOT = {yes: '\u25CF', part: '\u25D0', no: '\u25CB', deny: '\u2298', none: '\u25CC'};
+// A FIFTH MARK, not a fifth colour. The first cut of this gave `deny`
+// the same filled circle as `supported` and coloured it red — which
+// draws the strongest negative as the best outcome for anyone who does
+// not see colour, and satisfies a source grep either way. The mark has
+// to differ in the character, because the character is what survives a
+// stylesheet, a screen reader and a copy-paste.
 
 function verdictRows(bff, extra) {
   const f = bff.friction || {}, ci = bff.anchor_integrity || {}, cs = bff.claim_support || {};
@@ -2843,19 +2877,26 @@ function verdictRows(bff, extra) {
   } else if (ci.status === 'absent') {
     g = 'none'; gWhy = 'no quote was offered, so nothing was checked';
   } else if (cs.support === 'supported' && (ci.status === 'exact' || ci.status === 'normalized')) {
-    g = 'yes'; gWhy = 'the quote is in your text and it licenses the claim';
-  } else if (['topical', 'contradicted'].includes(cs.support) || ['near', 'not_found'].includes(ci.status)) {
+    g = 'yes'; gWhy = 'the anchor supports the claim';
+  } else if (cs.support === 'contradicted') {
+    g = 'deny'; gWhy = 'the anchor conflicts with the claim';
+  } else if (['near', 'not_found'].includes(ci.status)) {
     g = 'no';
-    gWhy = cs.support === 'contradicted' ? 'the anchor\u2019s own words deny this'
-         : ci.status === 'not_found' ? 'the quote is not in your text'
-         : ci.status === 'near' ? 'close to your text, but not the words your text has'
-         : 'same subject, but the anchor does not license this claim';
+    gWhy = ci.status === 'not_found' ? 'the quote is not in your text'
+         : 'close to your text, but not the words your text has';
+  } else if (cs.support === 'topical') {
+    g = 'no'; gWhy = 'the anchor concerns the subject but does not support the claim';
   } else if (['not_run', 'undetermined'].includes(cs.support)) {
-    g = 'none'; gWhy = 'the support check did not run';
+    g = 'none'; gWhy = 'anchor fit was not checked';
   } else {
-    g = 'part'; gWhy = 'the anchor carries some of the claim, not all of it';
+    g = 'part'; gWhy = 'the anchor supports only part of the claim';
   }
-  rows.push(['Grounded', g, gWhy]);
+  // block 122: "Grounded" claimed more than this check performs. It compares
+  // the CLAIM against the ONE QUOTED SPAN — not against the whole source,
+  // and not against the world. A reader who saw a filled circle here read it
+  // as "this is true", and a reader who saw a hollow one read it as a gate.
+  // It is neither. The row is named for what it actually measures.
+  rows.push(['Anchor fit', g, gWhy]);
 
   // WELL-MADE — Friction's craft verdict, and nothing else. "existing" is not
   // a craft objection, so it lands on the third row instead of muddying this one.
@@ -2901,6 +2942,52 @@ function namingNote(bff) {
     return ['yes', 'nothing confident recalled \u2014 still recall, not a search'];
   }
   return ['part', 'adjacent terms exist \u2014 read the note before you trust it'];
+}
+
+// block 122: THE DECIDING DIFFERENCE, ON THE CARD.
+//
+// The census that prompted this: 539 candidate rows across the owner's real
+// result files carried an anchor-fit verdict, and 54.2% of them were
+// `partial`, 25.0% `topical`, 11.5% `not_run`, 6.3% `supported`, 2.4%
+// `contradicted`. That is a five-state distribution with a large modal
+// class — NOT a check that says the same thing every time, and this block
+// does not touch the evaluator, its thresholds, its prompts or its stored
+// vocabulary. What failed was the drawing of it: five materially different
+// results were compressed into one row a reader scanned as a badge.
+//
+// So for the three states that mean "the anchor does not fully carry this",
+// the deciding difference comes out from behind the disclosure and onto the
+// card. The full note and the methodology stay behind it. Hide explanation;
+// never hide state.
+//
+// PROVENANCE MATTERS HERE. deciding_anchor_words and deciding_claim_words
+// are the reviewer's account of what it keyed on. They are model-selected
+// evidence about its own judgment, not a mechanical entailment proof, and
+// the line says so rather than letting them read as a derivation.
+function anchorFitLine(bff) {
+  const cs = (bff || {}).claim_support || {};
+  const sup = cs.support;
+  if (!['partial', 'topical', 'contradicted'].includes(sup)) return '';
+  const noun = {partial: 'partial', topical: 'topical', contradicted: 'contradicted'}[sup];
+  const note = (cs.note || '').trim();
+  const aw = (cs.deciding_anchor_words || '').trim();
+  const cw = (cs.deciding_claim_words || '').trim();
+  let body, how;
+  if (note) {
+    body = note;
+    how = 'the reviewer\u2019s recorded reason';
+  } else if (aw || cw) {
+    const parts = [];
+    if (aw) parts.push(`\u201C${escapeHtml(aw)}\u201D in the anchor`);
+    if (cw) parts.push(`\u201C${escapeHtml(cw)}\u201D in the claim`);
+    body = `the reviewer keyed on ${parts.join(' and ')}`;
+    how = 'words the reviewer selected, not a mechanical proof';
+  } else {
+    body = 'no deciding difference was recorded for this result';
+    how = 'the reason is missing from the record, not withheld here';
+  }
+  return `<p class="body anchor-fit-why"><strong>Why ${noun}:</strong> ${note ? escapeHtml(body) : body}
+    <span class="muted" style="font-size:11.5px">\u2014 ${escapeHtml(how)}.</span></p>`;
 }
 
 function verdictHeadHtml(bff, extra) {
