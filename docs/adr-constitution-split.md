@@ -108,7 +108,32 @@ second constitution wearing a link.
 
 Blocks 119 and 120 amended the constitution by appending near a convenient
 paragraph rather than a semantically right one, so the partial-workup law, the
-attempt-ledger law and the retry-authority law all sit inside **The Library —
-where kept things live**. They are correctly stated and correctly pinned, and
-they are filed under the wrong heading. Moving them is restructuring, which
-this block was told not to do. Reported here rather than quietly fixed.
+attempt-ledger law and the retry-authority law all came to rest inside **The
+Library — where kept things live**. Correctly stated, correctly pinned, filed
+where nobody would look for them.
+
+**Resolved in 121c, by relocation only.** Not one word of those laws changed
+and their attribution to blocks 119 and 120 travelled with them:
+
+| Law | Was under | Now under |
+| --- | --- | --- |
+| A partial workup is not a reading | The Library — where kept things live | **What it will not claim** (movement) |
+| A failure to run is not a finding | The Library — where kept things live | **What it will not claim** (movement) |
+| What a run cost, in requests rather than renders | The Library — where kept things live | **What a run cost, and what it retried** (new subsection under *Where the work happens*) |
+| A broken answer is not retried behind your back | The Library — where kept things live | **What a run cost, and what it retried** |
+
+A partial run is not an overall reading: that is an epistemic refusal, so it
+belongs with the refusals. What a run cost and what it retried is execution
+provenance, and no existing section under the work movement covered that. The
+five movements were checked for an honest home before anything was invented; a
+subsection was the answer, not a sixth movement.
+
+Three things are now pinned that nothing could see before: each law appears
+**exactly once** (a relocation done by copying leaves two laws that can
+disagree), each resolves inside its intended region, and none appears under the
+Library heading. Both failure modes were sabotaged — a law put back under the
+wrong heading, and a law duplicated rather than moved — and both fail by name.
+
+The compact panel's excerpt followed its law rather than staying behind, which
+is the case the earlier check could not have caught: the wording stayed
+verbatim and the destination went stale.

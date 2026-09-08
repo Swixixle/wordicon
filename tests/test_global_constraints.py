@@ -1219,6 +1219,87 @@ def _check_constitution_split():
     return out
 
 
+# ---- block 121c: three laws filed under the wrong heading ----------------
+#
+# Blocks 119 and 120 amended the constitution by appending near a convenient
+# paragraph rather than a semantically right one, so the partial-workup law,
+# the attempt-ledger law and the retry-authority law all came to rest inside
+# "The Library — where kept things live". They were correctly stated and
+# correctly pinned, and filed where nobody would look for them.
+#
+# The relocation is verbatim: not one word of those laws changed, and their
+# historical attribution to blocks 119 and 120 travelled with them. What is
+# pinned here is WHERE each one lives — because "correct text, wrong
+# heading" is a state the previous checks could not see, and the compact
+# panel's excerpt pointed at the Library for exactly that reason.
+#
+# A partial run is not an overall reading: that is an epistemic refusal, so
+# it belongs with the refusals. What a run cost and what it retried is
+# execution provenance; no section under the work movement covered that, so
+# it became a subsection there rather than a sixth movement.
+
+RELOCATED_LAWS = (
+    # (an excerpt unique to the law, the region that must hold it, the
+    #  heading it must no longer be under, why it belongs where it does)
+    ("A partial workup is not a reading",
+     "what-it-will-not-claim", "the-library-where-kept-things-live",
+     "a partial run is not an overall reading, which is a refusal to claim"),
+    ("A failure to run is not a finding",
+     "what-it-will-not-claim", "the-library-where-kept-things-live",
+     "a component that never ran was not judged, which is a refusal to claim"),
+    ("What a run cost, in requests rather than renders",
+     "what-a-run-cost-and-what-it-retried", "the-library-where-kept-things-live",
+     "what a run actually requested is execution provenance"),
+    ("A broken answer is not retried behind your back",
+     "what-a-run-cost-and-what-it-retried", "the-library-where-kept-things-live",
+     "how a run retries is execution provenance"),
+)
+
+
+def _check_law_filing():
+    out = []
+    canon = _canon_source()
+    regions = _canon_regions()
+    flat = " ".join(_re.sub(r"<[^>]+>", " ", canon).split())
+
+    for _ex, _home, _away, _why in RELOCATED_LAWS:
+        n = flat.count(_ex)
+        if n != 1:
+            out.append(f"121c: {_ex!r} appears {n} time(s) in the constitution. A law "
+                       f"relocated by copying rather than moving is two laws that can "
+                       f"disagree, and the reader cannot tell which binds")
+        if _home not in regions:
+            out.append(f"121c: {_home!r} is not an addressable region")
+            continue
+        if _ex not in regions[_home]:
+            here = [k for k, v in regions.items() if _ex in v]
+            out.append(f"121c: {_ex!r} is not under {_home!r} — it is under "
+                       f"{here or 'nothing'}. It belongs there because {_why}")
+        if _away in regions and _ex in regions[_away]:
+            out.append(f"121c: {_ex!r} is still under {_away!r}, which was only ever a "
+                       f"convenient insertion point")
+
+    # the subsection exists rather than a sixth movement having been invented
+    if canon.count('<div class="about-movement"') != 5:
+        out.append(f"121c: the constitution has {canon.count(chr(60) + 'div class=' + chr(34) + 'about-movement' + chr(34))} "
+                   f"movements. Attempts and retries got a subsection inside the work "
+                   f"movement precisely so a sixth would not be invented")
+    if 'id="what-a-run-cost-and-what-it-retried"' not in canon:
+        out.append("121c: the execution-provenance subsection is gone; its two laws have "
+                   "nowhere semantically honest to live")
+
+    # the compact panel's excerpt followed its law rather than staying behind
+    panel = _about_panel((_pathlib.Path(__file__).resolve().parents[1] / "webapp"
+                          / "index.html").read_text(encoding="utf-8"))
+    for _m in _re.finditer(r'data-canon="([^"]+)"[^>]*>(.*?)</a>', panel, _re.S):
+        _dc, _vis = _m.group(1), " ".join(_re.sub(r"<[^>]+>", " ", _m.group(2)).split())
+        for _ex, _home, _away, _ in RELOCATED_LAWS:
+            if _ex in _vis and _dc != _home:
+                out.append(f"121c: the panel still sends {_ex!r} to {_dc!r}; its law moved "
+                           f"to {_home!r}")
+    return out
+
+
 def main() -> int:
     failures = FAILURES
     # block 113, hoisted: pure checks on a pure function, before anything
@@ -1227,6 +1308,7 @@ def main() -> int:
     failures.extend(_check_attempt_ledger())
     failures.extend(_check_stream_and_retry_authority())
     failures.extend(_check_constitution_split())
+    failures.extend(_check_law_filing())
     # block 120: the baseline is only meaningful if nothing else is writing.
     # The corpus lease is the mechanical answer to "is a writer live" — it is
     # an flock held for a process's lifetime, so it cannot go stale and it
@@ -17091,6 +17173,10 @@ console.log(out.join('\\n'));
             "Media — where listening enters"]),
         ("Where the work happens", [
             "What comes back",
+            # block 121c: attempts and retries are execution provenance. No
+            # existing section covered that, so they got a subsection here
+            # rather than a sixth movement — checked before inventing one.
+            "What a run cost, and what it retried",
             "The room — where writing happens",
             "Inquiry — a question, kept",
             "The Work Room — a change of scale",

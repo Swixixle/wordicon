@@ -1,5 +1,38 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.15.2 — four laws filed under the wrong heading (block 121c)
+
+Relocation only. Not one word of any law changed, and their attribution to the
+blocks that wrote them travelled with them.
+
+Blocks 119 and 120 amended the constitution by appending near a convenient
+paragraph, so four laws came to rest inside **The Library — where kept things
+live**:
+
+| Law | Now under |
+| --- | --- |
+| A partial workup is not a reading | **What it will not claim** |
+| A failure to run is not a finding | **What it will not claim** |
+| What a run cost, in requests rather than renders | **What a run cost, and what it retried** |
+| A broken answer is not retried behind your back | **What a run cost, and what it retried** |
+
+A partial run is not an overall reading — that is a refusal to claim, and it
+belongs with the refusals. What a run cost and what it retried is execution
+provenance; no section under *Where the work happens* covered that, so the two
+laws got a subsection there. The five movements were checked for an honest home
+before anything was invented, and a sixth movement was not needed.
+
+Three things are pinned that nothing could see before: each law appears
+**exactly once** in the constitution, each resolves inside its intended region,
+and none remains under the Library heading. A relocation done by copying leaves
+two laws that can disagree and a reader who cannot tell which binds; that is now
+a named failure. Both modes were sabotaged — wrong heading, and duplicated
+rather than moved — and both fail by name.
+
+The compact panel's excerpt for "A failure to run is not a finding" followed its
+law. That is the case block 121b's check could not have caught on its own: the
+wording stayed verbatim while the destination went stale.
+
 ## v1.15.0 — the constitution left the controls (block 121)
 
 The law had reached about nine thousand words on one scroll, inside the home

@@ -138,6 +138,7 @@ claim. The home page carries a short orientation and sends you here.</p>
   <li class="sec"><a href="#media-where-listening-enters">Media — where listening enters</a></li>
   <li class="mv"><a href="#where-the-work-happens">Where the work happens</a></li>
   <li class="sec"><a href="#what-comes-back">What comes back</a></li>
+  <li class="sec"><a href="#what-a-run-cost-and-what-it-retried">What a run cost, and what it retried</a></li>
   <li class="sec"><a href="#the-room-where-writing-happens">The room — where writing happens</a></li>
   <li class="sec"><a href="#inquiry-a-question-kept">Inquiry — a question, kept</a></li>
   <li class="sec"><a href="#the-work-room-a-change-of-scale">The Work Room — a change of scale</a></li>
@@ -437,6 +438,31 @@ claim. The home page carries a short orientation and sends you here.</p>
   </details>
 </section>
 
+<section class="cl" id="what-a-run-cost-and-what-it-retried">
+  <details class="canon">
+    <summary><span class="section-label">What a run cost, and what it retried</span></summary>
+    <div class="canon-body">
+      <p class="body"><strong>What a run cost, in requests rather than renders.</strong> Every real
+      HTTP attempt a run makes is recorded once — which component, which stage, which attempt, how
+      long, what came back, and whether another call was in flight beside it. A retried call is
+      three attempts, not one. Attempts that failed are recorded too, because a run that produced
+      nothing is exactly the run whose history you need. What is never recorded: your passage, the
+      prompt, or any credential. And a rate limit is not something Nikodemus tries to outwait in
+      nine seconds — if the provider names a wait that fits the run's disclosed budget it waits
+      exactly that once, and otherwise it stops and hands the retry back to you, because a call that
+      times out may still have cost money.</p>
+      <p class="body"><strong>A broken answer is not retried behind your back.</strong> If a
+      reply dies before the model has written anything, Nikodemus tries again inside a budget
+      it has already declared. If it dies <em>after</em> the model started writing, it stops:
+      that request was generated and billed, and quietly asking again would spend twice and
+      could return a different answer with nothing saying so. The retry is yours to make.
+      Nikodemus is also the only thing retrying — the underlying client's own retries are
+      switched off, so the number of attempts on the record is the number of requests that
+      were actually made, and every attempt records which client library made it.</p>
+    </div>
+  </details>
+</section>
+
 <section class="cl" id="the-room-where-writing-happens">
   <details class="canon">
     <summary><span class="section-label">The room — where writing happens</span></summary>
@@ -648,34 +674,9 @@ claim. The home page carries a short orientation and sends you here.</p>
       silence is the good state. An entry reading “<strong>Friction: reject · you: accepted</strong>”
       is a word the critic argued against and you kept, which is a normal outcome and not a conflict
       to resolve.</p>
-      <p class="body"><strong>A partial workup is not a reading.</strong> A deep run splits your
-      passage into components and forges each one separately. When some of them fail — a dead model
-      call, a rate limit, a provider that never answered — the page says so <strong>first</strong>,
-      before anything else on it: <em>PARTIAL WORKUP — n of m components completed. No overall
-      reading exists.</em> That line is a fact, not an explanation, so it is never folded behind a
-      mark. <strong>Coverage is not completion</strong>: the extractor may account for every part of
-      your passage and still have analysed one component of six, and the page states both numbers
-      rather than letting the first speak for the second. Every count is scoped to what actually
-      completed. <strong>A failure to run is not a finding</strong> — nothing judged the components
-      that did not complete, in either direction — and each of them keeps its own retry, which
-      disturbs nothing that finished.</p>
-      <p class="body"><strong>What a run cost, in requests rather than renders.</strong> Every real
-      HTTP attempt a run makes is recorded once — which component, which stage, which attempt, how
-      long, what came back, and whether another call was in flight beside it. A retried call is
-      three attempts, not one. Attempts that failed are recorded too, because a run that produced
-      nothing is exactly the run whose history you need. What is never recorded: your passage, the
-      prompt, or any credential. And a rate limit is not something Nikodemus tries to outwait in
-      nine seconds — if the provider names a wait that fits the run's disclosed budget it waits
-      exactly that once, and otherwise it stops and hands the retry back to you, because a call that
-      times out may still have cost money.</p>
-      <p class="body"><strong>A broken answer is not retried behind your back.</strong> If a
-      reply dies before the model has written anything, Nikodemus tries again inside a budget
-      it has already declared. If it dies <em>after</em> the model started writing, it stops:
-      that request was generated and billed, and quietly asking again would spend twice and
-      could return a different answer with nothing saying so. The retry is yours to make.
-      Nikodemus is also the only thing retrying — the underlying client's own retries are
-      switched off, so the number of attempts on the record is the number of requests that
-      were actually made, and every attempt records which client library made it.</p>
+      
+      
+      
       <p class="body">Friction's verdict is about <strong>craft</strong> — is this a well-made word.
       The support box below it is about <strong>grounding</strong> — did the quoted passage establish
       this. <strong>They answer different questions</strong>, so a word can survive on craft while
@@ -881,7 +882,19 @@ claim. The home page carries a short orientation and sends you here.</p>
         </div>
       </details>
 
-      </section>
+      
+      <p class="body"><strong>A partial workup is not a reading.</strong> A deep run splits your
+      passage into components and forges each one separately. When some of them fail — a dead model
+      call, a rate limit, a provider that never answered — the page says so <strong>first</strong>,
+      before anything else on it: <em>PARTIAL WORKUP — n of m components completed. No overall
+      reading exists.</em> That line is a fact, not an explanation, so it is never folded behind a
+      mark. <strong>Coverage is not completion</strong>: the extractor may account for every part of
+      your passage and still have analysed one component of six, and the page states both numbers
+      rather than letting the first speak for the second. Every count is scoped to what actually
+      completed. <strong>A failure to run is not a finding</strong> — nothing judged the components
+      that did not complete, in either direction — and each of them keeps its own retry, which
+      disturbs nothing that finished.</p>
+    </section>
 
 <section class="cl" id="whether-any-of-this-beats-a-plain-prompt">
   <details class="canon">
