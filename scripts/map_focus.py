@@ -83,6 +83,25 @@ DIRECT_MODES = ("forge", "crack", "riff", "play")      # run() — the owner's t
 COMPOSITE_MODES = ("deep", "decompose")                # the composite lists its components
 
 
+def instant(stamp: str):
+    """An ISO 8601 stamp as a timezone-aware datetime, so two spellings of
+    one instant compare equal ("…Z" and "…+00:00" are the same second; newer
+    gits print the first, older ones the second). A stamp with no zone is
+    read as UTC, which is what every writer in this repository records.
+    Returns None for an empty or unreadable stamp."""
+    from datetime import datetime, timezone
+    s = (stamp or "").strip()
+    if not s:
+        return None
+    if s.endswith("Z") or s.endswith("z"):
+        s = s[:-1] + "+00:00"
+    try:
+        d = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    return d if d.tzinfo is not None else d.replace(tzinfo=timezone.utc)
+
+
 def _identity(rel: str, src: dict, tgt: dict, run_trace_id: str) -> tuple:
     return (rel, (src or {}).get("key", ""), (tgt or {}).get("key", ""), run_trace_id or "")
 
@@ -320,9 +339,10 @@ def derive_issuer(edge: dict, index: SnapshotIndex, tracked_since: str = TRACKED
         return {"label": f"derived from snapshot · {cls}", "recorded": False, "issuer_class": cls,
                 "derivation": {"rule": "snapshot", "basis": basis, "version": DERIVATION_VERSION}}
     # rule 3, the writer invariant over the tracked history
-    at = edge.get("created_at") or ""
+    at = instant(edge.get("created_at") or "")
     inv = WRITER_INVARIANT.get(rel)
-    if inv and at and at >= tracked_since:
+    since = instant(tracked_since)
+    if inv and at is not None and since is not None and at >= since:
         fn, _origin, cls = inv
         return {"label": f"derived by writer invariant · {cls}", "recorded": False, "issuer_class": cls,
                 "derivation": {"rule": "writer-invariant", "basis": f"{fn} since {tracked_since}",

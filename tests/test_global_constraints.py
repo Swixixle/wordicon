@@ -1720,8 +1720,17 @@ def _check_map_focus():
             first = _sp.run(["git", "log", "--reverse", "--format=%cI"], cwd=str(_root), capture_output=True, text=True, timeout=30).stdout.split("\n")[0].strip()
         except Exception:  # noqa: BLE001
             first = ""
-        if first and first != mf.TRACKED_SINCE:
+        # the same instant, whatever the spelling: newer gits print a UTC
+        # %cI as "…Z", older ones as "…+00:00" — the owner's Mac and CI
+        # said Z while the container's git 2.34 said +00:00, and a string
+        # compare failed the merge on a difference in notation, not in time
+        if first and mf.instant(first) != mf.instant(mf.TRACKED_SINCE):
             out.append(f"focus: TRACKED_SINCE {mf.TRACKED_SINCE} is not the first tracked commit's time {first}")
+        for spelling in ("2026-08-29T23:43:11Z", "2026-08-29T23:43:11+00:00", "2026-08-30T01:43:11+02:00"):
+            if mf.instant(spelling) != mf.instant(mf.TRACKED_SINCE):
+                out.append(f"focus: the instant reader does not read {spelling!r} as the tracked-since instant")
+        if mf.instant("2026-08-29T23:43:12Z") == mf.instant(mf.TRACKED_SINCE):
+            out.append("focus: the instant reader treats two different seconds as one")
     src = Path(cli.__file__).read_text(encoding="utf-8")
     lines = src.splitlines()
     for i, l in enumerate(lines):
