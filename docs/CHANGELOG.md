@@ -1,5 +1,60 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.15.0 — the constitution left the controls (block 121)
+
+The law had reached about nine thousand words on one scroll, inside the home
+page's controls, because a standing law amends it every time a wing ships. It
+accumulates by design and the interface had no shape that survived that.
+
+The whole of it now lives at **`/constitution`**: five movements in canonical
+order, a table of contents, stable anchors, a plain statement opening each
+movement, the detail behind a native `<details>`, and one button that opens
+everything for reading straight through or printing. The What-is panel became
+an orientation — what Nikodemus is, what it refuses to pretend, and the state
+of this machine right now — at 405 words instead of 8,979.
+
+The rule the split obeys: **hide explanation when necessary; never hide state.**
+The first cut of this block ignored it and moved the provider status, the epoch
+control, the encounter switch, the speech instrument and the connected-
+instruments readout onto an inert page along with the prose. Those report what
+the machine is doing; a document cannot report anything. The suite caught it.
+
+The panel is not a second constitution and cannot quietly become one. It
+carries no movement heading and no restatement: each promise is a link with a
+`data-canon` attribute, and the suite fails if any of them does not resolve to
+a real clause. The binding words exist in one place.
+
+**Every pin moved deliberately.** Twelve groups of constitutional assertions
+followed the law to its new file rather than being softened, and the movements
+and their order are still pinned — now parsed from the markup the law actually
+ships with. Three pins turned out to be fixed-byte windows after a heading
+(`[:3000]`, `[:4000]`, `[:6000]`) that had been silently shrinking their
+guarded region every time the prose above them grew. They are bounded by the
+section's own structure now, and that class of pin is retired.
+
+A new browser journey testifies to the two things source review cannot see: the
+disclosure controls open **by keyboard** — a `<div>` styled to look like a
+`<summary>` passes every grep and is unreachable without a mouse — and no
+runtime state went to the inert page. Both were sabotaged and both fail by name.
+
+**The README is a front door again**: 2,514 words to 1,046, with the rename
+moved out of the opening. The legacy name stays wherever it is the real name of
+a real thing — the repository, `scripts/wordicon_cli.py`, `WORDICON_MODEL`,
+`WORDICON_LAN`, `src/wordicon_corpus/` — because renaming a working command to
+tidy a logo is how a setup guide starts lying. One instruction in the first
+draft told readers to copy a `.env.example` that does not exist; it was checked
+and corrected before this shipped.
+
+**`docs/README.md` is the complete index**, grouped by purpose, and a check
+fails if any maintained document in `docs/` is classified by nothing — a new
+file cannot become unreachable because someone forgot to link it. The three
+pre-rename Sovereign Corpus documents are marked historical with their bodies
+untouched, and the capability census now says it is a snapshot rather than a
+standing description of runtime truth.
+
+Nothing constitutional was deleted, no epistemic rule was altered while being
+reorganised, and no unrelated runtime finding was repaired here.
+
 ## v1.14.0 — one retry authority, and two kinds of broken stream (block 120)
 
 Block 119 gave Nikodemus an attempt ledger. This block asks the question the

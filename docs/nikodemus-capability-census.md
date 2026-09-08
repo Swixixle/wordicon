@@ -1,5 +1,10 @@
 # Nikodemus — capability census
 
+> **A SNAPSHOT, not a standing description of runtime truth.** Collected
+> at one commit and true of that tree. Capability moves; this file does
+> not move with it. Check `docs/CHANGELOG.md` for what has shipped since,
+> and the suite for what is actually enforced.
+
 **Read-only.** Nothing was repaired, renamed, exposed, deleted or consolidated
 while this was collected. Every entry below is a report, not a proposal; the
 classification section at the end names what *could* be done and rules on

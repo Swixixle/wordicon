@@ -183,7 +183,12 @@ const OC_ID = OC.object.id, EA_ID = EA.object.id;
   const about = await text('#about-instruments');
   ok(/Open Case \(scratch\) \(open_case, 1 key pinned, credential env:JOURNEY_OPEN_CASE_KEY\)/.test(about) && /3 deposition\(s\)/.test(about) && /1 room\(s\)/.test(about) && /identity ruling\(s\)/.test(about) && /manual pull only/.test(about) && !/jjjj/.test(about),
     'About & proof states the registry, custody and rulings, the credential by reference: ' + about.slice(0, 200));
-  ok(/Nikodemus can hold what your other instruments produce/.test(await text('#about-panel')), 'the constitution carries the instruments paragraph');
+  // block 121: the law moved to /constitution. The panel keeps the STATE
+  // readout (checked above); this paragraph is explanation and followed the
+  // rest of the constitution. The pin follows it rather than being dropped.
+  const canonHtml = await page.evaluate(async () => (await fetch('/constitution')).text());
+  ok(/Nikodemus can hold what your other instruments produce/.test(canonHtml),
+     'the constitution carries the instruments paragraph');
   ok(await page.evaluate(() => !!document.querySelector('#rooms-area a[href="/investigation"]')), 'the Rooms place has the door to the instruments');
   ok(errs.length === 0, 'no page errors: ' + JSON.stringify(errs.slice(0, 3)));
   await browser.close();

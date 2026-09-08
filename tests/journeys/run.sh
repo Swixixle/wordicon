@@ -53,7 +53,7 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial; do
+for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution; do
   echo "== journey: $j"
   if [ "$j" = quiet ] || [ "$j" = speak ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
@@ -78,6 +78,12 @@ done
 # which a dropped check would hide while the journey still printed OK.
 for need in "partial banner states the ruling's sentence verbatim" "a complete run renders no partial banner at all" "coverage line no longer claims \"full coverage\"" "coverage line names components PROPOSED and components ANALYSED separately" "the trial verdict is on the page at all (the ordering check has something to order against)" "partiality is rendered BEFORE the trial verdict, not after it" "the trial verdict is scoped to the input, not to the workup" "the partial line is readable with every disclosure closed" "every failed component keeps its own retry door" "the component that DID complete is still on the page" "a partial run's component count says how many were ANALYSED"; do
   grep -qF "ok   $need" "$JOURNEY_OUT/partial.log" || { echo "== partial: missing check: $need"; status=1; }
+done
+# block 121: the constitution left the controls. Named individually because
+# the failures here are a KEYBOARD that stops working and a promise that
+# points at nothing — both invisible to source review and both silent.
+for need in "all five movements are on the page" "every disclosure has a real <summary>, so every one has a keyboard" "no contents entry points at nothing" "Enter on the focused control opens the explanation" "expand-everything opens every section" "the whole law is readable in one pass when expanded" "no runtime state was moved onto the inert page" "the panel carries no movement heading — one constitution, not two" "the machine-state readouts stayed in the panel where they mean something" "every panel promise reaches the clause that binds it" "the anatomy was not folded into the constitution"; do
+  grep -qF "ok   $need" "$JOURNEY_OUT/constitution.log" || { echo "== constitution: missing check: $need"; status=1; }
 done
 grep -q "^ok   anatomy: no request left the scratch origin" "$JOURNEY_OUT/anatomy.log" || { echo "== anatomy: the off-origin guard did not run"; status=1; }
 grep -q "^ok   dormant after" "$JOURNEY_OUT/anatomy.log" || { echo "== anatomy: the stillness check did not run"; status=1; }
@@ -141,6 +147,6 @@ done
 for need in "the question is kept exactly as it was asked" "the same words opened twice are two inquiries" "every phase this room has not built renders as an unbuilt door" "an abandoned branch keeps what the failure revealed" "after a full reload it reopens on the question as asked" "exploring created no ruling due" "walking to the Inquiry and back leaves the same room element"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/inquiry.log" || { echo "== inquiry: missing check: $need"; status=1; }
 done
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log | awk '{s+=$2} END {print s+0}')
+total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log "$JOURNEY_OUT"/constitution.log | awk '{s+=$2} END {print s+0}')
 echo "== journeys: $total checks, exit $status"
 exit $status

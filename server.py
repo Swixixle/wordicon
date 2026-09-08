@@ -1162,6 +1162,21 @@ def anatomy_page():
                     mimetype="text/html")
 
 
+@app.route("/constitution")
+def constitution_page():
+    """The canonical constitution (block 121). It used to live inside the
+    home page's What-is panel — nine thousand words on one scroll, inside
+    the controls. Moving it does not demote it: the law binds because it is
+    canonical, versioned and pinned by the suite, not because it occupies
+    the workspace. Static page, zero model calls, zero network requests;
+    the only server-side touch is stamping the commit so the page says
+    which tree it is the law of. Behind the gate like all."""
+    page = (pathlib.Path(WEBAPP_DIR) / "constitution.html").read_text(encoding="utf-8")
+    return Response(page.replace("__COMMIT__", _head_commit())
+                        .replace("__BRAND_NAME__", BRAND["name"]),
+                    mimetype="text/html")
+
+
 @app.route("/recovery")
 def recovery_page():
     """The Recovery Review (block 103). Static page, zero model calls; the

@@ -159,6 +159,51 @@ SKIPPED: list = []
 INCONCLUSIVE: list = []
 
 
+def _canon_source() -> str:
+    """The canonical constitution's own file. Block 121.
+
+    The law used to live inside index.html's What-is panel, so every pin
+    that held a constitutional sentence sliced that panel. The law moved to
+    /constitution; the pins move with it rather than being softened. This
+    is deliberately the WHOLE file: a pin that narrows to a byte window
+    around a heading breaks the moment a paragraph is inserted above it,
+    which is how the first of these broke."""
+    return (_pathlib.Path(__file__).resolve().parents[1] / "webapp"
+            / "constitution.html").read_text(encoding="utf-8")
+
+
+def _surfaces_text() -> str:
+    """index.html PLUS the canonical constitution. Block 121.
+
+    Before the split, index.html was both the interface and the law, and
+    these pins asserted "the system's own surfaces say this". The law moved
+    to /constitution; searching both files preserves exactly the coverage
+    those pins had, rather than narrowing them because the text moved. Pins
+    that are about the LAW specifically use _canon_source(); pins that are
+    about a surface element use index.html on its own."""
+    root = _pathlib.Path(__file__).resolve().parents[1] / "webapp"
+    return (root / "index.html").read_text(encoding="utf-8") + "\n" + _canon_source()
+
+
+def _canon_section(title: str) -> str:
+    """One canonical section's body, located by its OWN structure rather
+    than by a byte count: the <section> whose summary carries this label,
+    up to the next <section."""
+    src = _canon_source()
+    needle = f'<span class="section-label">{title}</span>'
+    if needle not in src:
+        return ""
+    start = src.rindex('<section class="cl"', 0, src.index(needle))
+    nxt = src.find('<section class="cl"', start + 1)
+    return src[start:nxt if nxt != -1 else len(src)]
+
+
+def _about_panel(idx: str) -> str:
+    """The compact orientation panel in index.html — no longer the law."""
+    a = idx.index('<details class="card" id="about-panel"')
+    return idx[a:idx.index("</main>", a)]
+
+
 def _audit_scaffolding():
     """Check the machinery that lets the run REPORT, by structure not by text.
 
@@ -413,8 +458,14 @@ def _check_acquisition_record():
         # promised "the word in a real sentence" — the exact overclaim this
         # block exists to remove.
         _idx = (_root / "webapp" / "index.html").read_text(encoding="utf-8")
-        _const = _idx.split('section-label">What comes back</div>')[1][:3000]
-        if "the word in a real sentence" in _idx:
+        # block 121: the law moved to /constitution and this pin moved with
+        # it, located by the section's structure rather than by a 3000-byte
+        # window after a heading — the window is what broke on the move.
+        _const = _canon_section("What comes back")
+        if not _const:
+            failures.append("113: the canonical section 'What comes back' is gone from the "
+                            "constitution — every acquisition sentence below is unpinned")
+        if "the word in a real sentence" in _idx or "the word in a real sentence" in _canon_source():
             failures.append("113: the constitution still calls the model's invented example "
                             "sentence a real sentence")
         for _need in ("invented example", "craft coherent; source warrant absent",
@@ -730,9 +781,9 @@ def _check_attempt_ledger():
     #    Pinned on the ABOUT PROSE, not on the renderer, because the
     #    renderer already has its own journey: this asks whether the page
     #    tells the reader the rule before they meet it.
-    _about = (_pathlib.Path(cli.__file__).resolve().parents[1] / "webapp" / "index.html").read_text()
-    _about_only = _about[:_about.index("function partialWorkupBanner")] if \
-        "function partialWorkupBanner" in _about else _about
+    # block 121: these sentences are law, so they moved to the canonical
+    # page with the rest of it.
+    _about_only = _canon_source()
     for _needle, _why in (
             ("A partial workup is not a reading",
              "that a partial run is not a reading"),
@@ -963,6 +1014,168 @@ def _check_stream_and_retry_authority():
     return out
 
 
+# ---- block 121: the constitution left the controls ------------------------
+#
+# Nine thousand words of law lived inside the home page's What-is panel. The
+# rule this split obeys: HIDE EXPLANATION WHEN NECESSARY; NEVER HIDE STATE.
+# Explanation moved to /constitution, where a table of contents and native
+# disclosure make it readable. State — the provider, the epoch, the encounter
+# switch, the speech instrument, the connected instruments, the name's own
+# provenance — stayed in the panel, because those are facts about this
+# machine right now and an inert document is the wrong place for them.
+#
+# The danger the ruling named is TWO CONSTITUTIONS: a compact panel that
+# paraphrases the law drifts from it, and then nobody knows which one binds.
+# So the panel carries no movement headings and no restatement — each of its
+# lines is a link into the clause that binds it, and every one of those
+# links is checked to resolve.
+
+# Anything that reports what this machine is doing right now. None of it may
+# be on the inert page, whatever else moves there.
+RUNTIME_STATE_IDS = ("about-provider", "about-system", "about-epoch", "about-name",
+                     "about-instruments", "about-speak", "about-encounter",
+                     "epoch-begin", "encounter-toggle")
+
+
+def _check_constitution_split():
+    out = []
+    root = _pathlib.Path(__file__).resolve().parents[1]
+    idx = (root / "webapp" / "index.html").read_text(encoding="utf-8")
+    canon = _canon_source()
+    panel = _about_panel(idx)
+
+    # -- the law is whole, and it is where the door says it is
+    if 'href="/constitution"' not in panel:
+        out.append("121: the What-is panel does not open the constitution, so the law is "
+                   "reachable only by knowing the URL")
+    if 'href="/anatomy"' not in panel:
+        out.append("121: the panel lost the anatomy door")
+    if "/constitution" not in (root / "server.py").read_text(encoding="utf-8"):
+        out.append("121: no route serves the constitution")
+
+    # -- the panel is an orientation, not a second constitution
+    panel_words = len(_re.sub(r"<[^>]+>", " ", panel).split())
+    if panel_words > 1200:
+        out.append(f"121: the What-is panel is {panel_words} words. It is an orientation; "
+                   f"past about a screen it becomes the second constitution the ruling "
+                   f"forbade")
+    if "about-movement" in panel:
+        out.append("121: a movement heading is back in the panel — the law lives in one place")
+
+    # -- every compact clause resolves to a real canonical clause
+    claims = _re.findall(r'data-canon="([^"]+)"[^>]*href="/constitution#([^"]+)"', panel)
+    if len(claims) < 4:
+        out.append(f"121: the panel carries {len(claims)} pinned clause(s); the refusals that "
+                   f"define the instrument are what it exists to foreground")
+    canon_ids = set(_re.findall(r'id="([^"]+)"', canon))
+    for _dc, _href in claims:
+        if _dc != _href:
+            out.append(f"121: a panel clause claims {_dc!r} but links to {_href!r}")
+        if _dc not in canon_ids:
+            out.append(f"121: a panel clause points at {_dc!r}, which is not a section of "
+                       f"the constitution — a pointer to nothing is a paraphrase with a "
+                       f"link on it")
+
+    # -- STATE did not follow the explanation onto the inert page
+    for _sid in RUNTIME_STATE_IDS:
+        if f'id="{_sid}"' not in idx:
+            out.append(f"121: the runtime state {_sid!r} left index.html — hide explanation, "
+                       f"never state")
+        if f'id="{_sid}"' in canon:
+            out.append(f"121: the runtime state {_sid!r} is on the constitution page, which "
+                       f"is inert and cannot report anything about this machine")
+    for _live in ("onclick=", "fetch(", "loadConfig"):
+        if _live in canon:
+            out.append(f"121: the constitution page carries {_live!r} — it is a document, "
+                       f"not a control surface")
+
+    # -- the canonical page's own structure
+    if canon.count('<div class="about-movement"') < 5:
+        out.append("121: the constitution does not carry all five movements")
+    n_sections = canon.count('<span class="section-label">')
+    n_details = canon.count('<details class="canon">')
+    if n_details != n_sections:
+        out.append(f"121: {n_sections} canonical section(s) but {n_details} disclosure(s) — "
+                   f"every section's explanation goes behind one, and only explanation does")
+    toc_links = _re.findall(r'<li class="(?:mv|sec)"><a href="#([^"]+)">', canon)
+    if len(toc_links) < n_sections + 5:
+        out.append(f"121: the table of contents lists {len(toc_links)} entries for "
+                   f"{n_sections} sections and 5 movements")
+    for _t in toc_links:
+        if f'id="{_t}"' not in canon:
+            out.append(f"121: a contents entry points at #{_t}, which is not on the page")
+    if 'id="expand-all"' not in canon or "beforeprint" not in canon:
+        out.append("121: the constitution cannot be expanded for straight-through reading "
+                   "or printing")
+    if "<details" in canon and "<summary" not in canon:
+        out.append("121: a disclosure with no summary cannot be reached by keyboard")
+
+    # -- /anatomy stays its own inert explainer, not folded in
+    if not (root / "webapp" / "anatomy.html").exists():
+        out.append("121: the anatomy page is gone")
+    elif 'href="/constitution"' not in (root / "webapp" / "anatomy.html").read_text(encoding="utf-8"):
+        pass  # the anatomy need not link onward; it is an explainer, not law
+    if "anatomy" in canon.lower() and "explainer, not law" not in canon:
+        out.append("121: the constitution mentions the anatomy without saying it is an "
+                   "explainer rather than law")
+
+    # -- every maintained document is classified by the index
+    docs = root / "docs"
+    index_path = docs / "README.md"
+    if not index_path.exists():
+        out.append("121: docs/README.md does not exist, so a new document becomes "
+                   "unreachable the moment someone forgets to link it")
+    else:
+        _ix = index_path.read_text(encoding="utf-8")
+        # links relative to docs/ only: ../README.md is the ROOT readme and is
+        # not a document this index classifies.
+        listed = set(_re.findall(r'\]\(\./([A-Za-z0-9_.\-/]+\.md)\)', _ix))
+        listed |= set(_re.findall(r'`([A-Za-z0-9_.\-/]+\.md)`', _ix))
+        listed.discard("README.md")   # the root front door, not a doc this indexes
+        on_disk = {str(f.relative_to(docs)) for f in docs.rglob("*.md")} - {"README.md"}
+        unclassified = sorted(on_disk - listed)
+        if unclassified:
+            out.append(f"121: {len(unclassified)} document(s) in docs/ are classified by "
+                       f"nothing: {', '.join(unclassified[:6])}")
+        phantom = sorted(listed - on_disk)
+        if phantom:
+            out.append(f"121: docs/README.md indexes files that do not exist: "
+                       f"{', '.join(phantom[:6])}")
+
+    # -- the three pre-rename documents say they are history, bodies intact
+    for _hist in ("Wordicon_Sovereign_Corpus_Blueprint_v1.2.md",
+                  "Wordicon_Sovereign_Corpus_Synthesis_v1.1.md",
+                  "Wordicon_Sovereign_Corpus_Technical_Blueprint_v1.md"):
+        _p = docs / _hist
+        if not _p.exists():
+            out.append(f"121: the historical design record {_hist} was deleted; it is "
+                       f"superseded, which is not the same as wrong")
+            continue
+        _head = _p.read_text(encoding="utf-8")[:1200]
+        if "HISTORICAL" not in _head.upper():
+            out.append(f"121: {_hist} does not say it is historical, so a reader takes it "
+                       f"for current specification")
+
+    # -- a snapshot is labelled a snapshot
+    _cen = docs / "nikodemus-capability-census.md"
+    if _cen.exists() and "snapshot" not in _cen.read_text(encoding="utf-8")[:1500].lower():
+        out.append("121: the capability census does not say it is a snapshot, so it reads "
+                   "as an eternal description of runtime truth")
+
+    # -- the README is a front door, not the manual
+    _rd = (root / "README.md").read_text(encoding="utf-8")
+    _rw = len(_rd.split())
+    if _rw > 1400:
+        out.append(f"121: README is {_rw} words — it is the front door, and the manual is "
+                   f"docs/")
+    if "docs/README.md" not in _rd:
+        out.append("121: the README does not point at the documentation index")
+    if _rd.lstrip().splitlines()[1:4] and "formerly" in " ".join(_rd.lstrip().splitlines()[1:6]).lower():
+        out.append("121: the README still opens with the rename; the first thing a stranger "
+                   "reads should be what Nikodemus is now")
+    return out
+
+
 def main() -> int:
     failures = FAILURES
     # block 113, hoisted: pure checks on a pure function, before anything
@@ -970,6 +1183,7 @@ def main() -> int:
     failures.extend(_check_acquisition_record())
     failures.extend(_check_attempt_ledger())
     failures.extend(_check_stream_and_retry_authority())
+    failures.extend(_check_constitution_split())
     # block 120: the baseline is only meaningful if nothing else is writing.
     # The corpus lease is the mechanical answer to "is a writer live" — it is
     # an flock held for a process's lifetime, so it cannot go stale and it
@@ -2512,7 +2726,7 @@ def main() -> int:
         failures.append("generation stage was not measured")
 
     # (i) surfaces keep the tiers distinct
-    idx7 = (Path(__file__).resolve().parents[1] / "webapp" / "index.html").read_text()
+    idx7 = _surfaces_text()   # block 121: the two-tier prose is law, the functions are index
     for needle in ("function twoTierHtml", "anchor_integrity", "claim_support",
                    "Two separate checks", "Is the quote there?",
                    "Does the quote support the claim?", "does <em>not</em> mean this claim was verified",
@@ -2964,11 +3178,14 @@ def main() -> int:
     # ledger (block 99): the panel is "What is <brand>?" and sits below the
     # intake now; the delimiter follows the panel's own element, not the
     # old page order. A layout pin, not a law — every sentence still pinned.
-    _pstart = idx11.index('<details class="card" id="about-panel"')
-    _pend = idx11.index('</main>', _pstart)
-    panel = " ".join(idx11[_pstart:_pend].split())
-    if len(panel) < 2000:
-        failures.append("the What-is panel could not be isolated — the checks below would be vacuous")
+    # block 121: these are CONSTITUTIONAL sentences, and the constitution
+    # moved to its own page. The pin follows the law rather than the panel;
+    # the compact panel is checked separately for pointing at it.
+    panel = " ".join(_canon_source().split())
+    if len(panel) < 20000:
+        failures.append("the constitution could not be read — the checks below would be vacuous")
+    if 'href="/constitution"' not in _about_panel(idx11):
+        failures.append("the What-is panel no longer opens the constitution")
     if "your ruling — Friction's advice is inside the run" not in flat11:
         failures.append("Recent's decision tags are unattributed")
     if "Friction: reject · you: accepted" not in panel:
@@ -9735,8 +9952,7 @@ console.log(out.join('\\n'));
         _shutil.rmtree(_exdir86, ignore_errors=True)
 
     # -- the page: the room, the doors, and the constitutional lines --
-    _idx86 = (Path(__file__).resolve().parents[1] / "webapp"
-              / "index.html").read_text()
+    _idx86 = _surfaces_text()   # block 121: mixed prose-and-code pins span both surfaces
     _flat86 = " ".join(_idx86.split())
     for _needle86, _why86 in [
         ('id="work-room-card"', "the Work Room card is gone"),
@@ -11337,9 +11553,9 @@ console.log(out.join('\\n'));
     #    cannot quietly disappear --
     # ledger (block 99): delimiter follows the panel element; the brand span
     # is folded to the name so the pinned sentence compares as prose
-    _ps91 = _idx91.index('<details class="card" id="about-panel"')
-    _pe91 = _idx91.index('</main>', _ps91)
-    _panel91 = " ".join(_re.sub(r'<span data-brand>[^<]*</span>', 'Wordicon', _idx91[_ps91:_pe91]).split())
+  # block 121: the law moved to /constitution; this pin moved with it.
+    _panel91 = " ".join(_re.sub(r'<span data-brand>[^<]*</span>', 'Wordicon',
+                                _canon_source()).split())
     for _pin91, _why91 in [
         ("Guardrails belong on consequential actions, not on language.",
          "the constitutional line is gone from the panel"),
@@ -13324,8 +13540,7 @@ console.log(out.join('\\n'));
     # item 36's "record drifting" on Wordicon's own front page. These pins
     # hold the corrected sentences and the laws of the three wings the
     # panel had never described. A wing that changes must change its pin.
-    _page97 = (Path(cli.__file__).parent.parent / "webapp"
-               / "index.html").read_text()
+    _page97 = _canon_source()   # block 121: 97 is a pure constitution pin
     _flat97 = " ".join(_page97.split())
     for _pin97 in ("Documents reads five formats",
                    "there is no OCR",
@@ -14298,7 +14513,7 @@ console.log(out.join('\\n'));
     import importlib as _il103
     _root103 = Path(cli.__file__).parent.parent
     _srv103 = (_root103 / "server.py").read_text(encoding="utf-8")
-    _idx103 = (_root103 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _idx103 = _surfaces_text()   # block 121: prose moved to /constitution; controls stayed in the panel
     _rec_page = (_root103 / "webapp" / "recovery.html").read_text(encoding="utf-8")
     _il103.import_module("recovery")
 
@@ -14629,7 +14844,7 @@ console.log(out.join('\\n'));
     _root104 = Path(cli.__file__).parent.parent
     _cli104 = (_root104 / "scripts" / "wordicon_cli.py").read_text(encoding="utf-8")
     _srv104 = (_root104 / "server.py").read_text(encoding="utf-8")
-    _idx104 = (_root104 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _idx104 = _surfaces_text()   # block 121: prose moved to /constitution; controls stayed in the panel
     _rec104 = (_root104 / "webapp" / "recovery.html").read_text(encoding="utf-8")
     _rsrc104 = (_root104 / "scripts" / "recovery.py").read_text(encoding="utf-8")
 
@@ -15112,7 +15327,7 @@ console.log(out.join('\\n'));
     _root105 = Path(cli.__file__).parent.parent
     _cli105 = (_root105 / "scripts" / "wordicon_cli.py").read_text(encoding="utf-8")
     _srv105 = (_root105 / "server.py").read_text(encoding="utf-8")
-    _idx105 = (_root105 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _idx105 = _surfaces_text()   # block 121: prose moved to /constitution; controls stayed in the panel
 
     def _f105(msg):
         failures.append(f"105: {msg}")
@@ -15318,7 +15533,7 @@ console.log(out.join('\\n'));
     _speech = _il106.import_module("speech")
     _root106 = Path(cli.__file__).parent.parent
     _srv106 = (_root106 / "server.py").read_text(encoding="utf-8")
-    _idx106 = (_root106 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _idx106 = _surfaces_text()   # block 121: prose moved to /constitution; controls stayed in the panel
     _spk106 = (_root106 / "scripts" / "speech.py").read_text(encoding="utf-8")
     _lib106 = (_root106 / "scripts" / "library.py").read_text(encoding="utf-8")
     _anat106 = (_root106 / "webapp" / "anatomy.html").read_text(encoding="utf-8")
@@ -15982,7 +16197,7 @@ console.log(out.join('\\n'));
             _f106b(f"the server lost {_need!r}")
     if _srv106b.count("speech.persist_hint_manifest(") != 1 or _srv106b.count("_speech_cited(") != 4:
         _f106b("the manifest is cited from more or fewer than the three record-entering routes through the one chokepoint")
-    _idx106b = (_root106 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _idx106b = _surfaces_text()   # block 121: prose moved to /constitution; controls stayed in the panel
     _js106b = _idx106b[_idx106b.index("// ---- Speak to Nikodemus (block 106)"):_idx106b.index("// ---- the destination chooser (block 105)")]
     if _js106b.count("document.getElementById('speak-heard').textContent =") != 2 or "document.getElementById('speak-heard').textContent = d.text ?" not in _js106b \
             or "box.value" in _js106b[_js106b.index("function speakShowReview"):_js106b.index("function speakContinue")]:
@@ -16619,7 +16834,7 @@ console.log(out.join('\\n'));
     for _need in ("env:OPEN_CASE_API_KEY", "out of band", "fingerprint", "Exact bytes", "Re-verify", "never shown as", "credential_unavailable", "origin_refused"):
         if _need not in _how:
             _f107(f"the how-to does not say {_need!r}")
-    _idx107 = (_root107 / "webapp" / "index.html").read_text(encoding="utf-8")
+    _idx107 = _surfaces_text()   # block 121: prose moved to /constitution; controls stayed in the panel
     for _need in ("Nikodemus can hold what your other instruments produce.", 'id="about-instruments"', "async function loadInstrumentsStatus()",
                   "loadInstrumentsStatus();", 'href="/investigation"', "Open the instruments", "never “nothing found”", "declared, rejected or left",
                   "unresolved by you alone"):
@@ -16818,8 +17033,14 @@ console.log(out.join('\\n'));
             f"leaves exactly {len(_keptN)} (one wire header, two provenance mentions)")
 
     # ---- (b) the constitution reads in movements ----------------------
-    _pSN = _idxN.index('<details class="card" id="about-panel"')
-    _panelN = _idxN[_pSN:_idxN.index("</main>", _pSN)]
+    # block 121: the five movements and their canonical order are the thing
+    # the ruling said must survive relocation unchanged. They are now read
+    # from the canonical page, and the compact panel is separately required
+    # to carry none of them — two constitutions is the failure this avoids.
+    _panelN = _canon_source()
+    if "about-movement" in _about_panel(_idxN):
+        _fN("the compact About panel carries a movement heading — the law lives in "
+            "one place, and a summary that restates it becomes a second constitution")
     _MOVEMENTS = [
         ("Bringing things in", [
             "Bringing something — where examination starts",
@@ -16842,8 +17063,12 @@ console.log(out.join('\\n'));
         ("What it will not claim", [
             "Whether any of this beats a plain prompt"]),
     ]
-    _patN = _re.compile(r'<div class="about-movement">\s*([^<\n]+)'
-                        r'|<div class="section-label">([^<]+)</div>')
+    # block 121: the canonical page wraps each section label in a native
+    # <summary> so the explanation can be disclosed; the movements are
+    # unchanged headings. Same ordered sequence, parsed from the markup the
+    # law actually ships with rather than from the panel markup it left.
+    _patN = _re.compile(r'<div class="about-movement"[^>]*>\s*([^<\n]+)'
+                        r'|<span class="section-label">([^<]+)</span>')
     _haveN = [("movement", m.group(1).strip()) if m.group(1) is not None
               else ("section", m.group(2).strip())
               for m in _patN.finditer(_panelN)]
@@ -16880,19 +17105,41 @@ console.log(out.join('\\n'));
     if _brandN["formerly"] not in _rdN or _brandN["adr"].split("/")[-1] not in _rdN:
         _fN("the README dropped the provenance the naming law requires "
             "(the former name and the ruling that changed it)")
-    _capsRN = [" ".join(_rdN[max(0, m.start() - 30):m.start() + 30].split())
-               for m in _re.finditer("Wordicon", _rdN)]
-    for _c in _capsRN:
-        if "Formerly **Wordicon**" not in _c:
-            _fN(f"the README still calls the tool by the dead name: …{_c}…")
+    # block 121: the ruling moved the rename out of the README's opening, so
+    # this can no longer look for one fixed phrase at the top. It checks the
+    # PROPERTY the naming law actually wants — the dead name appears only as
+    # provenance, never as the tool's current name — by requiring every
+    # occurrence to fall inside the history section. Structural, and it
+    # survives the section being reworded.
+    _histN = _rdN.find("## History and legacy names")
+    if _histN == -1:
+        _fN("the README has no history section, so the naming provenance has nowhere "
+            "to live now that it no longer opens the document")
+    else:
+        for _m in _re.finditer("Wordicon", _rdN):
+            if _m.start() < _histN:
+                _c = " ".join(_rdN[max(0, _m.start() - 40):_m.start() + 40].split())
+                _fN(f"the README uses the dead name outside the history section: …{_c}…")
+        if "**Wordicon**" not in _rdN[_histN:]:
+            _fN("the history section does not name the former name it exists to record")
     # not "each name appears somewhere" — the ORDER is the thing that was ruled,
     # and a name can survive in the machine map while the section that explains
     # it is renamed or gone. This reads the sequence out of "What is in it".
+    # block 121: the README became a front door and the machine map moved to
+    # docs/machine-map.md. The pin moved with it rather than being dropped —
+    # its purpose is that the front door, the map and the law describe the
+    # same machine in the same order, and that is still checkable.
+    _mmN = (_pathlib.Path(__file__).resolve().parents[1] / "docs" / "machine-map.md")
+    _rdN = _mmN.read_text(encoding="utf-8") if _mmN.exists() else ""
+    if not _rdN:
+        _fN("docs/machine-map.md is gone — the movements and the wing files have "
+            "nowhere to stand")
     try:
-        _wiN = _rdN[_rdN.index("## What is in it"):_rdN.index("## What it looks like")]
+        _wiN = _rdN[_rdN.index("## The five movements"):_rdN.index("## Which file is which")]
     except ValueError:
         _wiN = ""
-        _fN("the README has no 'What is in it' section — the movements have nowhere to stand")
+        _fN("the machine map has no 'The five movements' section — the movements have "
+            "nowhere to stand")
     _rdSeqN = [_m.group(1) for _m in _re.finditer(r"\*\*([A-Z][^*]+?)\.\*\*", _wiN)]
     if _rdSeqN != [_m for _m, _ in _MOVEMENTS]:
         _fN(f"the README's movements are not the panel's, in order: have {_rdSeqN}, "
@@ -17041,7 +17288,8 @@ console.log(out.join('\\n'));
         # say so — including the part that is easy to overstate, that the words
         # always came back and it is the caret, the undo history, the scroll and
         # the layout that did not.
-        _panS2 = _idxS2[_idxS2.index('id="about-panel"'):_idxS2.index("</main>", _idxS2.index('id="about-panel"'))]
+  # block 121: the law moved to /constitution; this pin moved with it.
+        _panS2 = _canon_source()
         _flatS2 = " ".join(_panS2.split())
         for _sayS2, _whyS2 in (
                 ("Walking somewhere else no longer disturbs the room",
@@ -17742,9 +17990,14 @@ console.log(out.join('\\n'));
     # change it, so both are said on the panel and pinned here.
     def _pass109c():
         _root = _pathlib.Path(__file__).resolve().parent.parent
-        _pg = (_root / "webapp" / "index.html").read_text(encoding="utf-8")
-        i = _pg.index("The room \u2014 where writing happens")
-        _room = _pg[i:i + 3000]
+        # block 121: located by the section's OWN structure, not a
+        # 3000-byte window after a heading. The window was the second pin
+        # to break on the relocation, and it would have broken again on any
+        # paragraph inserted above it.
+        _room = _canon_section("The room \u2014 where writing happens")
+        if not _room:
+            failures.append("109c: the canonical section on the room is gone — every "
+                            "sentence below it is unpinned")
         for _need, _why in (
                 ("<strong>Tab</strong> indents a paragraph's width rather than leaving the writing",
                  "the constitution does not say that Tab indents"),
@@ -18014,11 +18267,14 @@ console.log(out.join('\\n'));
                 failures.append(f"111: {_route} is missing")
         # 12. THE STANDING LAW: a wing that ships amends the constitution in
         # the same block, and says what it cannot do as plainly as what it can.
-        _i = _idx111.index("Inquiry \u2014 a question, kept")
         # to the NEXT section, not a fixed number of characters — a slice
-        # measured in bytes silently shrinks the guarded region every time the
-        # prose grows, which is the vacuous-pin failure in another costume
-        _con111 = _idx111[_i:_idx111.index('<div class="section-label">', _i + 10)]
+        # measured in bytes silently shrinks the guarded region every time
+        # the prose grows, which is the vacuous-pin failure in another
+        # costume. Block 121 moved the law to its own page and this reads
+        # the section there, still bounded by structure.
+        _con111 = _canon_section("Inquiry \u2014 a question, kept")
+        if not _con111:
+            failures.append("111: the canonical section on Inquiry is gone")
         for _need, _why in (
                 ("exactly as you asked it", "the constitution does not say the question is kept verbatim"),
                 ("becomes a descendant of it, never a replacement",
@@ -18777,7 +19033,10 @@ console.log(out.join('\\n'));
 
     # THE CONSTITUTION SAYS BOTH RULES. Whitespace-normalised: it is wrapped
     # prose, and a sentence spanning a line break is not a contiguous string.
-    _c116 = " ".join(_i116.split('section-label">What comes back</div>')[1][:6000].split())
+    # block 121: structural, not a 6000-byte window; and the law lives on
+    # its own page now. This is the third byte-window pin the relocation
+    # exposed — each one had been silently shrinking as the prose grew.
+    _c116 = " ".join(_canon_section("What comes back").split())
     for _need in ("A finding never goes behind it",
                   "the one door that could change what it says",
                   "never a tooltip"):
@@ -18984,7 +19243,7 @@ console.log(out.join('\\n'));
     # Whitespace-normalised: the constitution is wrapped prose, so a sentence
     # that spans a line break is not a contiguous substring of the file. The
     # first version of this check failed on its own correct text.
-    _const114 = " ".join(_i114.split('section-label">What comes back</div>')[1][:4000].split())
+    _const114 = " ".join(_canon_section("What comes back").split())
     for _need in ("A passing check may be quiet", "failing check may not",
                   "shows the same warnings it showed while it"):
         if _need not in _const114:

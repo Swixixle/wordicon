@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Constitution of __BRAND_NAME__</title>
+<link rel="icon" href="data:,">
+<!--
+  /constitution — the canonical law of __BRAND_NAME__, moved here whole.
+
+  It used to live inside the home page's "What is __BRAND_NAME__?" panel:
+  about nine thousand words on one scroll, inside the controls. That is the
+  same defect the interface blocks kept repairing one level down — a true
+  thing placed where its length made it unreadable. Moving it does not
+  demote it. The law binds because it is canonical, versioned and pinned by
+  the suite, not because it occupies the workspace.
+
+  THE RULE THIS PAGE OBEYS: hide explanation when necessary; never hide
+  state. Every movement's plain statement and every section's name are
+  visible on arrival. The detailed explanation sits behind a native
+  <details>, which is operable by keyboard without a line of script. No
+  runtime fact — a partial run, a failed warrant, an unverified source, a
+  provider boundary, an unsearched claim — lives on this page at all;
+  those belong where the result is, and this page is inert.
+
+  Zero model calls. Zero network requests. One script block, whose only
+  jobs are the expand-all control and opening everything before printing.
+  Behind the gate like all.
+-->
+<style>
+:root {
+    --bg: #11161d;
+    --panel: #181f29;
+    --panel-2: #1f2833;
+    --border: #2a3441;
+    --text: #e7ecf3;
+    --muted: #8b98a9;
+    --accent: #78aaff;
+    --accent-dim: #3a5578;
+    --good: #6fcf97;
+    --bad: #e08a8a;
+    /* Mode colours, lifted unchanged from the Map's route palette —
+       already validated all-pairs for colour-vision deficiency against
+       this exact background, so the two surfaces read as one system and a
+       colour means the same thing on the map as it does in a list. This
+       is colour carrying information: it makes Recent scannable by what
+       kind of work a run was, which is the point. */
+    --mode-forge: #3987e5;
+    --mode-source: #d766a6;   /* decompose / deep — a passage taken apart */
+    --mode-sprout: #d95926;
+    --mode-refract: #199e70;
+
+    /* The writing room. Deliberately NOT the app's palette: this surface
+       has one job and it is not showing you machinery. A saturated primary
+       blue under a pure yellow vibrates at the edges — the two hues fight
+       for the same focal plane and long passages get tiring — so the blue
+       is dropped toward indigo and the yellow warmed and pulled off full
+       chroma. The pair measures 11.4:1, well past WCAG AAA for body text,
+       which matters more here than anywhere else in the app because this
+       is the one screen meant to be looked at for an hour. */
+    --write-bg: #0f2350;
+    --write-ink: #ffd97d;
+    --write-faint: #6f86b8;
+    /* Any surface that floats OVER the writing has to be opaque. The first
+       version used a 5%-white wash and the prose read straight through the
+       control panel, which looked like a rendering bug and was one. */
+    --write-panel: #16305f;
+    --write-panel-ink: #b9c8e8;   /* 7.7:1 on the panel — these are 10.5px labels */
+
+    /* The four rulings a word can be under. Chosen apart in HUE and in
+       LIGHTNESS both, so the shelf stays scannable in greyscale and under
+       colour-vision deficiency — the chip also always carries its word, so
+       colour is a second channel here and never the only one. */
+    --rule-kept: #9ce8bb;        /* Y .684 */
+    --rule-reworked: #e2b45c;    /* Y .496 */
+    --rule-aside: #dd8686;       /* Y .341 */
+    --rule-undecided: #7d8fa8;   /* Y .254 — each step apart in lightness as
+                                    well as hue, and all four clear 4.5:1 on
+                                    the app background at chip size. */
+  }
+body { padding-bottom: env(safe-area-inset-bottom, 0); }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 16px; margin-bottom: 16px; }
+.section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 14px 0 6px; }
+.section-label:first-of-type { margin-top: 4px; }
+.about-movement .why { display: block; font-size: 12.5px; letter-spacing: 0;
+    text-transform: none; color: var(--muted); font-weight: 400; margin-top: 4px;
+    line-height: 1.4; }
+.about-movement + .section-label { margin-top: 12px; }
+.muted { color: var(--muted); }
+.foot { font-size: 12.5px; color: var(--muted); }
+  body { max-width: 780px; margin: 0 auto; padding: 28px 20px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 22px; }
+  .toc { border-left: 3px solid var(--border); padding: 4px 0 4px 14px; margin: 0 0 28px; }
+  .toc h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+            color: var(--muted); margin: 0 0 8px; }
+  .toc ol { list-style: none; margin: 0; padding: 0; }
+  .toc li { margin: 3px 0; font-size: 13px; }
+  .toc li.sec { padding-left: 16px; font-size: 12.5px; }
+  .toc li.mv a { font-weight: 600; }
+  .toc a { text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  section.movement { margin: 34px 0 10px; }
+  section.cl { margin: 0 0 2px; }
+  details.canon > summary { cursor: pointer; list-style: revert; padding: 5px 0; }
+  details.canon > summary .section-label { display: inline; margin: 0; }
+  details.canon > summary::marker { color: var(--muted); }
+  .canon-body { padding: 2px 0 10px 16px; border-left: 1px solid var(--border); }
+  .controls { position: sticky; top: 0; background: var(--bg, #fff);
+              padding: 8px 0; margin: 0 0 6px; border-bottom: 1px solid var(--border); }
+  .controls button { font: inherit; font-size: 12.5px; padding: 5px 11px;
+                     border: 1px solid var(--border); border-radius: 6px;
+                     background: transparent; color: inherit; cursor: pointer; }
+  .controls button:focus-visible { outline: 2px solid var(--accent, #888); outline-offset: 2px; }
+  @media print { .toc, .controls { display: none } .canon-body { border: 0 } }
+</style>
+</head>
+<body>
+<p class="foot"><a href="/">&larr; Home</a> &nbsp;·&nbsp; <a href="/anatomy">The anatomy</a> — how the parts cooperate; an explainer, not law.</p>
+
+<h1>The constitution of <span data-brand>__BRAND_NAME__</span></h1>
+<p class="sub">The whole of it, in the five movements it has always had. This is the
+binding text: what the instrument promises, what it refuses, and what it will not
+claim. The home page carries a short orientation and sends you here.</p>
+
+<div class="controls">
+  <button type="button" id="expand-all" aria-expanded="false">Expand everything</button>
+  <span class="foot" style="margin-left:8px">for reading straight through, or printing</span>
+</div>
+
+<nav class="toc" aria-label="Contents"><h2>Contents</h2><ol>
+  <li class="mv"><a href="#what-it-is">What holds everywhere — the laws, the clocks, the boundaries</a></li>
+  <li class="mv"><a href="#bringing-things-in">Bringing things in</a></li>
+  <li class="sec"><a href="#bringing-something-where-examination-starts">Bringing something — where examination starts</a></li>
+  <li class="sec"><a href="#documents-where-things-enter">Documents — where things enter</a></li>
+  <li class="sec"><a href="#media-where-listening-enters">Media — where listening enters</a></li>
+  <li class="mv"><a href="#where-the-work-happens">Where the work happens</a></li>
+  <li class="sec"><a href="#what-comes-back">What comes back</a></li>
+  <li class="sec"><a href="#the-room-where-writing-happens">The room — where writing happens</a></li>
+  <li class="sec"><a href="#inquiry-a-question-kept">Inquiry — a question, kept</a></li>
+  <li class="sec"><a href="#the-work-room-a-change-of-scale">The Work Room — a change of scale</a></li>
+  <li class="sec"><a href="#the-clinic-where-authorities-stay-separate">The Clinic — where authorities stay separate</a></li>
+  <li class="sec"><a href="#the-bench-working-on-a-word-you-already-kept">The Bench — working on a word you already kept</a></li>
+  <li class="mv"><a href="#what-accumulates">What accumulates</a></li>
+  <li class="sec"><a href="#the-library-where-kept-things-live">The Library — where kept things live</a></li>
+  <li class="sec"><a href="#the-sources">The sources</a></li>
+  <li class="sec"><a href="#the-map-where-things-connect">The Map — where things connect</a></li>
+  <li class="mv"><a href="#what-holds-it">What holds it</a></li>
+  <li class="sec"><a href="#the-vault-restoration-not-regeneration">The Vault — restoration, not regeneration</a></li>
+  <li class="sec"><a href="#the-keeper-custody-of-the-narration-not-authority-over-the-r">The Keeper — custody of the narration, not authority over the record</a></li>
+  <li class="mv"><a href="#what-it-will-not-claim">What it will not claim</a></li>
+  <li class="sec"><a href="#whether-any-of-this-beats-a-plain-prompt">Whether any of this beats a plain prompt</a></li>
+</ol></nav>
+
+<section id="what-it-is">
+<p class="body">Bring <span data-brand>Nikodemus</span> a feeling with no name and it forges you concept readings
+      worth arguing with — the idea's anatomy under a plain working title. Bring it a book and the
+      book stays a book — byte-intact, mechanically read, every sentence an anchor you can hold a
+      claim against. Bring it a recording and the transcript scrolls under the sound, one click
+      from any sentence to its exact second. Coin a word at the Bench when you want one, cross a
+      passage into evidence, walk the Map of everywhere your thinking has been, enter a work the
+      way you'd enter a room — and every step leaves a record you can reopen, dispute, and
+      re-rule, because in here <strong>the record is the product</strong>. <span data-brand>Nikodemus</span> is <strong>a
+      private, evidence-bearing workshop</strong>: it began as a word-coiner, and use revealed
+      that naming was only one small part of the work — so it is now concept-first and
+      coinage-optional. An idea is allowed to exist without a coined name; a name is a handle for
+      a concept, not the concept itself, attached at the Bench when wanted; and "the phrase you
+      already have is sufficient" counts as success. What accumulates is the concepts, the
+      sources, the documents, the recordings, and the record of what you decided and why.</p>
+      <p class="body">Three laws hold everywhere in it: <strong>the critic advises and never
+      decides</strong>; <strong>anything the tool isn't sure of says so</strong> instead of quietly
+      rounding up; and <strong>nothing changes without a visible choice</strong> — no ruling
+      recorded, no meaning rewritten, no check re-run and no page reset except by a thing you
+      clicked. Your ruling settles things, and only your ruling, and you are allowed to change it —
+      changes of mind are kept, never overwritten. Nothing here flatters you and nothing here
+      decides for you; what it offers is rarer — <strong>a place where your thinking is taken
+      seriously enough to be kept</strong>.</p>
+      <p class="body"><strong>The record keeps its clocks.</strong> Every ruling made since September 2, 2026
+      carries the time it was made and the epoch the owner declared the record to be in; a deep run keeps
+      its own receipt, Friction's objection to the input included; every input says how it arrived — typed,
+      attached, or through a door. Older rows carry none of this and are never rewritten: their missing clocks
+      are a finding, not a gap to paper over. Acceptances the identity migration found receipt-only wait in the
+      <a href="/recovery">Recovery Review</a>, where a definition comes from the owner or not at all.</p>
+      <p class="body"><strong>The record measures itself before it is used.</strong>
+      Every definition is an event — the exact words, the concept, the time, the origin, what it supersedes — and the
+      shelf is what those events rebuild, checked against them; older entries carry one labeled baseline, never an
+      invented history. Every receipt names the prompt templates behind it by stage and hash, never the prompt itself.
+      Now every new relation on the Map says who put it there — the pipeline, the owner, a model's proposal — and cites
+      the receipt or ruling that produced it; older relations are labeled unknown and left alone. A deep run keeps a
+      receipt like any other run. Encounter recording is off until you turn it on in this panel; while off nothing is
+      written, and the flip itself is recorded. A recovery case ruled “not enough survives” stays findable and can be
+      reopened by a later ruling that cites it.</p>
+      <p class="body"><strong>Nikodemus may hear what you deliberately say to it.</strong> Press the microphone and it
+      listens; press again and it stops; what it heard appears in the box for you to correct before it goes anywhere;
+      the recording stays in this page's memory and is kept only if you choose to keep it. Capture is not
+      interpretation, and interpretation is not memory until you keep it. The engine runs on this machine and
+      names itself and its model on every transcript; the vocabulary it is primed with is your own — the name,
+      the words you declared, what you have open, the titles you pinned, then the shelf as space remains — and
+      every transcript cites the exact list it was told and where each word came from, because that list biases
+      what is heard. What the engine heard stays visible beside your correction; your correction is what is sent;
+      the record never claims the engine heard the correction. No conversation mode, no spoken replies, no camera —
+      each of those is its own ruling.</p>
+      <p class="body"><strong>Words go where you send them.</strong> Once something is in the box, a row of
+      destinations appears — Research outside Nikodemus, Search my record, Develop the idea, Start a Room, Write
+      from this, Save as an open question, and for a name with a date, Study the name and the rest. The record reads
+      the words' shape and highlights one; it never chooses. Nothing runs until you choose, and a destination that
+      is not built yet says so instead of doing something else. Reading the shape asks no model and writes nothing —
+      the draft lives in this browser until you send it. Search my record is exact text in your own record, never
+      the web; research beyond the record is a separate door, not built yet. How the words arrived — typed, attached,
+      later spoken — travels beside them and changes nothing about where they may go.</p>
+      <p class="body"><strong>Nikodemus can hold what your other instruments produce.</strong> Open Case and EthicalAlt
+      are connected as instruments, not absorbed: each keeps its database, its code, its interface, its vocabulary and its
+      signing key. What crosses is a deposition — the exact bytes a producer signed, pulled one object at a time when you
+      press, verified under a public key you pinned here out of band, kept whole with its content hash. A verified
+      deposition is testimony by a named witness, never a Nikodemus finding: an Open Case label stays Open Case's, an
+      EthicalAlt concern level stays EthicalAlt's, an allegation stays paired with its response, a documented gap stays a
+      gap, and an instrument that cannot be reached is a failure with its class — never “nothing found”. Names are not
+      identities: a match between two instruments' records is proposed by exact name and declared, rejected or left
+      unresolved by you alone; a timeline across both appears only after your declaration. Nothing is polled, nothing
+      refreshes itself, and reading here never makes an instrument act. Paste a case or profile address into the box and
+      the chooser offers the import; the Investigation Room is at <a href="/investigation">/investigation</a>.</p>
+      <p class="body"><strong>The first minute:</strong> type into the box below — a feeling you don't
+      have a word for, a word you're curious about, a handful of loose words, or a whole passage — choose
+      <em>Develop the idea</em>, and press <em>Run it</em>. Cards come back; open them, argue with them, rule on
+      them or don't. Or skip all of that, press <strong>⤢ full page</strong>, and just write — everything else
+      will still be here.</p>
+      <p class="body">The whole tool is one loop, and every part below is a station on it:
+      <strong>encounter</strong> something (Documents), <strong>examine</strong> it (runs and the
+      Bench), <strong>keep</strong> what survives (the Library), <strong>connect</strong> it (the
+      Map — and, at the scale of a whole book rather than a word, the Work Room), and
+      <strong>use</strong> it in your own writing (the room) — which is where the next
+      encounter starts.</p>
+</section>
+
+<section class="movement">
+<div class="about-movement" id="bringing-things-in">Bringing things in
+        <span class="why">Every intake is a deliberate act: nothing is read, heard, or examined until you hand it over, and what arrives carries how it arrived.</span></div>
+      </section>
+
+<section class="cl" id="bringing-something-where-examination-starts">
+  <details class="canon">
+    <summary><span class="section-label">Bringing something — where examination starts</span></summary>
+    <div class="canon-body">
+      <p class="body"><strong>Run it</strong> — type anything. The tool reads the shape of what you
+      gave it: a described feeling gets forged into names, loose words get collided, a long passage
+      gets split into its separate ideas. It tells you how it read you, and one tap corrects it.</p>
+      <p class="body"><strong>Type a word that already exists</strong> — <em>television</em>,
+      <em>parole</em> — and it takes the word apart instead: roots, first appearance, how the sense
+      moved, the forms built off it, its relatives, its register. This is the one stage whose claims
+      have a <em>right</em> answer, so anything carrying a date or a named coiner comes back
+      <strong>unverified</strong> unless the reviewer stakes it and says where one search settles it.
+      A word that is not established gets told so, not given an invented past.</p>
+      <p class="body"><strong>Go deep</strong> — the full workup: components with existing neighbors
+      named, a critique of your input exactly as you gave it, and candidates for every component.
+      Slower, for the ideas that deserve it.</p>
+
+      </div>
+  </details>
+</section>
+
+<section class="cl" id="documents-where-things-enter">
+  <details class="canon">
+    <summary><span class="section-label">Documents — where things enter</span></summary>
+    <div class="canon-body">
+      <p class="body"><strong>Documents</strong> takes in whole works — a book, a chapter, a saved
+      news article — and keeps them as themselves. Bringing one in costs
+      <strong>zero model calls</strong>: the file is stored byte-intact forever, split
+      deterministically into sections, paragraphs and sentences, and indexed. The same file processed
+      under the same extractor and segmenter revisions yields the same anchors; a changed revision
+      creates a new immutable reading and never rewrites the old one.
+      Whatever the reader skipped or couldn't parse is written on the document's face. Search here is
+      <strong>your library only, exact text</strong> — not meanings, and never the web.</p>
+      <p class="body">Select a passage and it can cross into a <strong>note, claim, citation, or
+      Bench ingredient</strong> — an immutable reference to that exact span, retrieved fresh every
+      time it renders; if the stored record and the document ever disagree, the mismatch is shown,
+      not smoothed. A claim made while reading records only that it was made while viewing the span —
+      <strong>presence is not support</strong>. Support stays unruled until you summon the one narrow
+      question: what bearing does this exact span have on this exact claim? The answer runs on
+      <strong>two axes</strong> — bearing (supports, contradicts, contextualizes,
+      <strong>unrelated</strong>, or the span is insufficient: the honest negatives a support-only
+      vocabulary once made impossible) and, when the bearing is operative, mode: direct,
+      inference, interpretation, or speculation — unrelated and insufficient-span rulings carry no
+      invented mode.
+      The stage must name the sentences its judgment rests on; if they lie outside your selection it
+      is forced to “insufficient span” in code, with the wider selection suggested and
+      <strong>never attached invisibly</strong>. It cannot assign confidence, truth, or a score;
+      anything extra it attaches is stripped in code with a finding. And you are never its clerk:
+      <strong>adopt</strong> a proposal, <strong>reject</strong> it (the claim stays unruled, the
+      rejection is kept), or <strong>rule it yourself</strong> with no model involved — every ruling
+      carries its origin, and revising later appends a superseding ruling, earlier ones kept.
+      Retracting any crossing is append-only and recoverable. Beyond that, what a document
+      <em>means</em> is a later stage; this one only promises that what you read is what arrived.</p>
+
+      </div>
+  </details>
+</section>
+
+<section class="cl" id="media-where-listening-enters">
+  <details class="canon">
+    <summary><span class="section-label">Media — where listening enters</span></summary>
+    <div class="canon-body">
+      <p class="body"><strong>Media</strong> keeps recordings you own — a lecture, an interview, an
+      episode you have the file for — byte-intact, zero model calls, exactly like Documents. Beside
+      each recording sit its transcripts, and the constitution is blunt: <strong>the transcript is
+      a derivative that can be wrong; the recording remains the source</strong>. Every version —
+      publisher-supplied, platform captions, locally generated, your own correction — is a separate
+      immutable derivation whose origin you declare; a correction is a new version beside the old
+      one, never over it. Click any sentence and the player lands on that second; while it plays,
+      the sentence under the sound stays lit. Select sentences and the moment becomes a
+      <strong>time-anchored crossing</strong> — note, claim, citation, or Bench ingredient — pinned
+      to a segment range of one named transcript version at its exact seconds, retrieved fresh
+      every time it renders, drift shown rather than smoothed. A crossing's play button
+      <strong>plays only its span</strong>, then stops: it testifies to those seconds, not the ones
+      after. Claims are born unruled and take your ruling on the same two axes as everywhere else.
+      Two layouts, one player: <strong>Media fills half</strong> gives the recording the whole
+      research half; <strong>Media + research</strong> puts the transcript and crossings beneath
+      it — switching restyles the same element, so <strong>playback never stops</strong>, and the
+      split workspace carries it beside your writing with no third pane.</p>
+
+      </div>
+  </details>
+</section>
+
+<section class="movement">
+<div class="about-movement" id="where-the-work-happens">Where the work happens
+        <span class="why">Five scales of one activity — a run&#8217;s result, a draft, a whole work, a room of separate authorities, a single kept word. You may enter at any of them.</span></div>
+      </section>
+
+<section class="cl" id="what-comes-back">
+  <details class="canon">
+    <summary><span class="section-label">What comes back</span></summary>
+    <div class="canon-body">
+      <p class="body">Three layers, always. <strong>Bone</strong> — checkable facts from admitted
+      sources; often empty, and empty is honest. <strong>Flesh</strong> — the meaning: definition,
+      tension, axiom; interpretation labelled as interpretation. <strong>Friction</strong> — a critic
+      that attacks every candidate, tags it kitchen word or seminar term, and hides nothing. Each
+      card opens with three rows pointing the same way — grounded, well-made, unclaimed — and a
+      plain-terms box: the idea in one ordinary breath, plus an <strong>invented example</strong> —
+      a sentence the model wrote to show the word in use, labelled as invented in the text itself,
+      because it used to arrive in quotation marks and read like something you had written. Where a
+      candidate is well made and nothing established it, the craft row says so in the same breath:
+      <em>craft coherent; source warrant absent</em>.</p>
+
+      <p class="body">And where a review searched, the panel says only what it can actually
+      observe. That a result <strong>came back</strong> and that the prose <strong>cited</strong> it
+      are two different facts and are recorded separately. What the provider fetched, and what the
+      model read, are <strong>opaque</strong> — the search happens inside the provider — so they are
+      printed as <em>not applicable</em> and <em>unknown</em>, never as a zero, because a zero is a
+      measurement and no measurement was taken. The reviewer's own account of its work is labelled a
+      model self-report; where it disagrees with the record, the record wins.</p>
+
+      <p class="body">And a run opens on the work, not on the machinery. How a component was
+      pulled out of your text — the anchor, the constraint, the context recalled — folds behind
+      one line that says what it holds. <strong>A passing check may be quiet; a failing check may
+      not.</strong> An anchor that was not found in your text, a constraint the anchor cannot
+      carry, a passage that denies its own component: those stay on the page, and they are in the
+      record too, so reopening the run a month later shows the same warnings it showed while it
+      ran.</p>
+
+      <p class="body">And a page that explains itself on every card teaches the same lesson a
+      hundred times. So a <strong>fact</strong> stays on the face and the <strong>explanation of
+      the fact</strong> folds behind a small mark you press once — never a tooltip, which needs a
+      mouse and says nothing to a screen reader. A finding never goes behind it.</p>
+
+      <p class="body">Each card also names <strong>the one door that could change what it says</strong>,
+      and the others fold. Where nothing the app can do repairs a finding — a quote that is not in
+      your text was chosen when the passage was taken apart, and no button here re-runs that check —
+      it says so, rather than offering five actions that travel away from the problem while looking
+      like they address it.</p>
+
+      <details style="margin:10px 0">
+        <summary style="cursor:pointer;color:var(--muted);font-size:12.5px;font-weight:600">The four buttons on a card</summary>
+        <div style="margin-top:8px">
+        <p class="body"><strong>Make it a word</strong> — compresses a multi-word term into one
+        speakable coin; the plain gloss is the contract the coin must carry.</p>
+        <p class="body"><strong>⤷ Sprout</strong> — the rabbithole: the same thread in other myths,
+        books, poems, history. Each thread arrives split three ways — <strong>what the source
+        shows</strong>, <strong>the reading laid over it</strong>, and <strong>what's missing</strong> —
+        so a description of a myth can't borrow the credibility of the quote beside it. Quotes are
+        labelled recall-unverified or paraphrase with a place to check. Threads are written from
+        recall; the review of them is handed a <strong>live web-search tool</strong>, and whatever it
+        consulted is listed under the result — an empty list means it consulted nothing, and the page
+        says so in those words. Rabbitholes keep their trail, and every thread and door can sprout
+        again.</p>
+        <p class="body"><strong>⇄ Refract</strong> — the same idea through other languages, Spanish
+        on every run. For each language the nearest real term in its own script, what it keeps, what
+        it loses, and whether some language already has one word for your whole concept. A term the
+        reviewer won't stake as attested cannot hold, and a real term that
+        <strong>settles what your concept leaves open</strong> cannot hold either — attestation is
+        not fit. A required language that fails to appear is reported as the stage failing to comply,
+        which is different from that language having nothing. Terms start as recall; the reviewer is
+        handed a <strong>live web-search tool</strong> and whatever it consulted is listed under the
+        result — an empty list means the review is recall, which the page states outright.</p>
+        <p class="body"><strong>◈ Archetype</strong> — the figure the concept implies. Every facet
+        says what it rests on — a source, a documented tradition, or invention — and a tradition
+        claim whose reference is too vague to look up is <strong>demoted to invention in code</strong>.
+        It must name what it excludes and supply a falsifier; without one it is reported
+        <strong>unfalsifiable</strong>, because a figure nothing can contradict describes no one.
+        Beneath it, things that fit — characters and works, each with where it breaks, the
+        unlocatable ones marked remembered rather than cited.</p>
+        <p class="body"><strong>✓ Verify</strong> — turns the critic on itself, checking Friction's
+        own claims against live sources, as many times as you click. Nothing runs it for you.</p>
+        </div>
+      </details>
+
+      <details style="margin:10px 0">
+        <summary style="cursor:pointer;color:var(--muted);font-size:12.5px;font-weight:600">What is checked in code rather than asked of the model</summary>
+        <div style="margin-top:8px">
+        <p class="body">A model asked to follow a rule complies most of the time, which is the same
+        as not following it. These run after the model answers, so no wording gets past them.</p>
+        <p class="body"><strong>Presence is not support.</strong> <strong>Two separate checks</strong>
+        run on any quote pulled from your text: a mechanical one — is this string actually in what
+        you gave me — and a narrow model one — does that quote support the claim resting on it. They
+        render as two visibly different things, and a green first check never stands in for the
+        second.</p>
+        <p class="body"><strong>Craft and source-drift stay on separate axes.</strong> Where a
+        definition claims more than the quoted span shows, that lands under Beyond the source and
+        never feeds the verdict. Each concept records the text's own stance, so a candidate indicting
+        what its source blesses arrives labelled a counter-reading rather than passing as
+        extraction.</p>
+        <p class="body"><strong>A sprout thread claiming to hold</strong> while your concept's own
+        recorded parts are absent from the source is <strong>demoted to strained</strong> —
+        <strong>in code, not left to the reviewer</strong>'s mood. A part your concept never recorded
+        is n/a, not a mismatch; that distinction once carried a 100% false-positive rate.</p>
+        <p class="body"><strong>Names lifted from your text are checked against who said them.</strong>
+        A quote attributed to someone the passage doesn't put behind it is marked, never passed
+        through.</p>
+        <p class="body"><strong>A build that claims a seam has to spell it.</strong> When the Bench
+        says it clipped <em>clem</em> from clemency, the code <strong>rebuilds the word from those
+        exact letters</strong>; a seam that doesn't reassemble fails.</p>
+        </div>
+      </details>
+
+      </div>
+  </details>
+</section>
+
+<section class="cl" id="the-room-where-writing-happens">
+  <details class="canon">
+    <summary><span class="section-label">The room — where writing happens</span></summary>
+    <div class="canon-body">
+      <p class="body"><strong>⤢ full page</strong> opens the writing room: warm yellow on deep blue,
+      type larger than any input box, and nothing else — no counter, no timer, no praise.
+      <strong>Aa</strong> changes the face, the size, the measure and how the letters arrive, and
+      remembers your choice on this device. The letters land in one of three ways: <strong>Settle</strong>,
+      a soft drop with a slight overshoot; <strong>Ink</strong>, which splatters on the way in and
+      is plain text the moment it lands; and <strong>Plain</strong>, no motion at all. Nothing
+      continues moving after a letter has arrived, and none of it is part of what you wrote.
+      <strong>Tab</strong> indents a paragraph's width rather than leaving the writing — a
+      selection across lines indents every line, ⇧Tab takes a level back off, and one undo takes
+      back the whole indent.
+      To leave with the keyboard: <strong>Esc</strong> then Tab. Spell check is the
+      browser's own, which marks and offers and never rewrites; <strong>autocorrect is off</strong>,
+      because a phone keyboard is most confident that a coined word is a mistake. <strong>Esc</strong>
+      leaves.</p>
+      <p class="body"><strong>Guardrails belong on consequential actions, not on language.</strong>
+      That erudition-meets-filth register is part of your voice—the Trickster-Sage and the
+      grotesquerie at the same table. <span data-brand>Nikodemus</span> is supposed to give that voice more room and more
+      structure, not wash its mouth out with soap.</p>
+      <p class="body"><strong>⫞ split</strong> puts the room beside <em>the page itself</em> — the
+      same shelf, cards, documents and controls fitted into half the window,
+      <strong>not a miniature lookup</strong> and not a recolour. ⇄ swaps sides, the divider drags,
+      either half expands and comes back, and through all of it the draft, the caret, both scroll
+      positions and whatever was open stay exactly where you left them. Your side and your divider
+      are remembered.</p>
+      <p class="body">Everything you type is <strong>written to disk the moment you submit
+      it</strong> — before any model is contacted, so a failed run or a closed laptop never costs you
+      your words. And <strong>the page does not reset</strong>: the run you left is still there, still
+      streaming if it was streaming. Starting fresh is a thing you click, never a thing that happens
+      to you.</p>
+      <p class="body"><strong>Walking somewhere else no longer disturbs the room.</strong> The Bench,
+      the Map, a Room, Trails, the Recovery Review and the Investigation Rooms <strong>open inside this
+      page</strong> rather than replacing it, beside a writing room that is never touched — so a draft
+      keeps its caret, its selection, its <strong>undo history</strong>, its scroll and the layout you
+      were in, not merely its words. Before, the words came back from this browser's own store and
+      everything else was gone. Each of those places is still its own document under its own rules, and
+      each still answers on its own address if you open it directly. Two take the whole window on
+      purpose: <strong>the anatomy</strong> (its door is in the header, above), and pairing — a
+      pairing screen drawn inside an
+      unpaired page would be a lie about what is locked.</p>
+
+      </div>
+  </details>
+</section>
+
+<section class="cl" id="inquiry-a-question-kept">
+  <details class="canon">
+    <summary><span class="section-label">Inquiry — a question, kept</span></summary>
+    <div class="canon-body">
+      <p class="body">A question you mean to <em>work</em> gets a place of its own. It is kept
+      <strong>exactly as you asked it</strong>, however tangled — a narrowed or corrected question
+      becomes a descendant of it, never a replacement — and the branches you open, and what became
+      of each, stay with it. A branch you abandon keeps <strong>why</strong> and <strong>what the
+      failure revealed</strong>, because the throw that did not stick is the half worth having.
+      Nothing in an inquiry is a ruling until you promote it. Reopen it in a year and it is standing
+      where you left it.</p>
+      <p class="body"><strong>It reads the question back to you before it does anything else.</strong>
+      A tangled question usually means two or three different things at once, and those things need
+      <em>different evidence</em>. So the first thing you get is not an answer — it is two to four
+      ways your question could be read, the assumptions sitting inside it, and the terms that could
+      go either way. Take one, take all of them, reword any of them, or write your own. Taking
+      several makes <strong>separate branches</strong>, never one blended question. Your wording
+      becomes a descendant of the proposal; the proposal stays where it is.</p>
+      <p class="body">You can also ask about the question itself — <em>am I assuming resemblance
+      implies borrowing?</em> Those are kept apart from questions about the world, and marked so:
+      <strong>nothing can hang an answer off one.</strong> A question about your question can never
+      quietly become a finding about the subject.</p>
+      <p class="body muted">The reader proposes; it does not answer, look anything up, or know
+      anything about the subject — and it says so on its own face. It cannot state a fact even by
+      accident: a reading is a label, a scope and <em>what evidence it would need</em>, and every
+      word it claims to quote from your question is checked against your question, with anything
+      it invented dropped and shown to you. It costs one model call, and the panel names the lane
+      and the model before you spend it. Searching your record, going outside for sources, and
+      trial are still unbuilt, each named as such with its reason.</p>
+      </div>
+  </details>
+</section>
+
+<section class="cl" id="the-work-room-a-change-of-scale">
+  <details class="canon">
+    <summary><span class="section-label">The Work Room — a change of scale</span></summary>
+    <div class="canon-body">
+      <p class="body">Click <strong>Enter</strong> on a linked source entry and you are inside the
+      work itself — <em>The Fall</em>, not the run that mentioned it. A work is an identity
+      <strong>you create</strong>: its id is never inferred from a normalized title, so Camus's
+      novel and the fall of Genesis can never collide however their titles match. Everything else
+      is <strong>links — owner rulings</strong>, made one at a time, append-only, each carrying its
+      origin; relinking supersedes with the lineage kept, and nothing links itself. The room
+      gathers what already exists and writes nothing by itself: <strong>Passages</strong> (the
+      work's words — only mechanically retrieved imported text, never a recollection),
+      <strong>Readings</strong> (what your runs said <em>about</em> it, never rendered as its
+      words), <strong>Variations</strong> (each edition, translation, or excerpt its own document —
+      <strong>editions are never blended</strong>), <strong>Paths</strong> (the recorded,
+      reconstructed, and declared roads your record already holds — the room draws no new ones),
+      and <strong>Outside <span data-brand>Nikodemus</span></strong>: Wikipedia as <strong>the lobby, not the
+      courtroom</strong>, plus templated doors to scholarly search. Doors only open —
+      <strong>nothing is imported by opening them</strong>, no click ever changes a record, and
+      what you found becomes a record only when you save it and say so, with an append-only access
+      history and <strong>no authority score</strong>. <em>Read in split</em> puts the edition
+      beside your writing using the workspace that already exists — no third pane.</p>
+
+      </div>
+  </details>
+</section>
+
+<section class="cl" id="the-clinic-where-authorities-stay-separate">
+  <details class="canon">
+    <summary><span class="section-label">The Clinic — where authorities stay separate</span></summary>
+    <div class="canon-body">
+      <p class="body"><strong>/clinic</strong> is a room for documents that carry institutional
+      weight — a hospital policy, a professional guideline current or retired, a device label, an
+      independent study, a manufacturer's document — each admitted <strong>by you, declared by
+      you</strong>: role, issuer, dates (a value, <em>unknown</em>, or <em>not applicable</em> —
+      never a guess), status, facility, scope. <strong>Every source speaks in its own institutional
+      voice, never blended</strong>: ask the room a question and each admitted source answers with
+      its exact passages under its role and status, side by side; a role with nothing admitted says
+      <strong>&ldquo;No admitted source of this role is present&rdquo;</strong> — never that medicine
+      has no answer. Whether two passages <em>disagree</em> is a judgment, so it exists only as a
+      model proposal with the passages attached or as your ruling — the page never claims it on its
+      own. Supersession and family membership are rulings, never inferred from a title.</p>
+      <p class="body"><strong>The room answers questions about documents and never about a
+      patient.</strong> Two gates stand at its door. The question gate refuses a question about a
+      particular patient — yours, this one, the one in bed 4, a person described by age and sex —
+      whether or not an identifier appears, because this is a policy-and-evidence lane, not
+      clinical decision support; it does not advise, choose a treatment, or overrule an order. The
+      document gate looks for <strong>identifiers, not the word &ldquo;patient&rdquo;</strong>: a
+      guideline's ordinary clinical language is admitted; an MRN or account number with a value, a
+      date of birth with an actual date, a name paired with a record field, is
+      <strong>refused with no override</strong>; a document that merely resembles a case note is
+      <strong>held for inspection</strong> — in memory only, on no disk, seen by no model, in no
+      Keeper entry and no Vault — until you cancel it or attest that it is a lawful reference
+      document. <strong>Nothing about a question is ever kept</strong>, accepted or refused; a
+      refusal leaves only the fact of itself: time, lane, rule. An institution's name is never
+      treated as patient information. Restricted material stays on this machine and out of every
+      public artifact.</p>
+
+      </div>
+  </details>
+</section>
+
+<section class="cl" id="the-bench-working-on-a-word-you-already-kept">
+  <details class="canon">
+    <summary><span class="section-label">The Bench — working on a word you already kept</span></summary>
+    <div class="canon-body">
+      <p class="body"><strong>⚒ Bench</strong> opens a kept word and hands you its parts: a
+      <strong>record</strong> if your own run wrote one, or <strong>clearly-labelled <strong>guesses</strong></strong>
+      if it didn't. A model splits your definition into the pieces any rework must carry; you edit
+      those pieces and confirm them before anything runs, because a model can split your meaning
+      wrong, and a wrong piece aims every step after it at the wrong target. Each piece gets a role
+      in plain words — required means <strong>remove this and it becomes a different concept</strong>;
+      tension is the contradiction that gives it its charge. You declare how the pieces relate — in
+      <strong>your own verbs</strong>, not a preset menu: X conceals Y, X
+      <strong>becomes evidence against</strong> Y — because four nouns in a bag are not a concept.</p>
+      <p class="body">The payoff is the <strong>concept, not the coin</strong>.
+      <strong>Build the concept</strong> returns a statement and its anatomy, with an honest
+      accounting of every ingredient; a lost required piece and a silently dropped relation are both
+      reported in code. Every round keeps its own evidence — <strong>the untouched raw model
+      output</strong>, byte for byte, plus which model built it and the exact definition it built
+      from — and a field too long for the page is cut <strong>with a note saying so</strong>, the
+      full text surviving in the raw. This is measured, not hoped: in a controlled pair of preserved
+      rounds, declaring relations made the built anatomy <strong>reorganize around them</strong>,
+      including in fields no relation touched. Naming comes after, only if you ask, and <em>keep the
+      existing name</em> is always the first option, inserted by code: it stands unless the reviewer
+      stakes a real improvement, so the correct answer “no name beats the one it has” is finally one
+      the tool can give. The coinage lab survives behind <strong>Try a coined form</strong> — meaning
+      first, structure second, language third, coinage last, and <strong>sometimes never</strong>.</p>
+      <details style="margin:8px 0">
+        <summary style="cursor:pointer;color:var(--muted);font-size:12.5px;font-weight:600">The coinage lab, when you do want a coin</summary>
+        <div style="margin-top:8px">
+        <p class="body">Four diagnoses first — meaning, construction, expectation, sayability — with
+        no overall score, because “awkward” hides which of the four is wrong. Lines with a right
+        answer somewhere are tagged <strong>checkable — not checked</strong>. Then materials and a
+        method, with <strong>no limit on materials</strong>: pick everything on the screen if you
+        want; a coin of eleven stems is a bad coin, not an invalid request, and anything a build
+        never touched is <strong>named underneath it</strong>, read off the letters each build
+        declared. The seam check proves only where the letters came from — a coin can keep the
+        <strong>ancestry of its letters and lose</strong> the ancestry of its sense. A part you mark
+        🔒 is a warning, not a gate. Overrule any verdict; it is
+        <strong>written down and nothing else happens</strong> — the corrections pile up so any
+        future second reviewer can be measured against them rather than trusted.</p>
+        </div>
+      </details>
+
+      </div>
+  </details>
+</section>
+
+<section class="movement">
+<div class="about-movement" id="what-accumulates">What accumulates
+        <span class="why">The record is the product. These are the shapes it takes once you have ruled.</span></div>
+      </section>
+
+<section class="cl" id="the-library-where-kept-things-live">
+  <details class="canon">
+    <summary><span class="section-label">The Library — where kept things live</span></summary>
+    <div class="canon-body">
+      <p class="body"><strong>Library</strong> is every word this tool has ever put in front of you —
+      in <strong>alphabetical order</strong>, nothing ever falling off — each under the ruling it
+      carries: kept, reworked, set aside, or <strong>undecided</strong>, which is most of them and is
+      the point. Click a ruling chip to see everything under it. Alternate names for one concept fold
+      under the concept they name.</p>
+      <p class="body">Under the tally sits a second band of square chips: <strong>what the record
+      says, beside what you ruled</strong>. Friction objected; an established term already covers
+      this; the anchor is not in the source text; nothing was checked. They are not a second verdict
+      and they never add up to a score — a word with nothing against it gets no chip at all, because
+      silence is the good state. An entry reading “<strong>Friction: reject · you: accepted</strong>”
+      is a word the critic argued against and you kept, which is a normal outcome and not a conflict
+      to resolve.</p>
+      <p class="body"><strong>A partial workup is not a reading.</strong> A deep run splits your
+      passage into components and forges each one separately. When some of them fail — a dead model
+      call, a rate limit, a provider that never answered — the page says so <strong>first</strong>,
+      before anything else on it: <em>PARTIAL WORKUP — n of m components completed. No overall
+      reading exists.</em> That line is a fact, not an explanation, so it is never folded behind a
+      mark. <strong>Coverage is not completion</strong>: the extractor may account for every part of
+      your passage and still have analysed one component of six, and the page states both numbers
+      rather than letting the first speak for the second. Every count is scoped to what actually
+      completed. <strong>A failure to run is not a finding</strong> — nothing judged the components
+      that did not complete, in either direction — and each of them keeps its own retry, which
+      disturbs nothing that finished.</p>
+      <p class="body"><strong>What a run cost, in requests rather than renders.</strong> Every real
+      HTTP attempt a run makes is recorded once — which component, which stage, which attempt, how
+      long, what came back, and whether another call was in flight beside it. A retried call is
+      three attempts, not one. Attempts that failed are recorded too, because a run that produced
+      nothing is exactly the run whose history you need. What is never recorded: your passage, the
+      prompt, or any credential. And a rate limit is not something Nikodemus tries to outwait in
+      nine seconds — if the provider names a wait that fits the run's disclosed budget it waits
+      exactly that once, and otherwise it stops and hands the retry back to you, because a call that
+      times out may still have cost money.</p>
+      <p class="body"><strong>A broken answer is not retried behind your back.</strong> If a
+      reply dies before the model has written anything, Nikodemus tries again inside a budget
+      it has already declared. If it dies <em>after</em> the model started writing, it stops:
+      that request was generated and billed, and quietly asking again would spend twice and
+      could return a different answer with nothing saying so. The retry is yours to make.
+      Nikodemus is also the only thing retrying — the underlying client's own retries are
+      switched off, so the number of attempts on the record is the number of requests that
+      were actually made, and every attempt records which client library made it.</p>
+      <p class="body">Friction's verdict is about <strong>craft</strong> — is this a well-made word.
+      The support box below it is about <strong>grounding</strong> — did the quoted passage establish
+      this. <strong>They answer different questions</strong>, so a word can survive on craft while
+      its anchor fails to license the claim, and that is not the tool contradicting itself.</p>
+      <p class="body"><strong>No ruling is final.</strong> Rule again whenever you like; the log is
+      append-only, so the earlier ruling is kept, the rulings that disagree say so, and the latest
+      one counts. Accepting something that repeats a definition you already own puts the question to
+      you first, and <strong>keeping it anyway is now recorded</strong> with your reason — a
+      definition can outgrow one word, but a duplicate with no note saying the question was asked is
+      a mislabelled entry in a corpus meant to be read back later.</p>
+      <p class="body"><strong>The meaning is yours to write.</strong> Open any word and
+      <em>write the meaning yourself</em> — a run's definition is a proposal. The sentence you
+      replace is kept and labelled, and <strong>the grounding resets</strong>, because every check
+      ever run on that word was run against the sentence you just retired. A reworked meaning
+      likewise <strong>does not inherit its parent</strong>'s evidence. <em>Run it again on this</em>
+      puts your own definition back through Friction and the lexicon check.</p>
+      <p class="body"><strong>Take it out of here</strong> exports the lexicon, your writing, the
+      data, or the whole corpus with a checksum for every file — download, share sheet, or PDF, with
+      the manifest travelling separately, because a receipt inside the box it vouches for vouches for
+      nothing.</p>
+
+      </div>
+  </details>
+</section>
+
+<section class="cl" id="the-sources">
+  <details class="canon">
+    <summary><span class="section-label">The sources</span></summary>
+    <div class="canon-body">
+      <p class="body">Every rabbithole travels to real works, and every thread writes down
+      <em>what the source shows</em> in the source's own terms, forbidden from mentioning the concept
+      that came looking. <strong>Sources</strong> turns that around: the works indexed as themselves —
+      read about the Passover Seder without reading about whichever of your words reached it. Who
+      came, when, and what the reviewer ruled folds beneath each entry. Where two runs described one
+      source, both accounts are kept — <strong>difference is not disagreement</strong>. All of it is
+      recall, never retrieval, and each account names the run that wrote it. And when an entry
+      belongs to a work you created, its row says so — <em>Enter The Fall</em> — the door from
+      recall <em>about</em> a work into the work's own room, where retrieval lives.</p>
+
+      </div>
+  </details>
+</section>
+
+<section class="cl" id="the-map-where-things-connect">
+  <details class="canon">
+    <summary><span class="section-label">The Map — where things connect</span></summary>
+    <div class="canon-body">
+      <p class="body"><strong>🗺 Map</strong> is the whole corpus drawn as it happened — every run a
+      box, every recorded connection a road, folded into day columns you can travel. <strong>◫
+      Aerial</strong> shows all of it in one glance: every day, its runs, and the words you accepted,
+      click a day to dive. The <strong>Wayfinder</strong> takes two concepts and finds
+      <strong>every honest route at once</strong>, like the alternatives on a road map: Direct,
+      Lineage, Well-trodden, and History — the chain of runs your thinking actually took. Every road
+      identifies itself: recorded, <strong>reconstructed from snapshot</strong>, declared by you, or
+      inferred. Inferred is a model's proposal, checked in code against what the map actually
+      contains, editable, and a road only when you declare it — a ratified proposal keeps both halves
+      of its history, proposed by the model and ruled real by you. Three percent of shelf pairs are
+      connected at all, so <strong>“no road exists” is the usual true answer</strong>, delivered with
+      the island sizes instead of a manufactured path. A plotted route can be handed to an
+      <strong>analysis run</strong>: claims marked “from the record” must cite the route's own roads
+      or they are demoted to interpretation in code, and interpretation stays labelled as a reading,
+      never promoted by citation. <strong>Σ Stats</strong> counts what you actually did — searches,
+      roads declared, proposals ratified, the archipelago itself — and every Wayfinder act lands in a
+      behavioral log kept as <strong>raw counts, never conclusions</strong>: evidence of how you
+      travel your corpus, deliberately left uninterpreted.</p>
+
+      </div>
+  </details>
+</section>
+
+<section class="movement">
+<div class="about-movement" id="what-holds-it">What holds it
+        <span class="why">Two organs that keep and never produce: one restores a verified past exactly, one narrates and never decides.</span></div>
+      </section>
+
+<section class="cl" id="the-vault-restoration-not-regeneration">
+  <details class="canon">
+    <summary><span class="section-label">The Vault — restoration, not regeneration</span></summary>
+    <div class="canon-body">
+      <p class="body">The corpus is sealed into an encrypted vault on every server start and after
+      changes settle, to a destination you chose, under a recovery secret shown once and proven
+      twice — password manager and paper — because <strong>losing it makes every vault
+      permanently unreadable</strong>, and that is accepted on purpose. A vault is real only when a
+      copy fetched back from off this machine has been opened and verified; the record keeps which
+      vaults were drilled and never prunes one it has no sealed row for. The Vault
+      <strong>restores a verified past; it regrows and improves nothing</strong>. One process is
+      the corpus's only writer at a time, and the page's vault strip turns red the moment sealing
+      stalls.</p>
+
+      </div>
+  </details>
+</section>
+
+<section class="cl" id="the-keeper-custody-of-the-narration-not-authority-over-the-r">
+  <details class="canon">
+    <summary><span class="section-label">The Keeper — custody of the narration, not authority over the record</span></summary>
+    <div class="canon-body">
+      <p class="body">The Book has a resident narrator, summoned and never scheduled: ask it to
+      close a stretch of work and it writes an entry in a voice you and it author together. Its
+      speech comes in three classes and each is marked — <strong>event claims</strong> that must
+      resolve to records (an invalid one is shown as UNGROUNDED, never quietly re-classed),
+      <strong>inferences</strong> that are revisable proposals about you and never facts about you,
+      and flourish. It may have opinions; it may disagree with you in its voice forever; it may be
+      wrong, and its wrongness stays inspectable — every entry is kept, revised, or rejected by
+      you, and the full model input for every entry is preserved before the call. It may interpret
+      you; <strong>it may form toward you, but it must never form you silently</strong>. Off stops
+      its adaptation as well as its speech.</p>
+
+      </div>
+  </details>
+</section>
+
+<section class="movement">
+<div class="about-movement" id="what-it-will-not-claim">What it will not claim
+        <span class="why">The limits are part of the constitution, not an appendix to it.</span></div>
+      <details style="margin:10px 0">
+        <summary style="cursor:pointer;color:var(--muted);font-size:12.5px;font-weight:600">What it does not do</summary>
+        <div style="margin-top:8px">
+        <p class="body">It never checks whether it actually looked. Every check asks “is this claim
+        supported?”; none asks “did I search before saying nothing exists?” An absence claim is the
+        least trustworthy thing this tool produces.</p>
+        <p class="body">Sprout threads and Refract terms are generated from <strong>recall</strong>;
+        only the review searches. <strong>Sprout has never once come back empty</strong> —
+        fifty-eight runs, two hundred ninety-five threads, not one saying “no parallel exists.” A
+        stage that cannot say no is producing parallels rather than finding them; the reviewer then
+        walks most back, with about two in three arriving strained. And a third of the sprout
+        reviews never searched — thirty-eight of fifty-eight consulted live sources; the rest are
+        <strong>recall reviewed by recall</strong>, and each run lists which it was. (The older
+        measurement here read “<strong>Half the sprout reviews never searched</strong>”; the share
+        has improved and the sentence stays honest by saying so.)</p>
+        <p class="body"><strong>Taking a word apart is not looking it up.</strong> Etymologies and
+        first-attestation claims are a model's account of the record, reviewed by a pass that may or
+        may not have searched — the run says which. The famous frauds of this genre are all neat
+        stories, so a plausible one is exactly what to distrust.</p>
+        <p class="body">Duplicate detection compares definitions as text; two wordings of one idea
+        pass as separate concepts. It offers, never gates — which is why the decline is written
+        down.</p>
+        <p class="body">The archetype stage <strong>checks <em>shape</em> and nothing else</strong>.
+        It is the one stage with nothing outside itself to test against, which is exactly why it is
+        <strong>the one to distrust</strong>.</p>
+        <p class="body">Two in five lineage links on the shelf are <strong>reconstructed rather than
+        recorded</strong> — it was half when first measured, and the share improves because sprouts
+        store their parent while refractions and revisions never did: theirs is derived and every
+        derived link says so on its face. The Map draws recorded lineage and the
+        roads you have declared — it never draws an inferred road into the permanent geography;
+        proposals appear only inside your plotted route and vanish unless you make them real.</p>
+        <p class="body">Six of the oldest kept words once had <strong>no meaning stored
+        anywhere</strong> — accepted before definitions were written at judgment time. All six have
+        since been given meanings by hand through the shelf; the history of the hole is kept on their
+        entries. Twenty runs from 22–23 August still have a receipt and no snapshot — titles survive,
+        reasoning doesn't (re-verified today: exactly twenty, sixteen and four). Nothing has been
+        lost either way since.</p>
+        <p class="body"><strong>An anchor is one quotation</strong>, and some ideas live in a
+        sequence — the model picks one span and the support check rightly reports it doesn't carry
+        the whole thing. When that happens the evidence selection failed, not necessarily the idea.
+        <strong>Compound anchors don't exist yet</strong> — and the Documents wing now measures the
+        demand for them: “insufficient span” rulings whose suggested reselection still wouldn't
+        suffice are the signal, countable from the log.</p>
+        <p class="body">The Bench has <strong>no dictionary, word list or corpus wired in</strong>.
+        Its etymologies and syllable claims are tagged checkable — not checked, in code — and the tag
+        is all you get; a true etymology and a folk one look identical there.</p>
+        <p class="body"><strong>Documents reads five formats</strong> — EPUB, saved web pages, plain
+        text, PDF, and DOCX — each under its own named, versioned extractor, never a shared
+        &ldquo;universal&rdquo; one. A scanned PDF with no text layer is refused plainly rather than
+        mangled: <strong>there is no OCR</strong>. Its search matches exact text, not meanings. An
+        ingredient crossed from a document is stored with its span, but the Bench does not yet offer
+        it when you open a word — the two still meet by hand.</p>
+        <p class="body"><strong>The Clinic is one room, not a medical library.</strong> Room One
+        holds six seats and no bulk ingestion; its answers are exact retrieved passages, never a
+        synthesis, and it is <strong>never clinical decision support</strong>. The screens at its
+        door are heuristic backstops and say so — the lane's shape (questions about documents, not
+        patients) is the real control. The room is shipped but <strong>awaiting shadow-mode
+        validation</strong> on real nights; until then its usefulness is a claim, not a finding.</p>
+        <p class="body"><strong>The works registry links nothing by itself.</strong> Creating a work
+        titled exactly like a source entry links zero entries — every link is a ruling you make, one
+        at a time, and unlinked entries render exactly as they always did. Declaring a Wikipedia
+        page or a Wikidata QID fetches nothing; the outside shelf's doors open searches and record
+        nothing; an access status exists only where you stated one. The Map's own page has no
+        link-from-map control yet — links are made from Sources rows and inside the room. And two
+        works named <em>The Fall</em> stay two works forever: the tool will never merge them, which
+        also means a duplicate you created by mistake is yours to retract, never its to clean
+        up.</p>
+        <p class="body"><strong>Media transcribes nothing.</strong> <span data-brand>Nikodemus</span> has no speech
+        recognition: you supply the SRT or WebVTT, and a plain-text transcript is refused because
+        it cannot anchor time. No platform is touched — no YouTube, no RSS, no stream capture; a
+        recording enters only as a file you own, and duration is the player's live reading, never a
+        stored claim. The parser's rules are pinned by revision: cue lines join with single spaces,
+        WebVTT voice tags become speakers, other markup is stripped and counted, malformed cues are
+        skipped and counted — never silently. Speakers exist only where the file declares them.
+        And the model's support question does not run on media claims yet — only your own ruling
+        does.</p>
+      <p class="body"><strong>Nothing here reads your writing.</strong> The writing room is a room;
+        the tool sees only what you hand it by pressing a button. The whole thing runs as
+        <strong>a local server on your own machine</strong> with no account or telemetry of its own.
+        Text leaves the machine only through a lane you explicitly invoke: bounded model payloads go
+        to your configured model provider through <strong>your own API key</strong>, and the
+        live-review lanes may send search queries through their configured search service. <span data-brand>Nikodemus</span>
+        records what it supplied and what was consulted; third-party handling remains governed by
+        those providers and your account settings — that part is not <span data-brand>Nikodemus</span>&#8217;s to promise. Its canonical records are
+        <strong>plain JSON files on your disk</strong> (and JSONL logs), readable without this tool
+        and exportable in full with checksums; imported originals stay byte-intact in their native
+        format, and the search index is SQLite — a rebuildable index, never the authority. No account, no telemetry, no copy anywhere you can't see.</p>
+        </div>
+      </details>
+
+      </section>
+
+<section class="cl" id="whether-any-of-this-beats-a-plain-prompt">
+  <details class="canon">
+    <summary><span class="section-label">Whether any of this beats a plain prompt</span></summary>
+    <div class="canon-body">
+      <p class="body">Every check inside the tool asks <em>is this claim supported</em>; none asks
+      <em>is this pipeline better than one line of prompt</em>. <code>scripts/blind.py</code> asks
+      it: real words from your corpus run through the constrained stage and through a bare prompt,
+      every tell stripped, shuffled, and you pick — then it tells you how often a coin flip does that
+      well. Under six decided pairs it refuses to conclude anything.</p>
+
+      <p class="body muted" style="font-size:13.5px"><span data-brand>Nikodemus</span> is the concept lens of a larger
+      family — the same receipts-not-verdicts machinery that elsewhere investigates public records,
+      corporate conduct, and news coverage, here pointed inward at ideas. Tap anything under Recent
+      to reopen it. “Another round” retries briefed on what failed. Runs keep working when you close
+      the tab, and whatever was going is waiting under <strong>Where you left off</strong>.</p>
+    </div>
+  </details>
+</section>
+
+<p class="foot" style="margin-top:36px">Commit <code>__COMMIT__</code>. Amended in the
+same block as any wing that ships, by standing law.</p>
+
+<script>
+// The only script on the page. Native <details> already answers the
+// keyboard; this adds the one thing it cannot do by itself — open all of
+// them at once — and makes printing show the whole law rather than a list
+// of closed summaries.
+(function () {
+  var btn = document.getElementById('expand-all');
+  var all = function () { return document.querySelectorAll('details.canon'); };
+  function setAll(open) {
+    all().forEach(function (d) { d.open = open; });
+    btn.textContent = open ? 'Collapse everything' : 'Expand everything';
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  btn.addEventListener('click', function () {
+    setAll(btn.getAttribute('aria-expanded') !== 'true');
+  });
+  // A link into a closed section must land on open text, not on a summary.
+  function openTarget() {
+    var id = (location.hash || '').slice(1);
+    if (!id) return;
+    var el = document.getElementById(id);
+    if (!el) return;
+    var d = el.querySelector('details.canon') || el.closest('details.canon');
+    if (d) d.open = true;
+    el.scrollIntoView();
+  }
+  window.addEventListener('hashchange', openTarget);
+  openTarget();
+  window.addEventListener('beforeprint', function () { setAll(true); });
+})();
+</script>
+</body>
+</html>

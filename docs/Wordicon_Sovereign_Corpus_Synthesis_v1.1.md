@@ -1,5 +1,14 @@
 # Wordicon Sovereign Corpus — Synthesis Addendum v1.1
 
+> **HISTORICAL DESIGN RECORD — NOT A CURRENT SPECIFICATION.**
+> This is the v1.1 synthesis addendum, written before the concept-first ruling
+> (`adr-concept-first.md`) and before the rename to Nikodemus
+> (`adr-nikodemus.md`). It is preserved because the reasoning is part of
+> the record, and its body is untouched — nothing here was modernised to
+> make it look current. Where it describes behaviour, believe
+> the ADRs in this directory instead.
+
+
 **Reconciles:** the v1.0 blueprint (GPT) against the Gemini exchange on the same architecture. Written as amendments, not a rewrite — the v1.0 document stays the base.
 
 ---

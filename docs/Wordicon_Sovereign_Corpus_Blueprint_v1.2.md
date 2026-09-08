@@ -1,5 +1,14 @@
 # Wordicon Sovereign Corpus
 
+> **HISTORICAL DESIGN RECORD — NOT A CURRENT SPECIFICATION.**
+> This is the consolidated v1.2 blueprint, written before the concept-first ruling
+> (`adr-concept-first.md`) and before the rename to Nikodemus
+> (`adr-nikodemus.md`). It is preserved because the reasoning is part of
+> the record, and its body is untouched — nothing here was modernised to
+> make it look current. Where it describes behaviour, believe
+> the ADRs in this directory and `epistemic-contract.md` instead.
+
+
 ## Complete Product and Technical Blueprint — v1.2 (consolidated, canonical)
 
 **Supersedes:** v1.0 (base architecture) and the v1.1 synthesis addendum (revocation, derived-constraint, permission-profile, rejection-capture amendments). Those two documents are retained as change history in `CHANGELOG.md`; this file is the single authoritative specification. Where v1.0 and the Gemini exchange that prompted v1.1 disagreed, v1.0's stricter trust-zone boundaries win unless a specific amendment below says otherwise.

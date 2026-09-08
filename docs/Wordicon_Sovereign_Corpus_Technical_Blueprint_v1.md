@@ -1,5 +1,14 @@
 # Wordicon Sovereign Corpus
 
+> **HISTORICAL DESIGN RECORD — NOT A CURRENT SPECIFICATION.**
+> This is the original v1.0 technical blueprint, written before the concept-first ruling
+> (`adr-concept-first.md`) and before the rename to Nikodemus
+> (`adr-nikodemus.md`). It is preserved because the reasoning is part of
+> the record, and its body is untouched — nothing here was modernised to
+> make it look current. Where it describes behaviour, believe
+> `nikodemus-capability-census.md` for what is actually built instead.
+
+
 ## Complete Product and Technical Blueprint — v1.0
 
 **Audience:** Product designer, software architect, AI engineer, data engineer, security reviewer, and implementation agent.
