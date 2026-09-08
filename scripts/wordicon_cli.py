@@ -5730,16 +5730,21 @@ def record_composite_run(kind: str, result: dict, input_text: str, gateway=None,
         kernel_version = load_seed_corpus()["kernel"]["kernel_version"]
     except Exception:  # noqa: BLE001 — the seed is fixture data; its absence must not lose the record
         kernel_version = 0
-    receipt = receipts_mod.build_private_receipt(
-        receipt_id=f"receipt_{trace_id}", trace_id=trace_id, operation=kind,
-        input_text=input_text, kernel_version=kernel_version, engine_version="cli-0.2.0",
-        sources=[], derived_constraints_applied=[], claims=[], candidates=[],
-        rejections=[], warnings=[], model_calls=[model_call],
-        prompt_identities=list(prompt_identities if prompt_identities is not None
-                               else (result.get("prompt_identities") or [])),
-        composite=composite)
-    out = {"trace_id": trace_id, "receipt_id": receipt["receipt_id"], "completion": completion}
+    out = {"trace_id": trace_id, "receipt_id": f"receipt_{trace_id}", "completion": completion}
+    receipt = None
     try:
+        # Construction is inside the guard too (gate 0): the docstring
+        # promises this never raises into the job, and a receipt that
+        # cannot be built is a record that was not written, reported as
+        # such, with its roads withheld below.
+        receipt = receipts_mod.build_private_receipt(
+            receipt_id=f"receipt_{trace_id}", trace_id=trace_id, operation=kind,
+            input_text=input_text, kernel_version=kernel_version, engine_version="cli-0.2.0",
+            sources=[], derived_constraints_applied=[], claims=[], candidates=[],
+            rejections=[], warnings=[], model_calls=[model_call],
+            prompt_identities=list(prompt_identities if prompt_identities is not None
+                                   else (result.get("prompt_identities") or [])),
+            composite=composite)
         validators.validate_receipt_invariants(receipt)
         schema_loader.validate("receipt.schema.json", receipt)
         persist_receipt(receipt)
@@ -5768,6 +5773,27 @@ def record_composite_run(kind: str, result: dict, input_text: str, gateway=None,
     except Exception as e:  # noqa: BLE001 — reported in the result, never raised into the job
         out["recorded"] = False
         out["record_error"] = str(e)[:200]
+    # Write order (gate 0): the roads that cite THIS receipt are appended
+    # only now, after the receipt and the snapshot exist. If the record
+    # could not be written, the roads are withheld and counted — a road
+    # citing an absent receipt is the defect this order prevents. A road
+    # that fails to append leaves a receipt and a snapshot from which
+    # build_overworld reconstructs it.
+    pending = [w for w in (result.get("pending_roads") or []) if callable(w)]
+    if out["recorded"]:
+        appended, failed = 0, 0
+        for _write_road in pending:
+            try:
+                _write_road()
+                appended += 1
+            except Exception as e:  # noqa: BLE001 — the receipt and snapshot stand; the road is reconstructible
+                failed += 1
+                out["roads_append_error"] = str(e)[:200]
+        out["roads_appended"] = appended
+        if failed:
+            out["roads_failed"] = failed
+    else:
+        out["roads_withheld"] = len(pending)
     return out
 
 
@@ -6156,18 +6182,6 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
     receipt_path = persist_receipt(private_receipt)
     for r in results:
         r["bff"]["receipt_id"] = private_receipt["receipt_id"]
-        # Map layer: each candidate is a node the Overworld can draw, with
-        # Friction's verdict riding on the produced-edge (rejected ones
-        # render as ghosts, not disappear — rejection is data, not deletion).
-        record_edge("produced",
-                     _node("run", trace_id, input_text[:80]),
-                     node_concept(r["bff"].get("concept_id", ""), r["bff"]["title"]),
-                     trace_id, verdict=r["bff"]["friction"].get("verdict") or "",
-                     detail=("CONTRADICTS ANCHOR: " +
-                             (r["bff"]["friction"].get("source_contradiction") or ""))
-                            if r["bff"]["friction"].get("contradicts_anchor") else "",
-                     origin="mechanical",
-                     producer=edge_producer("receipt", private_receipt["receipt_id"]))
 
     # Full result snapshot, keyed by trace_id — the receipt deliberately
     # stores only claims/titles/provenance, so without this the Flesh and
@@ -6182,6 +6196,22 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
         "summary": summary_line(private_receipt, results),
         "metrics": metrics.as_dict(),
     }, indent=2))
+
+    # Write order (gate 0): the roads last, after the receipt and the
+    # snapshot they cite exist. Map layer: each candidate is a node the map
+    # can draw, with Friction's verdict riding on the produced-edge
+    # (rejected ones render as ghosts, not disappear — rejection is data,
+    # not deletion).
+    for r in results:
+        record_edge("produced",
+                     _node("run", trace_id, input_text[:80]),
+                     node_concept(r["bff"].get("concept_id", ""), r["bff"]["title"]),
+                     trace_id, verdict=r["bff"]["friction"].get("verdict") or "",
+                     detail=("CONTRADICTS ANCHOR: " +
+                             (r["bff"]["friction"].get("source_contradiction") or ""))
+                            if r["bff"]["friction"].get("contradicts_anchor") else "",
+                     origin="mechanical",
+                     producer=edge_producer("receipt", private_receipt["receipt_id"]))
 
     print(f"\n[cost] {metrics.line()}")
     print("\n" + "=" * 60)
@@ -7231,6 +7261,7 @@ def run_decompose(text: str, gateway: Gateway, interactive: bool = True,
             print(f"      the text's own stance: {c['stance']}")
 
     groups = []
+    deferred_split = []   # road writers for the split, called by record_composite_run after its receipt exists (gate 0)
     run_avoid = list(avoid_titles or [])
     for i, c in enumerate(concepts):
         print(f"\n{'#' * 60}\nForging: {c['label']}\n{'#' * 60}")
@@ -7337,10 +7368,14 @@ def run_decompose(text: str, gateway: Gateway, interactive: bool = True,
         cmp_node = node_component(src["key"], c["label"])
         # The split was the decomposition stage's proposal, cited to the
         # parent run's own receipt (block 104); the forge link is the
-        # pipeline's, cited to the component forge's receipt.
-        record_edge("decomposed_into", src, cmp_node, result["trace_id"],
-                     detail=c["gist"][:200], origin="model_proposed",
-                     producer=edge_producer("receipt", f"receipt_{parent_trace_id}", stage="decompose"))
+        # pipeline's, cited to the component forge's receipt. The split
+        # edge is appended after the composite receipt exists (gate 0);
+        # the forge edge's receipt was persisted by run() before it
+        # returned, so it may be written now.
+        deferred_split.append(lambda _src=src, _cmp=cmp_node, _ctrace=result["trace_id"], _gist=c["gist"][:200]: record_edge(
+            "decomposed_into", _src, _cmp, _ctrace,
+            detail=_gist, origin="model_proposed",
+            producer=edge_producer("receipt", f"receipt_{parent_trace_id}", stage="decompose")))
         for r in result.get("candidates", []):
             record_edge("forged_as", cmp_node,
                          node_concept(r["bff"].get("concept_id", ""), r["bff"]["title"]),
@@ -7388,9 +7423,14 @@ def run_decompose(text: str, gateway: Gateway, interactive: bool = True,
         close_attempt_ledger(gateway)
     out["attempts"] = _attempts
     out["attempt_summary"] = attempt_summary(_attempts)
+    # Write order (gate 0): the split roads cite the composite receipt,
+    # which record_composite_run persists; it appends them only after that
+    # receipt and the snapshot exist, and reports how many it withheld if
+    # the record could not be written.
     out.update(record_composite_run("decompose",
                                     {"groups": _groups_for_record, "gateway": gateway.name,
-                                     "attempts": _attempts},
+                                     "attempts": _attempts,
+                                     "pending_roads": deferred_split},
                                     text, gateway=gateway, trace_id=parent_trace_id,
                                     prompt_identities=prompt_identities_since(_pmark, gateway)))
     return out
@@ -7442,6 +7482,7 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
     _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
 
     results = []
+    deferred_edges = []   # road writers, called after the receipt and snapshot exist (gate 0)
     if steered:
         print(f"[{gateway.name}] reconsidering {original.get('title', '')!r} under the owner's critique...")
         progress("generating", f"Reconsidering {original.get('title', '')!r} under your critique…")
@@ -7495,12 +7536,14 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
             results.append({"bff": bff, "claims_detail": []})
             # Steered = the meaning may have changed, so this is a
             # reworked-into edge to a NEW concept, not a rename of the old.
-            record_edge("reworked_into",
-                         node_concept(original.get("concept_id", ""), original.get("title", "")),
-                         node_concept(concept_id, title),
-                         trace_id, verdict=adversarial.get("verdict") or "",
-                         detail=(owner_note or "")[:200], origin="mechanical",
-                         producer=edge_producer("receipt", f"receipt_{trace_id}"))
+            # Appended after the receipt and snapshot exist (gate 0).
+            deferred_edges.append(lambda _cid=concept_id, _title=title, _adv=adversarial: record_edge(
+                "reworked_into",
+                node_concept(original.get("concept_id", ""), original.get("title", "")),
+                node_concept(_cid, _title),
+                trace_id, verdict=_adv.get("verdict") or "",
+                detail=(owner_note or "")[:200], origin="mechanical",
+                producer=edge_producer("receipt", f"receipt_{trace_id}")))
     else:
         # Same concept, new word — carry the original's concept_id forward
         # unchanged for every variant this call produces, since they all
@@ -7564,12 +7607,14 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
             }
             results.append({"bff": bff, "claims_detail": list(claims_detail)})
             # Unsteered = same frozen flesh, new word: a rename within one
-            # concept (shared_concept_id), never a new concept.
-            record_edge("compressed_as" if wordify else "renamed_as",
-                         node_word(original.get("title", "")), node_word(title),
-                         trace_id, verdict=adversarial.get("verdict") or "",
-                         detail=shared_concept_id, origin="mechanical",
-                         producer=edge_producer("receipt", f"receipt_{trace_id}"))
+            # concept (shared_concept_id), never a new concept. Appended
+            # after the receipt and snapshot exist (gate 0).
+            deferred_edges.append(lambda _title=title, _adv=adversarial: record_edge(
+                "compressed_as" if wordify else "renamed_as",
+                node_word(original.get("title", "")), node_word(_title),
+                trace_id, verdict=_adv.get("verdict") or "",
+                detail=shared_concept_id, origin="mechanical",
+                producer=edge_producer("receipt", f"receipt_{trace_id}")))
 
     private_receipt = receipts_mod.build_private_receipt(
         receipt_id=f"receipt_{trace_id}", trace_id=trace_id, operation="forge",
@@ -7593,6 +7638,10 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
                          "claims_detail": r["claims_detail"]} for r in results],
         "summary": summary_line(private_receipt, results),
     }, indent=2))
+
+    # Write order (gate 0): roads last, citing a receipt that now exists.
+    for _write_road in deferred_edges:
+        _write_road()
 
     return {"trace_id": trace_id, "candidates": results,
             "private_receipt": private_receipt,
@@ -7931,28 +7980,11 @@ def run_sprout(candidate: dict, gateway: Gateway,
         t["review_verdict"] = r.get("verdict", "")
         t["review_note"] = r.get("note", "")
         apply_joint_rule(t)
-        # The verdict lives ON THE EDGE: "strained" was never about the
-        # external work itself, it was about the claim that this work
-        # parallels this seed. Stable external identity means Borges is
-        # ONE node across every run that reaches him — which is what lets
-        # the Overworld notice when two runs judged the same parallel
-        # differently instead of silently shipping both.
-        if t.get("anchor_name"):
-            # Concept-first: the parallel belongs to the CONCEPT when the
-            # candidate carries an id — a rename must not orphan it. A
-            # candidate without an id (legacy, raw words) keys exactly as
-            # before.
-            record_edge("parallels",
-                         node_concept(candidate.get("concept_id") or "", title),
-                         node_external(t["anchor_name"], t.get("culture_or_work", "")),
-                         trace_id, verdict=t.get("review_verdict") or "",
-                         detail=(t.get("parallel") or "")[:200], origin="model_proposed",
-                         producer=edge_producer("receipt", f"receipt_{trace_id}", stage="sprout"))
-    if parent_trace_id:
-        record_edge("continued_from", _node("run", parent_trace_id, ""),
-                     _node("run", trace_id, title), trace_id,
-                     detail=(via or "")[:200], origin="mechanical",
-                     producer=edge_producer("receipt", f"receipt_{trace_id}"))
+    # The roads this run draws are appended LAST, after the receipt and the
+    # snapshot exist — see the block after the snapshot write. Eighteen
+    # roads in the owner's record cite receipts that were never written,
+    # because the edges used to be appended here, before the receipt was
+    # built and validated, and three sprouts failed in between.
 
     # A receipt so the run appears on the Library shelf like everything
     # else; "crossbreed" is the frozen-enum operation closest to what this
@@ -8009,6 +8041,33 @@ def run_sprout(candidate: dict, gateway: Gateway,
             # reported nothing.
             "acquisition_usage": getattr(gateway, "last_acquisition", None),
     }, indent=2))
+
+    # Write order (Map Focus, gate 0): the roads come last, so every
+    # citation they carry resolves the moment it is written. A failure
+    # before this point leaves no road; a failure here leaves a receipt and
+    # a snapshot from which build_overworld reconstructs the same roads.
+    # The verdict lives ON THE EDGE: "strained" was never about the
+    # external work itself, it was about the claim that this work parallels
+    # this seed. Stable external identity means one node per external work
+    # across every run that reaches it — which is what lets the map notice
+    # when two runs judged the same parallel differently.
+    for t in threads:
+        if t.get("anchor_name"):
+            # Concept-first: the parallel belongs to the CONCEPT when the
+            # candidate carries an id — a rename must not orphan it. A
+            # candidate without an id (legacy, raw words) keys exactly as
+            # before.
+            record_edge("parallels",
+                         node_concept(candidate.get("concept_id") or "", title),
+                         node_external(t["anchor_name"], t.get("culture_or_work", "")),
+                         trace_id, verdict=t.get("review_verdict") or "",
+                         detail=(t.get("parallel") or "")[:200], origin="model_proposed",
+                         producer=edge_producer("receipt", f"receipt_{trace_id}", stage="sprout"))
+    if parent_trace_id:
+        record_edge("continued_from", _node("run", parent_trace_id, ""),
+                     _node("run", trace_id, title), trace_id,
+                     detail=(via or "")[:200], origin="mechanical",
+                     producer=edge_producer("receipt", f"receipt_{trace_id}"))
 
     return {"trace_id": trace_id, "mode": "sprout",
             "source_title": title, "threads": threads, "doors": doors,
@@ -9120,19 +9179,6 @@ def run_archetype(candidate: dict, gateway: Gateway,
     if not arch["facets"]:
         raise RuntimeError("archetype returned no usable facets")
 
-    # An archetype is a claim ABOUT a concept, not a step in its history —
-    # same shape as a translation or a parallel, so it hangs off the
-    # concept (by id when the candidate carries one) rather than carrying
-    # lineage through it.
-    record_edge("archetype_of",
-                 node_concept(candidate.get("concept_id") or "", title),
-                 node_external(arch["figure"][:60] or "unnamed figure", "archetype"),
-                 trace_id,
-                 verdict="unfalsifiable" if arch["unfalsifiable"] else "falsifiable",
-                 detail=f"{arch['invented_count']} of {len(arch['facets'])} facets invented",
-                 origin="model_proposed",
-                 producer=edge_producer("result_snapshot", trace_id, stage="archetype"))
-
     summary = (f"{len(arch['facets'])} facet(s) · "
                f"{arch['invented_count']} invented, "
                f"{sum(1 for f in arch['facets'] if f['rests_on'] == 'tradition')} on a named "
@@ -9165,6 +9211,20 @@ def run_archetype(candidate: dict, gateway: Gateway,
         "archetype": arch, "near_existing": [c.get("name", "") for c in near],
         "summary": summary,
     }, indent=2))
+
+    # Write order (gate 0): the road last, citing the snapshot that now
+    # exists. An archetype is a claim ABOUT a concept, not a step in its
+    # history — same shape as a translation or a parallel, so it hangs off
+    # the concept (by id when the candidate carries one) rather than
+    # carrying lineage through it.
+    record_edge("archetype_of",
+                 node_concept(candidate.get("concept_id") or "", title),
+                 node_external(arch["figure"][:60] or "unnamed figure", "archetype"),
+                 trace_id,
+                 verdict="unfalsifiable" if arch["unfalsifiable"] else "falsifiable",
+                 detail=f"{arch['invented_count']} of {len(arch['facets'])} facets invented",
+                 origin="model_proposed",
+                 producer=edge_producer("result_snapshot", trace_id, stage="archetype"))
 
     return {"trace_id": trace_id, "mode": "archetype", "source_title": title,
             "archetype": arch, "near_existing": [c.get("name", "") for c in near],
@@ -9227,28 +9287,10 @@ def run_refract(candidate: dict, gateway: Gateway,
             r["review_note"] = (r["review_note"] + " " if r["review_note"] else "") + \
                 (f"(Demoted from holds: the term settles what the concept leaves open — "
                  f"{r['carries_verdict']}.)")
-        # Edge per refraction, verdict on the relationship: a real Chinese
-        # term with a wrong equivalence claim is a real node with a bad
-        # edge — the two failures are independent (that's the two-axis
-        # rule above) and the map keeps them apart the same way.
-        if (r.get("romanization") or r.get("term") or "").strip():
-            record_edge("translated_as",
-                         node_concept(candidate.get("concept_id") or "", title),
-                         node_translation(r.get("language", ""),
-                                           r.get("romanization") or r.get("term") or ""),
-                         trace_id, verdict=r["review_verdict"],
-                         detail=f"attestation: {r['attestation'] or 'unstated'}",
-                         origin="model_proposed",
-                         producer=edge_producer("receipt", f"receipt_{trace_id}", stage="refract"))
+        # The edge per refraction is appended after the receipt and the
+        # snapshot exist — see the block after the snapshot write (gate 0).
     fossil_verdict = (review_parsed.get("fossil_verdict") or "").strip()
     fossil_note = (review_parsed.get("fossil_note") or "").strip()
-    if english_fossil:
-        record_edge("english_fossil",
-                     node_concept(candidate.get("concept_id") or "", title),
-                     node_external(english_fossil[:60], "English etymology"),
-                     trace_id, verdict=fossil_verdict, detail=fossil_check[:200],
-                     origin="model_proposed",
-                     producer=edge_producer("receipt", f"receipt_{trace_id}", stage="refract"))
 
     # Same frozen-enum reuse as sprout: "crossbreed" is the closest
     # operation — crossing one concept with other languages' stock.
@@ -9304,6 +9346,29 @@ def run_refract(candidate: dict, gateway: Gateway,
             # reported nothing.
             "acquisition_usage": getattr(gateway, "last_acquisition", None),
     }, indent=2))
+
+    # Write order (gate 0): roads last, citing a receipt that now exists.
+    # Edge per refraction, verdict on the relationship: a real Chinese
+    # term with a wrong equivalence claim is a real node with a bad
+    # edge — the two failures are independent (that's the two-axis
+    # rule above) and the map keeps them apart the same way.
+    for r in refractions:
+        if (r.get("romanization") or r.get("term") or "").strip():
+            record_edge("translated_as",
+                         node_concept(candidate.get("concept_id") or "", title),
+                         node_translation(r.get("language", ""),
+                                           r.get("romanization") or r.get("term") or ""),
+                         trace_id, verdict=r["review_verdict"],
+                         detail=f"attestation: {r['attestation'] or 'unstated'}",
+                         origin="model_proposed",
+                         producer=edge_producer("receipt", f"receipt_{trace_id}", stage="refract"))
+    if english_fossil:
+        record_edge("english_fossil",
+                     node_concept(candidate.get("concept_id") or "", title),
+                     node_external(english_fossil[:60], "English etymology"),
+                     trace_id, verdict=fossil_verdict, detail=fossil_check[:200],
+                     origin="model_proposed",
+                     producer=edge_producer("receipt", f"receipt_{trace_id}", stage="refract"))
 
     return {"trace_id": trace_id, "mode": "refract",
             "source_title": title, "refractions": refractions,
@@ -11883,6 +11948,7 @@ def run_deep(text: str, gateway: Gateway, interactive: bool = True,
         attack["redundancy_note"] = ""
 
     groups = []
+    pending_roads = []   # gate 0: road writers for the split, called by record_composite_run after its receipt exists
     run_avoid = list(avoid_titles or [])
     for i, c in enumerate(components):
         label = c.get("label", f"component {i + 1}")
@@ -11950,10 +12016,14 @@ def run_deep(text: str, gateway: Gateway, interactive: bool = True,
         cmp_node = node_component(src["key"], label)
         # As in decompose (block 104): the split is the dissection stage's
         # proposal cited to the deep run's own receipt; the forge link is
-        # mechanical, cited to the component forge's receipt.
-        record_edge("decomposed_into", src, cmp_node, result["trace_id"],
-                     detail=c.get("gist", "")[:200], origin="model_proposed",
-                     producer=edge_producer("receipt", f"receipt_{deep_trace_id}", stage="dissect"))
+        # mechanical, cited to the component forge's receipt. The split
+        # road is PENDING until record_composite_run has persisted that
+        # receipt (gate 0) — the caller records the composite, and the
+        # roads are appended there, after it exists.
+        pending_roads.append(lambda _src=src, _cmp=cmp_node, _ctrace=result["trace_id"], _gist=c.get("gist", "")[:200]: record_edge(
+            "decomposed_into", _src, _cmp, _ctrace,
+            detail=_gist, origin="model_proposed",
+            producer=edge_producer("receipt", f"receipt_{deep_trace_id}", stage="dissect")))
         for r in result.get("candidates", []):
             record_edge("forged_as", cmp_node,
                          node_concept(r["bff"].get("concept_id", ""), r["bff"]["title"]),
@@ -11968,6 +12038,7 @@ def run_deep(text: str, gateway: Gateway, interactive: bool = True,
         close_attempt_ledger(gateway)
     return {"source_text": text, "attack": attack, "groups": groups,
             "gesture": gesture,
+            "pending_roads": pending_roads,
             "partial": bool(n_failed), "n_failed": n_failed,
             "n_completed": len(groups) - n_failed, "n_components": len(groups),
             "trace_id": deep_trace_id,
@@ -11989,7 +12060,24 @@ def main() -> int:
 
     gateway = make_gateway(args.gateway, args.model)
     if args.mode == "deep":
-        run_deep(args.input_text, gateway, interactive=not args.non_interactive)
+        _r = run_deep(args.input_text, gateway, interactive=not args.non_interactive)
+        # The composite record — and with it the split roads, which cite the
+        # composite receipt (gate 0). The server writes this for app runs;
+        # a terminal run never did, so its split roads cited a receipt that
+        # was never written.
+        _rec = record_composite_run("deep", {
+            "groups": [{"label": g.get("label", ""), "gist": g.get("gist", ""), "anchor": g.get("anchor", ""),
+                        "anchor_verified": g.get("anchor_verified", False),
+                        "trace_id": (g.get("result") or {}).get("trace_id", ""),
+                        "receipt_id": ((g.get("result") or {}).get("private_receipt") or {}).get("receipt_id", ""),
+                        "failed": bool(g.get("failed"))} for g in _r.get("groups") or []],
+            "attack": _r.get("attack") or {}, "gesture": _r.get("gesture", "trial"),
+            "gateway": gateway.name, "gateway_external": bool(gateway.is_external),
+            "prompt_identities": _r.get("prompt_identities") or [], "attempts": _r.get("attempts") or [],
+            "pending_roads": _r.get("pending_roads") or []}, args.input_text, trace_id=_r.get("trace_id"))
+        if not _rec.get("recorded"):
+            print(f"[deep] the run's own record was NOT written ({_rec.get('record_error')}); "
+                  f"{_rec.get('roads_withheld', 0)} split road(s) withheld rather than left citing nothing")
     elif args.mode == "decompose":
         run_decompose(args.input_text, gateway, interactive=not args.non_interactive)
     else:

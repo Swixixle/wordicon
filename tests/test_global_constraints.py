@@ -1354,6 +1354,154 @@ def _check_law_filing():
 # labels as rendered text, a mismatch that cannot pass silently); this
 # proves the record side, offline, with no gateway anywhere near it.
 
+def _check_write_order():
+    """Gate 0 of the Map Focus build: no road is ever persisted citing a
+    receipt or snapshot that does not exist. Eighteen roads in the owner's
+    record cite receipts that were never written, because run_sprout used
+    to append its roads BEFORE building and validating the receipt, and
+    three sprouts failed in between. Every writer now persists the receipt
+    and the snapshot first and appends its roads last; a failure before
+    that point leaves no road, and a failure while appending leaves a
+    receipt and a snapshot from which build_overworld reconstructs it.
+
+    Proven by injection at every boundary rather than by reading the
+    source: each writer is run against the scratch store with one step
+    made to raise, and the edge log is compared before and after."""
+    out = []
+    import contextlib as _cl
+    gw = cli.MockGateway()
+    cli.LOCAL_STATE.mkdir(parents=True, exist_ok=True)
+    def _edge_rows():
+        return cli.EDGES_LOG.read_text(encoding="utf-8").splitlines() if cli.EDGES_LOG.exists() else []
+    def _dangling(rows_before, rows_after):
+        """Roads appended by the injected run whose citation does not resolve."""
+        new = rows_after[len(rows_before):]
+        bad = []
+        for line in new:
+            try:
+                e = _json.loads(line)
+            except Exception:  # noqa: BLE001
+                continue
+            pr = e.get("producer") or {}
+            if pr.get("kind") == "receipt" and not (cli.RECEIPTS_DIR / f"{pr.get('id')}.json").exists():
+                bad.append(e.get("rel"))
+            if pr.get("kind") == "result_snapshot" and not (cli.RESULTS_DIR / f"{pr.get('id')}.json").exists():
+                bad.append(e.get("rel"))
+        return bad
+    def _boom(*a, **k):
+        raise RuntimeError("injected failure")
+    def _run(writer):
+        # each writer, driven the way the app drives it
+        cand = {"title": "ZZ Write Order", "definition": "a probe for the write order", "concept_id": "concept_zzwo",
+                "central_contradiction": "c", "axiom": "a", "plain_gloss": "g"}
+        if writer == "sprout":
+            return cli.run_sprout(cand, gw, parent_trace_id="trace_zz_parent")
+        if writer == "refract":
+            return cli.run_refract(cand, gw)
+        if writer == "archetype":
+            return cli.run_archetype(cand, gw)
+        if writer == "revise":
+            return cli.run_revise({"title": "ZZ Write Order", "definition": "a probe", "concept_id": "concept_zzwo",
+                                   "central_contradiction": "c", "axiom": "a"}, gw)
+        if writer == "forge":
+            return cli.run("forge", "ZZ write order probe: a passage about pretending while poor.", gw, interactive=False)
+        if writer == "deep":
+            # the components ran UNPATCHED (prepared below); only the composite
+            # record — the step that persists the receipt the split roads
+            # cite — is under injection. The server's _write_deep_record is a
+            # one-line pass-through to this.
+            r = deep_prepared
+            return cli.record_composite_run("deep", {"mode": "deep", "groups": [], "attack": r["attack"], "gesture": "trial",
+                                                     "trace_id": r["trace_id"], "prompt_identities": r["prompt_identities"],
+                                                     "gateway": "mock", "gateway_external": False,
+                                                     "pending_roads": r.get("pending_roads") or []}, "ZZ write order probe deep")
+        raise ValueError(writer)
+    # the boundaries, as (label, patch target object, attribute)
+    boundaries = [
+        ("receipt construction", cli.receipts_mod, "build_private_receipt"),
+        ("receipt invariant", cli.validators, "validate_receipt_invariants"),
+        ("schema validation", cli.schema_loader, "validate"),
+        ("receipt persistence", cli, "persist_receipt"),
+        ("snapshot persistence", None, "RESULTS_DIR"),     # RESULTS_DIR pointed at a FILE: mkdir raises
+        ("edge persistence", cli, "record_edge"),
+    ]
+    deep_prepared = None
+    for writer in ("sprout", "refract", "archetype", "revise", "forge", "deep"):
+        for label, target, attr in boundaries:
+            if writer == "archetype" and label in ("receipt construction", "receipt invariant", "schema validation", "receipt persistence"):
+                continue   # archetype writes no receipt; its road cites the snapshot
+            if writer == "deep":
+                deep_prepared = cli.run_deep("ZZ write order probe deep: a passage about pretending while poor, and guilt at arriving.", gw, interactive=False)
+                if not deep_prepared.get("pending_roads"):
+                    out.append("gate0: deep: run_deep produced no pending roads to test with")
+                    break
+            before = _edge_rows()
+            receipts_before = set(p.name for p in cli.RECEIPTS_DIR.glob("*.json")) if cli.RECEIPTS_DIR.exists() else set()
+            snaps_before = set(p.name for p in cli.RESULTS_DIR.glob("*.json")) if cli.RESULTS_DIR.exists() else set()
+            raised = False
+            with _cl.ExitStack() as stack:
+                if target is None:
+                    blocker = cli.LOCAL_STATE / "zz_results_blocker"
+                    blocker.write_text("not a directory")
+                    old_dir = cli.RESULTS_DIR
+                    cli.RESULTS_DIR = blocker
+                    stack.callback(lambda: setattr(cli, "RESULTS_DIR", old_dir))
+                    stack.callback(lambda: blocker.unlink(missing_ok=True))
+                else:
+                    orig = getattr(target, attr)
+                    setattr(target, attr, _boom)
+                    stack.callback(lambda t=target, a=attr, o=orig: setattr(t, a, o))
+                try:
+                    result = _run(writer)
+                except Exception:  # noqa: BLE001
+                    raised = True
+                    result = None
+            after = _edge_rows()
+            dangling = _dangling(before, after)
+            new_roads = len(after) - len(before)
+            if label == "edge persistence":
+                # the receipt and snapshot must stand; nothing dangling may exist
+                if dangling:
+                    out.append(f"gate0: {writer}: a road append failure left dangling road(s) {dangling}")
+                if writer == "deep":
+                    if not (result and result.get("recorded")) or result.get("roads_appended", 0) != 0 or not result.get("roads_failed"):
+                        out.append(f"gate0: deep: a road append failure was not reported on the record result: {result}")
+                continue
+            # any failure before the receipt and snapshot exist: NO new road
+            if new_roads:
+                out.append(f"gate0: {writer}: failure at {label} still appended {new_roads} road(s) — "
+                           f"the road was persisted before the object it cites")
+            if dangling:
+                out.append(f"gate0: {writer}: failure at {label} left dangling road(s) {dangling}")
+            if writer == "deep":
+                if raised or not result or result.get("recorded") or result.get("roads_withheld") != len(deep_prepared["pending_roads"]):
+                    out.append(f"gate0: deep: a failed composite record did not withhold its roads: raised={raised} {result}")
+            elif not raised:
+                out.append(f"gate0: {writer}: the injected failure at {label} did not surface")
+    # and the happy path still writes every road, after its receipt
+    before = _edge_rows()
+    sp = cli.run_sprout({"title": "ZZ Write Order OK", "definition": "d", "concept_id": "concept_zzwo2"}, gw)
+    after = _edge_rows()
+    if len(after) - len(before) < 1 or _dangling(before, after):
+        out.append("gate0: a successful sprout did not write resolvable roads after its receipt")
+    if not (cli.RECEIPTS_DIR / f"receipt_{sp['trace_id']}.json").exists() or not (cli.RESULTS_DIR / f"{sp['trace_id']}.json").exists():
+        out.append("gate0: a successful sprout has no receipt or no snapshot")
+    # the write order, read off the source as a second witness: in every
+    # writer the LAST record_edge call sits after the snapshot write
+    src = (Path(cli.__file__)).read_text(encoding="utf-8")
+    for fn in ("def run_sprout(", "def run_refract(", "def run_archetype(", "def run_revise(", "def run("):
+        a = src.index(fn); b = src.index("\ndef ", a + 10)
+        body = src[a:b]
+        # the last road-writing STATEMENT: a direct record_edge call, or the
+        # flush of deferred writers (run_revise builds its roads as closures
+        # before the receipt and calls them after the snapshot)
+        last_edge = max(body.rfind("record_edge("), body.rfind("_write_road()"))
+        snap = body.rfind('.json").write_text(')
+        if last_edge < 0 or snap < 0 or last_edge < snap:
+            out.append(f"gate0: in {fn.strip('( ')} a road is still written before the snapshot")
+    return out
+
+
 def _check_carry_back():
     out = []
     import importlib
@@ -1624,6 +1772,7 @@ def main() -> int:
     failures.extend(_check_constitution_split())
     failures.extend(_check_law_filing())
     failures.extend(_check_carry_back())
+    failures.extend(_check_write_order())
     # block 120: the baseline is only meaningful if nothing else is writing.
     # The corpus lease is the mechanical answer to "is a writer live" — it is
     # an flock held for a process's lifetime, so it cannot go stale and it
@@ -15535,9 +15684,14 @@ console.log(out.join('\\n'));
     _deep104 = cli.run_deep("ZZ deep probe 104: a passage about pretending while poor, and guilt at arriving.", _gw104, interactive=False)
     if not str(_deep104.get("trace_id", "")).startswith("trace_deep_") or {i["stage"] for i in _deep104.get("prompt_identities") or []} != {"dissect", "attack"}:
         _f104(f"run_deep does not mint its identity before its first call and keep only its own stages: {_deep104.get('trace_id')} {[i.get('stage') for i in _deep104.get('prompt_identities') or []]}")
-    _dedges = [e for e in cli.load_edges() if e.get("rel") == "decomposed_into" and (e.get("producer") or {}).get("id") == f"receipt_{_deep104['trace_id']}"]
-    if not _dedges or any(e.get("origin") != "model_proposed" or (e.get("producer") or {}).get("stage") != "dissect" for e in _dedges):
-        _f104(f"a deep run's decomposed_into edges do not cite the deep receipt as a model proposal: {_dedges[:1]}")
+    # Gate 0 (Map Focus): the split roads cite the deep receipt, which does
+    # not exist until the composite is recorded — so run_deep must NOT have
+    # written them yet; it hands them over as pending_roads.
+    _dedges_early = [e for e in cli.load_edges() if e.get("rel") == "decomposed_into" and (e.get("producer") or {}).get("id") == f"receipt_{_deep104['trace_id']}"]
+    if _dedges_early:
+        _f104(f"run_deep wrote {len(_dedges_early)} decomposed_into road(s) before the receipt they cite existed")
+    if not _deep104.get("pending_roads") or any(not callable(r) for r in _deep104["pending_roads"]):
+        _f104(f"run_deep did not hand its split roads over as pending_roads: {_deep104.get('pending_roads')}")
     _fedges = [e for e in cli.load_edges() if e.get("rel") == "forged_as" and e.get("run_trace_id") in {g.get("result", {}).get("trace_id") for g in _deep104["groups"] if g.get("result")}]
     if not _fedges or any(e.get("origin") != "mechanical" or not (cli.RECEIPTS_DIR / ((e.get("producer") or {}).get("id", "") + ".json")).exists() for e in _fedges):
         _f104("a forged_as edge is not mechanical, or cites a receipt that does not exist")
@@ -15546,9 +15700,15 @@ console.log(out.join('\\n'));
                    for g in _deep104["groups"] if g.get("result")]
     _wrote = server._write_deep_record({"mode": "deep", "groups": _srv_groups, "attack": _deep104["attack"], "gesture": "trial",
                                         "trace_id": _deep104["trace_id"], "prompt_identities": _deep104["prompt_identities"],
-                                        "gateway": "mock", "gateway_external": False}, "ZZ deep probe 104")
+                                        "gateway": "mock", "gateway_external": False,
+                                        "pending_roads": _deep104.get("pending_roads") or []}, "ZZ deep probe 104")
     if not _wrote.get("recorded") or _wrote.get("trace_id") != _deep104["trace_id"] or not (cli.RECEIPTS_DIR / f"receipt_{_deep104['trace_id']}.json").exists():
         _f104(f"the deep receipt was not written under the identity the edges cite: {_wrote}")
+    _dedges = [e for e in cli.load_edges() if e.get("rel") == "decomposed_into" and (e.get("producer") or {}).get("id") == f"receipt_{_deep104['trace_id']}"]
+    if not _dedges or any(e.get("origin") != "model_proposed" or (e.get("producer") or {}).get("stage") != "dissect" for e in _dedges):
+        _f104(f"a deep run's decomposed_into edges do not cite the deep receipt as a model proposal: {_dedges[:1]}")
+    if _wrote.get("roads_appended") != len(_dedges):
+        _f104(f"record_composite_run appended {_wrote.get('roads_appended')} road(s) but {len(_dedges)} decomposed_into road(s) cite its receipt")
     _drc2 = _json104.loads((cli.RECEIPTS_DIR / f"receipt_{_deep104['trace_id']}.json").read_text(encoding="utf-8")) \
         if (cli.RECEIPTS_DIR / f"receipt_{_deep104['trace_id']}.json").exists() else {}
     if [i["stage"] for i in _drc2.get("prompt_identities") or []] != ["attack", "dissect"] or (_drc2.get("model_calls") or [{}])[0] != {"gateway": "mock", "is_external": False} \

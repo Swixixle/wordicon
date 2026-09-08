@@ -671,13 +671,18 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
                        # and whether the gateway was external — for its receipt
                        "trace_id": cli_result.get("trace_id", ""),
                        "prompt_identities": cli_result.get("prompt_identities") or [],
-                       "gateway_external": bool(gateway.is_external)}
+                       "gateway_external": bool(gateway.is_external),
+                       # gate 0 (Map Focus): the split roads wait for the
+                       # composite receipt they cite; record_composite_run
+                       # appends them after it exists.
+                       "pending_roads": cli_result.get("pending_roads") or []}
             # block 103: a deep run's own record — dissection, gesture, the
             # trial's outcome and the completion state — written to the
             # results store under its own trace id so it can be reopened
             # and so the trial's objection is never again lost with the
             # process. The component forges keep their own receipts.
             result.update(_write_deep_record(result, input_text))
+            result.pop("pending_roads", None)   # consumed by the record; callables, not job data
         elif mode == "decompose":
             cli_result = cli.run_decompose(input_text, gateway, interactive=False, on_progress=on_progress,
                                              avoid_titles=avoid_titles, prior_attempts=prior_attempts)

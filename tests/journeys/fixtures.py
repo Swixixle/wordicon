@@ -316,6 +316,7 @@ def seed_partial():
               "n_completed": r["n_completed"],
               "attempts": r.get("attempts") or [],
               "attempt_summary": r.get("attempt_summary") or {},
+              "pending_roads": r.get("pending_roads") or [],
               "groups": groups, "trace_id": r["trace_id"], "gateway": "mock"}
     rec = cli.record_composite_run("deep", result, r["source_text"],
                                    trace_id=r["trace_id"])
