@@ -1819,6 +1819,49 @@ def _check_map_focus_page():
             out.append(f"focus page: the shell's table lacks {place}")
     if "if (dest || trace) openDestination(dest || ('run:' + trace), trace);" not in idx:
         out.append("focus page: a door pressed inside a pane no longer opens its destination in Home")
+    # the law, pinned in the Map section of the canon — whitespace-normalized,
+    # because the canon is wrapped prose. No count lives in it: the counts are
+    # the census's and the changelog's, with their populations and dates.
+    law = _re.sub(r"\s+([,;.])", r"\1", " ".join(_re.sub(r"<[^>]+>", " ", _canon_section("The Map — where things connect")).split()))
+    for need in ("The Map opens on one place in focus, and you choose it; nothing is in focus until you do",
+                 "four things are kept apart and none stands in for another",
+                 "A receipt proves an event was recorded, not that the relationship is true",
+                 "A road on the Map names who put it there",
+                 "the Map may say derived — from the run's own snapshot when that snapshot reproduces the road's exact identity, "
+                 "or from the writer invariant of the tracked history when the row was created inside it",
+                 "every derived label carries its rule, its basis and its version",
+                 "An issuer is never guessed from a relation's name; it is derived only from mechanically exclusive custody "
+                 "evidence, and it stays labeled derived",
+                 "Roads for which no recorded or mechanically exclusive derived issuer exists remain labeled issuer not recorded",
+                 "A road that cites a receipt the record does not hold says so by name, and claims a run snapshot only where one exists",
+                 "A verdict belongs to a road in a run and is never lifted onto a place",
+                 "shows every verdict and chooses none",
+                 "two places, disclosed and never welded",
+                 "At twelve direct roads the Map groups them by relation and issuer with the total always in view",
+                 "never invents a time",
+                 "opens one further ring only on your explicit act",
+                 "Focus reads; it calls no model and writes nothing"):
+        if need not in law:
+            out.append(f"focus law: the Map section no longer says {need!r}")
+    focus_para = law[law.index("The Map opens on one place in focus"):] if "The Map opens on one place in focus" in law else ""
+    if _re.search(r"\b\d[\d,]*\b", focus_para):
+        out.append("focus law: the Map Focus paragraph carries a number — counts belong to the census and the changelog")
+    canon = _re.sub(r"\s+([,;.])", r"\1", " ".join(_re.sub(r"<[^>]+>", " ", _canon_source()).split()))
+    if "older relations are labeled unknown in the record and left alone" not in canon or \
+            "never from its relation's name" not in canon:
+        out.append("focus law: the block-104 sentence no longer says older relations stay unknown in the record, derived only from custody evidence")
+    changelog = (root / "docs" / "CHANGELOG.md").read_text(encoding="utf-8")
+    if "v1.18.0" not in changelog or "1,481 / 32 / 93" not in changelog or "superseded" not in changelog:
+        out.append("focus law: the changelog does not carry v1.18.0 with the superseded reconnaissance counts named as such")
+    census = (root / "docs" / "nikodemus-capability-census.md").read_text(encoding="utf-8")
+    if "## 8. Notes added after the census" not in census or "receipt_trace_cli_2562964933" not in census or "dormant_capability" not in census:
+        out.append("focus law: the census does not carry the write-order note, the eighteen, and /api/warps' dormancy")
+    surface = (root / "docs" / "nikodemus-surface-map.md").read_text(encoding="utf-8")
+    if "| Map · focus | `/map`, `/map/focus` |" not in surface or "an old URL, kept" not in surface:
+        out.append("focus law: the surface map's naming table does not say Map opens Focus and the old URLs stay")
+    machine = (root / "docs" / "machine-map.md").read_text(encoding="utf-8")
+    if "scripts/map_focus.py" not in machine or "webapp/focus.html" not in machine or "recorded_key" not in machine:
+        out.append("focus law: the machine map does not name map_focus.py, focus.html and the served map's recorded_key")
     return out
 
 def _check_map_focus_routes(server, paired):

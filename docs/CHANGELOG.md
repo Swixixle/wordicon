@@ -1,5 +1,165 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.18.0 — Map · focus: one place, its roads, and who drew them (Map Focus build)
+
+Six commits, in the order the authorization set: a write-order repair the
+build was gated on, a disclosure repair for three paid Map actions, the
+issuer derivation, a read-only route, the Focus view with its journey, and
+this documentation. Nothing in the Moira line was touched.
+
+**Gate 0 — no road before the receipt it cites.** Eighteen roads in the
+owner's record cite receipts that were never written: three sprouts on
+2026-09-03 (05:24:10, 05:24:16 and 05:25:35 UTC; five parallels and one
+continued_from each) appended their roads *before* building and validating
+the receipt, and each failed in between, leaving no receipt and no snapshot.
+`run_sprout`, `run_refract`, `run_archetype`, `run_revise` and `run()` now
+persist the receipt and the snapshot first and append their roads last;
+`run_revise` builds its roads as closures and flushes them after the
+snapshot. A deep or decompose run's split roads cite the *composite* receipt,
+which only `record_composite_run` writes — so the closures ride on the result
+as `pending_roads` and are flushed there, after the receipt and the snapshot,
+or withheld and counted (`roads_withheld`) when the record could not be
+written; a road that fails to append is counted (`roads_failed`) and is
+reconstructible from the snapshot that stands. The receipt's construction
+moved inside the guard that promised never to raise into the job. Proven by
+injection at six boundaries (receipt construction, invariant, schema,
+persistence, snapshot persistence, edge persistence) for every writer, with
+the edge log compared before and after, plus a source witness that the last
+road-writing statement in each writer sits after its snapshot write. The
+eighteen historical roads are untouched and render as *producer receipt cited
+· file not found*, with no snapshot claimed, because none exists.
+
+**Disclosure before spend.** *Resonance roads*, *Friction roads* and *reading a
+plotted journey* each called a model on a click that had not said so. Each now
+opens the room's disclosure panel before any request leaves the page — the
+route and its purpose, the lane and model read from `/api/config`, *Model
+calls: 1 — exactly one*, a cost line that states its own limit (the receipt
+records the tokens; the page cannot price them), and what enters the record
+(*no road, until you declare one* for a proposal; a run snapshot and a
+Wayfinder line for an analysis). Escape cancels with nothing sent. The
+`wayfinder` journey watches the page's own requests: none leaves before the
+answer, none on cancel, exactly one after confirmation. The prompts and
+outputs are unchanged.
+
+**Issuers derived from exact custody evidence.** `scripts/map_focus.py`
+labels every road in the served map: *recorded · pipeline | model proposal |
+owner declaration | import* when the row carries its origin (block 104);
+*derived from snapshot · ⟨class⟩* when the run's own snapshot — or the
+composite listing that run as a component — reproduces the road's **exact
+identity** (relation, both keys, run trace) through the same node
+constructors the writers use (`edge_specs_from_snapshot`); *derived by writer
+invariant · ⟨class⟩* when the row was created at or after the first tracked
+commit (`TRACKED_SINCE`, 2026-08-29T23:43:11Z), throughout whose history each
+relation has had exactly one writing function (audited per commit; the suite
+re-checks both against the repository); *issuer not recorded* otherwise.
+Nothing is inferred from a relation's name; no prefix or title resemblance
+qualifies (the suite plants a target that differs by one character and
+requires no derivation). Every derived label carries `rule`, `basis` and
+`issuer-derivation/1`. The identity matched is the row **as recorded**:
+`build_overworld` resolves a legacy title key onto today's concept box for
+display, and the served endpoint now carries `recorded_key` and `resolved_by`
+so the derivation matches what the writer wrote and the page can say that the
+box is the map's reading of the row. Sprout, refract, archetype and revise
+snapshots now store the source's `concept_id` (revise also its steered and
+wordify flags), so a snapshot alone reproduces the identity its roads were
+written with. `edges.jsonl` is never rewritten.
+
+The earlier reconnaissance counted 1,481 / 32 / 93 legacy roads
+(derived from snapshot / by invariant / not recorded) under a label-prefix
+rule; those counts are superseded and are not carried forward. The counts
+under the exact rule are produced by `python3 scripts/map_focus.py --census
+--state ⟨local_state⟩`, which prints them with their populations, its method,
+the date and the store hash before and after (read-only by construction);
+they belong in `docs/nikodemus-capability-census.md` §8 and here, never in
+the constitution.
+
+**Four standings, apart.** Each road carries `provenance` (receipt ▸ its run;
+snapshot; *producer receipt cited · file not found* with *run snapshot
+available* only when one exists; *reconstructed from snapshot ⟨trace⟩*; *no
+citation recorded*), `evidence_support` (explicitly `null` — no road carries
+a quoted span or a Library anchor today), `review_standing` (the verdict with
+the stage named — *Friction at forge*, *sprout review*, … — and the population
+*this run*), `owner_standing` (declared roads only: the verb, the note, the
+declaration id, who proposed it). A dispute rides on the road, counted by
+run, with its population named, and no verdict is lifted onto the node.
+
+**Read-only routes.** `GET /api/map/focus?key=&expand=&rel=&issuer=&standing=`
+returns one place's ring: the focus, its direct roads, the burden with its
+population named, the facets counted over the whole ring, groups when the
+ring is bounded, at most one further ring for the road named by `expand`,
+filters echoed as applied; no key is a 400 that points at the picker, an
+unknown key a 404 that says so. `GET /api/map/places` is the picker, ordered
+by label. GET only, no gateway import, no write: the suite hashes the whole
+scratch store around them and compares the Wayfinder log byte for byte.
+
+**Map · focus, the page.** `webapp/focus.html` is what the header's **Map**
+door opens (`/map`, `/map/focus`); `/map/trails` (and the old `/trails`,
+`/overworld`) is **Map · trails**; `/map/world` is **Map · world**. All three
+pages carry the same three-view navigation. Nothing is in focus until chosen:
+the picker lists every place by label with its direct-road count and its
+identity, ranked by nothing. The focus head names the place under the name it
+was first boxed under (or the owner's recorded primary name), discloses its
+identity — *concept-keyed* or *legacy title-keyed*, with the no-welding rule
+— names the other places carrying the same title with their identities, lists
+the revise variants as other written forms, says *appears again · n runs*,
+and states owner standing (or its absence). The burden line counts what the
+ring rests on with its population named. Roads are listed oldest first by
+recorded time then edge id, untimed last and labeled *recorded time
+unavailable*; at twelve or more they are grouped by (relation, issuer) with
+the total always visible and a group opened only by the owner's link. Each
+road states relation, the far place (*jump* puts it in focus; an external
+work is a *source*, a foreign term a foreign term, a passage a passage),
+issuer with rule · basis · version, provenance with its door, review
+standing, evidence support (absent, said so), owner standing (absent, said
+so), any dispute, any resolution (*recorded against word:… · resolved onto
+this box by unambiguous title match*), the recorded time and the run. *Show
+next ring* opens exactly one further ring and says *one ring only*; a
+bounded further ring shows its groups closed. Every state — focus, filters,
+open groups, expansion — is a navigation, so the URL restores the view and
+Back walks it. Road rows are keyboard-reachable and their accessible name
+carries relation, issuer and provenance. The page makes two GET reads and no
+other request. A typed door pressed inside a place — `/?trace=`, `/?dest=` —
+now opens its destination in the one Home instead of closing the pane and
+dropping it (a pre-existing shell defect the Focus made visible).
+
+**Proof.** Suite: `_check_write_order` (Gate 0), `_check_map_focus`
+(writer/derivation agreement on roads the real writers produced, every
+relation, no phantoms; exact identity; the invariant only inside tracked
+history; provenance resolution; the recorded-key case in an isolated store;
+burden sums; grouping at 12 and not 11; the order rule; a deterministic
+dispute; one ring per expansion; legacy title identity; the picker; no write),
+`_check_map_focus_routes` (store hash, Wayfinder log, GET only, named 400/404,
+the page routes), `_check_map_focus_page` (the ruled names on all three pages,
+the states rendered by name, no POST, no paid route, no storage, no score, the
+shell's table and its door repair). Journeys: `wayfinder.js` (disclosure) and
+`map.js` (76 checks, read off rendered text, against `fixtures.seed_map` —
+real writers throughout; the two sanctioned manipulations are a real row
+stripped of its origin and producer, and a real sprout's receipt deleted;
+one real row is moved before the tracked history to render *issuer not
+recorded*); `run.sh` hashes the store around the map journey and guards
+twenty-five of its checks by name. Sabotage, each caught by name: a sprout
+road persisted before its receipt; deep roads flushed without the receipt;
+prefix-based snapshot matching; relation-only issuer inference; a derived
+issuer rendered as recorded (projection and page); snapshot availability
+falsely added; the first verdict lifted onto the node (projection and page);
+a dispute collapsed (projection and page); legacy title identities welded; a
+second ring auto-opened (projection and page); the high-degree total hidden;
+a missing time synthesized (projection and page); a group open by itself; a
+missing receipt rendered blank; a picker that chooses; a paid request before
+confirmation (wayfinder); Focus navigation logging a Wayfinder event (route
+pin and page); a pane door dropping its destination.
+
+**Found and reported, not repaired.** A trace id is the hash of the input
+text and the *second*, so two runs on the same input inside one second share
+an id and the second silently overwrites the first's receipt and snapshot
+(the fixture waits for the clock; the record has no guard). A sprout or
+refract from a concept-keyed candidate is drawn twice in the served map —
+recorded from the concept box and reconstructed from the snapshot's
+title-keyed seed — so a title-keyed twin of every such concept exists with
+duplicate reconstructed roads; the Focus discloses the twin and counts
+disputes by run so one review is not counted twice. `/api/warps` stays
+classified `dormant_capability` and is not retired.
+
 ## v1.17.1 — Carry Back: the record decides, and the draft is found by its lineage (block 123b)
 
 Two repairs to block 123, both to the same question: *who says what a carry

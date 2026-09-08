@@ -44,7 +44,11 @@ the outside world as a lobby and not a courtroom: templated doors that open sear
 record nothing, saved references with append-only access histories, a Wikidata QID
 declared by hand with no lookup. The **Map** is everywhere your thinking has been, and
 every relation on it names who put it there — the pipeline, you, or a model's proposal —
-and cites the receipt or ruling that produced it.
+and cites the receipt or ruling that produced it; a relation from before origins were
+recorded may be labeled *derived*, only from its run's own snapshot reproducing its exact
+identity or from the writer invariant of the tracked history, never from its relation's
+name, and otherwise *issuer not recorded*. The Map opens on **one place in focus**, chosen
+never assumed, with its direct roads and four standings kept apart on each.
 
 **What holds it.** Two organs keep and never produce. The **Vault** seals the corpus
 into a standard age file and restores a verified past exactly — it regrows and improves
@@ -82,6 +86,16 @@ custody by institutional role, declared and never inferred supersession, one top
 a workup back beside his draft (`local_state/carries.jsonl`), each carry's excerpt and
 standing resolved from the run's own record and bound, by the run's recorded lineage,
 to the text the run examined — file I/O only, no model, no network.
+`scripts/map_focus.py` is Map · focus: the served projection behind one place's ring —
+exact-identity issuer derivation (`edge_specs_from_snapshot`, `SnapshotIndex`,
+`derive_issuer`), provenance resolution, the ring with its burden, facets, groups and
+order, the picker, and a read-only census (`--census --state ⟨local_state⟩`, which hashes
+the store before and after) — reads only, no model, no network. The served map's
+endpoints carry `recorded_key` and `resolved_by` where the concept-first post-pass moved
+a legacy title key onto a concept box; sprout, refract, archetype and revise snapshots
+store the source's `concept_id` (revise its `steered`/`wordify` flags) under `source`;
+composite runs flush their split roads only after their receipt and snapshot exist
+(`pending_roads`, `roads_appended`/`roads_failed`/`roads_withheld` on the record result).
 
 **What accumulates** — `src/wordicon_corpus/` holds the schema-validated corpus
 service; `scripts/shelf_projection.py` proves the shelf equals what its events rebuild;
@@ -100,8 +114,11 @@ prompt, labels hidden), `scripts/digest.py`, `scripts/scan_secrets.py`,
 
 **The interface** — `webapp/index.html` is the whole home: the writing room, the split
 workspace, Documents, Media, Sources, Work Rooms, Library, and the *What is Nikodemus?*
-constitution panel. `webapp/overworld.html` is the Map and Wayfinder;
-`webapp/trails.html` runs as trails, every item a typed door; `webapp/bench.html`
+constitution panel. `webapp/focus.html` is Map · focus — what the header's Map door
+opens (`/map`, `/map/focus`; `GET /api/map/focus`, `GET /api/map/places`) — one place in
+focus with its direct roads; `webapp/overworld.html` is Map · world, the spatial map and
+Wayfinder (`/map/world`); `webapp/trails.html` is Map · trails (`/map/trails`, and the old
+`/trails`, `/overworld`), every item a typed door; `webapp/bench.html`
 reworks a kept word; `webapp/clinic.html` is the Clinic;
 `webapp/recovery.html` the Recovery Review; `webapp/investigation.html` the
 investigation lane; and `webapp/anatomy.html` draws the whole organism — every organ,

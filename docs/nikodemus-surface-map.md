@@ -38,11 +38,12 @@ still its own document answering on its own URL.
 
 | Place | URL | Title it shows | How you actually get there |
 |---|---|---|---|
-| Trails | `/map` | **Trails** | header nav **Map** |
-| The overworld | `/map/world` | **Map** | one link, inside the Trails header |
-| — | `/overworld/map` | Map | **nothing links here** |
-| — | `/overworld` | serves Trails, labelled Map | **nothing links here** |
-| — | `/trails` | serves Trails, labelled Trails | **nothing links here** |
+| Map · focus | `/map`, `/map/focus` | **Map** (view: *Map · focus*) | header nav **Map**; the picker, then a place |
+| Map · trails | `/map/trails` | **Map** (view: *Map · trails*) | the three-view nav on every Map page |
+| Map · world | `/map/world` | **Map** (view: *Map · world*) | the three-view nav on every Map page |
+| — | `/overworld/map` | Map · world | **nothing links here** — an old URL, kept |
+| — | `/overworld` | serves Map · trails | **nothing links here** — an old URL, kept |
+| — | `/trails` | serves Map · trails | **nothing links here** — an old URL, kept |
 | The Bench | `/bench` | The Bench *(prototype)* | `⚒ Take it to the Bench` on a card — since block 116 usually inside the collapsed *other doors* |
 | The Clinic | `/clinic` | The Clinic | intake door `🏛 Admit a source to a Room`; Rooms row; destination `Start a Room` |
 | Investigation | `/investigation` | Investigation Rooms | Rooms row `Open the instruments`; two About links; five destination chips |

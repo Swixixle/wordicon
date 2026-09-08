@@ -418,3 +418,70 @@ The two producer repositories (Open Case, EthicalAlt) beyond their contract
 fixtures. The Vault's off-device restore path. Anything in
 `~/Downloads/wordicon-backlog.md` that has no code. The owner's real corpus
 contents beyond the counts in §1.
+
+---
+
+## 8. Notes added after the census — the Map Focus build (2026-09-08)
+
+The census above is a snapshot at `452e98c`; these notes are dated and name
+their own evidence.
+
+**A write-order defect, and the eighteen.** Eighteen rows in the owner's
+`edges.jsonl` cite receipts that do not exist: three sprouts at
+2026-09-03T05:24:10Z, 05:24:16Z and 05:25:35Z (five `parallels` and one
+`continued_from` each), whose receipts `receipt_trace_cli_2562964933`,
+`_9fea3c6271` and `_6792cc220b` were never written and whose snapshots do not
+exist. Cause: `run_sprout` appended its roads before building and validating
+the receipt, and the three sprouts failed in between — ten hours after block
+104 changed the receipt shape (`3fc5dbe`, 2026-09-02T18:56Z), which is an
+inference, not a record. The same order stood in `run_refract`, `run_revise`,
+`run_archetype`, `run()` and the composite writers (for a CLI deep run the
+parent receipt was never written at all). All repaired (v1.18.0); the eighteen
+rows are untouched and render as *producer receipt cited · file not found*
+with no snapshot claimed.
+
+**Issuers under the exact rule.** The counts belong here and in the changelog,
+never in the constitution. They are produced, with their populations, the
+method, the date and the store hash before and after, by
+`python3 scripts/map_focus.py --census --state ⟨local_state⟩`; paste its output
+below when it is run on the owner's record, and keep the date.
+
+*Population: rows in edges.jsonl without a recorded origin; roads in the
+served map (recorded and reconstructed). Method: derive_issuer per road under
+issuer-derivation/1 — exact recorded identity against the run's snapshot or a
+composite listing it; the writer invariant only for rows created at or after
+2026-08-29T23:43:11Z. The reconnaissance figures 1,481 / 32 / 93 were counted
+under a label-prefix rule and are superseded.*
+
+**The Map's names, resolved.** The header's **Map** opens *Map · focus*
+(`/map`); *Map · trails* (`/map/trails`) and *Map · world* (`/map/world`) are
+the other two views, named the same on all three pages; `/overworld/map`,
+`/overworld` and `/trails` stay as old URLs. §5.1's Map entry is closed.
+
+**Two of the undisclosed model routes now disclose.** `/api/map/roads/suggest`
+and `/api/map/route/analyze` open the disclosure panel before any request
+leaves the page (§4.1's count of thirteen undisclosed routes is now eleven).
+
+**`/api/warps`** stays classified `dormant_capability` in `DOORLESS_ROUTES` —
+deliberate dormancy, not retirement; nothing in tests, docs or contracts reads
+it.
+
+**Two new read-only routes.** `GET /api/map/focus`, `GET /api/map/places`
+(local only; §3's local count rises by two). Both have a door (`focus.html`).
+
+**Found, reported, not repaired.** (1) A trace id is `sha256(input_text +
+_now())[:10]` with `_now()` at one-second grain: two runs on one input inside a
+second share an id, and the second overwrites the first's receipt and
+snapshot — the journey fixture waits for the clock; the writers have no
+guard. (2) `build_overworld` draws a sprout or refract from a concept-keyed
+candidate twice: the recorded road from the concept box, and a reconstructed
+road from the snapshot's title-keyed seed (`node_word(seed_title)`), which the
+dedupe cannot match because the keys differ. Every such concept has a
+title-keyed twin carrying duplicate reconstructed roads and inflated dispute
+tallies; Map · focus discloses the twin and counts disputes by run. (3) A
+revise's `renamed_as` / `compressed_as` roads are recorded from the original's
+*title* key, so a concept-keyed box and its title-keyed twin split a revise's
+history; disclosed, not welded. (4) The constitution's Map section carries
+a live count from block 82 ("three percent of shelf pairs"); the Map Focus
+paragraph carries none, per the ruling, and the older sentence is left as
+written.
