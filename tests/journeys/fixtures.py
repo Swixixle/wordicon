@@ -259,6 +259,28 @@ def seed_partial():
                 self.gen += 1
                 if self.gen > 1:
                     raise RuntimeError("Request timed out or interrupted.")
+            if str(prompt).startswith("You are the anchor-support stage"):
+                # Since block 123b the server takes a carry's standing from
+                # the RECORD, so the record the carry journey reads must
+                # hold the standings that journey tests — a partial fit and
+                # a contradicted one — and the mock's default answer is
+                # "supported" for everything. These are the mock's own
+                # keyed answers, keyed here on the candidate's title; the
+                # shaping (verdict flipped to "contradicted", the caught-by
+                # note) is the real path's, not this file's.
+                if "Title: The Refusenik Posture" in prompt:
+                    return json.dumps({
+                        "support": "partial",
+                        "note": "The description is licensed; the causal claim is not.",
+                        "deciding_anchor_words": "pretending",
+                        "deciding_claim_words": "without pretending the exit resolves it"})
+                if "Title: Threshold Grief" in prompt:
+                    return json.dumps({
+                        "support": "contradicted",
+                        "note": "The anchor is a person pretending; the claim is a doorway "
+                                "with nobody in it.",
+                        "deciding_anchor_words": "pretending",
+                        "deciding_claim_words": "standing at a boundary"})
             return super().complete(prompt)
 
     r = cli.run_deep(
@@ -301,6 +323,21 @@ def seed_partial():
            "n_components": r["n_components"], "n_completed": r["n_completed"]}
     assert r["n_failed"] >= 1 and r["n_completed"] >= 1, (
         f"the partial fixture is not partial: {ids}")
+    # The completed component's own trace — what a candidate card inside
+    # this result actually carries (block 123b: the card's trace is the
+    # component's, whose record holds the dissection's gist, not the
+    # draft) — and a rabbithole opened FROM that card, the way the page
+    # opens one, so a thread carried from it has a recorded road back:
+    # sprout → component → this deep run → the draft.
+    done = [g for g in groups if not g.get("failed")]
+    ids["component"] = done[0]["trace_id"]
+    cand = done[0]["candidates"][0]
+    bff = cand.get("bone_flesh_friction") or {}
+    sp = cli.run_sprout({"title": bff.get("title") or cand.get("title") or "",
+                         "definition": (bff.get("flesh") or {}).get("definition") or "",
+                         "concept_id": bff.get("concept_id") or ""},
+                        cli.MockGateway(), parent_trace_id=ids["component"])
+    ids["sproutFromComponent"] = sp["trace_id"]
     (DIR / "partial.json").write_text(json.dumps(ids))
     return ids
 

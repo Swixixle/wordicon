@@ -1,5 +1,76 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.17.1 — Carry Back: the record decides, and the draft is found by its lineage (block 123b)
+
+Two repairs to block 123, both to the same question: *who says what a carry
+is?* The first cut let the page say. This one makes the record say.
+
+**Server authority.** `POST /api/carry` took the excerpt and the standing from
+the request. A buggy or dishonest client could carry a contradicted candidate
+as *supported* and the server would have written it down, labels and all. Now
+the request only *names* an object — a candidate by `concept_id` (or by title
+when it has no id) and a field, a thread by index, a door by id — and the
+server resolves that name against the run's own record (`carry.resolve_ref`),
+takes the excerpt and the standing from there, and ignores whatever the request
+claimed. A name that resolves to zero or several objects is refused with a
+reason, never guessed: two candidates sharing a title, an index past the end, a
+title that disagrees with its index, an unknown field, an anchor-fit carry on a
+candidate whose fit was *supported* (there is no deciding difference to carry).
+An example sentence carries INVENTED and the candidate's Friction verdict, but
+not an anchor fit — the anchor-fit stage read the title, definition, tension
+and axiom, never the example.
+
+**Exact identity.** A candidate card inside a Go Deep result is built with its
+*component's* trace, and the component's record holds as `input_text` the
+dissection's gist for that component — *"The part of the mechanism the input
+states outright…"* — not the owner's draft. A sprout's record holds *"sprout
+of 'Title': …"*. So a carry made from a card was bound to the hash of a
+sentence the pipeline wrote; the tray would have compared the draft in the room
+against that sentence, found them different every time, and offered to *open
+the analyzed version* of a paragraph the owner never wrote. The block-123
+journey did not catch this because it posted its carries with the deep run's
+trace directly — the route was tested with a trace the cards never send.
+
+The analysed text is now found by climbing **recorded links only**
+(`carry.draft_of`): a composite run (deep, decompose) lists its components'
+traces in its own record; a sprout records the `parent_trace_id` it was opened
+from. A run with no recorded road back to owner text is refused — a rabbithole
+opened from the Bench, a refraction (which records no parent), a parent whose
+record is gone, a lineage that loops. A derived sentence is not a draft, and a
+reconstruction is not a record, so the *derived* lineage the Library draws for
+refractions is not used here. Each hop is written into the carry
+(`analyzed.trace_id`, `analyzed.chain`) so the record says how the identity
+was settled, and the tray compares the room against the run that held the
+draft. Carries written before this block recorded only the source run; the tray
+falls back to it for them.
+
+**The journey now lies to the server on purpose.** Every carry is posted with
+the trace a card actually sends, and with an excerpt and a standing that are
+wrong: a partial candidate claimed as supported with a rewritten definition, the
+contradicted one claimed as supported and kept, the model's example claimed as
+the owner's words, a thread claimed verified. Each comes back as the record has
+it. The fixture is the same real partial run through the real path, with the
+offline gateway answering anchor-support *by title* so the record holds a
+partial fit and a contradicted proposal — the shaping (verdict flipped to
+*contradicted*, the caught-by note) is the real path's — plus a rabbithole
+opened from the completed component's card the way the page opens one, so a
+thread carried from it climbs sprout → component → deep run → draft.
+
+Six sabotages, each caught by name: the composite climb removed; the route
+reading the card's own record; the tray comparing against the card's run; the
+client's standing merged over the record's; and, at function level, a lineage
+that loops and a parent with no record bound to a draft instead of refused.
+
+The constitution's paragraph on the room gains two sentences, pinned: a
+carry's standing is a fact the record holds, never a claim the page makes; and
+which text a carry binds to is settled by the run's recorded lineage.
+
+Also recorded this block, and deliberately not built: the reviewer's
+reconciliation of an outside assessment — the triage rule for future surfaces,
+the definition of the acquisition-to-admission bridge as the future Research
+door, and the five real workflows that precede any pilot. See
+`backlog-post-launch-observations.md`.
+
 ## v1.17.0 — Carry Back: the excavation returns to the page (block 123)
 
 Nikodemus excavated and did not return. A dense first draft went into Go Deep;

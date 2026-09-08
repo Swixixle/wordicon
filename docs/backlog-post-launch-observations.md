@@ -218,3 +218,117 @@ every number on the Library page comes out of that block. Doing it inside a
 block about presentation would be refactoring the Library by accident.
 
 Until then the panel lives on the shelf, one click from Home.
+
+## An outside assessment, reconciled — and deliberately not built (2026-09-08)
+
+An outside assessment of Nikodemus recommended, among other things, ranking
+ambiguities so the owner rules only on the "high value" ones, another generic
+source-ingest door, and early pilots with users "who cannot afford
+hallucinations". The assessment itself was not pasted into the build session;
+what follows is the owner's reviewer's reconciliation of it, relayed by the
+owner and recorded here verbatim because it is a ruling, and because its
+strongest instruction is *build nothing merely because another product has it*.
+Nothing below creates a block. The order at the end is the standing order.
+
+> **SELECTIVE RESPONSE — DO NOT CHANGE THE CURRENT BUILD ORDER**
+>
+> The interface diagnosis is accepted. The ruling-burden and pilot conclusions
+> are not yet established.
+>
+> **CORRECTION 1 — RULING BURDEN.** Nikodemus does not require a ruling on every
+> ambiguity. Its historical record has had almost no deferred ruling queue; the
+> owner usually rules inline or leaves proposals provisional. The prospective
+> risk is narrower: Inquiry and Research may generate branching decisions faster
+> than the owner can understand their consequences. Do not optimize an unmeasured
+> burden. Establish this triage rule for future surfaces:
+>
+> *Blocking ambiguity* — ask immediately only when the answer changes: privacy or
+> governed lane; source or person identity; what data leaves the machine; whether
+> a paid/model/network act begins; which text or version is modified; whether
+> something becomes an owner ruling or durable fact.
+>
+> *Material but nonblocking ambiguity* — proceed with separate labelled
+> alternatives. Do not blend them. Offer a later ruling with the consequence
+> stated.
+>
+> *Cosmetic or descriptive ambiguity* — preserve it as unknown or as a proposal.
+> Do not interrupt the owner merely to complete metadata.
+>
+> "High value" must be defined by downstream consequence, not by a model's
+> confidence that the question feels important. Do not build an
+> ambiguity-ranking model. Measure actual interruption demand during real use
+> first.
+>
+> **CORRECTION 2 — SOURCE INGEST.** Local-file ingest already supports EPUB,
+> HTML, TXT, PDF, and DOCX. Media admission and institutional source admission
+> also exist. Do not build another generic upload door. The missing capability
+> is the acquisition-to-admission bridge: (1) the owner asks an outside-research
+> question; (2) search returns leads, explicitly not evidence; (3) the owner
+> selects a lead; (4) Nikodemus acquires or receives the actual source; (5) the
+> Library records exact bytes, acquisition origin, extractor identity, access
+> status, and failures; (6) exact passages become stable anchors; (7) claims
+> cite those anchors; (8) support is proposed or owner-ruled separately;
+> (9) search result, acquired source, cited passage, and owner conclusion never
+> collapse into one object. That is the future Research door. Do not begin it
+> inside the Carry Back, semantic-recall, or Markdown-export blocks.
+>
+> A browser capture mechanism may eventually help this bridge, but it must
+> preserve: original URL and retrieval time; redirected/final URL; content hash;
+> media type; what was actually saved; reader/extractor revision; paywall,
+> login, inaccessible, dynamic, or partial-capture state; whether the page is a
+> source, an index, or merely a lead; no claim that a saved page remains
+> current; a later retraction or correction as a new event, never a rewritten
+> original.
+>
+> GitHub/code is not another universal intake type. Debrief remains an external
+> instrument whose signed, inspectable report may cross through federation. Do
+> not fuse a code parser into the Library.
+>
+> **CORRECTION 3 — PILOTS.** Migration receipts prove that migrations preserved
+> what their tests measured. They do not prove: product usefulness; reduced
+> hallucination; comprehensive research; source quality; user comprehension;
+> clinical safety; readiness for strangers. Do not recruit healthcare users who
+> "cannot afford hallucinations." Nikodemus is explicitly not clinical decision
+> support, and the Clinic has not completed shadow validation.
+>
+> Before any external pilot, the owner should complete five real workflows:
+> (1) raw personal paragraph → Go Deep → Carry Back → owner-written second
+> draft; (2) historical or cultural question → multiple readings → outside
+> sources → exact admitted anchors → revised conclusion; (3) public healthcare
+> or insurance-company investigation using organizational documents only, with
+> no patient information; (4) one real Open Case deposition imported and
+> inspected; (5) one real EthicalAlt deposition imported and inspected.
+>
+> For each workflow, record operational measurements rather than personality
+> conclusions: time to first useful result; number of explicit interruptions;
+> number of model and search calls; approximate cost; sources returned,
+> acquired, admitted, and actually anchored; proposals corrected or discarded;
+> owner rulings made; whether the work could be reopened the following day
+> without reconstruction; which interface element caused confusion. No ambient
+> behavioral interpretation is authorized. Only after those workflows should a
+> small pilot begin, using public, reversible material and no patient-specific
+> or legally sensitive unpublished data.
+>
+> **INTERFACE PRINCIPLE.** The daily product should feel like: a writing room; a
+> question; the source beside the claim; one next useful action; the record
+> waiting underneath. Rooms, receipts, Friction, Vault state, schemas, and
+> provenance remain available contextually. They should not all compete on the
+> first surface. Continue applying: *hide machinery; never hide material state.*
+> Partiality, failed warrant, unverified standing, source absence, model spend,
+> and privacy consequences remain visible. General explanations and internal
+> anatomy may fold.
+>
+> **ORDER.** Do not create a new block from the quoted recommendation. Current
+> order remains: (1) close Carry Back's server-authority and exact-identity
+> repair; (2) manually prove the first-draft → excavation → Carry Back loop;
+> (3) build and test optional local Semantic Leads; (4) build the portable
+> Markdown projection; (5) run the five real workflows above; (6) reassess the
+> Research acquisition-to-admission bridge from measured failures; (7) consider
+> external pilots only afterward.
+>
+> Record the recommendation and this reconciliation. Build nothing merely
+> because another product has it.
+
+Item (1) of that order is block 123b, shipped with this entry. Items (2) and
+(5) are the owner's, not the builder's: they are use, and they produce the
+measurements that decide whether (6) is ever built.

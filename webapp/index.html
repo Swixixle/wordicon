@@ -5216,7 +5216,10 @@ async function carryBack(traceId, kind, ref, excerpt, standing, btn) {
 function carryBtn(traceId, kind, ref, excerpt, standing) {
   // One quiet action. The payload rides on the element so the handler is
   // the same for every kind of material and nothing is looked up by card
-  // order.
+  // order. Block 123b: the excerpt and standing here are what the PAGE
+  // believes; the server ignores both and resolves the ref against the
+  // run's own record. They are kept on the element only so a failed carry
+  // can say what it was trying to carry.
   const payload = escapeHtml(JSON.stringify({t: traceId, k: kind, r: ref || {}, e: String(excerpt || ''), s: standing || {}}));
   return `<button class="carry-btn" type="button" data-carry="${payload}" onclick="carryFromBtn(this)"
             title="keep this beside the draft while revising — it decides nothing">↩ carry back</button>`;
@@ -5315,9 +5318,14 @@ async function openCarryTray() {
   const current = normDraft(box ? box.value : (SESSION.input || ''));
   const items = orderedCarries();
   // which runs examined a different text than the one in the room now?
+  // The text to compare against is the one the carry's RECORD says was
+  // examined — analyzed.trace_id, the run that held the draft — never the
+  // run the card was drawn from: a card inside a Go Deep result carries
+  // its component's trace, whose record holds the dissection's gist, and
+  // a room compared against that would read as stale for ever (123b).
   const stale = {};
   for (const c of items) {
-    const tid = c.source && c.source.trace_id;
+    const tid = analyzedTraceOf(c);
     if (!tid || tid in stale) continue;
     const analyzed = await analyzedTextFor(tid);
     stale[tid] = analyzed === null ? 'unknown' : (normDraft(analyzed) !== current);
@@ -5329,9 +5337,15 @@ async function openCarryTray() {
     </div>
     <p class="foot" style="margin:6px 0 8px">Carried from the workup. Each keeps the standing it had there —
       carrying it changed nothing. None of this is in your draft unless you put it there yourself.</p>
-    ${items.map((c, i) => carryItemHtml(c, i, stale[c.source && c.source.trace_id])).join('')}`;
+    ${items.map((c, i) => carryItemHtml(c, i, stale[analyzedTraceOf(c)])).join('')}`;
   t.style.display = 'block';
   renderCarryControl();
+}
+function analyzedTraceOf(c) {
+  // the run that HELD the examined text, as the carry's record settled it;
+  // a carry written before 123b recorded only the source run, so fall back
+  const a = c && c.analyzed;
+  return (a && a.trace_id) || (c && c.source && c.source.trace_id) || '';
 }
 
 function carryItemHtml(c, i, isStale) {
@@ -5341,11 +5355,12 @@ function carryItemHtml(c, i, isStale) {
   const ref = src.ref || {};
   const where = [src.kind, ref.title || ref.label || ref.field || ''].filter(Boolean).join(' · ');
   const tid = src.trace_id || '';
+  const rootTid = analyzedTraceOf(c);   // the run that held the draft (123b)
   const staleLine = isStale === true
     ? `<div class="carry-stale" role="alert"><strong>This workup examined an earlier version of this draft.</strong>
          <span class="foot">The notes below are about that text, not the one in the room now.</span>
          <div class="row" style="margin-top:6px">
-           <button class="compose-exit" onclick="showAnalyzedVersion('${escapeJs(tid)}', this)">Open the analyzed version</button>
+           <button class="compose-exit" onclick="showAnalyzedVersion('${escapeJs(rootTid)}', this)">Open the analyzed version</button>
            <button class="compose-exit" onclick="retargetCarry('${escapeJs(c.carry_id)}', this)">Carry these notes to the current version anyway</button>
            <button class="compose-exit" onclick="toggleCarryTray()">Cancel</button>
          </div></div>`
@@ -5356,7 +5371,7 @@ function carryItemHtml(c, i, isStale) {
     ${staleLine}
     <div class="carry-labels">${labels.map(l => `<span class="carry-label">${escapeHtml(l)}</span>`).join('')}</div>
     <blockquote class="carry-excerpt">${escapeHtml(c.excerpt || '')}</blockquote>
-    <div class="foot">from ${escapeHtml(where)} · ${escapeHtml(tid)}${c.target && c.target.retargeted_by_owner ? ' · carried to this version by your choice' : ''}</div>
+    <div class="foot">from ${escapeHtml(where)} · ${escapeHtml(tid)}${rootTid && rootTid !== tid ? ' · examined the draft of ' + escapeHtml(rootTid) : ''}${c.target && c.target.retargeted_by_owner ? ' · carried to this version by your choice' : ''}</div>
     <input class="note" placeholder="your note — e.g. “happy hour is in this list on purpose”" value="${escapeHtml(c.note || '')}"
            onchange="noteCarry('${escapeJs(c.carry_id)}', this.value)">
     <div class="row" style="margin-top:4px">

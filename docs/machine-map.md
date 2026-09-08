@@ -78,6 +78,10 @@ exact-byte custody of every package received.
 engines (forge, crack, decompose, sprout, refract, archetype), the Bone/Flesh/Friction
 layering, the judgment log, the Map builder. `scripts/clinic.py` is the medical wing:
 custody by institutional role, declared and never inferred supersession, one topic room.
+`scripts/carry.py` is Carry Back: the append-only store of what the owner carried from
+a workup back beside his draft (`local_state/carries.jsonl`), each carry's excerpt and
+standing resolved from the run's own record and bound, by the run's recorded lineage,
+to the text the run examined — file I/O only, no model, no network.
 
 **What accumulates** — `src/wordicon_corpus/` holds the schema-validated corpus
 service; `scripts/shelf_projection.py` proves the shelf equals what its events rebuild;

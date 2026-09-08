@@ -1187,20 +1187,35 @@ def api_carry():
         rec = json.loads(rec_path.read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
         return jsonify({"error": "the run record could not be read"}), 400
-    analyzed = rec.get("input_text") or rec.get("source_text") or ""
-    if not analyzed.strip():
-        return jsonify({"error": "that run recorded no input text, so there is no draft "
-                                 "identity to bind a carry to"}), 400
+    # 123b: THE RECORD DECIDES. The page names an object; the server resolves
+    # it against the run's own record and takes the excerpt and the standing
+    # from there. Whatever excerpt or standing the request carried is
+    # ignored — a carry's standing is a fact the record holds, not a claim
+    # the client makes. A name that resolves to zero or several objects is
+    # refused rather than guessed.
+    #
+    # And the TEXT a carry binds to is found by the run's recorded lineage,
+    # not read off the run the card happened to be drawn from: a card inside
+    # a Go Deep result carries its component's trace, and that component's
+    # record holds the dissection's gist as input_text, not the draft. The
+    # climb (component → composite, sprout → parent) is written into the
+    # carry hop by hop, so the record says how the identity was settled.
+    kind = str(data.get("source_kind") or "")
     try:
+        excerpt, standing, resolved_ref = carry.resolve_ref(rec, kind, data.get("source_ref") or {})
+        draft = carry.draft_of(trace_id)
+        analyzed = draft["text"]
         row = carry.record_carry(
             trace_id=trace_id,
             source_key=carry.source_key_for(analyzed),
             analyzed_head=analyzed.strip()[:80],
             analyzed_words=len(analyzed.split()),
-            source_kind=str(data.get("source_kind") or ""),
-            source_ref=data.get("source_ref") or {},
-            excerpt=str(data.get("excerpt") or ""),
-            standing=data.get("standing") or {},
+            analyzed_trace_id=draft["trace_id"],
+            chain=draft["chain"],
+            source_kind=kind,
+            source_ref=resolved_ref,
+            excerpt=excerpt,
+            standing=standing,
             target_source_key=str(data.get("target_source_key") or ""),
             note=str(data.get("note") or ""))
     except ValueError as e:

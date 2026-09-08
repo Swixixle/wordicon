@@ -847,7 +847,14 @@ def _check_attempt_ledger():
             ("this may be useful while revising",
              "what carrying means, and by implication what it does not"),
             ("You write the second draft",
-             "who writes the second draft")):
+             "who writes the second draft"),
+            # block 123b
+            ("a fact the record holds, never a claim the page makes",
+             "that a carry's standing comes from the record, not from the page"),
+            ("refused rather than guessed",
+             "that a name fitting nothing or several things is refused"),
+            ("settled by the run's recorded lineage",
+             "which text a carry binds to, and by what")):
         if _n122 not in _canon122:
             out.append(f"122: the constitution does not tell the reader {_w122} "
                        f"(missing {_n122!r})")
@@ -1461,6 +1468,149 @@ def _check_carry_back():
     if 'id="carry-tray"' not in idx or 'class="write-style carry-tray"' not in idx:
         out.append("123: the tray is not one of the room's quiet panels — it must be a sibling "
                    "of the textarea, never a replacement for the room")
+    # -- 123b: SERVER AUTHORITY. The record decides what a carry says.
+    rec = {"trace_id": "trace_deep_fx123b", "input_text": "a synthetic midday passage",
+           "groups": [{"label": "g", "candidates": [
+               {"title": "The Consecrated Porch", "bone_flesh_friction": {
+                   "concept_id": "concept_porch", "title": "The Consecrated Porch",
+                   "flesh": {"definition": "sacred ground read as supervision",
+                             "example_sentence": "He always found it strange that the smoke started on the porch."},
+                   "friction": {"verdict": "reject", "contradicts_anchor": True,
+                                "hostile_read": "the anchor never mentions supervision"},
+                   "claim_support": {"support": "contradicted", "note": "the anchor says church, not cover",
+                                     "deciding_anchor_words": "church", "deciding_claim_words": "cover"}}},
+               {"title": "Twin", "bone_flesh_friction": {"concept_id": "concept_twin_a", "title": "Twin",
+                   "flesh": {"definition": "one"}, "friction": {"verdict": "keep"}, "claim_support": {"support": "supported"}}},
+               {"title": "Twin", "bone_flesh_friction": {"concept_id": "concept_twin_b", "title": "Twin",
+                   "flesh": {"definition": "two"}, "friction": {"verdict": "keep"}, "claim_support": {"support": "supported"}}},
+           ]}],
+           "threads": [{"anchor_name": "Fern Hill", "culture_or_work": "Dylan Thomas", "reading": "time as incubator",
+                        "divergence": "no daily window", "review_verdict": "strained"}],
+           "citations": [],
+           "doors": [{"door_id": "door_1", "text": "Follow the moral-panic thread"}, "a bare string door"]}
+    # a client claiming "supported" for a contradicted candidate gets the record's truth
+    ex, st, ref = carry.resolve_ref(rec, "candidate", {"concept_id": "concept_porch", "field": "definition"})
+    if st.get("anchor_fit") != "contradicted" or not st.get("contradicted") or st.get("friction_verdict") != "reject":
+        out.append(f"123b: the record says contradicted/reject and the resolver said {st}")
+    if "sacred ground read as supervision" not in ex or not ex.startswith("The Consecrated Porch"):
+        out.append(f"123b: the excerpt is not the record's own text: {ex!r}")
+    ex2, st2, _ = carry.resolve_ref(rec, "candidate", {"concept_id": "concept_porch", "field": "example_sentence"})
+    if not st2.get("invented"):
+        out.append("123b: an example sentence resolved without the INVENTED standing")
+    ex3, st3, _ = carry.resolve_ref(rec, "anchor_fit", {"concept_id": "concept_porch"})
+    if "church" not in ex3 or st3.get("anchor_fit") != "contradicted":
+        out.append(f"123b: the anchor-fit difference did not come from the record: {ex3!r} {st3}")
+    ex4, st4, ref4 = carry.resolve_ref(rec, "thread", {"index": 0, "title": "Fern Hill"})
+    if not st4.get("recall_only") or "Where it breaks" not in ex4:
+        out.append(f"123b: the thread's standing or text did not come from the record: {st4} {ex4[:60]!r}")
+    ex5, st5, ref5 = carry.resolve_ref(rec, "door", {"door_id": "door_1"})
+    if ex5 != "Follow the moral-panic thread" or not st5.get("unverified"):
+        out.append(f"123b: the door did not resolve from the record: {ex5!r} {st5}")
+    ex6, _, ref6 = carry.resolve_ref(rec, "door", {"text": "a bare string door"})
+    if ex6 != "a bare string door":
+        out.append("123b: a legacy bare-string door cannot be carried")
+    # exact identity: zero or several is refused, never guessed
+    for kind, ref, why in (("candidate", {"title": "Twin"}, "a title shared by two candidates"),
+                           ("candidate", {"concept_id": "concept_nope"}, "a concept that is not in the run"),
+                           ("candidate", {"concept_id": "concept_porch", "field": "plot_summary"}, "an unknown field"),
+                           ("thread", {"index": 7}, "a thread index past the end"),
+                           ("thread", {"index": 0, "title": "Huck Finn"}, "a thread whose index and title disagree"),
+                           ("door", {"door_id": "door_99"}, "a door that is not in the run"),
+                           ("anchor_fit", {"concept_id": "concept_twin_a"}, "an anchor-fit carry on a supported candidate"),
+                           ("refraction", {"index": 0}, "a kind the server cannot yet resolve")):
+        try:
+            carry.resolve_ref(rec, kind, ref)
+            out.append(f"123b: {why} was resolved instead of refused")
+        except ValueError:
+            pass
+    # the route ignores what the client sends for excerpt and standing
+    srv_block = block
+    if "excerpt=str(data.get(\"excerpt\")" in srv_block or "standing=data.get(\"standing\")" in srv_block:
+        out.append("123b: the carry route still takes the excerpt or the standing from the request")
+    if "carry.resolve_ref(" not in srv_block:
+        out.append("123b: the carry route does not resolve the ref against the record")
+    # -- 123b: EXACT IDENTITY. A card inside a Go Deep result carries its
+    # component's trace, and that component's record holds the dissection's
+    # gist as input_text — not the draft. The draft is found by RECORDED
+    # links only, and the road is written into the carry.
+    import os as _os
+    rd = cli.RESULTS_DIR
+    rd.mkdir(parents=True, exist_ok=True)
+    fx = {
+        "trace_deep_fxid": {"trace_id": "trace_deep_fxid", "mode": "deep",
+                            "input_text": "The owner's own paragraph about midday.",
+                            "components": [{"label": "a", "trace_id": "trace_cli_fxcomp"},
+                                           {"label": "b", "trace_id": "", "failed": True}]},
+        "trace_cli_fxcomp": {"trace_id": "trace_cli_fxcomp", "mode": "forge",
+                             "input_text": "The part of the mechanism the input states outright.\n\nSource constraints — keep it"},
+        "trace_cli_fxsprout": {"trace_id": "trace_cli_fxsprout", "mode": "sprout",
+                               "input_text": "sprout of 'X': a definition", "parent_trace_id": "trace_cli_fxcomp"},
+        "trace_cli_fxsprout2": {"trace_id": "trace_cli_fxsprout2", "mode": "sprout",
+                                "input_text": "sprout of 'Y': a definition", "parent_trace_id": "trace_cli_fxsprout"},
+        "trace_cli_fxdirect": {"trace_id": "trace_cli_fxdirect", "mode": "forge",
+                               "input_text": "A paragraph the owner pasted straight into Forge."},
+        "trace_cli_fxrootless": {"trace_id": "trace_cli_fxrootless", "mode": "sprout",
+                                 "input_text": "sprout of 'Z': typed at the bench", "parent_trace_id": ""},
+        "trace_cli_fxorphan": {"trace_id": "trace_cli_fxorphan", "mode": "sprout",
+                               "input_text": "sprout of 'W'", "parent_trace_id": "trace_cli_gone"},
+        "trace_cli_fxrefract": {"trace_id": "trace_cli_fxrefract", "mode": "refract",
+                                "input_text": "refraction of 'X'"},
+        "trace_cli_fxloopa": {"trace_id": "trace_cli_fxloopa", "mode": "sprout",
+                              "input_text": "s", "parent_trace_id": "trace_cli_fxloopb"},
+        "trace_cli_fxloopb": {"trace_id": "trace_cli_fxloopb", "mode": "sprout",
+                              "input_text": "s", "parent_trace_id": "trace_cli_fxloopa"},
+    }
+    for t, d in fx.items():
+        (rd / f"{t}.json").write_text(_json.dumps(d), encoding="utf-8")
+    try:
+        want_text = "The owner's own paragraph about midday."
+        for t, links in (("trace_deep_fxid", ["root"]),
+                         ("trace_cli_fxcomp", ["component_of", "root"]),
+                         ("trace_cli_fxsprout", ["parent_trace_id", "component_of", "root"]),
+                         ("trace_cli_fxsprout2", ["parent_trace_id", "parent_trace_id", "component_of", "root"])):
+            d = carry.draft_of(t)
+            if d["text"] != want_text or d["trace_id"] != "trace_deep_fxid":
+                out.append(f"123b: {t} did not bind to the draft the deep run examined: {d['trace_id']} {d['text'][:40]!r}")
+            if [h["link"] for h in d["chain"]] != links:
+                out.append(f"123b: the recorded road for {t} is {[h['link'] for h in d['chain']]}, not {links}")
+        d = carry.draft_of("trace_cli_fxdirect")
+        if d["trace_id"] != "trace_cli_fxdirect" or not d["text"].startswith("A paragraph the owner pasted"):
+            out.append("123b: a forge run no composite lists is the owner's own run and must bind to itself")
+        for t, why in (("trace_cli_fxrootless", "a rabbithole with no recorded parent"),
+                       ("trace_cli_fxorphan", "a rabbithole whose recorded parent has no record"),
+                       ("trace_cli_fxrefract", "a refraction, which records no road back"),
+                       ("trace_cli_fxloopa", "a lineage that loops"),
+                       ("trace_cli_nothing", "a trace with no record")):
+            try:
+                carry.draft_of(t)
+                out.append(f"123b: {why} was bound to a draft instead of refused")
+            except ValueError:
+                pass
+        # the record says how the identity was settled
+        row = carry.record_carry(trace_id="trace_cli_fxcomp", source_key="src:000000000000",
+                                 source_kind="candidate", source_ref={"concept_id": "c"}, excerpt="e",
+                                 analyzed_trace_id="trace_deep_fxid",
+                                 chain=carry.draft_of("trace_cli_fxcomp")["chain"])
+        if row["analyzed"].get("trace_id") != "trace_deep_fxid" or \
+           [h["link"] for h in row["analyzed"].get("chain") or []] != ["component_of", "root"]:
+            out.append("123b: the carry does not record which run held the draft and how that was established")
+    finally:
+        for t in fx:
+            try:
+                _os.remove(rd / f"{t}.json")
+            except OSError:
+                pass
+    if "carry.draft_of(" not in srv_block or "analyzed_trace_id=draft[\"trace_id\"]" not in srv_block:
+        out.append("123b: the carry route does not bind the carry to the draft by the recorded lineage")
+    # the tray compares the room against the run that HELD the draft
+    if "function analyzedTraceOf" not in idx:
+        out.append("123b: the tray has no notion of which run held the analysed text")
+    tray_fn = idx[idx.find("async function openCarryTray"):idx.find("function carryItemHtml")]
+    if "analyzedTraceOf(c)" not in tray_fn or "c.source.trace_id;" in tray_fn:
+        out.append("123b: the tray still compares the draft against the card's run, not the run that held the draft")
+    item_fn = idx[idx.find("function carryItemHtml"):idx.find("function carryCopyText")]
+    if "showAnalyzedVersion('${escapeJs(rootTid)}'" not in item_fn:
+        out.append("123b: 'Open the analyzed version' opens the card's run, not the draft")
     return out
 
 

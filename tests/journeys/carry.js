@@ -6,17 +6,26 @@
 // contradicted item cannot render as supported; and that nothing here ever
 // inserts prose into the draft or produces a ruling.
 //
-// The synthetic fixture carries the same structural trap as the run that
-// prompted this block: a broad MIDDAY interval, a list mixing childhood and
-// adult examples, a candidate that narrows it to school-to-dinner, an
-// anchor-fit reviewer naming the added boundary, an unverified cultural
-// comparison, one invented example, one contradicted proposal. The owner's
+// Block 123b — SERVER AUTHORITY and EXACT IDENTITY. Every carry below names
+// an object; the server resolves it against the run's own record and takes
+// the excerpt and the standing from there. The client's claims are sent and
+// must LOSE. And every carry is posted with the trace a card actually
+// carries — the COMPONENT'S, whose record holds the dissection's gist as its
+// input_text — and must come back bound to the draft the Go Deep run
+// examined, with the recorded road written into it.
+//
+// The fixture is a real partial Go Deep run through the real path, with the
+// offline gateway answering anchor-support by title so the RECORD holds a
+// partial fit and a contradicted proposal, plus a rabbithole opened from the
+// completed component's card the way the page opens one. The owner's
 // passage is not here.
 const fs = require('fs');
 const path = require('path');
 const { BASE, DIR, ok, launch, pairedContext, finish } = require('./lib');
 const IDS = JSON.parse(fs.readFileSync(path.join(DIR, 'partial.json'), 'utf8'));
 const TRACE = IDS.deepPartial;
+const COMPONENT = IDS.component;             // what a candidate card sends
+const SPROUT = IDS.sproutFromComponent;      // what a thread/door card sends
 
 (async () => {
   const browser = await launch();
@@ -42,29 +51,37 @@ const TRACE = IDS.deepPartial;
   const btns = await page.evaluate(() => document.querySelectorAll('button.carry-btn').length);
   ok(btns >= 2, 'the completed component\'s cards offer a quiet carry action :: ' + btns);
 
-  // ---- 2. carry the fixture's five standings through the real route -----
-  const carried = await page.evaluate(async (tid) => {
-    const mk = (kind, ref, excerpt, standing) => fetch('/api/carry', {method: 'POST',
+  // ---- 2. five carries through the real route, each LYING about itself --
+  // The page sends what a card sends — the component's trace, a name for
+  // the object — plus an excerpt and a standing that are WRONG on purpose.
+  // What comes back must be the record's text and the record's standing.
+  const carried = await page.evaluate(async ([comp, sprout]) => {
+    const mk = (tid, kind, ref, excerpt, standing) => fetch('/api/carry', {method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({trace_id: tid, source_kind: kind, source_ref: ref, excerpt, standing})}).then(r => r.json());
     const out = [];
-    out.push(await mk('candidate', {concept_id: 'concept_fx1', title: 'The Afterschool Slot', field: 'definition'},
-      'The Afterschool Slot: the interval between school letting out and dinner being called.',
-      {anchor_fit: 'partial', friction_verdict: 'keep', route: 'candidate concept'}));
-    out.push(await mk('anchor_fit', {concept_id: 'concept_fx1', title: 'The Afterschool Slot', field: 'claim_support'},
-      'Anchor fit (partial): anchor: midday, cradle · claim: school, dinner',
-      {anchor_fit: 'partial', route: 'anchor-fit difference — reviewer-selected words, not a proof'}));
-    out.push(await mk('candidate', {concept_id: 'concept_fx2', title: 'The Consecrated Porch', field: 'definition'},
-      'The Consecrated Porch: sacred ground read as supervision, so the transgression borrows the institution’s calm.',
-      {anchor_fit: 'contradicted', friction_verdict: 'reject', contradicted: true, route: 'candidate concept'}));
-    out.push(await mk('candidate', {concept_id: 'concept_fx1', title: 'The Afterschool Slot', field: 'example_sentence'},
-      'The afterschool slot ran from three to six, and it held both my glove and my brother’s lighter equally.',
-      {invented: true, route: 'model-written example'}));
-    out.push(await mk('thread', {index: 3, title: 'Latchkey children', work: 'American social history'},
-      'Latchkey children — American social history — a documented interval between institutional endpoints.',
-      {route: 'lateral thread · holds', recall_only: true, unverified: true}));
+    // a partial candidate, claimed as supported with a rewritten definition
+    out.push(await mk(comp, 'candidate', {title: 'The Refusenik Posture', field: 'definition'},
+      'The Refusenik Posture: a definition the page made up.',
+      {anchor_fit: 'supported', friction_verdict: 'keep', route: 'candidate concept'}));
+    // its anchor-fit difference, claimed as supported
+    out.push(await mk(comp, 'anchor_fit', {title: 'The Refusenik Posture', field: 'claim_support'},
+      'Anchor fit (supported): the page says so',
+      {anchor_fit: 'supported', route: 'anchor-fit difference — reviewer-selected words, not a proof'}));
+    // the CONTRADICTED candidate, claimed as supported and kept
+    out.push(await mk(comp, 'candidate', {title: 'Threshold Grief', field: 'definition'},
+      'Threshold Grief: the page says this one is fine.',
+      {anchor_fit: 'supported', friction_verdict: 'keep', contradicted: false, route: 'candidate concept'}));
+    // the model's example sentence, claimed as the owner's own words
+    out.push(await mk(comp, 'candidate', {title: 'The Refusenik Posture', field: 'example_sentence'},
+      'a sentence the owner never wrote, claimed as his',
+      {invented: false, route: 'owner-authored'}));
+    // a lateral thread from the rabbithole opened off that card, claimed verified
+    out.push(await mk(sprout, 'thread', {index: 0, title: 'Cassandra'},
+      'Cassandra — verified, says the page',
+      {route: 'lateral thread · verified', recall_only: false, unverified: false}));
     return out;
-  }, TRACE);
+  }, [COMPONENT, SPROUT]);
   ok(carried.every(c => c && c.ok && c.carry && c.carry.carry_id),
      'five carries recorded through the real route :: ' + carried.map(c => c && (c.error || c.carry.carry_id)).join(','));
   ok(carried.every(c => c.carry.means === 'may be useful while revising' && (c.carry.is_not || []).includes('accepted')),
@@ -74,6 +91,53 @@ const TRACE = IDS.deepPartial;
      + carried[0].carry.analyzed.source_key);
   ok(carried.every(c => !('candidates' in c.carry) && !('groups' in c.carry)),
      'a carry holds an excerpt and a reference, not a copy of the result');
+  // server authority: the record's text and standing, never the client's
+  const [cDef, cFit, cBad, cEx, cThr] = carried.map(c => c.carry);
+  ok(/^The Refusenik Posture: The stance of one who exits a containing system/.test(cDef.excerpt),
+     'the excerpt is the record\'s own definition, not the one the page sent :: ' + JSON.stringify(cDef.excerpt.slice(0, 80)));
+  ok(cDef.standing.anchor_fit === 'partial' && cDef.standing.friction_verdict === 'keep',
+     'a partial candidate claimed as supported comes back partial :: ' + JSON.stringify(cDef.standing));
+  ok(cFit.standing.anchor_fit === 'partial' && /The description is licensed; the causal claim is not/.test(cFit.excerpt),
+     'the anchor-fit difference is the reviewer\'s recorded words :: ' + JSON.stringify(cFit.excerpt));
+  ok(cBad.standing.contradicted === true && cBad.standing.anchor_fit === 'contradicted'
+     && cBad.standing.friction_verdict === 'contradicted' && /^Threshold Grief: Generic liminal-space/.test(cBad.excerpt),
+     'a contradicted candidate claimed as supported and kept comes back contradicted, with the record\'s text :: '
+     + JSON.stringify(cBad.standing));
+  ok(cEx.standing.invented === true && cEx.standing.route === 'model-written example'
+     && /^He quit the job but kept the refusenik posture/.test(cEx.excerpt) && !('anchor_fit' in cEx.standing),
+     'the example sentence claimed as the owner\'s comes back INVENTED, in the model\'s words, with no anchor fit it was never given :: '
+     + JSON.stringify(cEx.standing));
+  ok(cThr.standing.unverified === true && cThr.standing.route === 'lateral thread · holds'
+     && /^Cassandra — Greek myth/.test(cThr.excerpt) && !/verified, says the page/.test(cThr.excerpt),
+     'a thread claimed verified comes back unverified, with the record\'s route :: ' + JSON.stringify(cThr.standing));
+  ok(cDef.source.ref.concept_id && /^concept_/.test(cDef.source.ref.concept_id) && cDef.source.ref.field === 'definition',
+     'the stored ref is the identity the server settled (concept_id + field), not the bare title the page sent :: '
+     + JSON.stringify(cDef.source.ref));
+  // exact identity: posted with the component's trace, bound to the draft
+  ok(carried.every(c => c.carry.analyzed.trace_id === TRACE),
+     'every carry is bound to the Go Deep run that held the draft, though none was posted with its trace :: '
+     + carried.map(c => c.carry.analyzed.trace_id).join(','));
+  ok(new Set(carried.map(c => c.carry.analyzed.source_key)).size === 1,
+     'all five carries share one source key — the draft\'s, not the component gist\'s or the sprout\'s :: '
+     + [...new Set(carried.map(c => c.carry.analyzed.source_key))].join(','));
+  ok(/^A passage about pretending while poor/.test(cDef.analyzed.head),
+     'the analysed head is the owner\'s draft, not the dissection\'s gist :: ' + JSON.stringify(cDef.analyzed.head));
+  ok(cDef.analyzed.chain.map(h => h.link).join('>') === 'component_of>root'
+     && cThr.analyzed.chain.map(h => h.link).join('>') === 'parent_trace_id>component_of>root',
+     'the road from the card\'s run to the draft is written into the carry, hop by hop :: '
+     + JSON.stringify([cDef.analyzed.chain, cThr.analyzed.chain]));
+  // a name that does not resolve is refused, never guessed
+  const refused = await page.evaluate(async (comp) => {
+    const post = body => fetch('/api/carry', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(Object.assign({trace_id: comp, excerpt: 'x', standing: {}}, body))}).then(async r => ({status: r.status, body: await r.json()}));
+    return {
+      missing: await post({source_kind: 'candidate', source_ref: {title: 'The Afterschool Slot', field: 'definition'}}),
+      fitOnPartialOnly: await post({source_kind: 'anchor_fit', source_ref: {title: 'Nobody'}}),
+      field: await post({source_kind: 'candidate', source_ref: {title: 'The Refusenik Posture', field: 'plot'}}),
+    };
+  }, COMPONENT);
+  ok(Object.values(refused).every(r => r.status === 400 && r.body.error && !r.body.ok),
+     'a ref that names nothing in the record is refused with a reason, not guessed :: ' + JSON.stringify(refused));
 
   // ---- 3. carrying produced no ruling and changed no candidate -----------
   const untouched = await page.evaluate(async (tid) => {
@@ -152,7 +216,15 @@ const TRACE = IDS.deepPartial;
   // children; that is the witness a reader actually has.
   ok(/INVENTED EXAMPLE/.test(tray.text), 'the invented example is labelled INVENTED on the rendered tray :: ' + tray.text.slice(0, 160));
   ok(/CONTRADICTED/.test(tray.text), 'the contradicted proposal is labelled CONTRADICTED on the rendered tray');
-  ok(/RECALL ONLY/.test(tray.text), 'the recall-only comparison stays recall-only on the rendered tray');
+  // the thread's standing is what ITS record holds: the rabbithole's review
+  // saw provider results, so it is unverified but not recall-only — and the
+  // tray may not say otherwise in either direction
+  const sproutCited = await page.evaluate(async (sp) => {
+    const d = await (await fetch('/api/result/' + sp)).json(); return (d.citations || []).length;
+  }, SPROUT);
+  ok(/UNVERIFIED/.test(tray.text) && (/RECALL ONLY/.test(tray.text) === (sproutCited === 0)),
+     'the lateral thread reads UNVERIFIED, and RECALL ONLY exactly when its run saw no provider results :: '
+     + sproutCited + ' citation row(s); ' + tray.text.match(/UNVERIFIED|RECALL ONLY[^\n]*/g));
   ok(/anchor fit: partial/i.test(tray.text), 'the partial anchor-fit stays partial on the rendered tray');
   ok(!/\bsupported\b/i.test(tray.text), 'nothing on the rendered tray reads as supported');
   ok(tray.labels.length >= 8 && tray.visibleLabels === tray.labels.length,
@@ -178,6 +250,10 @@ const TRACE = IDS.deepPartial;
   }));
   ok(shown.pre.length > 40 && shown.box === 'A midday sentence the owner is writing now.\nSecond line.',
      'opening the analysed version shows it read-only and leaves the draft alone :: ' + shown.pre.slice(0, 50));
+  // 123b: the analysed version is the DRAFT the Go Deep run examined, not
+  // the dissection's gist that the component's own record holds
+  ok(/^A passage about pretending while poor/.test(shown.pre) && !/The part of the mechanism/.test(shown.pre),
+     'the analysed version opened is the owner\'s draft, not the component\'s forge text :: ' + JSON.stringify(shown.pre.slice(0, 60)));
   // the owner's explicit choice is recorded as his
   const first = carried[0].carry.carry_id;
   await page.evaluate(async (id) => {
