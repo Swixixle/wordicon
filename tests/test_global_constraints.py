@@ -48,6 +48,7 @@ _REDIRECTED = {
     "ENCOUNTER_SWITCH_LOG": _SCRATCH / "encounter_switch.jsonl",
     "ENCOUNTERS_LOG": _SCRATCH / "encounters.jsonl",
     "OPEN_QUESTIONS_LOG": _SCRATCH / "open_questions.jsonl",   # block 105
+    "CARRIES_LOG": _SCRATCH / "carries.jsonl",                 # block 123
 }
 for _name, _path in _REDIRECTED.items():
     setattr(cli, _name, _path)
@@ -839,7 +840,14 @@ def _check_attempt_ledger():
             ("drawn as five different things",
              "that its five states are distinguishable on sight"),
             ("never blocks a ruling",
-             "that the row advises and does not gate")):
+             "that the row advises and does not gate"),
+            # block 123
+            ("comes back as notes, not as text",
+             "that what returns from a workup is notes beside the draft, never text in it"),
+            ("this may be useful while revising",
+             "what carrying means, and by implication what it does not"),
+            ("You write the second draft",
+             "who writes the second draft")):
         if _n122 not in _canon122:
             out.append(f"122: the constitution does not tell the reader {_w122} "
                        f"(missing {_n122!r})")
@@ -1330,6 +1338,132 @@ def _check_law_filing():
     return out
 
 
+# ---- block 123: Carry Back ---------------------------------------------------
+#
+# The bridge from a workup to the writing room. A carry means "this may be
+# useful while revising" — not accepted, supported, verified, true, written
+# by the owner, or approved — and these pins hold the store to that. The
+# browser journey proves the room side (nothing inserted, nothing disturbed,
+# labels as rendered text, a mismatch that cannot pass silently); this
+# proves the record side, offline, with no gateway anywhere near it.
+
+def _check_carry_back():
+    out = []
+    import importlib
+    try:
+        carry = importlib.import_module("carry")
+    except Exception as e:  # noqa: BLE001
+        out.append(f"123: scripts/carry.py does not import ({type(e).__name__}: {e})")
+        return out
+    importlib.reload(carry)   # picks up the redirected LOCAL_STATE
+
+    # -- no model, no network, by construction
+    src = (_pathlib.Path(cli.__file__).parent / "carry.py").read_text(encoding="utf-8")
+    for bad in ("anthropic", "httpx", "urllib", "requests", "socket", "make_gateway", ".complete("):
+        if bad in src:
+            out.append(f"123: carry.py mentions {bad!r} — the bridge makes no model call and "
+                       f"no network request, ever")
+    srv = (_pathlib.Path(cli.__file__).resolve().parents[1] / "server.py").read_text(encoding="utf-8")
+    i = srv.find("# ---- Carry Back (block 123)")
+    j = srv.find('@app.route("/constitution")', i)
+    block = srv[i:j] if i != -1 and j != -1 else ""
+    if not block:
+        out.append("123: the carry routes are not where the server says they are")
+    elif "server_gateway" in block or "make_gateway" in block:
+        out.append("123: a carry route reaches for the gateway")
+
+    text = "A synthetic passage about a midday interval that cradles both a first cigarette and happy hour."
+    key = carry.source_key_for(text)
+    if key != cli.node_source(text)["key"]:
+        out.append("123: the carry's source identity is not the Map's source identity — a carry "
+                   "and an edge would disagree about which text they mean")
+
+    # -- record, fold, and the meaning a carry records about itself
+    c = carry.record_carry(trace_id="trace_deep_fx123", source_key=key, source_kind="candidate",
+                           source_ref={"concept_id": "concept_fx", "title": "The Afterschool Slot",
+                                       "field": "definition"},
+                           excerpt="The interval between school letting out and dinner being called.",
+                           standing={"anchor_fit": "partial", "friction_verdict": "keep",
+                                     "contradicted": False})
+    if c.get("means") != "may be useful while revising" or "accepted" not in (c.get("is_not") or []):
+        out.append("123: a carry does not record what it means and what it is not")
+    if "candidates" in c or "groups" in c or len(c.get("excerpt", "")) > 4000:
+        out.append("123: a carry copies the result instead of excerpting it")
+    if c.get("standing", {}).get("anchor_fit") != "partial":
+        out.append("123: the standing did not survive into the record")
+    for k in ("carry_id", "at", "epoch", "source", "analyzed", "target", "excerpt"):
+        if k not in c:
+            out.append(f"123: a carry lacks {k!r}, which a later interface needs to find it")
+
+    # -- unknown kinds and empty carries are refused
+    for kwargs, why in (
+            (dict(source_kind="dom_position"), "a carry bound by DOM position"),
+            (dict(excerpt="   "), "a carry with nothing in it"),
+            (dict(trace_id=""), "a carry with no run")):
+        base = dict(trace_id="trace_deep_fx123", source_key=key, source_kind="candidate",
+                    source_ref={"field": "definition"}, excerpt="x")
+        base.update(kwargs)
+        try:
+            carry.record_carry(**base)
+            out.append(f"123: {why} was accepted")
+        except ValueError:
+            pass
+
+    # -- append-only: dismissing is an event, not an erasure
+    carry.dismiss_carry(c["carry_id"], "not this one")
+    f = carry.fold()
+    if c["carry_id"] not in f or f[c["carry_id"]]["state"] != "dismissed":
+        out.append("123: dismissing a carry did not record a dismissal")
+    if not carry._log_path().exists():
+        out.append("123: the carry log is not a file under the store, so it would not survive "
+                   "a server restart or ride in the vault")
+    rows = carry._rows()
+    if len(rows) != 2 or rows[0].get("kind") != "carried" or rows[1].get("kind") != "dismissed":
+        out.append(f"123: the log is not append-only history: {[r.get('kind') for r in rows]}")
+    if str(carry._log_path()).startswith(str(_REAL_STATE)):
+        out.append("123: the carry store is writing to the owner's real store during the suite")
+
+    # -- retargeting is the owner's explicit choice, and only that
+    try:
+        carry.retarget_carry(c["carry_id"], "src:000000000000", "silently")
+        out.append("123: a retarget with no owner choice was accepted")
+    except ValueError:
+        pass
+    ev = carry.retarget_carry(c["carry_id"], "src:000000000000", "carry_to_current_anyway")
+    if ev.get("owner_choice") != "carry_to_current_anyway":
+        out.append("123: the owner's retarget choice was not recorded as his")
+
+    # -- the vault does not exclude it: carries ride with the corpus
+    vsrc = (_pathlib.Path(cli.__file__).parent / "vault.py").read_text(encoding="utf-8")
+    if "carries.jsonl" in vsrc:
+        out.append("123: vault.py names carries.jsonl — if it is an exclusion, carries would "
+                   "not survive to another machine; say so rather than hide it")
+
+    # -- the room's contract survives the tray: the textarea is never rebuilt
+    idx = (_pathlib.Path(cli.__file__).resolve().parents[1] / "webapp" / "index.html").read_text(encoding="utf-8")
+    ci = idx.find("// ---- Carry Back (block 123)")
+    cj = idx.find("function composeMirror() {", ci)
+    cblock = idx[ci:cj] if ci != -1 and cj != -1 else ""
+    if not cblock:
+        out.append("123: the carry code is not where index.html says it is")
+    else:
+        for bad, why in (("compose-text').value =", "writes into the draft"),
+                         ("innerHTML = ", None)):
+            pass
+        # the ONLY assignment to the draft's value is inside retargetCarry's
+        # read of it — never a write. Look for writes.
+        if _re.search(r"getElementById\('compose-text'\)\.value\s*=[^=]", cblock):
+            out.append("123: the carry code writes into the draft — nothing here may insert prose")
+        if "execCommand" in cblock or "insertText" in cblock:
+            out.append("123: the carry code inserts text into the room")
+        if "server_gateway" in cblock or "/api/run" in cblock or "/api/job" in cblock:
+            out.append("123: the carry code starts a run")
+    if 'id="carry-tray"' not in idx or 'class="write-style carry-tray"' not in idx:
+        out.append("123: the tray is not one of the room's quiet panels — it must be a sibling "
+                   "of the textarea, never a replacement for the room")
+    return out
+
+
 def main() -> int:
     failures = FAILURES
     # block 113, hoisted: pure checks on a pure function, before anything
@@ -1339,6 +1473,7 @@ def main() -> int:
     failures.extend(_check_stream_and_retry_authority())
     failures.extend(_check_constitution_split())
     failures.extend(_check_law_filing())
+    failures.extend(_check_carry_back())
     # block 120: the baseline is only meaningful if nothing else is writing.
     # The corpus lease is the mechanical answer to "is a writer live" — it is
     # an flock held for a process's lifetime, so it cannot go stale and it

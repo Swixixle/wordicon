@@ -453,6 +453,18 @@
      this thing, and fourteen flat headings are a wall. These five name the
      order rather than merely imposing it. Unnumbered on purpose — the
      system is not a pipeline and you may enter at any of them. */
+  .carry-btn { font: inherit; font-size: 11.5px; color: var(--muted); background: transparent;
+    border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; cursor: pointer; margin-top: 6px }
+  .carry-btn:hover { color: inherit }
+  .carry-tray { width: min(420px, calc(100vw - 32px)); max-height: 70vh; overflow: auto }
+  .carry-item { border-top: 1px solid var(--write-faint, var(--border)); padding: 8px 0 6px }
+  .carry-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px }
+  .carry-label { font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase;
+    border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; color: var(--muted) }
+  .carry-excerpt { margin: 4px 0; padding-left: 10px; border-left: 3px solid var(--border); font-size: 13px }
+  .carry-stale { border-left: 3px solid var(--bad, #c0605f); padding-left: 10px; margin: 4px 0 8px; font-size: 12.5px }
+  .carry-stale pre.analyzed { white-space: pre-wrap; font: inherit; font-size: 12px; max-height: 30vh; overflow: auto;
+    border: 1px solid var(--border); padding: 6px; margin-top: 6px }
   .anchor-fit-why { margin: 2px 0 8px; font-size: 12.5px;
     border-left: 3px solid var(--border); padding-left: 10px }
   .v-deny .vdot { color: var(--bad) }
@@ -976,6 +988,7 @@
     </div>
   </div>
   <div id="write-style" class="write-style" style="display:none"></div>
+  <div id="carry-tray" class="write-style carry-tray" style="display:none" role="region" aria-label="revision notes"></div>
   <div id="write-save" class="write-style" style="display:none"></div>
   <!-- Pass 2. A keystroke may not spend money, so it opens this instead: one
        panel that says what would be sent, down which lane, at what cost, and
@@ -2706,7 +2719,7 @@ function renderCandidateCard(cand, traceId, extra) {
       ${(bff.flesh && (bff.flesh.plain_gloss || bff.flesh.example_sentence)) ? `
       <div style="margin:8px 0 2px;padding:8px 10px;border-left:3px solid var(--accent, #888);background:rgba(128,128,128,0.07);border-radius:4px">
         ${bff.flesh.plain_gloss ? `<p class="body" style="margin:0;font-size:13.5px"><span style="font-size:10.5px;text-transform:uppercase;letter-spacing:0.07em;color:var(--muted);display:block">In one breath</span>${escapeHtml(bff.flesh.plain_gloss)}</p>` : ''}
-        ${inventedExampleHtml(bff.flesh.example_sentence)}
+        ${inventedExampleHtml(bff.flesh.example_sentence, {traceId: traceId, ref: {concept_id: bff.concept_id || '', title: bff.title}})}
       </div>` : ''}
 
       <div class="section-label">The concept — what the idea is, before any name</div>
@@ -2718,6 +2731,25 @@ function renderCandidateCard(cand, traceId, extra) {
 
       ${verdictHeadHtml(bff, extra)}
       ${anchorFitLine(bff)}
+      ${(() => {
+        const cs = bff.claim_support || {}, f = bff.friction || {};
+        const standing = {anchor_fit: cs.support || '', friction_verdict: f.verdict || '',
+                          contradicted: !!f.contradicts_anchor, route: 'candidate concept'};
+        const ref = {concept_id: bff.concept_id || '', title: bff.title};
+        const def = (bff.flesh && bff.flesh.definition) || '';
+        const fitWhy = ['partial', 'topical', 'contradicted'].includes(cs.support)
+          ? (cs.note || [cs.deciding_anchor_words ? 'anchor: ' + cs.deciding_anchor_words : '',
+                         cs.deciding_claim_words ? 'claim: ' + cs.deciding_claim_words : ''].filter(Boolean).join(' · '))
+          : '';
+        return `<div class="row" style="gap:6px;flex-wrap:wrap">
+          ${def ? carryBtn(traceId, 'candidate', Object.assign({field: 'definition'}, ref), bff.title + ': ' + def, standing) : ''}
+          ${fitWhy ? carryBtn(traceId, 'anchor_fit', Object.assign({field: 'claim_support'}, ref),
+                              'Anchor fit (' + cs.support + ') on “' + bff.title + '”: ' + fitWhy,
+                              {anchor_fit: cs.support, route: 'anchor-fit difference — reviewer-selected words, not a proof'}) : ''}
+          ${f.hostile_read ? carryBtn(traceId, 'friction', Object.assign({field: 'hostile_read'}, ref),
+                                      'Friction on “' + bff.title + '”: ' + f.hostile_read,
+                                      {friction_verdict: f.verdict || '', route: 'critic\u2019s objection — advisory'}) : ''}
+        </div>`; })()}
 
       <details class="case"><summary>show the case \u2014 the evidence behind those rows</summary>
 
@@ -3166,12 +3198,13 @@ function liveDoor(bff) {
 // label does not shrink.
 const INVENTED_EXAMPLE_PREFIX = 'INVENTED EXAMPLE — NOT IN YOUR TEXT:';
 
-function inventedExampleHtml(sentence) {
+function inventedExampleHtml(sentence, carry) {
   const t = String(sentence || '').trim();
   if (!t) return '';
   return `<p class="body muted" style="margin:5px 0 0;font-size:13px">
       <span style="letter-spacing:0.04em">${INVENTED_EXAMPLE_PREFIX}</span>
-      <span style="font-style:italic">${escapeHtml(t)}</span></p>`;
+      <span style="font-style:italic">${escapeHtml(t)}</span>
+      ${carry ? carryBtn(carry.traceId, 'candidate', Object.assign({field: 'example_sentence'}, carry.ref), t, {invented: true, route: 'model-written example'}) : ''}</p>`;
 }
 
 // ---- the acquisition record -------------------------------------------
@@ -3689,7 +3722,7 @@ function buildSproutHtml(res, areaId) {
     ? `<div class="body muted" style="font-size:12.5px;border-left:3px solid var(--accent, #888);padding-left:10px;margin:4px 0 10px">
         <em>Inherited caveat</em> — this concept was itself rated “${escapeHtml(iv)}” one hop back: ${escapeHtml(res.inherited_note || '')}
       </div>` : '';
-  const threadCards = threads.map(t => {
+  const threadCards = threads.map((t, ti) => {
     const v = t.review_verdict;
     const vTag = v === 'holds' ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0">holds</span>`
       : v === 'strained' ? `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">strained</span>`
@@ -3729,6 +3762,11 @@ function buildSproutHtml(res, areaId) {
         ${t.locator ? `<p class="body muted" style="font-size:12.5px"><em>Check it:</em> ${escapeHtml(t.locator)}</p>` : ''}
         ${reviewerProseHtml(t.review_note, (res.citations || []).length)}
         <button class="judge-btn" style="margin-top:6px;font-size:12px" onclick="sproutFromSeed('${seedKey}', '${areaId}')">⤷ sprout from this</button>
+        ${carryBtn(res.trace_id || '', 'thread',
+                   {index: ti, title: t.anchor_name || '', work: t.culture_or_work || ''},
+                   [t.anchor_name || '', t.culture_or_work || '', t.reading || t.parallel || '', t.divergence ? 'Where it breaks: ' + t.divergence : ''].filter(Boolean).join(' — '),
+                   {route: 'lateral thread · ' + (t.review_verdict || 'unreviewed'),
+                    recall_only: !((res.citations || []).length), unverified: true})}
       </div>`;
   }).join('');
   // Doors are objects now ({door_id, text, origin_scope, ...}), but old
@@ -3744,7 +3782,9 @@ function buildSproutHtml(res, areaId) {
       ${door.origin_scope === 'thread' && (door.origin_thread_ids || []).length
         ? `<div class="history-meta">suggested by thread ${door.origin_thread_ids.map(n => n + 1).join(', ')}</div>`
         : `<div class="history-meta">suggested by this set as a whole — no single thread claimed it</div>`}
-      <button class="judge-btn" style="margin-top:4px;font-size:12px" onclick="sproutFromSeed('${seedKey}', '${areaId}')">⤷ open this door</button></div>`;
+      <button class="judge-btn" style="margin-top:4px;font-size:12px" onclick="sproutFromSeed('${seedKey}', '${areaId}')">⤷ open this door</button>
+      ${carryBtn(res.trace_id || '', 'door', {door_id: door.door_id || '', text: door.text}, door.text,
+                 {route: 'investigative road, not yet walked', unverified: true})}</div>`;
   }).join('');
   // The trail: how you got here, idea by idea. Every hop but the current
   // one is tappable and reopens that hop from the record. A hop taken on
@@ -5107,6 +5147,285 @@ function inkUpdate() {
     paintInk(now, null);
   }
   inkScroll();
+}
+
+// ---- Carry Back (block 123) ---------------------------------------------
+//
+// The bridge from a workup to the writing room, and only a bridge. The
+// owner writes a dense first draft; Go Deep takes it apart; he sees what is
+// worth returning to; and until now nothing carried it back — nine hundred
+// lines on one side, the untouched paragraph on the other, and him ferrying
+// by hand or losing it under the dig.
+//
+// CARRY MEANS "this may be useful while revising". Not accepted, supported,
+// verified, true, written by him, or approved. Carrying creates no judgment
+// and changes no standing: a contradicted candidate carried for its energy
+// is still contradicted, an invented example still says INVENTED, a
+// recall-only parallel is still recall-only. The labels ride with the
+// excerpt into the store, onto the tray, and into anything copied out.
+//
+// The draft never leaves the browser because of this. A carry stores the
+// excerpt and the identity of the text the run examined; the comparison
+// between that text and the current draft happens HERE, from the result the
+// server already holds, so the draft is not sent anywhere to be checked.
+//
+// The room is not touched. The tray is one more quiet panel beside the
+// textarea — the same furniture as the type panel — and opening it moves
+// no text, no caret, no selection, no scroll, and no undo history. Nothing
+// here ever inserts model prose into the draft. No model is called. No
+// network leaves the machine.
+
+let CARRIES = [];                      // active carries, from the record
+let CARRY_ORDER_KEY = 'nikodemus.carry.order.v1';   // working order: a convenience, local, not history
+
+function carryLabels(st) {
+  // Real text, never a colour or an icon alone: this must survive a copy,
+  // a stylesheet loss and a screen reader, because the standing is the
+  // whole point of carrying honestly.
+  const out = [];
+  if (!st) return out;
+  if (st.invented) out.push('INVENTED EXAMPLE — NOT IN YOUR TEXT');
+  if (st.contradicted || st.anchor_fit === 'contradicted') out.push('CONTRADICTED — the anchor conflicts with this');
+  if (st.anchor_fit && st.anchor_fit !== 'contradicted') out.push('anchor fit: ' + st.anchor_fit);
+  if (st.friction_verdict) out.push('Friction: ' + st.friction_verdict);
+  if (st.recall_only) out.push('RECALL ONLY — unverified');
+  else if (st.unverified) out.push('UNVERIFIED');
+  if (st.provider_returned) out.push('provider-returned, not examined');
+  if (st.route) out.push(st.route);
+  return out;
+}
+
+async function carryBack(traceId, kind, ref, excerpt, standing, btn) {
+  if (!traceId || !excerpt) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'carrying…'; }
+  try {
+    const r = await fetch('/api/carry', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({trace_id: traceId, source_kind: kind, source_ref: ref || {},
+                            excerpt: String(excerpt), standing: standing || {}})});
+    const d = await r.json();
+    if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    if (btn) { btn.textContent = '↩ carried'; }
+    await loadCarries();
+    carryReturnLine();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = '↩ carry back'; }
+    pageNote('Could not carry that back: ' + escapeHtml(String(e)));
+  }
+}
+
+function carryBtn(traceId, kind, ref, excerpt, standing) {
+  // One quiet action. The payload rides on the element so the handler is
+  // the same for every kind of material and nothing is looked up by card
+  // order.
+  const payload = escapeHtml(JSON.stringify({t: traceId, k: kind, r: ref || {}, e: String(excerpt || ''), s: standing || {}}));
+  return `<button class="carry-btn" type="button" data-carry="${payload}" onclick="carryFromBtn(this)"
+            title="keep this beside the draft while revising — it decides nothing">↩ carry back</button>`;
+}
+function carryFromBtn(btn) {
+  let p; try { p = JSON.parse(btn.getAttribute('data-carry')); } catch (e) { return; }
+  carryBack(p.t, p.k, p.r, p.e, p.s, btn);
+}
+
+async function loadCarries() {
+  try {
+    const r = await fetch('/api/carries');
+    const d = await r.json();
+    CARRIES = d.carries || [];
+  } catch (e) { CARRIES = []; }
+  renderCarryControl();
+}
+
+// The control exists only when there is something to show. An empty tray
+// is not a feature; it is furniture, and the room already has enough.
+function renderCarryControl() {
+  const bar = document.getElementById('ws-bar');
+  if (!bar) return;
+  let b = document.getElementById('carry-ctl');
+  const n = CARRIES.length;
+  if (!n) { if (b) b.remove(); return; }
+  if (!b) {
+    b = document.createElement('button');
+    b.id = 'carry-ctl'; b.className = 'compose-exit';
+    b.setAttribute('aria-controls', 'carry-tray');
+    b.onclick = toggleCarryTray;
+    bar.insertBefore(b, bar.firstChild);
+  }
+  b.textContent = `↩ Revision notes · ${n}`;
+  b.setAttribute('aria-expanded', String(document.getElementById('carry-tray')?.style.display === 'block'));
+}
+
+// After a carry, one line under the result: the way back. It opens the
+// room with the tray showing; it does not replace the draft, take the
+// caret, or insert anything.
+function carryReturnLine() {
+  let el = document.getElementById('carry-return');
+  const area = document.getElementById('result-area');
+  if (!area) return;
+  if (!CARRIES.length) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'carry-return'; el.className = 'card';
+    el.style.borderLeft = '3px solid var(--accent, #888)';
+    area.insertBefore(el, area.firstChild);
+  }
+  el.innerHTML = `<p class="body" style="margin:0"><strong>Revision notes · ${CARRIES.length}</strong> carried back so far.
+    <a onclick="openCompose();openCarryTray()">Back into the room with them</a> — the draft is untouched; they sit beside it.</p>`;
+}
+
+function toggleCarryTray() {
+  const t = document.getElementById('carry-tray');
+  if (!t) return;
+  if (t.style.display === 'block') { t.style.display = 'none'; renderCarryControl(); return; }
+  openCarryTray();
+}
+
+function carryOrder(ids) {
+  try { localStorage.setItem(CARRY_ORDER_KEY, JSON.stringify(ids)); } catch (e) {}
+}
+function orderedCarries() {
+  let order = [];
+  try { order = JSON.parse(localStorage.getItem(CARRY_ORDER_KEY)) || []; } catch (e) {}
+  const by = Object.fromEntries(CARRIES.map(c => [c.carry_id, c]));
+  const out = order.map(id => by[id]).filter(Boolean);
+  for (const c of CARRIES) if (!out.includes(c)) out.push(c);
+  return out;
+}
+
+// SOURCE-VERSION SAFETY. A workup examined one text. If the room now holds
+// a different one, the notes are about a draft that is not this draft, and
+// saying so is not optional. The comparison is made here, against the
+// analyzed text the server already holds for that run — the current draft
+// is not sent anywhere to be checked.
+const ANALYZED_TEXT = {};   // trace_id -> input_text, fetched once
+async function analyzedTextFor(traceId) {
+  if (traceId in ANALYZED_TEXT) return ANALYZED_TEXT[traceId];
+  try {
+    const r = await fetch('/api/result/' + encodeURIComponent(traceId));
+    const d = await r.json();
+    ANALYZED_TEXT[traceId] = (d.input_text || d.source_text || '');
+  } catch (e) { ANALYZED_TEXT[traceId] = null; }
+  return ANALYZED_TEXT[traceId];
+}
+function normDraft(t) { return String(t || '').replace(/\s+/g, ' ').trim(); }
+
+async function openCarryTray() {
+  const t = document.getElementById('carry-tray');
+  if (!t) return;
+  const box = document.getElementById('compose-text');
+  const current = normDraft(box ? box.value : (SESSION.input || ''));
+  const items = orderedCarries();
+  // which runs examined a different text than the one in the room now?
+  const stale = {};
+  for (const c of items) {
+    const tid = c.source && c.source.trace_id;
+    if (!tid || tid in stale) continue;
+    const analyzed = await analyzedTextFor(tid);
+    stale[tid] = analyzed === null ? 'unknown' : (normDraft(analyzed) !== current);
+  }
+  t.innerHTML = `
+    <div class="row" style="justify-content:space-between">
+      <strong>Revision notes · ${items.length}</strong>
+      <button class="compose-exit" onclick="toggleCarryTray()" aria-label="close revision notes">×</button>
+    </div>
+    <p class="foot" style="margin:6px 0 8px">Carried from the workup. Each keeps the standing it had there —
+      carrying it changed nothing. None of this is in your draft unless you put it there yourself.</p>
+    ${items.map((c, i) => carryItemHtml(c, i, stale[c.source && c.source.trace_id])).join('')}`;
+  t.style.display = 'block';
+  renderCarryControl();
+}
+
+function carryItemHtml(c, i, isStale) {
+  const st = c.standing || {};
+  const labels = carryLabels(st);
+  const src = c.source || {};
+  const ref = src.ref || {};
+  const where = [src.kind, ref.title || ref.label || ref.field || ''].filter(Boolean).join(' · ');
+  const tid = src.trace_id || '';
+  const staleLine = isStale === true
+    ? `<div class="carry-stale" role="alert"><strong>This workup examined an earlier version of this draft.</strong>
+         <span class="foot">The notes below are about that text, not the one in the room now.</span>
+         <div class="row" style="margin-top:6px">
+           <button class="compose-exit" onclick="showAnalyzedVersion('${escapeJs(tid)}', this)">Open the analyzed version</button>
+           <button class="compose-exit" onclick="retargetCarry('${escapeJs(c.carry_id)}', this)">Carry these notes to the current version anyway</button>
+           <button class="compose-exit" onclick="toggleCarryTray()">Cancel</button>
+         </div></div>`
+    : isStale === 'unknown'
+      ? `<div class="carry-stale"><span class="foot">The text this workup examined could not be read back, so whether it matches the draft in the room is unknown.</span></div>`
+      : '';
+  return `<div class="carry-item" data-carry-id="${escapeHtml(c.carry_id)}">
+    ${staleLine}
+    <div class="carry-labels">${labels.map(l => `<span class="carry-label">${escapeHtml(l)}</span>`).join('')}</div>
+    <blockquote class="carry-excerpt">${escapeHtml(c.excerpt || '')}</blockquote>
+    <div class="foot">from ${escapeHtml(where)} · ${escapeHtml(tid)}${c.target && c.target.retargeted_by_owner ? ' · carried to this version by your choice' : ''}</div>
+    <input class="note" placeholder="your note — e.g. “happy hour is in this list on purpose”" value="${escapeHtml(c.note || '')}"
+           onchange="noteCarry('${escapeJs(c.carry_id)}', this.value)">
+    <div class="row" style="margin-top:4px">
+      <button class="compose-exit" onclick="moveCarry(${i}, -1)" aria-label="move up">↑</button>
+      <button class="compose-exit" onclick="moveCarry(${i}, 1)" aria-label="move down">↓</button>
+      <button class="compose-exit" onclick="carryCopy('${escapeJs(c.carry_id)}')" title="copy with its labels">copy</button>
+      <button class="compose-exit" onclick="carryUsed('${escapeJs(c.carry_id)}')">used it</button>
+      <button class="compose-exit" onclick="carryDismiss('${escapeJs(c.carry_id)}')">dismiss</button>
+    </div>
+  </div>`;
+}
+
+// COPIED TEXT CARRIES ITS STANDING. A label that lives only in a stylesheet
+// vanishes the moment the excerpt is pasted somewhere else.
+function carryCopyText(c) {
+  const labels = carryLabels(c.standing || {});
+  return (labels.length ? '[' + labels.join(' · ') + '] ' : '') + (c.excerpt || '')
+       + (c.note ? '\n— your note: ' + c.note : '');
+}
+async function carryCopy(id) {
+  const c = CARRIES.find(x => x.carry_id === id); if (!c) return;
+  try { await navigator.clipboard.writeText(carryCopyText(c)); } catch (e) {}
+}
+function moveCarry(i, d) {
+  const items = orderedCarries();
+  const j = i + d; if (j < 0 || j >= items.length) return;
+  [items[i], items[j]] = [items[j], items[i]];
+  carryOrder(items.map(c => c.carry_id));
+  openCarryTray();
+}
+async function noteCarry(id, note) {
+  try { await fetch('/api/carry/' + encodeURIComponent(id) + '/note', {method: 'POST',
+    headers: {'Content-Type': 'application/json'}, body: JSON.stringify({note: note})}); } catch (e) {}
+  await loadCarries();
+}
+async function carryUsed(id) {
+  try { await fetch('/api/carry/' + encodeURIComponent(id) + '/used', {method: 'POST'}); } catch (e) {}
+  await loadCarries(); openCarryTray(); carryReturnLine();
+}
+async function carryDismiss(id) {
+  try { await fetch('/api/carry/' + encodeURIComponent(id) + '/dismiss', {method: 'POST',
+    headers: {'Content-Type': 'application/json'}, body: JSON.stringify({why: 'dismissed from the tray'})}); } catch (e) {}
+  await loadCarries(); openCarryTray(); carryReturnLine();
+}
+// The owner's explicit choice, recorded as his. The page never does this
+// on its own.
+async function retargetCarry(id, btn) {
+  const box = document.getElementById('compose-text');
+  const current = box ? box.value : (SESSION.input || '');
+  let key = '';
+  try {
+    const r = await fetch('/api/source_key', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text: current})});
+    key = (await r.json()).source_key || '';
+  } catch (e) {}
+  try { await fetch('/api/carry/' + encodeURIComponent(id) + '/retarget', {method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({new_target_source_key: key, owner_choice: 'carry_to_current_anyway'})}); } catch (e) {}
+  await loadCarries(); openCarryTray();
+}
+// Read-only. The analyzed text is shown BESIDE the room, never put into it:
+// putting it into the textarea would overwrite the draft the owner has now.
+async function showAnalyzedVersion(traceId, btn) {
+  const txt = await analyzedTextFor(traceId);
+  const host = btn.closest('.carry-stale');
+  if (!host) return;
+  let pre = host.querySelector('pre.analyzed');
+  if (!pre) { pre = document.createElement('pre'); pre.className = 'analyzed'; host.appendChild(pre); }
+  pre.textContent = txt === null ? '(could not be read back)' : txt;
 }
 
 function composeMirror() {
@@ -6828,6 +7147,7 @@ loadWriteStyle();
 loadInkPref();
 loadHistory();
 loadHome();
+loadCarries();   // block 123: the revision-notes control, only if there is anything to show
 // The route of a run that was going when the page went away. Read before
 // restoreSession so that a job it also finds is already known to belong to
 // the room rather than to Home.

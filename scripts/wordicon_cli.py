@@ -2143,6 +2143,7 @@ def suggest_destinations(text: str, provenance: str = "typed", connectors=None) 
 # ---- open questions (block 105): a question kept verbatim, until later ----
 
 OPEN_QUESTIONS_LOG = LOCAL_STATE / "open_questions.jsonl"
+CARRIES_LOG = LOCAL_STATE / "carries.jsonl"   # block 123: Carry Back, append-only
 OPEN_QUESTION_STATUSES = ("open", "withdrawn", "answered")
 
 

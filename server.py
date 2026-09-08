@@ -80,6 +80,7 @@ import keeper  # noqa: E402  (the Book's narrator — summoned only, never sched
 import recovery  # noqa: E402  (the Recovery Review — block 103; reads the queue, appends rulings)
 import speech  # noqa: E402  (Speak to Nikodemus — block 106; the transcription adapter, local only)
 import federation  # noqa: E402  (connected instruments — block 107; Open Case and EthicalAlt behind the membrane, manual pull only)
+import carry  # noqa: E402  (Carry Back — block 123; the bridge from a workup to the writing room. No model, no network)
 import inquiry  # noqa: E402  (the Inquiry — block 111 phase 1; a question kept, branched and returnable. Zero model calls)
 from wordicon_corpus.objects import Judgment  # noqa: E402
 
@@ -1160,6 +1161,102 @@ def anatomy_page():
     return Response(page.replace("__COMMIT__", _head_commit())
                         .replace("__BRAND_NAME__", BRAND["name"]),
                     mimetype="text/html")
+
+
+# ---- Carry Back (block 123) -------------------------------------------------
+#
+# The bridge from a workup to the writing room. A carry means "this may be
+# useful while revising" and nothing more: it creates no judgment, changes no
+# standing, admits no source. Every route here is file I/O; none calls a
+# model or the network, and the suite proves that by poisoning the gateway
+# and running them anyway.
+
+@app.route("/api/carry", methods=["POST"])
+def api_carry():
+    data = request.get_json(silent=True) or {}
+    # The identity of the analysed text comes from the RUN'S OWN RECORD, not
+    # from the page: the page never hashes anything and never sends the
+    # draft to be hashed. If the run left no record, there is nothing honest
+    # to bind a carry to, and it is refused.
+    trace_id = str(data.get("trace_id") or "")
+    rec_path = cli.RESULTS_DIR / f"{trace_id}.json" if trace_id else None
+    if not trace_id or not rec_path.exists():
+        return jsonify({"error": "no run record for that trace; a carry must bind to the text a "
+                                 "run actually examined"}), 400
+    try:
+        rec = json.loads(rec_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return jsonify({"error": "the run record could not be read"}), 400
+    analyzed = rec.get("input_text") or rec.get("source_text") or ""
+    if not analyzed.strip():
+        return jsonify({"error": "that run recorded no input text, so there is no draft "
+                                 "identity to bind a carry to"}), 400
+    try:
+        row = carry.record_carry(
+            trace_id=trace_id,
+            source_key=carry.source_key_for(analyzed),
+            analyzed_head=analyzed.strip()[:80],
+            analyzed_words=len(analyzed.split()),
+            source_kind=str(data.get("source_kind") or ""),
+            source_ref=data.get("source_ref") or {},
+            excerpt=str(data.get("excerpt") or ""),
+            standing=data.get("standing") or {},
+            target_source_key=str(data.get("target_source_key") or ""),
+            note=str(data.get("note") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "carry": row})
+
+
+@app.route("/api/carries")
+def api_carries():
+    target = request.args.get("target", "") or ""
+    return jsonify({"carries": carry.active(target), "summary": carry.summary(),
+                    "means": "may be useful while revising",
+                    "is_not": ["accepted", "supported", "verified", "true",
+                               "owner_authored", "approved"]})
+
+
+@app.route("/api/carry/<carry_id>/dismiss", methods=["POST"])
+def api_carry_dismiss(carry_id):
+    data = request.get_json(silent=True) or {}
+    return jsonify({"ok": True, "event": carry.dismiss_carry(carry_id, str(data.get("why") or ""))})
+
+
+@app.route("/api/carry/<carry_id>/used", methods=["POST"])
+def api_carry_used(carry_id):
+    return jsonify({"ok": True, "event": carry.mark_used(carry_id)})
+
+
+@app.route("/api/carry/<carry_id>/note", methods=["POST"])
+def api_carry_note(carry_id):
+    data = request.get_json(silent=True) or {}
+    return jsonify({"ok": True, "event": carry.note_carry(carry_id, str(data.get("note") or ""))})
+
+
+@app.route("/api/carry/<carry_id>/retarget", methods=["POST"])
+def api_carry_retarget(carry_id):
+    """The owner chose to carry notes about one draft to a different one.
+    Recorded as his choice; the page must never call this on its own."""
+    data = request.get_json(silent=True) or {}
+    try:
+        ev = carry.retarget_carry(carry_id, str(data.get("new_target_source_key") or ""),
+                                  str(data.get("owner_choice") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "event": ev})
+
+
+@app.route("/api/source_key", methods=["POST"])
+def api_source_key():
+    """The identity of a text, computed here so the page and the record use
+    one hash. The text is used for the hash and is NOT stored, logged or
+    recorded by this route — it is the owner's draft, and the draft stays
+    in his browser."""
+    data = request.get_json(silent=True) or {}
+    text = str(data.get("text") or "")
+    return jsonify({"source_key": carry.source_key_for(text),
+                    "words": len(text.split()), "head": text.strip()[:80]})
 
 
 @app.route("/constitution")

@@ -53,7 +53,7 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit; do
+for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit carry; do
   echo "== journey: $j"
   if [ "$j" = quiet ] || [ "$j" = speak ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
@@ -91,6 +91,12 @@ done
 # very block and was caught only by checking the drawn mark.
 for need in "all five anchor-fit states say something different" "all five states are DRAWN differently — five marks, not five names over four marks" "contradicted no longer shares a mark with topical" "the row no longer claims grounding, which it never measured" "the deciding difference is readable with every disclosure closed" "the non-gating status is stated once for the run, not on every card" "even a contradicted candidate keeps all three rulings — the row advises, it does not gate"; do
   grep -qF "ok   $need" "$JOURNEY_OUT/anchorfit.log" || { echo "== anchorfit: missing check: $need"; status=1; }
+done
+# block 123: the bridge. Named individually because each is a way the bridge
+# could quietly become something else — a judgment, an insertion, a second
+# copy of the draft, a label that exists only in a stylesheet.
+for need in "carrying created no judgment and moved no verdict" "each carry is bound to the hash of the text the workup examined, not to a card position" "the carries reopen after a page reload, counted from the record" "the draft text is exactly what the owner typed — nothing inserted" "native undo still reaches the keystroke made before the tray opened" "the invented example is labelled INVENTED on the rendered tray" "the contradicted proposal is labelled CONTRADICTED on the rendered tray" "every standing label is actually displayed, not merely present in the DOM" "the invented label travels INSIDE copied text, not only in a stylesheet" "the tray offers no ruling — carry is not keep" "a draft that differs from the analysed text is said so, plainly" "opening the analysed version shows it read-only and leaves the draft alone" "carrying to a different draft is recorded as the owner's choice" "the original draft was never changed by anything carried" "no revision-notes control exists while nothing has been carried"; do
+  grep -qF "ok   $need" "$JOURNEY_OUT/carry.log" || { echo "== carry: missing check: $need"; status=1; }
 done
 grep -q "^ok   anatomy: no request left the scratch origin" "$JOURNEY_OUT/anatomy.log" || { echo "== anatomy: the off-origin guard did not run"; status=1; }
 grep -q "^ok   dormant after" "$JOURNEY_OUT/anatomy.log" || { echo "== anatomy: the stillness check did not run"; status=1; }
@@ -154,6 +160,6 @@ done
 for need in "the question is kept exactly as it was asked" "the same words opened twice are two inquiries" "every phase this room has not built renders as an unbuilt door" "an abandoned branch keeps what the failure revealed" "after a full reload it reopens on the question as asked" "exploring created no ruling due" "walking to the Inquiry and back leaves the same room element"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/inquiry.log" || { echo "== inquiry: missing check: $need"; status=1; }
 done
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log "$JOURNEY_OUT"/constitution.log "$JOURNEY_OUT"/anchorfit.log | awk '{s+=$2} END {print s+0}')
+total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log "$JOURNEY_OUT"/constitution.log "$JOURNEY_OUT"/anchorfit.log "$JOURNEY_OUT"/carry.log | awk '{s+=$2} END {print s+0}')
 echo "== journeys: $total checks, exit $status"
 exit $status

@@ -1,5 +1,75 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.17.0 — Carry Back: the excavation returns to the page (block 123)
+
+Nikodemus excavated and did not return. A dense first draft went into Go Deep;
+readings, objections, comparisons and doors came out, nine hundred lines of
+them; and the owner carried what he wanted back to the paragraph by hand, or
+lost it under the dig. This is the bridge, and it is only a bridge.
+
+**What was found before anything was built.** The draft lives in the browser
+(`localStorage`, `wordicon.session.v1`) and nowhere else until the owner submits
+it; the home page says so — *"kept in this browser only"* — and that sentence
+is pinned. A deep run's record holds the exact text it examined, and the Map
+already gives that text a stable identity, `src:<sha256[:12]>`, through
+`node_source`. No durable owner-prose store exists. The room's textarea is
+never removed or rebuilt, so a panel beside it can leave everything in it
+alone. Those four facts decided the shape.
+
+**Carry means: this may be useful while revising.** Not accepted, supported,
+verified, true, written by the owner, or approved. Carrying creates no judgment,
+changes no standing, repairs no warrant, admits no source, alters no concept. A
+contradicted proposal carried for its energy is still contradicted; an invented
+example still says INVENTED; a recall-only parallel is still recall-only. The
+record says so about each carry (`means`, `is_not`), the tray says so in real
+text, and copied text carries the labels inside it — a label that lived only in
+a stylesheet vanished the moment the excerpt was pasted anywhere, and that
+sabotage was run and caught.
+
+**What a carry holds.** An exact excerpt, the standing the result recorded, the
+run's trace, a stable reference inside it (component label, candidate id and
+field, thread index, door id — never a card position), and the identity of the
+text the run examined, computed by the server from the run's own record. Not
+the result, and not the draft. The one piece of owner prose a carry may hold is
+a note he types into it on purpose, kept verbatim.
+
+**Append-only**, like every log here: dismissing or using a carry records that
+it was; nothing is rewritten. The store is a file under `local_state`, so it
+survives a reload and a server restart and rides in the Vault to another
+machine. The draft does not — it never did, and this block did not change that.
+
+**Version safety.** A workup examined one text. If the room now holds a
+different one, the tray says *"This workup examined an earlier version of this
+draft"* and offers three explicit choices — open the analysed version
+(read-only, beside the room, never into the box), carry the notes to the current
+version anyway, or cancel. The comparison is made in the browser against the
+analysed text the server already holds; the current draft is not sent anywhere
+to be checked. Carrying to a different draft is recorded as the owner's choice.
+
+**The room is not touched.** One quiet control, *Revision notes · N*, exists
+only when N is not zero. The tray is one more panel beside the textarea — the
+same furniture as the type panel — and opening it moves no text, no caret, no
+selection, no scroll and no undo history; the journey types a character, opens
+the tray, and undoes it. Nothing here inserts model prose into the draft, and
+the suite reads the carry code for any write into it.
+
+**Draft 1 / Draft 2 versioning is deferred, and said so.** It cannot ship
+honestly in this block: there is no durable owner-prose store, and creating one
+moves the owner's unsent writing into the record, which changes what *"kept in
+this browser only"* means. That is a constitutional privacy decision, not a
+feature, and it is recorded here as the next necessary slice rather than faked.
+
+**Model and network calls made by the feature: zero.** The bridge is file I/O.
+The suite reads `carry.py` and the carry routes for any gateway or network
+import; the journey runs with the gateway poisoned and the network dead.
+
+Seven sabotages, each caught by name: dropping a standing label; hiding a label
+through CSS alone (which passed the first version of the check — reading each
+label element bypasses `display:none`; the check now reads the rendered tray);
+retargeting silently on a mismatch; treating carry as keep; inserting carried
+prose automatically; losing the original draft when the analysed version opens;
+binding a carry by DOM position.
+
 ## v1.16.0 — anchor fit, drawn as five things (block 122)
 
 A run over the owner's own writing produced three candidates that all silently
