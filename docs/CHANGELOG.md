@@ -1,5 +1,113 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.14.0 — one retry authority, and two kinds of broken stream (block 120)
+
+Block 119 gave Nikodemus an attempt ledger. This block asks the question the
+ledger made askable: **is what it counts actually the number of requests?**
+
+**It is, and now that is proven rather than asserted.** The SDK retries
+connection errors, timeouts, 429s and 5xx twice by default; Nikodemus makes
+three attempts of its own. Both live would mean up to nine physical requests
+per logical call with three in the record. The app has passed `max_retries=0`
+since the first tracked commit — but a keyword argument is a claim, so the
+suite now counts sends at the transport with an injected fault and asserts
+that the recorded number IS the physical number. It is. There is exactly one
+retry authority and the declared ceiling equals the real one.
+
+That also settles the arithmetic on the failed workup: twelve application
+attempts across the four connection-failure components were twelve physical
+sends, not thirty-six.
+
+**A stream can break in two different ways and they are not the same event.**
+A response that dies before a single delta arrived produced nothing and may be
+retried inside the budget. A response that dies *after* content began was
+generated and billed, and we hold a fragment of an answer — retrying that
+silently spends the money twice and can return a substantively different reply
+with nothing on the page saying so.
+
+The SDK cannot tell them apart. It raises the same `APIConnectionError` either
+way, and retries both. So the gateway now walks the stream itself instead of
+asking for the finished message, records `partial_stream_failure` or
+`stream_failed_before_content`, retries only the second, and hands the first
+back to the owner the way a rate limit is handed back. The concrete transport
+class is what lands in the record; `StreamInterrupted` is a carrier for the
+distinction, not a diagnosis.
+
+**The historical timeout is explained, by exact match.** A raw transport
+exception raised mid-stream escapes the SDK unwrapped, was not in the old
+retry loop's transient tuple, and reached the soft-fail handler with its own
+message intact — `"The read operation timed out"`, character for character
+the string in that run's record, on both anthropic 1.0.0 and 1.4.0. That
+component made **one attempt, not three**. It is now retried like any other
+pre-content failure.
+
+A correction worth keeping: an earlier pass reported this hypothesis
+*refuted*. That measurement used a bare iterator as the response body; httpx
+asserts on anything that is not a `SyncByteStream`, and the assertion
+surfaced as a pre-request `APIConnectionError` — so every "stream failure" it
+measured was really a connection failure, and the streaming path was never
+exercised. A transport test that does not use a real transport type is
+testing its own mock. The fixture subclasses `SyncByteStream` for that reason.
+
+**Every attempt now names its client.** `requirements.txt` declares
+`anthropic>=0.40`, unpinned, so the owner's Mac (1.0.0), the build container
+(1.4.0) and CI (newest on the day) each resolve a different one. Behaviour was
+measured identical across 1.0.0 and 1.4.0 for every injected fault — but
+"identical today" is a measurement, not a guarantee, and a networking record
+that does not name its client cannot be compared with one taken elsewhere. The
+version is not pinned; instead the behavioural assertions themselves run
+against whatever is installed, so a future SDK that changes any of this fails
+the suite on the owner's machine and in CI independently. That is a stronger
+guarantee than a pin, which would only have frozen one environment.
+
+**The connection failures are still not attributed.** Four consecutive
+pre-header connection-establishment failures after one successful component
+locate the failure *phase*, not the responsible party. DNS, TCP/TLS, local
+networking, an intermediary, pool state, or a remote close before headers all
+remain possible. `APIConnectionError` says where the failure surfaced. The
+shared client was not replaced and pooling was not touched.
+
+**The inspector has two modes now, because it had none that worked.** Block
+119 shipped one, and it refused on every real record: it forbade any
+40-character run of the passage, and an anchor *is* such a run, so it blocked
+the exact case it was built for. The repair is not a weaker guard. The default
+is share-safe — identifiers, labels, verdict classes, support classes, error
+metadata, and nothing that quotes the passage, safe even when redirected into
+a file. `--show-anchors` adds the anchors and the critics' own sentences, is
+marked private, refuses to run when its output is not a terminal, and is used
+by no test, fixture or report. Neither mode writes a file.
+
+**The real-store guard now says when it cannot tell.** It measures the store,
+not the writer, so it cannot distinguish a leak from the owner's own server
+writing while the suite ran — and it had caught the latter three times.
+Exempting the writes it recognises would trade false alarms for blind spots.
+Instead: the corpus lease is tested live (an `flock` attempt, not a read of the
+lease file, whose text outlives the process that wrote it), the baseline is
+only meaningful when nothing holds it, and any change to owner state ends the
+run as **`INCONCLUSIVE — CONCURRENT OWNER ACTIVITY`** with the exact paths
+named and a clean rerun required. It is never reported as unchanged when it
+changed, however legitimate the write. CI is stated as structurally unable to
+prove this guard at all: a fresh checkout has no owner store to compare.
+
+**The two defects under the failed component are recorded separately**, and
+neither erases the other:
+
+- a **malformed component packet** — the constraint required a word the chosen
+  anchor did not contain, so every candidate under it was measured against a
+  span too short to carry what the same component demanded (this fired on four
+  of the six components, not one);
+- a **candidate-generation defect** — all three candidates converted two
+  negatively described states into a good/bad binary, which is a factual
+  inversion of the source independent of the anchor's length.
+
+Friction and the anchor-support tier both found the polarity inversion on all
+three. They are recorded as **convergent** evaluations, not independent
+evidence: they ran on the same model over the same packet. Their convergence
+still matters, and it is what the owner's original objection said — the
+surviving output distorted the passage toward one description and did not
+engage what was underneath. The critic agreed with the substance of that
+complaint. The interface, before block 119, made none of it legible.
+
 ## v1.13.0 — a partial workup may not impersonate a whole reading (block 119)
 
 The owner ran his own writing through a deep workup and argued with the

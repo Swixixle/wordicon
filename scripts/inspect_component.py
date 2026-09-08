@@ -1,26 +1,33 @@
 #!/usr/bin/env python3
-"""Read-only. Print the per-candidate Friction reasons and anchor-support
-notes from ONE component's run record, and nothing else.
+"""Read-only. What a component run's stored verdicts say, in two modes.
 
-Block 119, under the owner's ruling: the malformed evidence packet is
-proven (a constraint requiring a word the chosen anchor does not contain),
-but whether the candidates ALSO overreached on their own is unresolved.
-That question is answered by reading the stored verdicts, not by changing
-anchor selection — which this script cannot do and must not.
+Block 120, under the owner's ruling. Block 119 shipped one mode and it
+failed closed on every real record: it refused if any 40-character run of
+the passage reached its output, and an ANCHOR IS SUCH A RUN, so it blocked
+the exact case it was built for. The repair is not to weaken the guard.
+It is to have two outputs with different audiences.
 
-WHAT THIS REFUSES TO PRINT, by construction rather than by care:
-`input_text` and `source_text` — the owner's passage — never leave the
-file. The anchor is printed because it is the span the verdicts are ABOUT
-and the whole question is whether it can carry them; nothing wider is.
-The refusal is enforced after rendering, against the rendered text, so a
-future field that smuggles the passage in under another name is caught by
-the same check rather than by remembering to exclude it.
+  DEFAULT (share-safe). Identifiers, labels, verdict classes, support
+  classes, error metadata, counts. No passage, no anchors, no candidate
+  prose, no model sentences about the passage — those quote it. Safe to
+  paste into a chat, a ruling, or a bug report, and safe when redirected
+  into a file, because safety is a property of what is rendered and not of
+  where it goes.
+
+  --show-anchors (LOCAL ONLY). Adds the anchors and the critics' own
+  sentences, for the owner reading his own material on his own machine. It
+  prints a private-output banner, refuses to run when its output is not a
+  terminal, and is never used by tests, fixtures or reports.
+
+Neither mode writes a file. Nothing here goes into the repository.
 
     python3 scripts/inspect_component.py <trace_id|path>
     python3 scripts/inspect_component.py --latest-failed
+    python3 scripts/inspect_component.py --latest-failed --show-anchors
 """
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -28,9 +35,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RESULTS = ROOT / "local_state" / "results"
 
-# Never rendered. Not a filter over what we happened to build — the check
-# below re-reads the record for these and refuses to print if any survived.
-FORBIDDEN_FIELDS = ("input_text", "source_text", "forge_input", "gist")
+# Fields whose content is, or quotes, the owner's writing. The share-safe
+# render never reads them; the guard below re-checks the rendered text
+# against them anyway, so a future field carrying his prose under a new
+# name is caught by the check rather than by someone remembering it here.
+PASSAGE_FIELDS = ("input_text", "source_text", "forge_input", "gist", "anchor",
+                  "constraints", "summary", "hostile_read", "reason",
+                  "source_contradiction", "note", "definition",
+                  "deciding_anchor_words", "deciding_claim_words")
+
+PRIVATE_BANNER = (
+    "════ PRIVATE — LOCAL READING ONLY ════\n"
+    "This output contains your passage's anchors and the critics' sentences\n"
+    "about them. It is for you, on this machine. Do not paste it into a\n"
+    "chat, a report or a ruling; run without --show-anchors for that.\n"
+    "══════════════════════════════════════")
 
 
 def _load(arg: str) -> "tuple[Path, dict]":
@@ -43,8 +62,6 @@ def _load(arg: str) -> "tuple[Path, dict]":
 
 
 def _latest_failed() -> str:
-    """The most recent composite run that did not complete. Named by its
-    own record, not guessed from filenames."""
     best = None
     for f in RESULTS.glob("*.json"):
         try:
@@ -59,79 +76,80 @@ def _latest_failed() -> str:
     return str(best[0])
 
 
-def render(d: dict) -> str:
+def render(record: dict, show_anchors: bool = False) -> str:
     out: "list[str]" = []
     w = out.append
-    mode = d.get("mode", "")
-    w(f"record       {d.get('trace_id','')}  ({mode})")
-    w(f"completion   {d.get('completion','')}  ·  "
-      f"{d.get('n_completed','?')} of {d.get('n_components','?')} components analysed")
-    att = d.get("attempt_summary") or {}
+    if show_anchors:
+        w(PRIVATE_BANNER)
+        w("")
+    w(f"record       {record.get('trace_id','')}  ({record.get('mode','')})")
+    w(f"created      {record.get('created_at','')}")
+    n = record.get("n_components")
+    done = record.get("n_completed")
+    if n is None:
+        groups = record.get("groups") or []
+        n = len(groups)
+        done = n - sum(1 for g in groups if g.get("failed"))
+        w(f"completion   {record.get('completion','')}  ·  {done} of {n} components analysed "
+          f"(counted here; this record predates the scoped counts)")
+    else:
+        w(f"completion   {record.get('completion','')}  ·  {done} of {n} components analysed")
+    att = record.get("attempt_summary") or {}
     if att:
         w(f"attempts     {att.get('http_attempts','?')} HTTP attempt(s), "
-          f"{att.get('attempts_failed','?')} failed  ·  {att.get('population','')}")
+          f"{att.get('attempts_failed','?')} failed, {att.get('retries','?')} retries")
+        w(f"             population: {att.get('population','')}")
     else:
-        w("attempts     not recorded — this run predates the attempt ledger")
+        w("attempts     NOT RECORDED — this run predates the attempt ledger, so the "
+          "number of requests it made cannot be recovered")
+    pid = record.get("prompt_identities") or []
+    if pid:
+        w("prompt renders (NOT a request count; worker-thread stages are absent "
+          "from pre-block-119 records): "
+          + ", ".join(f"{p.get('stage')}={p.get('calls')}" for p in pid))
+        models = sorted({p.get("model", "") for p in pid if p.get("model")})
+        if models:
+            w(f"model(s)     {', '.join(models)}")
     w("")
 
-    groups = d.get("groups") or d.get("components") or []
-    for g in groups:
+    for g in record.get("groups") or []:
         label = g.get("label", "")
+        w(f"── {label}")
         if g.get("failed"):
-            w(f"── {label}  —  NOT ANALYSED")
-            w(f"     {g.get('failure_explanation','')}")
-            w(f"     stored error: {str(g.get('error',''))[:300]}")
+            w("     NOT ANALYSED")
+            w(f"     stored error class/text: {str(g.get('error',''))[:200]}")
             w("")
             continue
-        w(f"── {label}")
-        anchor = g.get("anchor", "")
-        if anchor:
-            w(f"     anchor        “{anchor}”")
-            w(f"     anchor_verified {g.get('anchor_verified')}")
-        beyond = g.get("constraint_beyond_anchor") or []
-        if beyond:
-            w(f"     CONSTRAINT REQUIRES, ANCHOR LACKS: {', '.join(map(str, beyond))}")
-            w("     (the packet is malformed here; verdicts below inherit that)")
+        w(f"     anchor_verified={g.get('anchor_verified')} "
+          f"near_miss={g.get('anchor_near_miss')} grounding={g.get('grounding','')}")
+        cba = g.get("constraint_beyond_anchor") or []
+        if cba:
+            w(f"     MALFORMED PACKET — constraint requires words the anchor lacks: {', '.join(map(str, cba))}")
+        if show_anchors and g.get("anchor"):
+            w(f"     anchor: “{g['anchor']}”")
         cands = g.get("candidates") or []
-        if not cands:
-            w(f"     candidates live in this component's own run: {g.get('trace_id','')}")
-            w("     re-run this script against that trace id for the verdicts")
+        if not cands and g.get("trace_id"):
+            w(f"     candidates live in this component's own run: {g['trace_id']}")
         for c in cands:
-            bff = c.get("bff") or c
-            fr = bff.get("friction") or {}
-            w(f"     • {bff.get('title','')}")
-            w(f"         friction verdict     {fr.get('verdict','')}")
-            if fr.get("contradicts_anchor"):
-                w("         contradicts_anchor   True")
-            if fr.get("source_contradiction"):
-                w(f"         source_contradiction {fr['source_contradiction']}")
-            if fr.get("reason"):
-                w(f"         reason               {fr['reason']}")
-            if fr.get("hostile_read"):
-                w(f"         hostile_read         {fr['hostile_read']}")
-            sup = bff.get("claim_support") or bff.get("support") or {}
-            if sup:
-                w(f"         support              {sup.get('support','')}")
+            b = c.get("bone_flesh_friction") or c.get("bff") or {}
+            f = b.get("friction") or {}
+            sup = b.get("claim_support") or b.get("support") or {}
+            w(f"     • {b.get('title','')}")
+            w(f"         friction verdict     {f.get('verdict','')}")
+            w(f"         contradicts_anchor   {bool(f.get('contradicts_anchor'))}")
+            w(f"         support class        {sup.get('support','')}")
+            if show_anchors:
+                for key, lbl in (("source_contradiction", "source_contradiction"),
+                                 ("reason", "reason"), ("hostile_read", "hostile_read")):
+                    if f.get(key):
+                        w(f"         {lbl:20} {f[key]}")
                 if sup.get("note"):
                     w(f"         support note         {sup['note']}")
-                if sup.get("deciding_anchor_words"):
-                    w(f"         deciding anchor words {sup['deciding_anchor_words']}")
         w("")
+    if not show_anchors:
+        w("(verdict CLASSES only. The critics' sentences quote your passage, so they "
+          "are omitted here; run with --show-anchors on your own machine to read them.)")
     return "\n".join(out)
-
-
-def refuse_if_passage_leaked(text: str, record: dict) -> "str | None":
-    """Rendered output is checked AGAINST THE RECORD, not against a list of
-    keys we remembered to skip. If any run of the owner's prose made it
-    into the page, this says so and prints nothing."""
-    for field in FORBIDDEN_FIELDS:
-        for value in _all_values(record, field):
-            if not isinstance(value, str):
-                continue
-            for chunk in _chunks(value):
-                if chunk and chunk in text:
-                    return f"{field} (a {len(chunk)}-character run of it)"
-    return None
 
 
 def _all_values(node, key):
@@ -148,22 +166,49 @@ def _all_values(node, key):
 
 def _chunks(text: str, size: int = 40):
     t = " ".join((text or "").split())
-    for i in range(0, max(0, len(t) - size + 1), size):
+    for i in range(0, max(0, len(t) - size + 1)):
         yield t[i:i + size]
 
 
+def refuse_if_passage_leaked(text: str, record: dict) -> "str | None":
+    """The share-safe render, checked AGAINST THE RECORD rather than against
+    a list of keys someone remembered to skip."""
+    flat = " ".join((text or "").split())
+    for field in PASSAGE_FIELDS:
+        for value in _all_values(record, field):
+            if not isinstance(value, str) or len(" ".join(value.split())) < 40:
+                continue
+            for chunk in _chunks(value):
+                if chunk and chunk in flat:
+                    return f"{field} (a 40-character run of it)"
+    return None
+
+
 def main(argv: "list[str]") -> int:
-    arg = argv[1] if len(argv) > 1 else "--latest-failed"
-    if arg == "--latest-failed":
-        arg = _latest_failed()
-    path, record = _load(arg)
-    text = render(record)
-    leaked = refuse_if_passage_leaked(text, record)
-    if leaked:
-        print("REFUSING TO PRINT: the rendered report contains the owner's "
-              f"{leaked}. Nothing was written. This is the script's own guard "
-              "failing closed, not a problem with the record.")
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("target", nargs="?", default="--latest-failed")
+    ap.add_argument("--show-anchors", action="store_true",
+                    help="LOCAL ONLY: also print anchors and the critics' sentences. "
+                         "Refuses to run unless output is a terminal.")
+    args = ap.parse_args(argv[1:])
+
+    if args.show_anchors and not sys.stdout.isatty():
+        print("REFUSING: --show-anchors prints your passage's anchors and is for reading "
+              "on screen, not for redirecting into a file, a pipe or a report. Run it in "
+              "a terminal, or drop the flag for the share-safe output.", file=sys.stderr)
         return 2
+
+    target = _latest_failed() if args.target == "--latest-failed" else args.target
+    path, record = _load(target)
+    text = render(record, show_anchors=args.show_anchors)
+
+    if not args.show_anchors:
+        leaked = refuse_if_passage_leaked(text, record)
+        if leaked:
+            print("REFUSING TO PRINT: the share-safe report contains the owner's "
+                  f"{leaked}. Nothing was written. This is the guard failing closed — "
+                  "the share-safe render has a bug, and weakening the guard is not the fix.")
+            return 2
     print(f"# {path}")
     print(text)
     return 0

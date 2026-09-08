@@ -2454,8 +2454,13 @@ ATTEMPT_EVENT_KEYS = (
     "run_id", "component", "stage", "provider", "model", "attempt",
     "started_at", "started_mono", "finished_mono", "duration_s",
     "outcome", "exception", "message", "status_code", "retry_after_s",
-    "usage", "overlapped",
+    "usage", "overlapped", "outcome_detail", "saw_content", "sdk",
 )
+
+# Outcome details that are not plain success or plain failure. A partial
+# stream is its own state: the request was generated and billed, the answer
+# is incomplete, and nothing may silently retry it.
+ATTEMPT_OUTCOME_DETAILS = ("", "partial_stream_failure", "stream_failed_before_content")
 
 # Keys that may appear inside an event's `usage` sub-object. The provider's
 # usage object carries more than this over time; we copy only integers we
@@ -2622,6 +2627,32 @@ def derive_overlap(events: "list[dict]") -> "list[dict]":
     return out
 
 
+class StreamInterrupted(RuntimeError):
+    """A streaming response died while its body was being read.
+
+    Block 120. The SDK wraps this indistinguishably: an injected ReadError,
+    ssl.SSLError, socket.timeout, TimeoutError and httpx ReadTimeout ALL
+    surface as APIConnectionError("Connection error."), before or after
+    content, on both anthropic 1.0.0 and 1.4.0 — measured, not assumed. So
+    the SDK cannot tell us whether the model had already begun answering,
+    and it retries either way.
+
+    That matters because the two cases are not the same event. A drop
+    before any delta arrived is a request that produced nothing and may be
+    retried inside the declared budget. A drop AFTER partial content is a
+    request that was generated and billed, whose answer we hold a fragment
+    of; retrying it silently spends the money twice and can return a
+    substantively different answer, with nothing on the page saying so.
+
+    Only the gateway can tell them apart, and only by iterating the stream
+    itself instead of asking for the finished message and hoping."""
+
+    def __init__(self, message: str, saw_content: bool, cause_class: str = ""):
+        super().__init__(message)
+        self.saw_content = bool(saw_content)
+        self.cause_class = cause_class
+
+
 class RateLimited(RuntimeError):
     """The provider refused this attempt for rate reasons and the wait it
     asked for does not fit the disclosed budget. This is a STOP, not a
@@ -2668,6 +2699,41 @@ def _retry_after_of(exc) -> "float | None":
         if val >= 0:
             return val
     return None
+
+
+_CLIENT_VERSIONS_CACHE: "dict | None" = None
+
+
+def client_versions() -> dict:
+    """Which SDK and transport library actually produced these attempts.
+
+    Block 120. requirements.txt declares `anthropic>=0.40`, unpinned, so the
+    owner's Mac (1.0.0), the build container (1.4.0) and CI (whatever is
+    newest on the day) can each resolve a different client. Behaviour was
+    measured to be identical across 1.0.0 and 1.4.0 for every injected
+    transport fault — but 'identical today' is a measurement, not a
+    guarantee, and a networking record that does not name its client cannot
+    be compared with one taken somewhere else."""
+    global _CLIENT_VERSIONS_CACHE
+    if _CLIENT_VERSIONS_CACHE is not None:
+        return dict(_CLIENT_VERSIONS_CACHE)
+    out = {"anthropic": "", "transport": "", "transport_version": ""}
+    try:
+        import anthropic
+        out["anthropic"] = getattr(anthropic, "__version__", "") or ""
+        from anthropic import _base_client as _bc
+        hx = getattr(_bc, "httpx2", None) or getattr(_bc, "httpx", None)
+        if hx is not None:
+            out["transport"] = getattr(hx, "__name__", "") or ""
+            out["transport_version"] = getattr(hx, "__version__", "") or ""
+    except Exception:  # noqa: BLE001 — a gateway with no SDK still records attempts
+        pass
+    _CLIENT_VERSIONS_CACHE = dict(out)
+    return dict(out)
+
+
+def _client_versions() -> dict:
+    return client_versions()
 
 
 def _usage_fields(usage) -> "dict | None":
@@ -2741,7 +2807,7 @@ class Gateway:
     BACKOFF_BASE_S = 3.0
 
     def _record_attempt(self, *, stage, attempt, started_at, t0, t1,
-                        outcome, exc=None, usage=None) -> None:
+                        outcome, exc=None, usage=None, outcome_detail="") -> None:
         ledger = getattr(self, "attempts", None)
         if not isinstance(ledger, AttemptLedger):
             return
@@ -2761,12 +2827,24 @@ class Gateway:
             "finished_mono": t1,
             "duration_s": round(t1 - t0, 3),
             "outcome": outcome,
-            "exception": type(exc).__name__ if exc is not None else "",
+            # The concrete class, never our own wrapper: StreamInterrupted
+            # is a carrier for the distinction, not a diagnosis.
+            "exception": (getattr(exc, "cause_class", "") or type(exc).__name__)
+                         if exc is not None else "",
             "message": sanitize_attempt_message(exc) if exc is not None else "",
             "status_code": _status_code_of(exc),
             "retry_after_s": _retry_after_of(exc),
             "usage": _usage_fields(usage),
             "overlapped": None,
+            "outcome_detail": outcome_detail,
+            "saw_content": getattr(exc, "saw_content", None),
+            # block 120: the SDK and transport that produced this attempt.
+            # requirements.txt says `anthropic>=0.40`, so the owner's Mac,
+            # the build container and CI can each resolve a different one,
+            # and a networking finding is only as portable as the client it
+            # was measured on. An attempt that does not name its client is
+            # a measurement with no units.
+            "sdk": _client_versions(),
         })
 
     def _call_with_attempts(self, stage: str, make_call):
@@ -2802,6 +2880,30 @@ class Gateway:
                     f"budget inside a window the limit could not have cleared. Retry when "
                     f"you're ready; completed components are already saved.",
                     retry_after_s=wait) from e
+            except StreamInterrupted as e:
+                # Two different events, and the difference is money. A stream
+                # that died before a single delta arrived produced nothing:
+                # it is transient and may be retried inside the declared
+                # budget. A stream that died AFTER content had begun was
+                # generated and billed, and we hold a fragment of an answer —
+                # retrying it silently would spend twice and could return a
+                # substantively different reply with nothing saying so. So
+                # that one stops, keeps the diagnostic metadata, and hands the
+                # retry to the owner, exactly as a rate limit does.
+                t1 = time.monotonic()
+                self._record_attempt(stage=stage, attempt=attempt, started_at=started_at,
+                                     t0=t0, t1=t1, outcome="error", exc=e,
+                                     outcome_detail=("partial_stream_failure" if e.saw_content
+                                                     else "stream_failed_before_content"))
+                if e.saw_content:
+                    raise
+                if attempt >= self.ATTEMPTS:
+                    raise
+                backoff = self.BACKOFF_BASE_S * attempt
+                print(f"  [gateway] stream ended before any content after {t1 - t0:.0f}s "
+                      f"({e.cause_class}) — retry {attempt}/{self.ATTEMPTS - 1} in {backoff:.0f}s...")
+                time.sleep(backoff)
+                continue
             except transient as e:
                 t1 = time.monotonic()
                 self._record_attempt(stage=stage, attempt=attempt, started_at=started_at,
@@ -3646,8 +3748,43 @@ class AnthropicAPIGateway(Gateway):
                           messages=[{"role": "user", "content": str(prompt)}])
         if tools:
             kwargs["tools"] = tools
-        with self.client.messages.stream(**kwargs) as stream:
-            message = stream.get_final_message()
+        # block 120: ITERATE THE STREAM OURSELVES. get_final_message()
+        # reads the body behind a closed door — when the connection dies
+        # partway the SDK raises the same APIConnectionError whether the
+        # model had written nothing or had written half an answer we have
+        # already paid for. Walking the events is the only place that
+        # distinction exists, and the retry policy depends on it.
+        #
+        # The `with` is held OUTSIDE the conversion because closing a dead
+        # stream raises again on __exit__, and an exception from __exit__
+        # replaces the one in flight — the first version of this lost the
+        # real cause exactly that way and recorded nothing. `iterating`
+        # keeps a pre-request connection failure from being relabelled as a
+        # stream failure: those are the diagnostically distinct case.
+        saw_content = False
+        iterating = False
+        failure = None
+        message = None
+        try:
+            with self.client.messages.stream(**kwargs) as stream:
+                iterating = True
+                try:
+                    for event in stream:
+                        if getattr(event, "type", "") in ("content_block_delta", "text"):
+                            saw_content = True
+                except BaseException as e:  # noqa: BLE001 — kept, then re-raised
+                    failure = e
+                    raise
+                message = stream.get_final_message()
+        except BaseException as e:  # noqa: BLE001
+            if not iterating:
+                raise
+            cause = failure if failure is not None else e
+            raise StreamInterrupted(
+                f"The response stream ended before the message was complete "
+                f"({type(cause).__name__}: {str(cause)[:160]}).",
+                saw_content=saw_content,
+                cause_class=type(cause).__name__) from cause
         if getattr(message, "stop_reason", None) == "max_tokens":
             # Fail with the REAL diagnosis instead of letting the JSON
             # parser report a confusing "could not find a JSON object".

@@ -1348,6 +1348,14 @@
       nine seconds — if the provider names a wait that fits the run's disclosed budget it waits
       exactly that once, and otherwise it stops and hands the retry back to you, because a call that
       times out may still have cost money.</p>
+      <p class="body"><strong>A broken answer is not retried behind your back.</strong> If a
+      reply dies before the model has written anything, Nikodemus tries again inside a budget
+      it has already declared. If it dies <em>after</em> the model started writing, it stops:
+      that request was generated and billed, and quietly asking again would spend twice and
+      could return a different answer with nothing saying so. The retry is yours to make.
+      Nikodemus is also the only thing retrying — the underlying client's own retries are
+      switched off, so the number of attempts on the record is the number of requests that
+      were actually made, and every attempt records which client library made it.</p>
       <p class="body">Friction's verdict is about <strong>craft</strong> — is this a well-made word.
       The support box below it is about <strong>grounding</strong> — did the quoted passage establish
       this. <strong>They answer different questions</strong>, so a word can survive on craft while

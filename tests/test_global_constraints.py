@@ -56,6 +56,53 @@ _SCRATCH.mkdir(exist_ok=True)
 (_SCRATCH / "results").mkdir(exist_ok=True)
 
 
+def _corpus_lease_holder() -> str:
+    """Who, if anyone, is currently the corpus's only writer. Block 120.
+
+    The lease is an flock held for a process's lifetime (scripts/vault.py),
+    so it cannot go stale and it names its holder. This reads the REAL
+    store's lease, not the scratch one, which is the whole point: the
+    question is whether something outside this suite is writing."""
+    # lease_holder() alone is NOT the answer: it reads the lease FILE, whose
+    # text outlives the process that wrote it (the flock dies with the
+    # process; the file does not). So a lease last held four days ago would
+    # read as a live writer and make every run inconclusive forever. The
+    # live question is answered by trying the flock non-blockingly: if it
+    # can be taken, nobody holds it, and it is released immediately.
+    import fcntl as _fcntl
+    import os as _os
+    try:
+        import vault as _v
+        _saved = cli.LOCAL_STATE
+        try:
+            cli.LOCAL_STATE = _REAL_STATE
+            path = _v.lease_path()
+            if not path.exists():
+                return ""
+            name = _v.lease_holder()
+        finally:
+            cli.LOCAL_STATE = _saved
+    except Exception:  # noqa: BLE001 — no vault, no lease, no claim either way
+        return ""
+    fd = None
+    try:
+        fd = _os.open(path, _os.O_RDWR)
+        try:
+            _fcntl.flock(fd, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
+        except OSError:
+            return name or "an unnamed process"   # someone holds it right now
+        _fcntl.flock(fd, _fcntl.LOCK_UN)          # we took it; nobody was holding it
+        return ""
+    except OSError:
+        return ""
+    finally:
+        if fd is not None:
+            try:
+                _os.close(fd)
+            except OSError:
+                pass
+
+
 def _real_state_snapshot():
     """Filenames + line counts of everything in the owner's real store."""
     out = {}
@@ -87,6 +134,7 @@ import types as _types
 import time as _time
 import json as _json
 import concurrent.futures as _futures
+import os as _os
 
 # The report is printed at the END of the run, which means an exception
 # anywhere throws away every named failure found before it. The block-113
@@ -101,6 +149,14 @@ FAILURES: list = []
 # evaluate to nothing and the run prints OK, which is indistinguishable from
 # the check having passed. A skip is a third outcome and it is now reported.
 SKIPPED: list = []
+# block 120: a THIRD outcome for the real-store guard. That guard measures
+# the STORE, not the writer, so it cannot distinguish "the suite leaked"
+# from "the owner's server wrote while the suite ran" — and it has now
+# caught the latter three times. Exempting the writes it recognises would
+# trade false alarms for blind spots, so instead the run says it could not
+# tell. A run that could not tell is not a pass and not a failure; it needs
+# doing again with the writer stopped.
+INCONCLUSIVE: list = []
 
 
 def _audit_scaffolding():
@@ -623,18 +679,53 @@ def _check_attempt_ledger():
                 "from having to own it.")
     _rec = {"input_text": _passage, "mode": "deep", "trace_id": "t",
             "groups": [{"label": "conditional self-description", "gist": _passage,
-                        "anchor": "monstrous when I am deprived", "candidates": []}]}
-    if _ic.refuse_if_passage_leaked("a report that quotes nothing", _rec) is not None:
-        out.append("block 119: the inspector's leak guard fires on clean output")
+                        "anchor": "monstrous when I am deprived of it, and I called that second thing a demon",
+                        "constraint_beyond_anchor": ["addict"],
+                        "candidates": [{"bff": {"title": "Attention-Contingent Self",
+                                                "friction": {"verdict": "reject",
+                                                             "contradicts_anchor": True,
+                                                             "source_contradiction": _passage[:80]},
+                                                "claim_support": {"support": "partial",
+                                                                  "note": _passage[40:120]}}}]}]}
+
+    # block 120: TWO modes, different audiences. The block-119 inspector had
+    # one, and it refused on every real record — an anchor IS a 40-character
+    # run of the passage, so the guard blocked the exact case it was built
+    # for. The repair is two outputs, not a weaker guard.
+    _share = _ic.render(_rec, show_anchors=False)
+    if _ic.refuse_if_passage_leaked(_share, _rec) is not None:
+        out.append("block 120: the SHARE-SAFE render leaks the owner's passage — that "
+                   "mode's whole purpose is to be pasteable")
+    if "conditional self-description" not in _share:
+        out.append("block 120: the share-safe render names no component, so it answers nothing")
+    for _needle, _why in (("reject", "the friction verdict class"),
+                          ("contradicts_anchor   True", "the contradiction flag"),
+                          ("partial", "the support class"),
+                          ("addict", "the malformed-packet finding")):
+        if _needle not in _share:
+            out.append(f"block 120: the share-safe render omits {_why}, which is the "
+                       f"whole content it is allowed to carry")
+    if "monstrous when I am deprived" in _share:
+        out.append("block 120: the share-safe render printed the anchor")
+    if _passage[:60] in _share:
+        out.append("block 120: the share-safe render printed the critic's prose, which "
+                   "quotes the passage")
+
+    _local = _ic.render(_rec, show_anchors=True)
+    if "monstrous when I am deprived" not in _local:
+        out.append("block 120: --show-anchors did not print the anchor, so the local "
+                   "mode answers nothing the share-safe mode did not")
+    if "PRIVATE" not in _local:
+        out.append("block 120: --show-anchors output is not marked private")
+
+    # the guard still fires, and still fires on real prose rather than on a
+    # keyword list someone maintained
     if _ic.refuse_if_passage_leaked("report: " + _passage, _rec) is None:
-        out.append("block 119: the inspector's leak guard did not catch the owner's "
-                   "passage in its own output — a guard that cannot fail is not a guard")
-    _rendered = _ic.render(_rec)
-    if _ic.refuse_if_passage_leaked(_rendered, _rec) is not None:
-        out.append("block 119: the inspector's own render leaks the passage")
-    if "conditional self-description" not in _rendered or "monstrous when I am deprived" not in _rendered:
-        out.append("block 119: the inspector printed neither the component nor its anchor, "
-                   "so it answers nothing")
+        out.append("block 120: the leak guard did not catch the owner's passage in the "
+                   "output — a guard that cannot fail is not a guard")
+    if _ic.refuse_if_passage_leaked("a report that quotes nothing", _rec) is not None:
+        out.append("block 120: the leak guard fires on clean output")
+
     # -- the constitution must carry the wing that shipped (standing law).
     #    Pinned on the ABOUT PROSE, not on the renderer, because the
     #    renderer already has its own journey: this asks whether the page
@@ -652,11 +743,223 @@ def _check_attempt_ledger():
             ("in requests rather than renders",
              "that what a run cost is counted in HTTP attempts, not prompt renders"),
             ("hands the retry back to you",
-             "that a rate limit stops rather than being outwaited automatically")):
+             "that a rate limit stops rather than being outwaited automatically"),
+            ("A broken answer is not retried behind your back",
+             "that a half-written answer is not silently re-requested at their expense"),
+            ("the only thing retrying",
+             "that there is exactly one retry authority")):
         if _needle not in _about_only:
             out.append(f"block 119: the constitution does not tell the reader {_why} "
                        f"(missing {_needle!r}) — a wing that ships amends the constitution "
                        f"in the same block")
+    return out
+
+
+# ---- block 120: one retry authority, and the two stream cases ------------
+#
+# Three things are pinned here, all with INJECTED TRANSPORT FAULTS and never
+# a live call.
+#
+# 1. THE PHYSICAL SEND COUNT. The SDK retries connection errors, timeouts,
+#    429s and 5xx twice by default. Nikodemus performs its own three
+#    attempts. If both were live, one logical call could make nine physical
+#    requests while the record showed three. The app passes max_retries=0
+#    and has since the first tracked commit — but that is a keyword
+#    argument, and a keyword argument is a claim. This counts sends at the
+#    transport and asserts the recorded number IS the physical number.
+#
+# 2. THE TWO STREAM CASES. A stream that dies before any delta produced
+#    nothing and may be retried inside the budget. A stream that dies AFTER
+#    content began was generated and billed; retrying it silently spends
+#    twice and can return a substantively different answer. The SDK cannot
+#    tell them apart — it raises the same thing either way — so the gateway
+#    walks the stream itself.
+#
+# 3. THE EXACT-MATCH CLAIM. The historical run stored "The read operation
+#    timed out", which is not any SDK message. This proves a raw transport
+#    exception raised mid-stream reaches the soft-fail handler with that
+#    string intact, which is what licensed the claim about that run.
+#
+# A NOTE ON HOW THIS WAS NEARLY GOT WRONG: the first harness used a bare
+# iterator as the response body. httpx asserts on that, and the assertion
+# surfaced as APIConnectionError from send() — so every "stream failure" it
+# measured was really a pre-request failure, and it appeared to REFUTE the
+# stream hypothesis. The fixture below subclasses SyncByteStream for that
+# reason. A transport test that does not use a real transport type is
+# testing its own mock.
+
+_NOT_A_KEY = "not-" + "a-real-" + "key-for-tests"
+
+
+def _sdk_bits():
+    import anthropic
+    from anthropic import _base_client as _bc
+    hx = getattr(_bc, "httpx2", None) or getattr(_bc, "httpx", None)
+    return anthropic, hx
+
+
+def _sse(ev, d):
+    return f"event: {ev}\ndata: {_json.dumps(d)}\n\n".encode()
+
+
+def _stream_prelude():
+    return [
+        _sse("message_start", {"type": "message_start", "message": {
+            "id": "m", "type": "message", "role": "assistant", "model": "m",
+            "content": [], "stop_reason": None, "stop_sequence": None,
+            "usage": {"input_tokens": 10, "output_tokens": 1}}}),
+        _sse("content_block_start", {"type": "content_block_start", "index": 0,
+                                     "content_block": {"type": "text", "text": ""}}),
+        _sse("content_block_delta", {"type": "content_block_delta", "index": 0,
+                                     "delta": {"type": "text_delta", "text": "partial"}}),
+    ]
+
+
+def _drive(chunks, exc_factory, out):
+    """Returns (physical_sends, recorded_events, raised). Real SDK, real
+    max_retries, fake transport."""
+    anthropic, hx = _sdk_bits()
+    if hx is None:
+        return None, None, None
+
+    class _Failing(hx.SyncByteStream):
+        def __init__(self, cs, e): self.cs, self.e = cs, e
+        def __iter__(self):
+            for c in self.cs:
+                yield c
+            raise self.e
+        def close(self): pass
+
+    sends = []
+
+    def handler(req):
+        sends.append(1)
+        return hx.Response(200, headers={"content-type": "text/event-stream"},
+                           stream=_Failing(chunks, exc_factory()))
+
+    _os_saved = _os.environ.get("ANTHROPIC_API_KEY")
+    _os.environ["ANTHROPIC_API_KEY"] = _NOT_A_KEY
+    try:
+        gw = cli.make_gateway("anthropic", "claude-sonnet-5")
+    finally:
+        if _os_saved is None:
+            _os.environ.pop("ANTHROPIC_API_KEY", None)
+        else:
+            _os.environ["ANTHROPIC_API_KEY"] = _os_saved
+    declared = gw.client.max_retries
+    if declared != 0:
+        out.append(f"block 120: the production client asks the SDK for "
+                   f"max_retries={declared!r}. There must be exactly one retry "
+                   f"authority, and block 119 gave it to Nikodemus — an SDK that also "
+                   f"retries turns each recorded attempt into up to three hidden sends")
+    gw.BACKOFF_BASE_S = 0.0
+    gw.client = anthropic.Anthropic(api_key=_NOT_A_KEY, timeout=5,
+                                    max_retries=declared,
+                                    http_client=hx.Client(transport=hx.MockTransport(handler)))
+    led, _own = cli.open_attempt_ledger(gw, run_id="b120")
+    raised = None
+    try:
+        gw.complete("a prompt that never leaves this process")
+    except BaseException as e:  # noqa: BLE001
+        raised = e
+    evs = led.events()
+    cli.close_attempt_ledger(gw)
+    return len(sends), evs, raised
+
+
+def _check_stream_and_retry_authority():
+    out = []
+    try:
+        anthropic, hx = _sdk_bits()
+    except Exception as e:  # noqa: BLE001
+        SKIPPED.append(f"block 120 transport proofs: the anthropic SDK is not importable "
+                       f"({type(e).__name__}), so one retry authority and the two stream "
+                       f"cases were NOT proven in this run")
+        return out
+    if hx is None:
+        SKIPPED.append("block 120 transport proofs: the SDK's transport library could not "
+                       "be located, so nothing was injected and nothing was proven")
+        return out
+
+    versions = cli.client_versions()
+    if not versions.get("anthropic"):
+        out.append("block 120: the SDK version could not be read, so an attempt event "
+                   "cannot name the client that produced it")
+
+    # -- 1. no nested retries: recorded attempts ARE physical sends
+    sends, evs, raised = _drive([], lambda: hx.ReadError("injected"), out)
+    if sends is None:
+        return out
+    if sends != len(evs):
+        out.append(f"block 120: {sends} physical send(s) but {len(evs)} recorded — the "
+                   f"instrumented count must be a count of REQUESTS, not of application "
+                   f"attempts with SDK retries hidden underneath")
+    if sends != cli.AnthropicAPIGateway.ATTEMPTS:
+        out.append(f"block 120: a fully-failing call made {sends} physical send(s); the "
+                   f"declared ceiling is {cli.AnthropicAPIGateway.ATTEMPTS}. The declared "
+                   f"attempt ceiling must equal the real one")
+    if any(e.get("sdk", {}).get("anthropic") != versions["anthropic"] for e in evs):
+        out.append("block 120: an attempt event does not name the SDK that produced it")
+
+    # -- 2. before content: transient, retried inside the budget
+    if [e.get("outcome_detail") for e in evs] != ["stream_failed_before_content"] * len(evs):
+        out.append(f"block 120: a stream that died before any content was not classified "
+                   f"as such: {[e.get('outcome_detail') for e in evs]}")
+    if any(e.get("saw_content") is not False for e in evs):
+        out.append("block 120: saw_content is not recorded False for a pre-content drop")
+    if not isinstance(raised, cli.StreamInterrupted):
+        out.append(f"block 120: a pre-content stream drop raised {type(raised).__name__}, "
+                   f"not StreamInterrupted")
+    if any(e.get("exception") == "StreamInterrupted" for e in evs):
+        out.append("block 120: the event recorded our own carrier class instead of the "
+                   "concrete transport exception — the carrier is a distinction, not a "
+                   "diagnosis")
+
+    # -- 3. after partial content: NOT retried, and named
+    sends2, evs2, raised2 = _drive(_stream_prelude(), lambda: hx.ReadError("injected"), out)
+    if sends2 != 1:
+        out.append(f"block 120: a stream that died AFTER partial content made {sends2} "
+                   f"physical send(s). It must make exactly one: the request was already "
+                   f"generated and billed, and a silent retry spends twice and can return "
+                   f"a substantively different answer")
+    if [e.get("outcome_detail") for e in evs2] != ["partial_stream_failure"]:
+        out.append(f"block 120: a partial stream failure was not named: "
+                   f"{[e.get('outcome_detail') for e in evs2]}")
+    if not (evs2 and evs2[0].get("saw_content") is True):
+        out.append("block 120: saw_content is not recorded True after content arrived")
+    if not isinstance(raised2, cli.StreamInterrupted) or not raised2.saw_content:
+        out.append("block 120: a partial stream failure did not stop with the partial flag set")
+
+    # -- 4. the exact-match claim about the historical run
+    TARGET = "The read operation timed out"
+
+    class _Raw(hx.SyncByteStream):
+        def __iter__(self):
+            for c in _stream_prelude():
+                yield c
+            raise hx.ReadTimeout(TARGET)
+        def close(self): pass
+
+    def handler(req):
+        return hx.Response(200, headers={"content-type": "text/event-stream"}, stream=_Raw())
+
+    client = anthropic.Anthropic(api_key=_NOT_A_KEY, timeout=5, max_retries=0,
+                                 http_client=hx.Client(transport=hx.MockTransport(handler)))
+    stored = ""
+    try:
+        with client.messages.stream(model="m", max_tokens=8,
+                                    messages=[{"role": "user", "content": "x"}]) as st:
+            st.get_final_message()
+    except BaseException as e:  # noqa: BLE001
+        stored = str(e)[:400]
+    if stored.strip() != TARGET:
+        out.append(f"block 120: a raw transport exception raised mid-stream no longer "
+                   f"reaches the caller with its own message ({stored[:60]!r}). The claim "
+                   f"about the historical run rested on that exact match and must be "
+                   f"withdrawn if it stops holding")
+    if "timed out" not in cli.explain_component_failure(TARGET):
+        out.append("block 120: the component explainer no longer reads that string as a "
+                   "timeout, so the historical page and this proof have diverged")
     return out
 
 
@@ -666,6 +969,17 @@ def main() -> int:
     # that could crash on a broken one.
     failures.extend(_check_acquisition_record())
     failures.extend(_check_attempt_ledger())
+    failures.extend(_check_stream_and_retry_authority())
+    # block 120: the baseline is only meaningful if nothing else is writing.
+    # The corpus lease is the mechanical answer to "is a writer live" — it is
+    # an flock held for a process's lifetime, so it cannot go stale and it
+    # names its holder.
+    _lease_holder_before = _corpus_lease_holder()
+    if _lease_holder_before:
+        INCONCLUSIVE.append(
+            f"a corpus writer holds the lease ({_lease_holder_before}) — the real-store "
+            f"guard cannot separate its writes from the suite's, so the baseline was "
+            f"taken against a moving store. Stop the server and run again.")
     _state_before = _real_state_snapshot()
     gw = CapturingMock()
     result = cli.run_decompose("A passage about pretending while poor, and guilt at arriving.",
@@ -7758,9 +8072,16 @@ console.log(out.join('\\n'));
     # The breakpoint must land on the stable block. On the variable one it
     # hashes differently every call: no hit, and the 1.25x write billed anyway.
     class _FakeStream:
+        # block 120: the gateway now WALKS the stream instead of asking for
+        # the finished message, because whether any content arrived before a
+        # drop is the difference between a free retry and paying twice. A
+        # fake that only answers get_final_message() no longer describes the
+        # shape the code meets.
         def __init__(self, kw): self.kw = kw
         def __enter__(self): return self
         def __exit__(self, *a): return False
+        def __iter__(self):
+            return iter([type("E", (), {"type": "content_block_delta"})()])
         def get_final_message(self):
             class _M:
                 stop_reason = "end_turn"
@@ -18701,17 +19022,31 @@ console.log(out.join('\\n'));
     # own concurrent run — a receipt, a result and a few edge rows carrying his
     # material, not the suite's fixtures. The check stays exactly this strict; the
     # message now says what to look at before believing it.
-    _WHO = ("— the suite runs against a scratch store, so this is either a path the "
-            "redirect list forgot, or the owner's own server or CLI writing while the "
-            "suite ran. Open the named file: rows carrying the suite's fixtures "
-            "(Refusenik Posture, Threshold Grief, ZZ Probe, Exemplar) are the suite's; "
-            "rows carrying the owner's own material are his, and the run is clean")
+    # A change is reported as INCONCLUSIVE, never as a failure and never as
+    # a pass. Attribution is not mechanically provable here: the guard sees
+    # sizes, not authors. Naming the path and demanding a clean rerun is the
+    # honest outcome — and "unchanged" is never printed when it changed,
+    # however legitimate the write (a vault seal on server shutdown is
+    # legitimate and still makes this run unable to prove anything).
+    _changed = []
     for _f, _size in sorted(_state_after.items()):
         if _f not in _state_before:
-            failures.append(f"the owner's real store gained {_f!r} during the run {_WHO}")
+            _changed.append(f"{_f} (created)")
         elif _size != _state_before[_f]:
-            failures.append(f"the owner's real {_f!r} changed during the run "
-                            f"({_state_before[_f]} -> {_size} bytes) {_WHO}")
+            _changed.append(f"{_f} ({_state_before[_f]} -> {_size} bytes)")
+    for _f in sorted(_state_before):
+        if _f not in _state_after:
+            _changed.append(f"{_f} (removed)")
+    _lease_holder_after = _corpus_lease_holder()
+    if _changed:
+        INCONCLUSIVE.append(
+            "the owner's real store changed during the run — "
+            + "; ".join(_changed[:12])
+            + (f" [corpus lease held by {_lease_holder_after}]" if _lease_holder_after else
+               " [no corpus lease was held at the end of the run]")
+            + ". This does not prove a leak and does not prove innocence: the guard "
+              "measures the store, not the writer. Stop every corpus writer and run "
+              "again; a clean rerun is what proves the redirect list is complete.")
     _shutil.rmtree(_SCRATCH, ignore_errors=True)
 
     if failures:
@@ -18723,6 +19058,15 @@ console.log(out.join('\\n'));
         print(f"SKIPPED — {len(SKIPPED)} check(s) did not run; a skip is not a pass:")
         for _s in SKIPPED:
             print("  ~", _s)
+    if INCONCLUSIVE:
+        print("INCONCLUSIVE — CONCURRENT OWNER ACTIVITY")
+        for _i in INCONCLUSIVE:
+            print("  ?", _i)
+        print("  This run proves nothing about the real-store guard. It is not a pass. "
+              "Stop the Nikodemus server (and any CLI run) and run the suite again.")
+        print("  NOTE: CI can never prove this guard — a fresh checkout has no owner "
+              "store to compare against, so there the check is structurally vacuous.")
+        return 2
     print(f"OK — {len(gen_prompts)} branch forge(s) all carried the global constraint; "
           "rubric bullets present; recall-honesty language present; server pass-through verified; "
           "absent-key degradation verified.")
