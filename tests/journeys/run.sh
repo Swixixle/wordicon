@@ -53,7 +53,7 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit carry; do
+for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit carry wayfinder; do
   echo "== journey: $j"
   if [ "$j" = quiet ] || [ "$j" = speak ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
@@ -97,6 +97,12 @@ done
 # copy of the draft, a label that exists only in a stylesheet.
 for need in "carrying created no judgment and moved no verdict" "each carry is bound to the hash of the text the workup examined, not to a card position" "the carries reopen after a page reload, counted from the record" "the draft text is exactly what the owner typed — nothing inserted" "native undo still reaches the keystroke made before the tray opened" "the invented example is labelled INVENTED on the rendered tray" "the contradicted proposal is labelled CONTRADICTED on the rendered tray" "every standing label is actually displayed, not merely present in the DOM" "the invented label travels INSIDE copied text, not only in a stylesheet" "the tray offers no ruling — carry is not keep" "a draft that differs from the analysed text is said so, plainly" "opening the analysed version shows it read-only and leaves the draft alone" "carrying to a different draft is recorded as the owner's choice" "the original draft was never changed by anything carried" "no revision-notes control exists while nothing has been carried"; do
   grep -qF "ok   $need" "$JOURNEY_OUT/carry.log" || { echo "== carry: missing check: $need"; status=1; }
+done
+# Map Focus, repair: the three paid Wayfinder actions disclose before they
+# spend. Named individually because the failure is a request that leaves
+# before the answer — invisible to source review, silent in the log.
+for need in "no request left the page before the owner answered" "the panel says exactly one call" "the panel names the lane and model" "cancelling sent nothing" "after confirmation exactly one proposal request left" "no analysis request left before the answer" "exactly one analysis request left after confirmation"; do
+  grep -qF "ok   $need" "$JOURNEY_OUT/wayfinder.log" || { echo "== wayfinder: missing check: $need"; status=1; }
 done
 grep -q "^ok   anatomy: no request left the scratch origin" "$JOURNEY_OUT/anatomy.log" || { echo "== anatomy: the off-origin guard did not run"; status=1; }
 grep -q "^ok   dormant after" "$JOURNEY_OUT/anatomy.log" || { echo "== anatomy: the stillness check did not run"; status=1; }

@@ -7717,14 +7717,19 @@ console.log(bad.join('\\n'));
     _wf82 = _ow82[_ow82.index("// ---- Wayfinder"):_ow82.index("// ---- boot")]
     if "localStorage" in _wf82:
         failures.append("82: the wayfinder writes browser storage — proposals are session material")
-    if _wf82.count("fetch(") != 6 or _wf82.count("'/api/map/roads/suggest'") != 1 \
+    # Seven fetches since the disclosure repair (Map Focus build, repair
+    # commit): the one added is a GET of /api/config so the panel can name
+    # the lane and model BEFORE a paid request leaves — a read, never a
+    # spend. Any other change to this surface is still a change.
+    if _wf82.count("fetch(") != 7 or _wf82.count("'/api/map/roads/suggest'") != 1 \
             or _wf82.count("'/api/map/road'") != 2 \
             or _wf82.count("'/api/map/route/analyze'") != 1 \
             or _wf82.count("'/api/map/log'") != 1 \
-            or _wf82.count("'/api/map/stats'") != 1:
+            or _wf82.count("'/api/map/stats'") != 1 \
+            or _wf82.count("'/api/config'") != 1:
         failures.append("82: the wayfinder's network surface changed — expected exactly "
                         "suggest ×1, road ×2 (ratify + manual), analyze ×1, log ×1, "
-                        "stats ×1")
+                        "stats ×1, config ×1 (the disclosure panel's read)")
 
     # (c) the prompt: fiction rule + honest-empty, stated to the model
     _rp82 = cli.build_road_prompt("Alpha", "defA", "Beta", "defB", "resonance",

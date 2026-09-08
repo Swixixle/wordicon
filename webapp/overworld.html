@@ -163,6 +163,18 @@
   #wf-out .roadchip.inferred { color: var(--route-warp); border-color: var(--route-warp); }
   #wf-out .basis { color: var(--muted); font-size: 12px; }
   #wf-out .cand { border-top: 1px solid var(--border); padding: 7px 0; }
+  /* disclosure before spend: the same panel discipline the writing room uses */
+  #spend-ask { position: fixed; left: 50%; top: 18%; transform: translateX(-50%); z-index: 40; width: min(520px, 92vw);
+    background: rgba(24,31,41,0.985); border: 1px solid var(--accent); border-radius: 12px; padding: 14px 18px;
+    font-size: 13px; display: none; box-shadow: 0 12px 40px rgba(0,0,0,0.45); }
+  #spend-ask.open { display: block; }
+  #spend-ask .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+  #spend-ask p { margin: 4px 0; line-height: 1.5; }
+  #spend-ask .fact b { color: var(--text); }
+  #spend-ask .row { display: flex; gap: 8px; margin-top: 10px; }
+  #spend-ask button { font: inherit; padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel-2, #1b2230); color: var(--text); cursor: pointer; }
+  #spend-ask button.primary { border-color: var(--accent); color: var(--accent); }
   #wf-out .cand input { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
     border-radius: 6px; padding: 2px 7px; font-size: 12px; width: 200px; }
   #wf-out button { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
@@ -227,6 +239,7 @@
 
 <div id="detail"><button class="close" onclick="closeDetail()">×</button><div id="detail-body"></div></div>
 <div id="wf-out"><button class="close" onclick="clearRoute()">×</button><div id="wf-out-body"></div></div>
+<div id="spend-ask" role="dialog" aria-modal="true" aria-labelledby="spend-ask-title"></div>
 <div id="aerial-overlay">
   <p id="aerial-note">The whole corpus, one glance — every day, its runs, and the words you accepted.
   Click a day to dive to it on the map. <button onclick="closeAerial()" style="background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:2px 10px;font-size:12px;cursor:pointer">close</button></p>
@@ -1163,6 +1176,55 @@ function wfNoRoute(fromKey, toKey, strategy) {
     </div>`);
 }
 let wfProposalTrace = '';
+// ---- disclosure before spend --------------------------------------------
+// The writing room's law, applied here: a keystroke may not spend money,
+// and neither may a click that did not say it would. Three Wayfinder
+// actions call a model. Each now says, before any request leaves the page,
+// what it is for, which lane and model, exactly how many calls, what a
+// cost line can honestly say, and what enters the record — then waits.
+// Escape cancels and nothing is sent. The prompts and outputs behind the
+// actions are unchanged; only the moment before them is.
+let SPEND_ASK = null;   // {resolve} while a disclosure is open
+async function laneFacts() {
+  try {
+    const d = await (await fetch('/api/config')).json();
+    if (!d.ok) return { lane: 'the model lane is not available', model: '', ok: false };
+    return { lane: d.gateway === 'mock' ? 'the mock gateway (no real calls)' : d.gateway, model: d.model || '', ok: true };
+  } catch (e) { return { lane: 'unreachable', model: '', ok: false }; }
+}
+function discloseSpend(spec) {
+  const el = document.getElementById('spend-ask');
+  if (!el) return Promise.resolve(false);
+  if (SPEND_ASK) SPEND_ASK.resolve(false);
+  return new Promise(async resolve => {
+    // Escape is listened for only while the question is open — a cancel key
+    // that exists when there is nothing to cancel is a listener for no reason
+    const onKey = e => { if (e.key === 'Escape' && SPEND_ASK) { e.preventDefault(); e.stopPropagation(); SPEND_ASK.resolve(false); } };
+    window.addEventListener('keydown', onKey, true);
+    SPEND_ASK = { resolve: v => { SPEND_ASK = null; window.removeEventListener('keydown', onKey, true);
+                                  el.classList.remove('open'); el.innerHTML = ''; resolve(v); } };
+    el.innerHTML = `<div class="lbl" id="spend-ask-title">${escapeHtml(spec.title)}</div>
+      <p>${escapeHtml(spec.purpose)}</p>
+      <p class="fact">Route: <b>${escapeHtml(spec.route)}</b></p>
+      <p class="fact" id="spend-ask-lane">Lane: <b>checking…</b></p>
+      <p class="fact">Model calls: <b>${spec.calls}</b>${spec.calls === 1 ? ' — exactly one.' : ''}</p>
+      <p class="fact">Cost: the receipt records the tokens the provider reports; this page cannot price them.</p>
+      <p class="fact">Enters the record: ${escapeHtml(spec.record)}</p>
+      <div class="row">
+        <button class="primary" id="spend-ask-go">${escapeHtml(spec.go || 'Proceed')}</button>
+        <button id="spend-ask-cancel">Cancel · esc</button>
+      </div>`;
+    el.classList.add('open');
+    document.getElementById('spend-ask-go').onclick = () => SPEND_ASK && SPEND_ASK.resolve(true);
+    document.getElementById('spend-ask-cancel').onclick = () => SPEND_ASK && SPEND_ASK.resolve(false);
+    document.getElementById('spend-ask-go').focus({ preventScroll: true });
+    const lane = await laneFacts();
+    const laneEl = document.getElementById('spend-ask-lane');
+    if (laneEl) laneEl.innerHTML = 'Lane: <b>' + escapeHtml(lane.lane) + '</b>'
+      + (lane.model ? ' · model <b>' + escapeHtml(lane.model) + '</b>' : (lane.ok ? ' · no model of its own' : ''));
+  });
+}
+
 async function fetchInferred(fromL, toL, kind) {
   wfFindings = [];
   try {
@@ -1188,6 +1250,13 @@ async function proposeRoads(kind) {
   const fromL = w ? w.fromL : document.getElementById('wf-from').value.trim();
   const toL = w ? w.toL : document.getElementById('wf-to').value.trim();
   if (!fromL || !toL) return;
+  const ok = await discloseSpend({
+    title: 'Propose ' + kind + ' roads',
+    purpose: 'A model proposes ' + kind + ' roads between “' + fromL + '” and “' + toL + '”, each checked in code against what the map actually contains. A proposal is not a road until you declare it.',
+    route: 'POST /api/map/roads/suggest', calls: 1,
+    record: 'one run snapshot (map_roads) and one Wayfinder log line; no road, until you declare one.',
+    go: 'Propose roads' });
+  if (!ok) return;
   await fetchInferred(fromL, toL, kind);
   recomputeProposed();
 }
@@ -1263,6 +1332,13 @@ async function analyzeRoute() {
   if (!w || w.chosen < 0 || w.chosen >= w.alts.length) return;
   const a = w.alts[w.chosen];
   const out = document.getElementById('wf-analysis');
+  const ok = await discloseSpend({
+    title: 'Read this journey',
+    purpose: 'A model reads the plotted route as one run: claims marked “from the record” must cite the route’s own roads or are demoted to interpretation in code.',
+    route: 'POST /api/map/route/analyze', calls: 1,
+    record: 'one run snapshot (route_analysis) and one Wayfinder log line.',
+    go: 'Read the journey' });
+  if (!ok) return;
   out.innerHTML = '<p class="basis">Reading the journey…</p>';
   const stops = [a.path.start, ...a.path.steps.map(st => st.node)]
     .map(k => ({ key: k, label: labelFor(k) }));
