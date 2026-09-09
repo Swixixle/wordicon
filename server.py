@@ -82,6 +82,7 @@ import speech  # noqa: E402  (Speak to Nikodemus — block 106; the transcriptio
 import federation  # noqa: E402  (connected instruments — block 107; Open Case and EthicalAlt behind the membrane, manual pull only)
 import carry  # noqa: E402  (Carry Back — block 123; the bridge from a workup to the writing room. No model, no network)
 import map_focus  # noqa: E402  (Map · focus — one place's ring, read-only. No model, no network, no write)
+import moira  # noqa: E402  (Professor Moira — block 125; three readers beside the draft, each on its own call)
 import inquiry  # noqa: E402  (the Inquiry — block 111 phase 1; a question kept, branched and returnable. Zero model calls)
 from wordicon_corpus.objects import Judgment  # noqa: E402
 
@@ -1212,6 +1213,261 @@ def anatomy_page():
                     mimetype="text/html")
 
 
+# ---- Professor Moira (block 125) --------------------------------------------
+#
+# Three readers beside the draft, each on its own call, each answering into
+# its own file. The page shows the scope, the readers, their models and the
+# call count BEFORE anything is sent, and one explicit press starts it — a
+# click that did not say it would spend may not. The blind reader's request
+# is the instructions and the exact draft, by construction (moira.blind_
+# request takes nothing else). Failed readers are recorded as failed and
+# never as agreement. Nothing here conferences, scores, or synthesizes.
+#
+# MOIRA_GATEWAY_FACTORY is None in every real run and assigned only by the
+# journey server, so the whole path — snapshot, dispatch, quotation check,
+# carry, follow-up, consultation — runs for real with nothing reaching a
+# provider. The suite pins that nothing else in this file assigns it.
+MOIRA_GATEWAY_FACTORY = None
+ATROPOS_MODEL_ENV = "WORDICON_ATROPOS_MODEL"
+
+
+def moira_lane_for(reader: str):
+    """The gateway one reader will use. Clotho and Lachesis read on the
+    configured lane; the blind reader uses WORDICON_ATROPOS_MODEL when it is
+    set, otherwise the same lane — and then says so, because a reading by the
+    same model is a weaker independence test."""
+    if MOIRA_GATEWAY_FACTORY is not None:
+        return MOIRA_GATEWAY_FACTORY(reader)
+    if reader == "atropos" and os.environ.get("ANTHROPIC_API_KEY") and os.environ.get(ATROPOS_MODEL_ENV):
+        return cli.make_gateway("anthropic", os.environ[ATROPOS_MODEL_ENV])
+    return server_gateway()
+
+
+def moira_models() -> dict:
+    """What each reader would be read by, said before anything is spent."""
+    out = {}
+    strong = None
+    for r in moira.READERS:
+        try:
+            g = moira_lane_for(r)
+            desc = {"provider": g.name, "model": getattr(g, "model", None) or g.name, "ok": True,
+                    "external": bool(getattr(g, "is_external", False))}
+        except Exception as e:  # noqa: BLE001
+            desc = {"provider": None, "model": None, "ok": False, "error": str(e)}
+        if r != "atropos":
+            strong = desc.get("model")
+        out[r] = desc
+    a = out.get("atropos") or {}
+    a["same_model_as_strong"] = bool(a.get("ok") and strong and a.get("model") == strong)
+    a["independence"] = ("same model as the other readers — a weaker independence test, recorded on every response"
+                         if a["same_model_as_strong"] else
+                         ("a different model from the other readers" if a.get("ok") else "no lane"))
+    return out
+
+
+def _moira_run(reading: dict, reader: str, response_id: str = "") -> None:
+    """One reader, on its own thread, holding the corpus-writers lock for its
+    own write only. A lane that cannot be built is recorded as a failure."""
+    with vault.corpus_write():
+        try:
+            try:
+                gw = moira_lane_for(reader)
+            except Exception as e:  # noqa: BLE001
+                moira.fail_reader(reading, reader, f"no model lane: {e}", response_id)
+                return
+            moira.run_reader(reading, reader, gw, response_id)
+        except Exception:  # noqa: BLE001 — a reader's failure is its own file, never the run's
+            traceback.print_exc()
+        finally:
+            vault.mark_dirty()
+
+
+def _moira_dispatch(reading: dict, readers: "list[str] | None" = None, response_ids: "dict | None" = None) -> None:
+    ids = response_ids or {}
+    for d in reading.get("readers") or []:
+        r = d["reader"]
+        if readers is not None and r not in readers:
+            continue
+        threading.Thread(target=_moira_run, args=(reading, r, ids.get(r, "")), daemon=True).start()
+
+
+@app.route("/api/moira/config")
+def api_moira_config():
+    """Everything the panel says before a press: the faculty as ruled, the
+    readers and their lanes, the settings, the notebook count, the call
+    count. Reads no draft and calls no model."""
+    models = moira_models()
+    fac = moira.faculty()
+    return jsonify({**moira.summary(), "models": models,
+                    "calls_per_reading": len(fac["readers"]),
+                    "output_cap_tokens": getattr(cli.AnthropicAPIGateway, "MAX_OUTPUT_TOKENS", None),
+                    "cost": "not priced here — each response records the token counts the provider reported",
+                    "privacy": "each reader receives the exact text you chose and its own instructions; "
+                               "the blind reader receives nothing else; a hosted lane sends that text to the provider"})
+
+
+@app.route("/api/moira/readings", methods=["GET"])
+def api_moira_list():
+    try:
+        limit = int(request.args.get("limit", "30"))
+    except ValueError:
+        limit = 30
+    return jsonify({"readings": moira.list_readings(limit)})
+
+
+@app.route("/api/moira/readings", methods=["POST"])
+def api_moira_start():
+    """The explicit press. Freezes the snapshot, writes the reading, and
+    dispatches each reader separately. The draft in the room is not
+    touched; what is read is the copy the page sent."""
+    data = request.get_json(silent=True) or {}
+    text = data.get("text")
+    fac = moira.faculty()
+    wanted = data.get("readers")
+    readers = [r for r in wanted if r in fac["readers"]] if isinstance(wanted, list) else None
+    try:
+        reading = moira.start_reading(str(text or ""), str(data.get("scope") or "draft"),
+                                      previous_reading_id=str(data.get("previous_reading_id") or ""),
+                                      readers=readers, models=moira_models())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    _moira_dispatch(reading)
+    return jsonify({"reading_id": reading["reading_id"],
+                    "readers": [d["reader"] for d in reading["readers"]],
+                    "snapshot_sha256": reading["snapshot"]["sha256"]})
+
+
+@app.route("/api/moira/readings/<reading_id>")
+def api_moira_reading(reading_id):
+    v = moira.view(reading_id)
+    if v is None:
+        return jsonify({"error": "no reading with that id"}), 404
+    return jsonify(v)
+
+
+@app.route("/api/moira/readings/<reading_id>/text")
+def api_moira_reading_text(reading_id):
+    """The exact snapshot a reading was of — so the page can say whether the
+    room now holds the same text, and show the earlier version beside it,
+    never in it."""
+    rec = moira.load_reading(reading_id)
+    if rec is None:
+        return jsonify({"error": "no reading with that id"}), 404
+    snap = rec.get("snapshot") or {}
+    return jsonify({"reading_id": reading_id, "text": snap.get("text", ""), "sha256": snap.get("sha256", ""),
+                    "words": snap.get("words", 0), "created_at": rec.get("created_at", "")})
+
+
+@app.route("/api/moira/readings/<reading_id>/retry", methods=["POST"])
+def api_moira_retry(reading_id):
+    """Retry ONE reader that failed or never answered — a new response; the
+    failed one stays on the record. Retrying one disturbs no other."""
+    rec = moira.load_reading(reading_id)
+    if rec is None:
+        return jsonify({"error": "no reading with that id"}), 404
+    data = request.get_json(silent=True) or {}
+    reader = str(data.get("reader") or "")
+    if reader not in [d["reader"] for d in rec.get("readers") or []]:
+        return jsonify({"error": "that reader is not on this reading"}), 400
+    latest = moira.latest_response(reading_id, reader)
+    if latest is not None and latest.get("status") == "complete":
+        return jsonify({"error": f"{reader} already answered this reading; ask a follow-up instead"}), 400
+    new_id = "rs_" + uuid.uuid4().hex[:12]
+    _moira_dispatch(rec, readers=[reader], response_ids={reader: new_id})
+    return jsonify({"ok": True, "response_id": new_id})
+
+
+@app.route("/api/moira/readings/<reading_id>/ask", methods=["POST"])
+def api_moira_ask(reading_id):
+    """A follow-up to one reader, in that reader's own thread — or, for the
+    blind reader, the informed consultation. One model call, said so on the
+    page first. The earlier response is not touched."""
+    rec = moira.load_reading(reading_id)
+    if rec is None:
+        return jsonify({"error": "no reading with that id"}), 404
+    data = request.get_json(silent=True) or {}
+    reader = str(data.get("reader") or "")
+    question = str(data.get("question") or "")
+    include_nb = bool(data.get("include_notebook"))
+    if reader not in [d["reader"] for d in rec.get("readers") or []]:
+        return jsonify({"error": "that reader is not on this reading"}), 400
+    try:
+        gw = moira_lane_for(reader)
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": f"no model lane is configured: {e}"}), 400
+    try:
+        with vault.corpus_write():
+            try:
+                row = moira.ask_reader(rec, reader, question, gw, include_notebook=include_nb)
+            finally:
+                vault.mark_dirty()
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "response": row, "reading": moira.view(reading_id)})
+
+
+@app.route("/api/moira/settings", methods=["GET"])
+def api_moira_settings():
+    return jsonify({"settings": moira.current_settings(), "defaults": moira.DEFAULT_SETTINGS,
+                    "levels": list(moira.LEVELS), "lengths": list(moira.LENGTHS),
+                    "prompts_version": moira.PROMPTS_VERSION, "faculty": moira.faculty()})
+
+
+@app.route("/api/moira/settings", methods=["POST"])
+def api_moira_settings_set():
+    data = request.get_json(silent=True) or {}
+    settings = moira.record_settings(data.get("settings") or {}, str(data.get("note") or ""))
+    return jsonify({"ok": True, "settings": settings})
+
+
+@app.route("/api/moira/notebook", methods=["GET"])
+def api_moira_notebook():
+    entries = sorted(moira.fold_notebook().values(), key=lambda e: e.get("at", ""))
+    return jsonify({"entries": entries, "readers": list(moira.NOTEBOOK_READERS),
+                    "means": "something the writer chose to keep in the readers' view",
+                    "is_not": ["a correctness claim", "a diagnosis", "an instruction to agree"]})
+
+
+@app.route("/api/moira/notebook", methods=["POST"])
+def api_moira_remember():
+    data = request.get_json(silent=True) or {}
+    try:
+        row = moira.remember(str(data.get("text") or ""), data.get("source") or {},
+                             data.get("readers") if isinstance(data.get("readers"), list) else None)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "entry": row})
+
+
+@app.route("/api/moira/notebook/<note_id>/<action>", methods=["POST"])
+def api_moira_note_action(note_id, action):
+    data = request.get_json(silent=True) or {}
+    try:
+        if action == "correct":
+            ev = moira.correct_note(note_id, str(data.get("text") or ""))
+        elif action == "retire":
+            ev = moira.retire_note(note_id, str(data.get("why") or ""))
+        elif action == "restore":
+            ev = moira.restore_note(note_id)
+        else:
+            return jsonify({"error": "unknown notebook action"}), 400
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "event": ev})
+
+
+@app.route("/api/moira/phase0", methods=["POST"])
+def api_moira_phase0():
+    """The owner records the Phase 0 result. His act, from the page or the
+    command line; the faculty's name and reader set follow the ruling."""
+    data = request.get_json(silent=True) or {}
+    try:
+        row = moira.record_phase0(str(data.get("result") or ""), str(data.get("note") or ""))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True, "ruling": row, "faculty": moira.faculty()})
+
+
 # ---- Carry Back (block 123) -------------------------------------------------
 #
 # The bridge from a workup to the writing room. A carry means "this may be
@@ -1228,14 +1484,10 @@ def api_carry():
     # draft to be hashed. If the run left no record, there is nothing honest
     # to bind a carry to, and it is refused.
     trace_id = str(data.get("trace_id") or "")
-    rec_path = cli.RESULTS_DIR / f"{trace_id}.json" if trace_id else None
-    if not trace_id or not rec_path.exists():
+    rec = carry.load_record(trace_id) if trace_id else None
+    if rec is None:
         return jsonify({"error": "no run record for that trace; a carry must bind to the text a "
                                  "run actually examined"}), 400
-    try:
-        rec = json.loads(rec_path.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
-        return jsonify({"error": "the run record could not be read"}), 400
     # 123b: THE RECORD DECIDES. The page names an object; the server resolves
     # it against the run's own record and takes the excerpt and the standing
     # from there. Whatever excerpt or standing the request carried is
@@ -3812,6 +4064,15 @@ def api_result(trace_id):
     judgments. Only runs made after result snapshots existed can be
     reopened; older receipts never stored the Flesh/Friction text."""
     path = cli.RESULTS_DIR / f"{trace_id}.json"
+    if not path.exists() and trace_id.startswith("rd_"):
+        # block 125: a reading by the readers — the exact text it read, so
+        # the revision notes can say whether the room still holds it
+        rec = moira.load_reading(trace_id)
+        if rec is not None:
+            snap = rec.get("snapshot") or {}
+            return jsonify({"trace_id": trace_id, "mode": "moira_reading", "created_at": rec.get("created_at", ""),
+                            "input_text": snap.get("text", ""), "snapshot_sha256": snap.get("sha256", ""),
+                            "words": snap.get("words", 0), "faculty_name": rec.get("faculty_name", "")})
     if not path.exists():
         # A door must never open onto an unexplained blank. If the receipt
         # survives, show the receipt and say exactly what is unavailable;

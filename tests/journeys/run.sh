@@ -53,7 +53,7 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit carry wayfinder map; do
+for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit carry wayfinder map moira; do
   echo "== journey: $j"
   if [ "$j" = quiet ] || [ "$j" = speak ] || [ "$j" = map ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
@@ -174,6 +174,15 @@ done
 for need in "the question is kept exactly as it was asked" "the same words opened twice are two inquiries" "every phase this room has not built renders as an unbuilt door" "an abandoned branch keeps what the failure revealed" "after a full reload it reopens on the question as asked" "exploring created no ruling due" "walking to the Inquiry and back leaves the same room element"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/inquiry.log" || { echo "== inquiry: missing check: $need"; status=1; }
 done
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log "$JOURNEY_OUT"/constitution.log "$JOURNEY_OUT"/anchorfit.log "$JOURNEY_OUT"/carry.log | awk '{s+=$2} END {print s+0}')
+# block 125: the readers. The press must have been proved not to spend, the
+# room proved untouched, the three answers proved separate, the invented span
+# proved marked, the failed reader proved failed-not-agreeing, the carry proved
+# to land by CLICK (the button was found dead by this journey), the blind
+# reader's discussion proved a consultation, and the earlier reading proved
+# reopenable after the draft moved on.
+for need in "the readers' control opens a question rather than starting a reading" "and it has spent nothing" "cancelling spent nothing at all" "one press starts exactly one reading" "the room splits when the first reader answers" "the reading leaves the element, the draft and the caret exactly as they were" "three readers answer into three separate cards" "a quoted span that is not in the text is marked, not dropped" "the blind reader's card says what she received" "carrying an observation back lands in the revision notes" "a follow-up goes to one reader only" "the blind reader's discussion is labelled a consultation and her first reading stands" "a reader that failed is shown failed, says it is not agreement, and can be retried alone" "an earlier reading reopens whole" "a whole-draft reading reopened after an edit says the draft has moved on" "the undo stack survived the whole invocation"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/moira.log" || { echo "== moira: missing check: $need"; status=1; }
+done
+total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log "$JOURNEY_OUT"/constitution.log "$JOURNEY_OUT"/anchorfit.log "$JOURNEY_OUT"/carry.log "$JOURNEY_OUT"/wayfinder.log "$JOURNEY_OUT"/map.log "$JOURNEY_OUT"/moira.log | awk '{s+=$2} END {print s+0}')
 echo "== journeys: $total checks, exit $status"
 exit $status

@@ -40,6 +40,12 @@ server.server_gateway = _poisoned
 # the server stays poisoned; only the Question Reader has a stand-in, and it
 # runs the real check, the real run record and the real adoption.
 server.READER_GATEWAY = cli.MockReader()
+# block 125: the readers' deterministic offline stand-ins — one per reader, so
+# the whole path (snapshot, three separate dispatches, quotation check, the
+# carry, a follow-up, the consultation) runs for real with nothing reaching a
+# provider. A draft containing "FAIL LACHESIS" makes that one reader fail.
+import moira  # noqa: E402
+server.MOIRA_GATEWAY_FACTORY = moira.mock_gateway_for
 import speech  # noqa: E402
 speech.ENGINE = speech.MockEngine()   # block 106: the journeys transcribe with the mock, offline, deterministic
 # block 107: the mock producers on their own loopback port, and two development

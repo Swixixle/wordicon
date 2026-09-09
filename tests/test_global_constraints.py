@@ -1967,6 +1967,356 @@ def _check_map_focus_routes(server, paired):
         out.append("focus route: a focus route declares a verb other than GET")
     return out
 
+def _check_moira():
+    """Block 125: three readers beside the draft. What is pinned: the blind
+    reader's request is the instructions and the exact text and NOTHING else
+    (inspected on the captured request object, not asserted); quoted spans
+    are checked against the text and a span that is not there is marked,
+    never dropped or repaired; a failed reader is its own file and touches
+    no other; a reply that returned but cannot be read is 'unusable', never
+    a finished reader; a new reading of changed text leaves the earlier
+    reading byte-identical and reopenable; a retired notebook entry never
+    reaches a later request and a corrected one arrives corrected; every
+    response records the settings and the prompt hash it was read under; the
+    consultation is labelled and leaves the blind reply untouched; nothing
+    combines the readers. On synthetic text, in an isolated store."""
+    out = []
+    import importlib
+    try:
+        moira = importlib.import_module("moira")
+    except Exception as e:  # noqa: BLE001
+        out.append(f"125: scripts/moira.py does not import ({type(e).__name__}: {e})")
+        return out
+    importlib.reload(moira)
+
+    # -- the blind request takes nothing but the draft: by signature
+    sig = _ins113.signature(moira.blind_request)
+    if list(sig.parameters) != ["draft", "settings"]:
+        out.append(f"125: blind_request takes {list(sig.parameters)} — it must take the draft and the settings and nothing else")
+    src = (_pathlib.Path(cli.__file__).parent / "moira.py").read_text(encoding="utf-8")
+    for bad in ("conference", "synthes", "verdict_overall", "consensus"):
+        pass
+    if "def conference" in src or "def synthesize" in src or "overall_verdict" in src:
+        out.append("125: moira.py defines a conference or an overall verdict — the readers answer separately")
+    for word in ("Clotho", "Lachesis", "Atropos", "Moira", "Fates"):
+        for role in ("CLOTHO", "LACHESIS", "ATROPOS"):
+            text = getattr(moira, role)
+            if word.lower() in text.lower():
+                out.append(f"125: the {role} instructions name {word!r} — the readers are not told the myth")
+
+    captured = {}
+
+    class Cap(moira.MockMoiraGateway):
+        def complete(self, prompt):
+            captured.setdefault(self.reader, []).append(prompt)
+            return super().complete(prompt)
+
+    draft = ("A synthetic paragraph about a lantern with two settings, and a house that learned to read them. "
+             "Nobody had decided this. It was the kind of arrangement that forms between a machine and the people "
+             "who stop noticing it.")
+    with _isolated_store("moira"):
+        importlib.reload(moira)
+        # a notebook entry BEFORE the reading, kept for Clotho and Lachesis
+        n1 = moira.remember("keep the lantern as an object, not a symbol", {"kind": "typed"})
+        r = moira.start_reading(draft, "paragraph")
+        if not r["reading_id"].startswith("rd_") or r["snapshot"]["sha256"] != moira.sha(draft):
+            out.append("125: the reading does not freeze the exact text under a collision-proof id")
+        gws = {x: Cap(x) for x in moira.READERS}
+        resps = {x: moira.run_reader(r, x, gws[x]) for x in moira.READERS}
+        # ISOLATION, inspected on the request object
+        a = captured.get("atropos", [None])[0]
+        if a is None or not isinstance(a, cli.Cacheable):
+            out.append("125: the blind reader's request was not a split (system, user) request")
+        else:
+            if a.variable != draft:
+                out.append("125: the blind reader's message is not the exact draft")
+            if a.stable != moira.instructions_for("atropos", moira.current_settings()):
+                out.append("125: the blind reader's system text is not the fixed instructions under the current settings")
+            if "lantern as an object" in str(a) or n1["note_id"] in str(a):
+                out.append("125: the notebook reached the blind reader")
+        if resps["atropos"]["request"].get("context") != ["draft"] or resps["atropos"]["request"].get("notebook_ids"):
+            out.append(f"125: the blind response records context {resps['atropos']['request']} — it must record the draft alone")
+        c = captured.get("clotho", [None])[0]
+        if c is None or "lantern as an object" not in c.stable or c.variable != draft:
+            out.append("125: Clotho did not receive the notebook in the instructions with the exact draft as the message")
+        if n1["note_id"] not in resps["clotho"]["request"].get("notebook_ids", []):
+            out.append("125: Clotho's response does not record which notebook entries it was read with")
+        # QUOTATION CHECK: exact, normalized, not found — all three present, the missing one MARKED
+        st = {s["quoted"] for s in resps["clotho"]["segments"]}
+        if not {"exact", "normalized", "not_found"} <= st:
+            out.append(f"125: the quotation check did not produce exact, normalized and not_found on the mock's spans: {st}")
+        nf = [s for s in resps["clotho"]["segments"] if s["quoted"] == "not_found"]
+        if not nf or not nf[0]["span"]:
+            out.append("125: a span that is not in the text was dropped instead of being marked")
+        # every response records the settings and the prompt hash it was read under
+        for x, resp in resps.items():
+            if resp.get("status") != "complete":
+                out.append(f"125: {x} did not complete on the mock: {resp.get('status')} {resp.get('error')}")
+            if resp.get("prompt_version") != moira.PROMPTS_VERSION or not resp.get("request", {}).get("system_sha"):
+                out.append(f"125: {x}'s response does not record its prompt version and instruction hash")
+            if resp.get("settings") != moira.current_settings()[x]:
+                out.append(f"125: {x}'s response does not record the settings it was read under")
+            for k in ("verdict", "score", "overall", "agreement"):
+                if k in resp and resp[k]:
+                    out.append(f"125: a response carries {k!r} — no verdict, no score, no agreement")
+        v = moira.view(r["reading_id"])
+        if v is None or v["answered"] != 3 or any(k in v for k in ("verdict", "conference", "summary_verdict")):
+            out.append("125: the reading view does not fold three separate answers without a verdict")
+
+        # PARTIAL FAILURE: one reader fails; the others' files are byte-identical
+        r2 = moira.start_reading(draft + " FAIL LACHESIS", "draft", previous_reading_id=r["reading_id"])
+        before = {x: (moira.responses_dir() / f"{d['response_id']}.json") for x, d in
+                  ((d["reader"], d) for d in r2["readers"])}
+        resps2 = {x: moira.run_reader(r2, x, Cap(x)) for x in moira.READERS}
+        if resps2["lachesis"]["status"] != "failed" or "refused" not in resps2["lachesis"]["error"]:
+            out.append("125: a failing reader was not recorded as failed with its reason")
+        if resps2["clotho"]["status"] != "complete" or resps2["atropos"]["status"] != "complete":
+            out.append("125: one reader's failure disturbed another's answer")
+        if "agreement" in resps2["lachesis"].get("failure_means", "").lower() and "not agreement" not in resps2["lachesis"]["failure_means"]:
+            out.append("125: a failure is described as agreement")
+        v2 = moira.view(r2["reading_id"])
+        if v2["failed"] != 1 or v2["answered"] != 2:
+            out.append(f"125: the view miscounts a partial reading: {v2['answered']} answered, {v2['failed']} failed")
+        # UNUSABLE: a reply that returned but is not a reading
+        class Garbage(moira.MockMoiraGateway):
+            def complete(self, prompt):
+                return "not json at all"
+        r3 = moira.start_reading(draft + " (third)", "draft")
+        g = moira.run_reader(r3, "clotho", Garbage("clotho"))
+        if g["status"] != "unusable" or not g.get("unusable_reason"):
+            out.append(f"125: a reply that cannot be read is shown as {g['status']!r}, not as unusable")
+        # VERSIONS: the earlier reading is byte-identical and reopenable
+        first_file = moira.readings_dir() / f"{r['reading_id']}.json"
+        first_bytes = first_file.read_bytes()
+        first_resp = (moira.responses_dir() / f"{resps['clotho']['response_id']}.json").read_bytes()
+        again = moira.view(r["reading_id"])
+        if again is None or again["snapshot"]["sha256"] != moira.sha(draft) or again["answered"] != 3:
+            out.append("125: the earlier reading cannot be reopened whole after a new reading of changed text")
+        if first_file.read_bytes() != first_bytes or (moira.responses_dir() / f"{resps['clotho']['response_id']}.json").read_bytes() != first_resp:
+            out.append("125: a later reading changed an earlier reading's bytes")
+        if r2.get("previous_reading_id") != r["reading_id"]:
+            out.append("125: a reread does not record the reading it follows")
+        # write-once: the same response id cannot be written twice
+        try:
+            moira.run_reader(r, "clotho", Cap("clotho"), response_id=resps["clotho"]["response_id"])
+            out.append("125: a response file was overwritten — every file must be write-once")
+        except FileExistsError:
+            pass
+
+        # MEMORY REMOVAL: retire → absent from the next request; correct → arrives corrected
+        moira.retire_note(n1["note_id"], "no longer true")
+        n2 = moira.remember("the run-on in the last paragraph is on purpose", {"kind": "typed"})
+        moira.correct_note(n2["note_id"], "the run-on in the LAST paragraph is deliberate")
+        r4 = moira.start_reading(draft, "paragraph")
+        captured.clear()
+        moira.run_reader(r4, "lachesis", Cap("lachesis"))
+        l = captured["lachesis"][0]
+        if "lantern as an object" in str(l):
+            out.append("125: a retired notebook entry still reaches a later request")
+        if "is deliberate" not in str(l) or "is on purpose" in str(l):
+            out.append("125: a corrected notebook entry did not arrive corrected")
+        # FOLLOW-UP and CONSULTATION
+        f = moira.ask_reader(r, "clotho", "why that line?", Cap("clotho"))
+        if f["role"] != "followup" or f["request"]["in_reply_to"] != resps["clotho"]["response_id"]:
+            out.append("125: a follow-up is not recorded as one reader's own thread")
+        fq = captured["clotho"][-1]
+        if resps["atropos"]["raw_text"][:40] in str(fq) or resps["lachesis"]["raw_text"][:40] in str(fq):
+            out.append("125: a follow-up to one reader carried another reader's answer")
+        blind_before = (moira.responses_dir() / f"{resps['atropos']['response_id']}.json").read_bytes()
+        cons = moira.ask_reader(r, "atropos", "it was about grief", Cap("atropos"), include_notebook=False)
+        if cons["role"] != "consultation":
+            out.append("125: the blind reader's follow-up is not labelled a consultation")
+        if "notebook" in cons["request"]["context"]:
+            out.append("125: the consultation carried the notebook without the owner choosing to share it")
+        if (moira.responses_dir() / f"{resps['atropos']['response_id']}.json").read_bytes() != blind_before:
+            out.append("125: the consultation changed the blind reply's bytes")
+        else:
+            try:
+                cons2 = moira.ask_reader(r, "atropos", "and now with my notes", Cap("atropos"), include_notebook=True)
+                if "notebook" not in cons2["request"]["context"]:
+                    out.append("125: the consultation the owner chose to share the notebook with did not carry it")
+            except Exception as e:  # noqa: BLE001
+                out.append(f"125: a second consultation could not be asked ({type(e).__name__}: {e})")
+        latest_blind = moira.latest_response(r["reading_id"], "atropos")
+        if latest_blind is None or latest_blind.get("request", {}).get("context") != ["draft"]:
+            out.append("125: after the consultation, the blind reading on record is no longer the blind one")
+        # SETTINGS: recorded per response, and a change reaches the next reading
+        moira.record_settings({"lachesis": {"warmth": 3, "directness": 0, "playfulness": 3, "length": "long"}})
+        r5 = moira.start_reading(draft, "paragraph")
+        s5 = moira.run_reader(r5, "lachesis", Cap("lachesis"))
+        if s5["settings"] != {"warmth": 3, "directness": 0, "playfulness": 3, "length": "long"}:
+            out.append("125: a changed setting was not recorded on the next response")
+        if s5["request"]["system_sha"] == resps["lachesis"]["request"]["system_sha"]:
+            out.append("125: a changed manner did not change the instruction hash — the record could not tell the two apart")
+        # FACULTY: no ruling → three readers, no name; FAIL → the pair, name stays out; PASS → Moira
+        if moira.faculty()["name"] != "Readers" or moira.faculty()["readers"] != list(moira.READERS):
+            out.append("125: before a Phase 0 ruling the faculty claims a name or drops a reader")
+        moira.record_phase0("FAIL", "synthetic")
+        fac = moira.faculty()
+        if fac["name"] != "Readers" or fac["readers"] != ["lachesis", "atropos"]:
+            out.append(f"125: the precommitted FAIL shape is wrong: {fac}")
+        moira.record_phase0("PASS", "synthetic")
+        if moira.faculty()["name"] != "Moira" or moira.faculty()["readers"] != list(moira.READERS):
+            out.append("125: a recorded PASS does not name the faculty with three readers")
+        if str(moira.store_dir()).startswith(str(_REAL_STATE)):
+            out.append("125: the readers' store is writing to the owner's real store during the suite")
+
+    # -- the constitution: the wing amended it, with the sentences the code keeps
+    canon = _re.sub(r"\s+", " ", _canon_source())
+    if 'id="the-readers-three-aspects-kept-apart"' not in canon:
+        out.append("125: the constitution has no section for the readers — a wing that ships amends it in the same block")
+    for sent in ("none of them sees another's answer", "no conference, no verdict, no score",
+                 "never as a finished reader", "built from the instructions and the text alone",
+                 "is never dropped or repaired", "her first reading stands unchanged",
+                 "never what it is responsible for", "a recorded FAIL keeps the precommitted pair and the name stays out",
+                 "the draft in the room stays in this browser"):
+        if sent not in canon:
+            out.append(f"125: the constitution no longer says {sent!r}")
+    idx = (_pathlib.Path(cli.__file__).resolve().parents[1] / "webapp" / "index.html").read_text(encoding="utf-8")
+    if 'data-canon="the-readers-three-aspects-kept-apart"' not in _about_panel(idx):
+        out.append("125: the What-is panel carries no excerpt of the readers' clause")
+    # -- the room: the readers' code never writes into the draft, never inserts prose, never starts a run
+    mi = idx.find("// ---- Professor Moira — the readers (block 125)")
+    mj = idx.find("// ---- the page you left", mi)
+    mblock = idx[mi:mj] if mi != -1 and mj != -1 else ""
+    if not mblock:
+        out.append("125: the readers' code is not where index.html says it is")
+    else:
+        if _re.search(r"getElementById\('compose-text'\)\.value\s*=[^=]", mblock):
+            out.append("125: the readers' code writes into the draft")
+        if "execCommand" in mblock or "insertText" in mblock:
+            out.append("125: the readers' code inserts text into the room")
+        if "/api/jobs" in mblock or "submitRun(" in mblock:
+            out.append("125: the readers' code starts a run through the job door — it must go through its own disclosed press")
+        if "fetch('/api/moira/readings'" not in mblock or mblock.count("method: 'POST'") < 1:
+            out.append("125: the readers' code does not post the reading through the disclosed route")
+    if 'id="moira-ask" class="write-style"' not in idx:
+        out.append("125: the readers' panel is not one of the room's quiet panels")
+    if 'id="moira-door"' not in idx or "askReaders(" not in idx[idx.find("function renderWriteStyle()"):idx.find("function setWriteFace(")]:
+        out.append("125: the readers' door is not in the panel behind Aa, where the room's doors live")
+
+    # -- carry: a reader's observation carries as one reader's advisory observation, from the record
+    carry = importlib.import_module("carry")
+    importlib.reload(carry)
+    if "moira_observation" not in carry.CARRY_SOURCE_KINDS:
+        out.append("125: carry.py does not know a reader's observation as a source kind")
+    with _isolated_store("moira_carry"):
+        importlib.reload(moira); importlib.reload(carry)
+        r = moira.start_reading(draft, "paragraph")
+        resp = moira.run_reader(r, "clotho", moira.MockMoiraGateway("clotho"))
+        rec = carry.load_record(r["reading_id"])
+        if rec is None:
+            out.append("125: a carry cannot find the reading's record")
+        else:
+            ex, standing, ref = carry.resolve_ref(rec, "moira_observation", {"response_id": resp["response_id"], "segment": 2})
+            if "NOT IN YOUR TEXT" not in standing.get("route", "") or not standing.get("unverified"):
+                out.append(f"125: a carried observation with an invented span does not say so in its standing: {standing}")
+            d = carry.draft_of(r["reading_id"])
+            if d["text"] != draft or d["chain"][0].get("mode") != "moira_reading":
+                out.append("125: the carry does not bind to the exact text the readers read")
+            try:
+                carry.resolve_ref(rec, "moira_observation", {"response_id": resp["response_id"], "segment": 99})
+                out.append("125: a segment that does not exist resolved to something")
+            except ValueError:
+                pass
+    return out
+
+
+def _check_moira_routes(server, paired):
+    """Block 125, the doors: the panel's reads spend nothing (a gateway whose
+    complete() raises is installed, and config / list / view / notebook /
+    settings never reach it); the explicit press dispatches one call per
+    reader, separately, and a lane that cannot be built is three recorded
+    failures, not a hang; the factory override is assigned nowhere in the
+    server but the journey server assigns it."""
+    out = []
+    import importlib, time as _t
+    moira = importlib.import_module("moira"); importlib.reload(moira)
+    srv = (_pathlib.Path(cli.__file__).resolve().parents[1] / "server.py").read_text(encoding="utf-8")
+    if srv.count("MOIRA_GATEWAY_FACTORY =") != 1 or "MOIRA_GATEWAY_FACTORY = None" not in srv:
+        out.append("125: MOIRA_GATEWAY_FACTORY must be assigned exactly once in server.py, to None")
+    js = (_pathlib.Path(cli.__file__).resolve().parents[1] / "tests" / "journeys" / "serve.py").read_text(encoding="utf-8")
+    if "server.MOIRA_GATEWAY_FACTORY = moira.mock_gateway_for" not in js:
+        out.append("125: the journey server does not install the readers' offline stand-ins")
+
+    class Spends(moira.MockMoiraGateway):
+        def complete(self, prompt):
+            raise AssertionError("a read spent a model call")
+
+    with _isolated_store("moira_routes"):
+        importlib.reload(moira)
+        c = paired(server.app.test_client())
+        old = server.MOIRA_GATEWAY_FACTORY
+        try:
+            server.MOIRA_GATEWAY_FACTORY = lambda r: Spends(r)
+            cfg = c.get("/api/moira/config")
+            if cfg.status_code != 200 or cfg.get_json().get("calls_per_reading") != 3:
+                out.append(f"125: /api/moira/config did not say the call count (HTTP {cfg.status_code})")
+            if not (cfg.get_json().get("models") or {}).get("atropos", {}).get("independence"):
+                out.append("125: the config does not say what the blind reader's lane means for independence")
+            for path, body in (("/api/moira/readings?limit=5", None), ("/api/moira/settings", None), ("/api/moira/notebook", None)):
+                rr = c.get(path)
+                if rr.status_code != 200:
+                    out.append(f"125: GET {path} answered HTTP {rr.status_code}")
+            rr = c.post("/api/moira/notebook", json={"text": "kept", "source": {"kind": "typed"}})
+            if rr.status_code != 200:
+                out.append("125: remembering a note failed over the route")
+            rr = c.post("/api/moira/settings", json={"settings": {"clotho": {"warmth": 3}}})
+            if rr.status_code != 200 or rr.get_json()["settings"]["clotho"]["warmth"] != 3:
+                out.append("125: settings did not record over the route")
+            rr = c.post("/api/moira/readings", json={"text": "", "scope": "draft"})
+            if rr.status_code != 400:
+                out.append("125: an empty reading was accepted")
+            # the explicit press, on the offline stand-ins: three separate files, then a view
+            server.MOIRA_GATEWAY_FACTORY = moira.mock_gateway_for
+            rr = c.post("/api/moira/readings", json={"text": "A synthetic draft with a lantern and a house.", "scope": "draft"})
+            if rr.status_code != 200 or not rr.get_json().get("reading_id"):
+                out.append(f"125: the press did not start a reading (HTTP {rr.status_code}: {rr.get_json()})")
+            else:
+                rid = rr.get_json()["reading_id"]
+                v = None
+                for _ in range(60):
+                    v = c.get(f"/api/moira/readings/{rid}").get_json()
+                    if v.get("pending") == 0:
+                        break
+                    _t.sleep(0.1)
+                if not v or v.get("answered") != 3:
+                    out.append(f"125: three readers did not each answer into their own file: {v and {k: v[k] for k in ('answered','failed','pending')}}")
+                files = sorted(moira.responses_dir().glob("rs_*.json"))
+                if len({_json.loads(f.read_text())["reader"] for f in files}) != 3:
+                    out.append("125: the responses are not three separate files")
+                # a lane that cannot be built: three recorded failures, not a hang
+                def _no_lane(r):
+                    raise RuntimeError("no lane in this test")
+                server.MOIRA_GATEWAY_FACTORY = _no_lane
+                rr = c.post("/api/moira/readings", json={"text": "Another synthetic draft.", "scope": "draft"})
+                rid2 = rr.get_json().get("reading_id")
+                v2 = None
+                for _ in range(60):
+                    v2 = c.get(f"/api/moira/readings/{rid2}").get_json()
+                    if v2.get("pending") == 0:
+                        break
+                    _t.sleep(0.1)
+                if not v2 or v2.get("failed") != 3 or v2.get("answered") != 0:
+                    out.append(f"125: a lane that cannot be built did not record three failures: {v2 and {k: v2[k] for k in ('answered','failed','pending')}}")
+                # a carry from the reading, over the route, from the record
+                clo = next((x for x in v["readers"] if x["reader"] == "clotho"), None) if v else None
+                if clo and clo.get("response"):
+                    cr = c.post("/api/carry", json={"trace_id": rid, "source_kind": "moira_observation",
+                                                     "source_ref": {"response_id": clo["response"]["response_id"], "segment": 0}})
+                    if cr.status_code != 200 or not cr.get_json().get("ok"):
+                        out.append(f"125: carrying a reader's observation over the route failed: {cr.get_json()}")
+                    elif cr.get_json()["carry"]["analyzed"].get("trace_id") != rid:
+                        out.append("125: the carry did not bind to the reading's own text")
+                # /api/result answers for a reading, so the revision notes can compare texts
+                res = c.get(f"/api/result/{rid}")
+                if res.status_code != 200 or res.get_json().get("mode") != "moira_reading":
+                    out.append("125: /api/result does not answer for a reading")
+        finally:
+            server.MOIRA_GATEWAY_FACTORY = old
+    return out
+
+
 def _check_write_order():
     """Gate 0 of the Map Focus build: no road is ever persisted citing a
     receipt or snapshot that does not exist. Eighteen roads in the owner's
@@ -2385,6 +2735,7 @@ def main() -> int:
     failures.extend(_check_constitution_split())
     failures.extend(_check_law_filing())
     failures.extend(_check_carry_back())
+    failures.extend(_check_moira())
     failures.extend(_check_write_order())
     failures.extend(_check_map_focus())
     failures.extend(_check_map_focus_page())
@@ -2501,6 +2852,7 @@ def main() -> int:
     if shaped.get("global_constraints") != gc:
         failures.append("server did not pass global_constraints through")
     failures.extend(_check_map_focus_routes(server, _paired))
+    failures.extend(_check_moira_routes(server, _paired))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key
@@ -18274,6 +18626,9 @@ console.log(out.join('\\n'));
             # rather than a sixth movement — checked before inventing one.
             "What a run cost, and what it retried",
             "The room — where writing happens",
+            # block 125: the readers read the text the room holds; their
+            # clause sits beside the room's, under the same movement.
+            "The readers — three aspects, kept apart",
             "Inquiry — a question, kept",
             "The Work Room — a change of scale",
             "The Clinic — where authorities stay separate",

@@ -1,5 +1,110 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.19.0 — The readers: three aspects beside the draft, kept apart (block 125)
+
+One block, by the owner's instruction of 2026-09-09: a working faculty to use
+and develop through use, with documentation kept to the contract changes.
+`scripts/moira.py`, the `/api/moira/*` routes, a panel in the room, a suite
+check, a journey, and a constitution section.
+
+**What it is.** From the writing room, behind Aa: This paragraph · The whole
+draft · Readings, notebook, settings. The panel says the scope, each reader
+and what it reads for, the lane each will use, the call count (one per
+reader) and what each receives, and one press starts it; escape spends
+nothing. The server freezes one exact snapshot (`readings/<id>.json`,
+write-once) and dispatches each reader on its own thread; every answer, or
+failure, is its own write-once file (`responses/<id>.json`) that records the
+model, the prompt version and instruction hash, the settings it was read
+under, the notebook entries it received, the request's hashes, the provider's
+token counts and the attempt ledger. The answers land beside the draft in the
+page pane, one card per reader, and the room splits when the first arrives;
+the draft, the caret, the scroll and the undo history are not touched
+(journey-proved, in WebKit). Three outcomes are kept apart: complete (a
+usable reading), unusable (a reply came back but is not a reading — no JSON,
+no observations), failed (no reply). A failed or unusable reader says it is
+not a finding about the writing and not agreement with any other reader, and
+can be retried alone; the retry is a new file, the failed one stays.
+
+**Isolation, by construction.** `moira.blind_request(draft, settings)` takes
+nothing else, so the blind reader's request is the fixed instructions and the
+exact text — the suite inspects the captured request object, not a claim.
+Clotho and Lachesis receive the writer's notebook; the blind reader never
+does. "Discuss this reading" with the blind reader is a separate response
+labelled `consultation`; the blind reply's bytes are unchanged afterwards
+(pinned), and a fresh blind reading is available on every new draft.
+
+**Quotation checking.** Every quoted span is located in the text: exact,
+normalized (whitespace, quotes and dashes unified), or not found — and a span
+that is not found is MARKED "quoted words not in your text", never dropped or
+repaired. The journey sees all three on the offline stand-ins.
+
+**Carry Back.** A reader's observation carries into the same Revision notes
+through the same route: `carry.resolve_ref` gains the kind `moira_observation`,
+resolved from the reader's own response file (which must belong to the
+reading), with the standing "<reader>'s observation — advisory, one reader ·
+<how the span was quoted>", unverified; `carry.draft_of` binds it to the exact
+snapshot the readers read; `/api/result/<reading>` answers so the tray can
+say whether the room still holds that text.
+
+**Found and repaired on the way, narrowly.** Every ↩ carry back button on
+every card was dead: `escapeHtml()` does not escape the double quote, so the
+JSON payload on the button's `data-carry` attribute ended at `{`, `JSON.parse`
+threw, and `carryFromBtn` returned silently. No journey had ever clicked one
+(the carry journey posts the route directly). The readers' journey clicks;
+the payload now escapes its quotes, and a payload that cannot be read says so
+on the page instead of doing nothing.
+
+**The notebook.** `Remember this` on any observation, or typed in the
+notebook tab, keeps what the owner said with its source (reading, response,
+reader, segment — or "typed"); each entry can be corrected, stopped, and
+restored, append-only; only the two readers that may see it receive it; a
+retired entry never reaches a later request and a corrected one arrives
+corrected (pinned). The record says what an entry means and is not: a
+correctness claim, a diagnosis, an instruction to agree.
+
+**Faculty settings.** Warmth, directness and playfulness (0–3) and length
+(short/medium/long) per reader, rendered into a manner clause under the
+role's fixed responsibility; recorded as rows; every reply records the
+settings it was read under, and a changed manner changes the instruction
+hash (pinned). Prompts are versioned `moira-prompts/1`; the frozen Phase 0
+prompts live outside the repository and are not these.
+
+**The faculty's name follows the recorded ruling.** No Phase 0 result
+recorded: three readers, the door says Readers, no name claimed. PASS
+recorded (`scripts/moira.py --record-phase0 PASS`): the door says Moira. FAIL
+recorded: the precommitted pair, Lachesis and Atropos, and the name stays out.
+The 2026-09-09 Phase 0 run on a 1,925-word document is INDETERMINATE under
+the corrected evaluator (all three Lachesis replies hit the 2,000-token cap
+and could not be parsed — an unusable reply is not a reply that contributed
+nothing), so nothing is recorded and the pair fallback does NOT apply.
+
+**Proof.** Suite: `_check_moira` (isolation on the request object; exact /
+normalized / not-found quoting; partial failure leaves the others' files
+byte-identical; unusable ≠ complete; an earlier reading byte-identical and
+reopenable after a reread; write-once ids; retired and corrected notebook
+entries; follow-up in one reader's thread; consultation labelled with the
+blind file untouched; settings per response; faculty by ruling; the carry
+kind; the constitution's sentences; the room's code never writes into the
+draft) and `_check_moira_routes` (the panel's reads spend nothing on a
+gateway whose complete() raises; the press dispatches three separate files; a
+lane that cannot be built is three recorded failures; the carry and
+`/api/result` over the route; the factory assigned nowhere but the journey
+server). Five sabotage mutations caught by name. Journey `moira` (WebKit, the
+real scratch server with offline stand-ins per reader): 34 checks — the
+bar did not grow, the door behind Aa, spends nothing, one press one POST,
+room untouched, split on first answer, three cards, the invented span
+marked, carry by click, one-reader follow-up, the consultation, remember
+with source, a failed reader shown failed, both readings listed, the
+paragraph reading reopened whole with its follow-ups, the whole-draft
+reading reopened after an edit saying the draft moved on, undo intact.
+
+**Not built, said so.** No conference and no synthesized verdict, by law.
+No numeric scores. No local-model lane for the blind reader (the
+`WORDICON_ATROPOS_MODEL` lane is an anthropic model id; a local one is a
+later lane). No chord for the readers. The draft in the room is still kept
+in the browser only; what is sent to the readers is kept in the record as a
+submitted run is, and the constitution says so.
+
 ## v1.18.0 — Map · focus: one place, its roads, and who drew them (Map Focus build)
 
 Six commits, in the order the authorization set: a write-order repair the

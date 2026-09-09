@@ -271,6 +271,35 @@
     margin: 0 0 8px; max-height: 4.6em; overflow: hidden; }
   #deep-ask .fact { color: var(--write-panel-ink); font-size: 11.5px; line-height: 1.45; margin: 3px 0; }
   #deep-ask .fact b { color: var(--write-ink); font-weight: 600; }
+  /* Block 125: the readers' panel — the same quiet furniture again. */
+  #moira-ask { width: min(380px, calc(100vw - 32px)); max-height: calc(100vh - 90px); overflow: auto; }
+  #moira-ask .scope { color: var(--write-ink); font-size: 13px; margin: 0 0 6px; }
+  #moira-ask .preview { color: var(--write-panel-ink); font-size: 12px; line-height: 1.4;
+    margin: 0 0 8px; max-height: 4.6em; overflow: hidden; }
+  #moira-ask .fact { color: var(--write-panel-ink); font-size: 11.5px; line-height: 1.45; margin: 3px 0; }
+  #moira-ask .fact b { color: var(--write-ink); font-weight: 600; }
+  #moira-ask .tabs { display: flex; gap: 4px; margin: 0 0 8px; flex-wrap: wrap; }
+  #moira-ask .tabs button.on { color: var(--write-bg); background: var(--write-ink); }
+  #moira-ask .nb { border-top: 1px solid var(--write-faint); padding: 6px 0; font-size: 12px;
+    color: var(--write-panel-ink); }
+  #moira-ask .nb.retired { opacity: 0.55; }
+  #moira-ask input.note, #moira-ask textarea.note { width: 100%; box-sizing: border-box; background: transparent;
+    border: 1px solid var(--write-faint); color: var(--write-ink); border-radius: 7px; padding: 5px 8px;
+    font-family: inherit; font-size: 12.5px; margin-top: 6px; }
+  /* the readers' answers, beside the draft: one card per reader, never merged */
+  .reader-card .who { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .reader-card .seg { border-top: 1px solid var(--border); padding: 8px 0 6px; }
+  .reader-card .seg .cls { font-size: 11.5px; color: var(--muted); }
+  .reader-card .seg blockquote { margin: 4px 0; padding-left: 10px; border-left: 2px solid var(--border);
+    font-size: 13px; color: var(--text); }
+  .reader-card .quote { display: inline-block; font-size: 10.5px; padding: 1px 6px; border-radius: 6px;
+    border: 1px solid var(--border); color: var(--muted); margin-left: 6px; vertical-align: middle; }
+  .reader-card .quote.bad { border-color: var(--bad, #c0605f); color: var(--bad, #c0605f); font-weight: 600; }
+  .reader-card .ask { display: flex; gap: 6px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+  .reader-card .ask input { flex: 1 1 12em; min-width: 8em; font-family: inherit; font-size: 12.5px; padding: 5px 8px;
+    border: 1px solid var(--border); border-radius: 7px; background: var(--panel-2, transparent); color: var(--text); }
+  .reader-card .thread { margin-top: 8px; padding: 8px 10px; border-left: 3px solid var(--border); font-size: 13px; }
+  .reader-card .thread .q { color: var(--muted); font-size: 12px; }
   /* The running line: bottom-left of the room, dim, never in the way of the
      writing and never a thing that can take focus. */
   .room-run { position: fixed; left: 16px; bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
@@ -921,6 +950,7 @@
         <li><a class="canon-link" data-canon="the-vault-restoration-not-regeneration" href="/constitution#the-vault-restoration-not-regeneration">The Vault restores a verified past; it regrows and improves nothing</a></li>
         <li><a class="canon-link" data-canon="whether-any-of-this-beats-a-plain-prompt" href="/constitution#whether-any-of-this-beats-a-plain-prompt">Under six decided pairs it refuses to conclude anything.</a></li>
         <li><a class="canon-link" data-canon="what-it-is" href="/constitution#what-it-is">the critic advises and never decides</a></li>
+        <li><a class="canon-link" data-canon="the-readers-three-aspects-kept-apart" href="/constitution#the-readers-three-aspects-kept-apart">The readers answer separately and stay separate: no conference, no verdict, no score, and nothing here combines them.</a></li>
       </ul>
       <p class="body" style="margin-top:14px"><a href="/constitution"><strong>Read the full constitution</strong></a>
       — all five movements, whole, with a table of contents. That page is the law; this panel
@@ -997,6 +1027,12 @@
        paper first and does not become a cockpit. -->
   <div id="deep-ask" class="write-style" style="display:none" role="dialog"
        aria-modal="false" aria-labelledby="deep-ask-title"></div>
+  <!-- Block 125: the readers. One more quiet panel: what would be read, by
+       whom, on which lane, at what call count — and one press starts it. The
+       readings themselves land beside the draft, in the page pane, never in
+       the room. -->
+  <div id="moira-ask" class="write-style" style="display:none" role="dialog"
+       aria-modal="false" aria-labelledby="moira-ask-title"></div>
   <!-- and while it runs: one line, low, that never takes the caret -->
   <div id="room-run" class="room-run" hidden aria-live="polite"></div>
 </div>
@@ -4914,6 +4950,11 @@ function renderWriteStyle() {
     `<button onclick="toggleWriteStyle();askDeep('paragraph')" title="the paragraph the caret is in — or your selection">This paragraph <span style="opacity:.6">${DEEP_CHORDS.paragraph.label}</span></button>` +
     `<button onclick="toggleWriteStyle();askDeep('draft')" title="everything in the room">The whole draft <span style="opacity:.6">${DEEP_CHORDS.draft.label}</span></button>` +
     `</div>` +
+    `<div class="lbl" style="margin-top:10px">${escapeHtml(moiraName())} — three readers, each on its own call</div><div class="row">` +
+    `<button id="moira-door" onclick="toggleWriteStyle();askReaders('paragraph')" title="the paragraph the caret is in — or your selection">This paragraph</button>` +
+    `<button onclick="toggleWriteStyle();askReaders('draft')" title="everything in the room">The whole draft</button>` +
+    `<button onclick="toggleWriteStyle();askReaders('readings')" title="reopen an earlier reading, the notebook, or the faculty settings">Readings · notebook · settings</button>` +
+    `</div>` +
     `<div class="lbl" style="margin-top:10px">View</div><div class="row">` +
     WRITE_VIEWS.map(v => `<button class="${v[0] === writeView()[0] ? 'on' : ''}"
        title="${v[3]}" onclick="setWriteView('${v[0]}')">${v[1]}</button>`).join('') +
@@ -5220,12 +5261,20 @@ function carryBtn(traceId, kind, ref, excerpt, standing) {
   // believes; the server ignores both and resolves the ref against the
   // run's own record. They are kept on the element only so a failed carry
   // can say what it was trying to carry.
-  const payload = escapeHtml(JSON.stringify({t: traceId, k: kind, r: ref || {}, e: String(excerpt || ''), s: standing || {}}));
+  // Block 125 repair: escapeHtml() escapes &, < and > but NOT the double
+  // quote, and JSON is made of double quotes — so this attribute used to end
+  // at its first character, `{`, JSON.parse threw, and carryFromBtn returned
+  // without a word. Every ↩ carry back button on every card did nothing when
+  // clicked, and no journey had ever clicked one (the carry journey posts the
+  // route directly). The readers' journey clicks; it found this.
+  const payload = escapeHtml(JSON.stringify({t: traceId, k: kind, r: ref || {}, e: String(excerpt || ''), s: standing || {}})).replace(/"/g, '&quot;');
   return `<button class="carry-btn" type="button" data-carry="${payload}" onclick="carryFromBtn(this)"
             title="keep this beside the draft while revising — it decides nothing">↩ carry back</button>`;
 }
 function carryFromBtn(btn) {
-  let p; try { p = JSON.parse(btn.getAttribute('data-carry')); } catch (e) { return; }
+  let p;
+  try { p = JSON.parse(btn.getAttribute('data-carry')); }
+  catch (e) { pageNote('This carry button carries no readable payload — nothing was carried.'); return; }
   carryBack(p.t, p.k, p.r, p.e, p.s, btn);
 }
 
@@ -6258,8 +6307,516 @@ document.addEventListener('keydown', e => {
   // The invocation panel goes first, and going costs nothing. Escaping the
   // room out from under an unanswered question would be the wrong order.
   if (DEEP_ASK) { e.preventDefault(); closeDeepAsk(); return; }
+  if (moiraOpen()) { e.preventDefault(); closeMoira(); return; }
   if (document.body.classList.contains('ws-open')) { e.preventDefault(); closeWorkspace(); }
 });
+
+// ---- Professor Moira — the readers (block 125) ----------------------------
+//
+// Three readers beside the draft, each on its own call, each answering into
+// its own record: one reads for what is alive, one for what can bear weight,
+// one for what reached a stranger. The rules, all the owner's: the panel
+// says the scope, the readers, their lanes and the call count BEFORE a
+// press, and one press starts it; the draft, the element, the caret, the
+// undo stack and the scroll are never touched; the answers land in the page
+// pane beside the writing and the room splits when the FIRST answer
+// arrives; a reader that failed is shown failed and never as agreement;
+// nothing here conferences, scores, or synthesizes a verdict; a follow-up
+// goes to ONE reader; carrying an observation back uses the same Revision
+// notes as everything else; "Remember this" keeps what he said, with its
+// source. The blind reader's request is the instructions and the exact
+// text — the server builds it from nothing else (moira.blind_request).
+//
+// Routing identity only is stored here, as for a Go Deep run: the reading's
+// id and whether it has been shown. Not a character of the draft.
+const MOIRA_KEY = 'nikodemus.moira.route.v1';
+let MOIRA = {reading: '', revealed: false};
+let MOIRA_CFG = null;          // /api/moira/config, read when the panel opens
+let MOIRA_ASK = null;          // the scope being asked about (kind, text, what)
+let MOIRA_TAB = 'read';
+let MOIRA_VIEW = null;         // the reading currently shown beside the draft
+let MOIRA_LAST = '';           // the last reading shown for this room session (for "read this version again")
+let moiraPollTimer = null;
+let MOIRA_WATCHING = '';
+
+function readerName(r) { return r ? r.charAt(0).toUpperCase() + r.slice(1) : ''; }
+function moiraName() { return (MOIRA_CFG && MOIRA_CFG.faculty && MOIRA_CFG.faculty.name) || 'Readers'; }
+function moiraOpen() { const el = document.getElementById('moira-ask'); return !!el && el.style.display !== 'none'; }
+function saveMoira() {
+  try { if (MOIRA.reading) localStorage.setItem(MOIRA_KEY, JSON.stringify(MOIRA)); else localStorage.removeItem(MOIRA_KEY); } catch (e) {}
+}
+function loadMoira() {
+  try { const d = JSON.parse(localStorage.getItem(MOIRA_KEY) || 'null'); if (d && d.reading) MOIRA = {reading: String(d.reading), revealed: !!d.revealed}; } catch (e) {}
+}
+
+async function moiraConfig(force) {
+  if (MOIRA_CFG && !force) return MOIRA_CFG;
+  try {
+    const r = await fetch('/api/moira/config');
+    MOIRA_CFG = await r.json();
+  } catch (e) { MOIRA_CFG = null; }
+  return MOIRA_CFG;
+}
+
+// The door is in the panel behind Aa, beside Go deep — the room's bar does
+// not grow (pass 1 and 2 pinned that), and a door in the panel is one every
+// reader of the room can find. `kind` is the scope to ask about, or
+// 'readings' to open the earlier readings, the notebook and the settings.
+function askReaders(kind) {
+  const el = document.getElementById('moira-ask');
+  if (!el) return;
+  for (const id of ['write-style', 'write-save', 'deep-ask']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
+  DEEP_ASK = null;
+  el.style.display = 'block';
+  if (kind === 'readings') { MOIRA_TAB = 'readings'; MOIRA_ASK = null; }
+  else { MOIRA_TAB = 'read'; MOIRA_ASK = deepScope(kind === 'draft' ? 'draft' : 'paragraph'); if (MOIRA_ASK) MOIRA_ASK.text = (MOIRA_ASK.text || '').trim(); }
+  renderMoira();
+}
+function toggleMoira() {
+  if (moiraOpen()) { closeMoira(); return; }
+  askReaders('paragraph');
+}
+function closeMoira() {
+  const el = document.getElementById('moira-ask');
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+  MOIRA_ASK = null;
+  const ta = document.getElementById('compose-text');
+  if (ta && document.body.classList.contains('ws-open')) ta.focus({preventScroll: true});
+}
+function moiraTab(t) { MOIRA_TAB = t; renderMoira(); }
+
+async function renderMoira() {
+  const el = document.getElementById('moira-ask');
+  if (!el || el.style.display === 'none') return;
+  const cfg = await moiraConfig();
+  if (!moiraOpen()) return;
+  const tabs = [['read', 'Read'], ['readings', 'Readings'], ['notebook', 'Notebook'], ['settings', 'Faculty settings']]
+    .map(([k, l]) => `<button class="${MOIRA_TAB === k ? 'on' : ''}" onclick="moiraTab('${k}')">${l}</button>`).join('');
+  let body = '';
+  if (!cfg) body = `<p class="fact">The readers' configuration could not be read from the server.</p>`;
+  else if (MOIRA_TAB === 'read') body = moiraReadTab(cfg);
+  else if (MOIRA_TAB === 'readings') body = await moiraReadingsTab();
+  else if (MOIRA_TAB === 'notebook') body = await moiraNotebookTab();
+  else body = await moiraSettingsTab(cfg);
+  el.innerHTML = `<div class="row" style="justify-content:space-between;align-items:center">
+      <div class="lbl" id="moira-ask-title" style="margin:0">${escapeHtml(moiraName())}</div>
+      <button class="compose-exit" onclick="closeMoira()" aria-label="close">× esc</button></div>
+    <div class="tabs" style="margin-top:8px">${tabs}</div>${body}`;
+  if (MOIRA_TAB === 'read') { const go = document.getElementById('moira-go'); if (go && !go.disabled) go.focus({preventScroll: true}); }
+}
+
+function moiraPickScope(kind) { MOIRA_ASK = deepScope(kind); if (MOIRA_ASK) MOIRA_ASK.text = (MOIRA_ASK.text || '').trim(); renderMoira(); }
+
+function moiraReadTab(cfg) {
+  const fac = cfg.faculty || {readers: []};
+  const readers = fac.readers || [];
+  const models = cfg.models || {};
+  if (!MOIRA_ASK) MOIRA_ASK = (() => { const s = deepScope('paragraph'); if (s) s.text = (s.text || '').trim(); return s; })();
+  const scope = MOIRA_ASK || {kind: 'paragraph', text: '', what: 'this paragraph'};
+  const text = scope.text || '';
+  const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
+  const lanes = readers.map(r => {
+    const m = models[r] || {};
+    const lane = m.ok ? `${escapeHtml(m.provider === 'mock' || m.provider === 'mock-moira' ? 'the mock lane (no real calls)' : (m.model || m.provider || ''))}` : 'no lane';
+    const note = r === 'atropos' && m.same_model_as_strong ? ' <span style="opacity:.75">· same model as the others — a weaker independence test, recorded on the reply</span>' : '';
+    return `<p class="fact"><b>${escapeHtml(readerName(r))}</b> — reads for ${escapeHtml(((cfg.faculty || {}).reads_for || {})[r] || {clotho: 'what is alive', lachesis: 'what can bear weight', atropos: 'what reached a stranger'}[r] || '')} · ${lane}${note}</p>`;
+  }).join('');
+  const nb = cfg.notebook || {active: 0};
+  return `<div class="lbl">Read</div>
+    <div class="row">
+      <button class="${scope.kind === 'paragraph' ? 'on' : ''}" onclick="moiraPickScope('paragraph')">This paragraph</button>
+      <button class="${scope.kind === 'selection' ? 'on' : ''}" onclick="moiraPickScope('paragraph')" title="select text in the room first; the selection is offered, never widened">Your selection</button>
+      <button class="${scope.kind === 'draft' ? 'on' : ''}" onclick="moiraPickScope('draft')">The whole draft</button>
+    </div>
+    <p class="scope" style="margin-top:8px">on <strong>${escapeHtml(scope.what)}</strong> — ${words} word${words === 1 ? '' : 's'}</p>
+    <p class="preview">${text ? '“' + escapeHtml(text.slice(0, 180)) + (text.length > 180 ? '…' : '') + '”' : 'There is nothing there to read.'}</p>
+    ${lanes}
+    <p class="fact">Model calls: <b>${readers.length}, one per reader</b>, sent separately; none of them sees another's answer. ${escapeHtml(cfg.cost || '')}</p>
+    <p class="fact">Each reader receives the exact text above and its own instructions. ${readers.includes('clotho') || readers.includes('lachesis') ? `Clotho and Lachesis also receive your notebook (${nb.active} entr${nb.active === 1 ? 'y' : 'ies'}); ` : ''}the blind reader receives nothing else. A hosted lane sends that text to the provider.</p>
+    <p class="fact">The answers open beside your writing as each arrives; the draft, the caret and the undo history are not touched.</p>
+    <div class="row" style="margin-top:10px">
+      <button id="moira-go"${text && readers.length ? '' : ' disabled aria-disabled="true"'} onclick="startMoira()">Read it</button>
+      <button onclick="closeMoira()">Cancel · esc</button>
+    </div>`;
+}
+
+async function startMoira() {
+  const scope = MOIRA_ASK;
+  if (!scope || !scope.text) return;
+  const prev = MOIRA_LAST;
+  closeMoira();
+  roomRun('readers · submitted');
+  try {
+    const r = await fetch('/api/moira/readings', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text: scope.text, scope: scope.kind, previous_reading_id: prev || ''})});
+    const d = await r.json();
+    if (!r.ok || d.error) { roomRun('the readers could not start — ' + failureClass(d.error)); return; }
+    MOIRA = {reading: d.reading_id, revealed: false};
+    saveMoira();
+    watchMoira(d.reading_id);
+  } catch (e) {
+    roomRun('the readers could not start — the server could not be reached');
+  }
+}
+
+function moiraProgressLine(v) {
+  const n = (v.readers || []).length;
+  const done = (v.answered || 0) + (v.failed || 0) + (v.unusable || 0);
+  return `readers · ${done} of ${n} answered` + (v.failed ? ` · ${v.failed} failed` : '') + (v.unusable ? ` · ${v.unusable} unusable` : '');
+}
+
+async function watchMoira(readingId) {
+  if (moiraPollTimer) { clearTimeout(moiraPollTimer); moiraPollTimer = null; }
+  MOIRA_WATCHING = readingId;
+  let shownOnce = false;
+  async function poll() {
+    if (MOIRA_WATCHING !== readingId) return;
+    let v;
+    try {
+      const r = await fetch(`/api/moira/readings/${encodeURIComponent(readingId)}`);
+      if (!r.ok) {
+        MOIRA_WATCHING = '';
+        if (MOIRA.reading === readingId) { roomRun('that reading cannot be found — the server no longer has it'); MOIRA = {reading: '', revealed: false}; saveMoira(); }
+        return;
+      }
+      v = await r.json();
+    } catch (e) { moiraPollTimer = setTimeout(poll, 4000); return; }
+    MOIRA_VIEW = v;
+    MOIRA_LAST = v.reading_id;
+    const arrivedAny = ((v.answered || 0) + (v.failed || 0) + (v.unusable || 0)) > 0;
+    if (arrivedAny) {
+      document.getElementById('result-area').innerHTML = buildMoiraHtml(v);
+      if (!shownOnce) { shownOnce = true; moiraArrived(readingId); }
+    }
+    if (MOIRA.reading === readingId && v.pending > 0) roomRun(moiraProgressLine(v));
+    if (v.pending > 0) { moiraPollTimer = setTimeout(poll, 2500); return; }
+    MOIRA_WATCHING = '';
+    if (MOIRA.reading === readingId && MOIRA.revealed) { roomRun(''); MOIRA = {reading: '', revealed: false}; saveMoira(); }
+    else if (MOIRA.reading === readingId) { roomRun('the readers have answered', 'Open beside writing'); moiraOfferReveal(); }
+  }
+  poll();
+}
+
+// The same discipline as a Go Deep answer: beside him now if he is in the
+// room; offered, never forced, if he stepped away.
+function moiraArrived(readingId) {
+  if (MOIRA.reading !== readingId) return;
+  const here = document.body.classList.contains('ws-open') && !PLACE;
+  if (here && WS_MODE === 'split') { MOIRA.revealed = true; saveMoira(); return; }
+  if (!here) { moiraOfferReveal(); return; }
+  revealMoira();
+}
+function moiraOfferReveal() {
+  const el = document.getElementById('room-run');
+  if (!el) return;
+  el.hidden = false;
+  el.textContent = MOIRA_VIEW ? moiraProgressLine(MOIRA_VIEW) : 'the readers have answered';
+  el.classList.add('has-act');
+  const b = document.createElement('button');
+  b.type = 'button'; b.textContent = 'Open beside writing'; b.onclick = revealMoira;
+  el.appendChild(b);
+}
+function revealMoira() {
+  const ta = document.getElementById('compose-text');
+  const sel = ta ? [ta.selectionStart, ta.selectionEnd] : null;
+  if (PLACE) closePlace();
+  if (!document.body.classList.contains('ws-open')) openWorkspace('split');
+  if (WS_MODE !== 'split') setWorkspaceMode('split');
+  if (ta && sel) { ta.setSelectionRange(sel[0], sel[1]); ta.focus({preventScroll: true}); }
+  MOIRA.revealed = true;
+  if (MOIRA_VIEW && MOIRA_VIEW.pending === 0) { roomRun(''); MOIRA = {reading: '', revealed: false}; }
+  else if (MOIRA_VIEW) roomRun(moiraProgressLine(MOIRA_VIEW));
+  saveMoira();
+}
+async function resumeMoira() {
+  loadMoira();
+  if (!MOIRA.reading) return;
+  MOIRA_LAST = MOIRA.reading;
+  watchMoira(MOIRA.reading);
+}
+async function openReading(readingId) {
+  try {
+    const r = await fetch(`/api/moira/readings/${encodeURIComponent(readingId)}`);
+    if (!r.ok) { pageNote('That reading could not be found.'); return; }
+    const v = await r.json();
+    MOIRA_VIEW = v; MOIRA_LAST = v.reading_id;
+    document.getElementById('result-area').innerHTML = buildMoiraHtml(v);
+    closeMoira();
+    const ta = document.getElementById('compose-text');
+    const sel = ta ? [ta.selectionStart, ta.selectionEnd] : null;
+    if (PLACE) closePlace();
+    if (!document.body.classList.contains('ws-open')) openWorkspace('split');
+    if (WS_MODE !== 'split') setWorkspaceMode('split');
+    if (ta && sel) { ta.setSelectionRange(sel[0], sel[1]); ta.focus({preventScroll: true}); }
+    if (v.pending > 0 && MOIRA_WATCHING !== v.reading_id) watchMoira(v.reading_id);
+  } catch (e) { pageNote('That reading could not be opened.'); }
+}
+
+// ---- the answers, one card per reader, never merged ----------------------
+function moiraStaleLine(v) {
+  const box = document.getElementById('compose-text');
+  const current = normDraft(box ? box.value : (SESSION.input || ''));
+  const read = normDraft((v.snapshot || {}).text || '');
+  if (!current || !read) return '';
+  if (v.snapshot.scope !== 'draft') {
+    // a paragraph or a selection: stale means that exact text is no longer in the room
+    if (current.indexOf(read) !== -1) return '';
+    return `<p class="body muted" style="margin:6px 0 0;font-size:12.5px"><strong>The text this reading was of is no longer in the room as it was.</strong> The answers below are about that text. <a onclick="rereadMoira('${escapeJs(v.reading_id)}')">Read the current ${escapeHtml(v.snapshot.scope === 'selection' ? 'selection' : 'paragraph')} again</a> (${(v.readers || []).length} model calls).</p>`;
+  }
+  if (current === read) return '';
+  return `<p class="body muted" style="margin:6px 0 0;font-size:12.5px"><strong>This reading was of an earlier version of the draft.</strong> The answers below are about that version, not the one in the room now. <a onclick="rereadMoira('${escapeJs(v.reading_id)}')">Read the current draft again</a> (${(v.readers || []).length} model calls) · <a onclick="showReadVersion('${escapeJs(v.reading_id)}', this)">show the version that was read</a></p>`;
+}
+async function showReadVersion(readingId, a) {
+  try {
+    const r = await fetch(`/api/moira/readings/${encodeURIComponent(readingId)}/text`);
+    const d = await r.json();
+    const host = a.closest('.card');
+    if (!host) return;
+    let pre = host.querySelector('pre.analyzed');
+    if (!pre) { pre = document.createElement('pre'); pre.className = 'analyzed'; host.appendChild(pre); }
+    pre.textContent = d.text || '(could not be read back)';
+  } catch (e) {}
+}
+function rereadMoira(prevId) {
+  const v = MOIRA_VIEW;
+  const kind = v && v.snapshot ? v.snapshot.scope : 'draft';
+  const s = deepScope(kind === 'draft' ? 'draft' : 'paragraph');
+  if (!s || !(s.text || '').trim()) { pageNote('There is nothing in the room to read.'); return; }
+  MOIRA_ASK = {...s, text: s.text.trim()};
+  MOIRA_LAST = prevId;
+  // the panel is the place a spend is confirmed — a link never spends by itself
+  const el = document.getElementById('moira-ask');
+  if (el) { el.style.display = 'block'; MOIRA_TAB = 'read'; renderMoira(); }
+}
+
+function quotePill(seg) {
+  const q = seg.quoted || 'no span';
+  if (q === 'no span') return '';
+  if (q === 'exact') return `<span class="quote">quoted exactly</span>`;
+  if (q === 'normalized') return `<span class="quote">quoted · punctuation normalized</span>`;
+  return `<span class="quote bad">QUOTED WORDS NOT IN YOUR TEXT</span>`;
+}
+
+function buildMoiraHtml(v) {
+  const snap = v.snapshot || {};
+  const when = v.created_at ? new Date(v.created_at).toLocaleString() : '';
+  const head = `<div class="card">
+      <div class="result-title" style="margin:0">${escapeHtml(v.faculty_name || 'Readers')} — ${(v.readers || []).length} readers, one call each</div>
+      <p class="body muted" style="margin:6px 0 0;font-size:12.5px">Read ${escapeHtml(when)} · ${snap.words || 0} words · ${escapeHtml(snap.scope || 'draft')} · snapshot ${escapeHtml(String(snap.sha256 || '').slice(0, 12))}…
+        · ${v.answered || 0} answered${v.failed ? ` · <strong>${v.failed} failed</strong>` : ''}${v.unusable ? ` · <strong>${v.unusable} unusable</strong>` : ''}${v.pending ? ` · ${v.pending} still reading` : ''}</p>
+      <p class="body muted" style="margin:6px 0 0;font-size:11.5px">${escapeHtml(v.no_conference || '')} A reader that did not answer is not a finding about your writing, in either direction.</p>
+      ${moiraStaleLine(v)}
+    </div>`;
+  return head + (v.readers || []).map(r => moiraReaderCard(v, r)).join('');
+}
+
+function moiraReaderCard(v, r) {
+  const who = `<div class="who">${escapeHtml(readerName(r.reader))} — reads for ${escapeHtml(r.reads_for || '')}</div>`;
+  const d = r.dispatched || {};
+  const resp = r.response;
+  const lane = resp ? `${escapeHtml(resp.model || resp.provider || '')}${resp.same_model_as_strong ? ' · same model as the other readers (weaker independence)' : ''}` : escapeHtml(d.model || '');
+  const settings = (resp && resp.settings) || d.settings || {};
+  const settingsLine = `warmth ${settings.warmth} · directness ${settings.directness} · playfulness ${settings.playfulness} · ${escapeHtml(settings.length || '')}`;
+  const foot = `<p class="body muted" style="margin:8px 0 0;font-size:11px">${lane} · read under ${settingsLine}${resp && resp.usage ? ` · ${resp.usage.input_tokens || '?'} in / ${resp.usage.output_tokens || '?'} out tokens (provider-reported)` : ''}${resp && resp.request && resp.request.notebook_ids && resp.request.notebook_ids.length ? ` · with ${resp.request.notebook_ids.length} notebook entr${resp.request.notebook_ids.length === 1 ? 'y' : 'ies'}` : (r.reader === 'atropos' ? ' · blind: the instructions and the text, nothing else' : '')}</p>`;
+  if (r.status === 'no response recorded') {
+    return `<div class="card reader-card">${who}<div class="body" style="display:flex;align-items:center;gap:8px;margin-top:6px"><span class="spinner"></span>reading…</div>
+      <p class="body muted" style="font-size:11.5px;margin:6px 0 0">If this never changes, the server may have restarted while the reader was out; nothing was recorded for it and you can retry it alone.</p>
+      <div class="row" style="margin-top:6px"><button class="compose-exit" onclick="retryReader('${escapeJs(v.reading_id)}','${escapeJs(r.reader)}')">↻ Retry just this reader</button></div>${foot}</div>`;
+  }
+  if (r.status === 'failed' || r.status === 'unusable') {
+    const why = r.status === 'failed' ? failureClass(resp.error) : (resp.unusable_reason || 'the reply is not a usable reading');
+    return `<div class="card reader-card" style="border-left:3px solid var(--bad, #c0605f)">${who}
+      <div class="section-label">${r.status === 'failed' ? 'Reader — this one did not answer' : 'Reader — the reply is not a usable reading'}</div>
+      <p class="body">${escapeHtml(why)}</p>
+      <p class="body muted" style="font-size:11.5px">${escapeHtml(resp.failure_means || '')}</p>
+      ${resp.error ? `<details class="case"><summary>the raw error</summary><pre class="analyzed">${escapeHtml(resp.error)}</pre></details>` : ''}
+      ${r.status === 'unusable' && resp.raw_text ? `<details class="case"><summary>the raw reply, as it came back</summary><pre class="analyzed">${escapeHtml(resp.raw_text)}</pre></details>` : ''}
+      <div class="row" style="margin-top:6px"><button class="compose-exit" onclick="retryReader('${escapeJs(v.reading_id)}','${escapeJs(r.reader)}')">↻ Retry just this reader</button></div>${foot}</div>`;
+  }
+  const segs = (resp.segments || []).map((s, i) => moiraSegmentHtml(v, r, resp, s, i)).join('');
+  const threads = (r.followups || []).map(f => moiraThreadHtml(f)).join('');
+  const isA = r.reader === 'atropos';
+  const askLabel = isA ? 'Discuss this reading — informed consultation' : `Ask ${readerName(r.reader)}`;
+  return `<div class="card reader-card">${who}
+    ${segs || '<p class="body muted">No observations came back.</p>'}
+    ${threads}
+    <div class="ask">
+      <input type="text" id="ask-${escapeHtml(r.reader)}-${escapeHtml(v.reading_id)}" placeholder="${escapeHtml(isA ? 'a question for the blind reader — her first reading stays as it is' : 'a follow-up question, to this reader only')}">
+      ${isA ? `<label style="font-size:11.5px;color:var(--muted)"><input type="checkbox" id="asknb-${escapeHtml(v.reading_id)}"> share my notebook for this discussion</label>` : ''}
+      <button class="compose-exit" onclick="askReader('${escapeJs(v.reading_id)}','${escapeJs(r.reader)}', this)">${escapeHtml(askLabel)} · 1 model call</button>
+    </div>${foot}</div>`;
+}
+
+function moiraSegmentHtml(v, r, resp, s, i) {
+  const excerpt = `${readerName(r.reader)} · ${s.class_words || s.class}: ${s.text || ''}${s.span ? ' — “' + s.span + '”' : ''}`;
+  const carry = carryBtn(v.reading_id, 'moira_observation', {response_id: resp.response_id, segment: i}, excerpt, {unverified: true, route: readerName(r.reader) + "'s observation — advisory"});
+  const remember = `<button class="carry-btn" type="button" onclick="rememberFromSegment('${escapeJs(v.reading_id)}','${escapeJs(resp.response_id)}','${escapeJs(r.reader)}',${i}, this)" title="keep this in the writer's notebook — Clotho and Lachesis will see it; it is not a claim that it is correct">✎ remember this</button>`;
+  const span2 = s.span2 ? `<blockquote>${escapeHtml(s.span2)} ${s.located2 && s.located2.status === 'not_found' ? '<span class="quote bad">QUOTED WORDS NOT IN YOUR TEXT</span>' : ''}</blockquote>` : '';
+  return `<div class="seg">
+      <div class="cls">${escapeHtml(s.class_words || s.class || 'note')}${quotePill(s)}</div>
+      ${s.span ? `<blockquote>${escapeHtml(s.span)}</blockquote>` : ''}${span2}
+      <p class="body" style="margin:4px 0">${escapeHtml(s.text || '')}</p>
+      <div class="row">${carry} ${remember}</div>
+    </div>`;
+}
+
+function moiraThreadHtml(f) {
+  const label = f.role === 'consultation' ? 'Informed consultation — the blind reading above stands unchanged' : 'Follow-up';
+  const ctx = (f.request && f.request.context) || [];
+  return `<div class="thread"><div class="q"><strong>${escapeHtml(label)}</strong> · you asked: ${escapeHtml(f.question || '')}${ctx.includes('notebook') ? ' · with your notebook' : ''}</div>
+    ${f.status === 'complete' ? `<p class="body" style="margin:6px 0 0;white-space:pre-wrap">${escapeHtml(f.raw_text || '')}</p>`
+      : `<p class="body" style="margin:6px 0 0;color:var(--bad, #c0605f)">${escapeHtml(f.status === 'failed' ? 'no answer came back — ' + failureClass(f.error) : (f.unusable_reason || 'the reply is not usable'))}</p>`}
+  </div>`;
+}
+
+async function askReader(readingId, reader, btn) {
+  const inp = document.getElementById(`ask-${reader}-${readingId}`);
+  const q = inp ? inp.value.trim() : '';
+  if (!q) { pageNote('Type the question first.'); return; }
+  const nb = document.getElementById(`asknb-${readingId}`);
+  if (btn) { btn.disabled = true; btn.textContent = 'asking…'; }
+  try {
+    const r = await fetch(`/api/moira/readings/${encodeURIComponent(readingId)}/ask`, {method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({reader, question: q, include_notebook: !!(nb && nb.checked)})});
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status));
+    MOIRA_VIEW = d.reading;
+    document.getElementById('result-area').innerHTML = buildMoiraHtml(d.reading);
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'ask again'; }
+    pageNote('The question could not be asked: ' + escapeHtml(String(e)));
+  }
+}
+
+async function retryReader(readingId, reader) {
+  try {
+    const r = await fetch(`/api/moira/readings/${encodeURIComponent(readingId)}/retry`, {method: 'POST',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify({reader})});
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status));
+    if (MOIRA_WATCHING !== readingId) { MOIRA = {reading: readingId, revealed: true}; saveMoira(); watchMoira(readingId); }
+  } catch (e) { pageNote('Could not retry that reader: ' + escapeHtml(String(e))); }
+}
+
+async function rememberFromSegment(readingId, responseId, reader, i, btn) {
+  const v = MOIRA_VIEW;
+  const rr = v && (v.readers || []).find(x => x.reader === reader);
+  const resp = rr && rr.response && rr.response.response_id === responseId ? rr.response : null;
+  const s = resp && (resp.segments || [])[i];
+  if (!s) return;
+  const text = (s.span ? '“' + s.span + '” — ' : '') + (s.text || '');
+  if (btn) { btn.disabled = true; btn.textContent = 'remembering…'; }
+  try {
+    const r = await fetch('/api/moira/notebook', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text, source: {kind: 'reading', reading_id: readingId, response_id: responseId, reader, segment: i}})});
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status));
+    if (btn) btn.textContent = '✎ remembered';
+    MOIRA_CFG = null;
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = '✎ remember this'; }
+    pageNote('Could not remember that: ' + escapeHtml(String(e)));
+  }
+}
+
+// ---- the readings, the notebook, the settings -----------------------------
+async function moiraReadingsTab() {
+  let list = [];
+  try { list = ((await (await fetch('/api/moira/readings?limit=30')).json()).readings) || []; } catch (e) {}
+  if (!list.length) return `<div class="lbl">Readings</div><p class="fact">Nothing has been read yet.</p>`;
+  return `<div class="lbl">Readings — newest first</div>` + list.map(x => {
+    const st = Object.entries(x.readers || {}).map(([r, s]) => `${readerName(r)} ${s === 'complete' ? '✓' : (s === 'failed' ? '✗' : (s === 'unusable' ? '?' : '…'))}`).join(' · ');
+    return `<div class="nb"><a onclick="openReading('${escapeJs(x.reading_id)}')"><strong>${escapeHtml(x.created_at ? new Date(x.created_at).toLocaleString() : x.reading_id)}</strong></a>
+      · ${x.words} words · ${escapeHtml(x.scope || '')} · ${escapeHtml(String(x.snapshot_sha256 || '').slice(0, 8))}…<br>
+      <span style="opacity:.8">“${escapeHtml(x.head || '')}${(x.head || '').length >= 80 ? '…' : ''}”</span><br>${st}${x.followups ? ` · ${x.followups} follow-up${x.followups === 1 ? '' : 's'}` : ''}${x.previous_reading_id ? ' · reread of an earlier version' : ''}</div>`;
+  }).join('');
+}
+
+async function moiraNotebookTab() {
+  let d = {entries: []};
+  try { d = await (await fetch('/api/moira/notebook')).json(); } catch (e) {}
+  const entries = d.entries || [];
+  const items = entries.map(e => {
+    const src = e.source || {};
+    const where = src.kind === 'reading' ? `from ${readerName(src.reader)}'s reading` : 'written by you';
+    return `<div class="nb ${e.state === 'retired' ? 'retired' : ''}" data-note="${escapeHtml(e.note_id)}">
+      <div>${escapeHtml(e.text)}</div>
+      <div style="font-size:11px;opacity:.75;margin-top:3px">${escapeHtml(where)} · for ${(e.for || []).map(readerName).join(' and ')} · ${escapeHtml(e.at ? e.at.slice(0, 10) : '')}${e.state === 'retired' ? ' · <strong>not in use</strong>' : ''}</div>
+      <div class="row" style="margin-top:4px">
+        ${e.state === 'retired'
+          ? `<button onclick="noteAction('${escapeJs(e.note_id)}','restore')">use again</button>`
+          : `<button onclick="noteCorrect('${escapeJs(e.note_id)}', this)">correct</button><button onclick="noteAction('${escapeJs(e.note_id)}','retire')">stop using</button>`}
+      </div></div>`;
+  }).join('');
+  return `<div class="lbl">Writer's notebook</div>
+    <p class="fact">What you chose to keep in Clotho's and Lachesis's view — a preference, an example, feedback you want kept. Each entry records its source. ${escapeHtml((d.means || ''))}; it is not ${escapeHtml((d.is_not || []).join(', '))}. The blind reader never receives it.</p>
+    <textarea class="note" id="nb-new" rows="2" placeholder="Remember this — e.g. “I keep the run-on in the last paragraph on purpose”"></textarea>
+    <div class="row" style="margin-top:6px"><button onclick="rememberTyped()">Remember this</button></div>
+    ${items || '<p class="fact" style="margin-top:8px">Nothing kept yet.</p>'}`;
+}
+async function rememberTyped() {
+  const ta = document.getElementById('nb-new');
+  const text = ta ? ta.value.trim() : '';
+  if (!text) return;
+  try {
+    const r = await fetch('/api/moira/notebook', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text, source: {kind: 'typed'}})});
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status));
+    MOIRA_CFG = null; renderMoira();
+  } catch (e) { pageNote('Could not remember that: ' + escapeHtml(String(e))); }
+}
+async function noteAction(id, action, body) {
+  try {
+    await fetch(`/api/moira/notebook/${encodeURIComponent(id)}/${action}`, {method: 'POST',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {})});
+  } catch (e) {}
+  MOIRA_CFG = null; renderMoira();
+}
+function noteCorrect(id, btn) {
+  const host = btn.closest('.nb');
+  if (!host || host.querySelector('textarea')) return;
+  const cur = host.firstElementChild ? host.firstElementChild.textContent : '';
+  const ta = document.createElement('textarea'); ta.className = 'note'; ta.rows = 2; ta.value = cur;
+  const save = document.createElement('button'); save.textContent = 'save the correction';
+  save.onclick = () => noteAction(id, 'correct', {text: ta.value.trim()});
+  host.appendChild(ta); host.appendChild(save);
+}
+
+async function moiraSettingsTab(cfg) {
+  let d = null;
+  try { d = await (await fetch('/api/moira/settings')).json(); } catch (e) {}
+  if (!d) return `<p class="fact">The settings could not be read.</p>`;
+  const S = d.settings || {};
+  const readers = (d.faculty && d.faculty.readers) || Object.keys(S);
+  const dim = (r, k, label) => `<div class="row" style="margin-top:4px"><span style="font-size:11.5px;min-width:7em;color:var(--write-panel-ink)">${label}</span>` +
+    [0, 1, 2, 3].map(n => `<button class="${(S[r] || {})[k] === n ? 'on' : ''}" data-r="${r}" data-k="${k}" data-v="${n}" onclick="moiraSetLocal(this)">${n}</button>`).join('') + `</div>`;
+  const len = r => `<div class="row" style="margin-top:4px"><span style="font-size:11.5px;min-width:7em;color:var(--write-panel-ink)">length</span>` +
+    ['short', 'medium', 'long'].map(x => `<button class="${(S[r] || {}).length === x ? 'on' : ''}" data-r="${r}" data-k="length" data-v="${x}" onclick="moiraSetLocal(this)">${x}</button>`).join('') + `</div>`;
+  window._moiraDraftSettings = JSON.parse(JSON.stringify(S));
+  const ph = d.faculty && d.faculty.phase0;
+  return `<div class="lbl">Faculty settings — how they speak, not what they are responsible for</div>
+    ${readers.map(r => `<div class="nb"><strong>${escapeHtml(readerName(r))}</strong>${dim(r, 'warmth', 'warmth')}${dim(r, 'directness', 'directness')}${dim(r, 'playfulness', 'playfulness')}${len(r)}</div>`).join('')}
+    <div class="row" style="margin-top:8px"><button onclick="moiraSaveSettings()">Save</button><span class="fact">Every reply records the settings it was read under. Prompts ${escapeHtml(d.prompts_version || '')}.</span></div>
+    <p class="fact" style="margin-top:10px">Phase 0: ${ph ? `${escapeHtml(ph.result)} recorded ${escapeHtml((ph.at || '').slice(0, 10))}${ph.note ? ' — ' + escapeHtml(ph.note) : ''}` : 'no result recorded — three readers, no faculty name claimed. Record it from the command line: <code>python scripts/moira.py --record-phase0 PASS|FAIL --note "…"</code>'}</p>`;
+}
+function moiraSetLocal(btn) {
+  const S = window._moiraDraftSettings || {};
+  const r = btn.dataset.r, k = btn.dataset.k;
+  S[r] = S[r] || {};
+  S[r][k] = k === 'length' ? btn.dataset.v : Number(btn.dataset.v);
+  for (const b of btn.parentElement.querySelectorAll('button')) b.classList.toggle('on', b === btn);
+}
+async function moiraSaveSettings() {
+  try {
+    const r = await fetch('/api/moira/settings', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({settings: window._moiraDraftSettings || {}, note: 'changed from the room'})});
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status));
+    MOIRA_CFG = null; renderMoira();
+  } catch (e) { pageNote('Could not save the settings: ' + escapeHtml(String(e))); }
+}
 
 // ---- the page you left --------------------------------------------------
 //
@@ -7179,6 +7736,8 @@ loadCarries();   // block 123: the revision-notes control, only if there is anyt
 // restoreSession so that a job it also finds is already known to belong to
 // the room rather than to Home.
 resumeRun();
+resumeMoira();   // block 125: a reading that was out when the page went away
+moiraConfig();   // block 125: the faculty's ruled name for the door behind Aa; reads no draft, calls no model
 // Panels he closed stay closed; then the page he left comes back. Neither
 // of these clears anything — a reset is something he asks for.
 resumeJobIfAny();

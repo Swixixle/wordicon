@@ -56,6 +56,7 @@ CARRY_SOURCE_KINDS = (
     "refraction",       # a linguistic proposal
     "archetype",        # a figure or facet
     "verify",           # a verification question
+    "moira_observation",  # block 125: one reader's observation on one exact snapshot
 )
 
 # Standing labels a carry preserves. Each is a fact the result recorded, and
@@ -129,11 +130,23 @@ _COMPOSITE_CACHE: "dict[str, tuple[float, int, list[str], str]]" = {}
 def _load_record(trace_id: str) -> "dict | None":
     p = Path(cli.RESULTS_DIR) / f"{trace_id}.json"
     if not trace_id or not p.exists():
+        # block 125: a reading by the readers is its own record, kept in its
+        # own store; it holds the exact text it read, so a carry from it
+        # binds to that text by the same rule as any run
+        if trace_id.startswith("rd_"):
+            import moira
+            return moira.load_reading(trace_id)
         return None
     try:
         return json.loads(p.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
+
+
+def load_record(trace_id: str) -> "dict | None":
+    """The record a carry binds to: a run's result snapshot, or a reading by
+    the readers (block 125). None when nothing honest exists."""
+    return _load_record((trace_id or "").strip())
 
 
 def composite_listing(trace_id: str) -> str:
@@ -211,6 +224,13 @@ def draft_of(trace_id: str) -> dict:
             if not text.strip():
                 raise ValueError("that run recorded no input text, so there is no draft "
                                  "identity to bind a carry to")
+            chain.append({"trace_id": tid, "mode": mode, "link": "root"})
+            return {"text": text, "trace_id": tid, "chain": chain}
+        if mode == "moira_reading":
+            # block 125: the reading holds the exact snapshot it read
+            text = ((rec.get("snapshot") or {}).get("text")) or rec.get("input_text") or ""
+            if not text.strip():
+                raise ValueError("that reading recorded no text, so there is no draft identity to bind to")
             chain.append({"trace_id": tid, "mode": mode, "link": "root"})
             return {"text": text, "trace_id": tid, "chain": chain}
         if mode == "sprout":
@@ -369,6 +389,42 @@ def resolve_ref(record: dict, source_kind: str, ref: dict) -> "tuple[str, dict, 
             raise ValueError("that door holds no text")
         return d["text"], {"route": "investigative road, not yet walked", "unverified": True}, \
                {"door_id": d.get("door_id") or "", "text": d["text"]}
+
+    if kind == "moira_observation":
+        # block 125: one reader's observation, from that reader's own
+        # response file — which must belong to THIS reading. The excerpt is
+        # the observation as recorded, with its quoted span and whether that
+        # span was found in the text; the standing says it is one reader's
+        # advisory observation and nothing more.
+        import moira
+        resp_id = (ref.get("response_id") or "").strip()
+        idx = ref.get("segment")
+        resp = moira.load_response(resp_id) if resp_id else None
+        if resp is None or resp.get("reading_id") != record.get("reading_id"):
+            raise ValueError("that response does not belong to this reading")
+        if resp.get("status") != "complete":
+            raise ValueError("that reader did not answer; a failure carries nothing")
+        segs = resp.get("segments") or []
+        if not isinstance(idx, int) or not (0 <= idx < len(segs)):
+            raise ValueError("a reader's observation is named by the index of a segment that exists")
+        seg = segs[idx]
+        reader = str(resp.get("reader") or "")
+        who = reader[:1].upper() + reader[1:]
+        quoted = seg.get("quoted") or "no span"
+        text = (seg.get("text") or "").strip()
+        span = (seg.get("span") or "").strip()
+        if not text and not span:
+            raise ValueError("that observation holds no text to carry")
+        excerpt = f"{who} \u00b7 {seg.get('class_words') or seg.get('class') or 'note'}: {text}"
+        if span:
+            excerpt += f" \u2014 \u201c{span}\u201d"
+        span_words = {"exact": "quoted exactly", "normalized": "quoted with punctuation normalized",
+                      "not_found": "QUOTED WORDS NOT IN YOUR TEXT", "no span": "no quotation"}.get(quoted, quoted)
+        standing = {"route": f"{who}\u2019s observation \u2014 advisory, one reader \u00b7 {span_words}",
+                    "unverified": True}
+        return excerpt, standing, {"response_id": resp_id, "segment": idx, "reader": reader,
+                                   "class": seg.get("class") or "", "quoted": quoted,
+                                   "title": f"{who} \u00b7 {seg.get('class_words') or ''}".strip(" \u00b7")}
 
     raise ValueError(f"the server cannot resolve carries of kind {source_kind!r} yet")
 
