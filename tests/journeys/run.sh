@@ -53,7 +53,7 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit carry wayfinder map moira; do
+for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit carry wayfinder map moira notebook; do
   echo "== journey: $j"
   if [ "$j" = quiet ] || [ "$j" = speak ] || [ "$j" = map ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
@@ -183,6 +183,12 @@ done
 for need in "the readers' control opens a question rather than starting a reading" "and it has spent nothing" "cancelling spent nothing at all" "one press starts exactly one reading" "the room splits when the first reader answers" "the reading leaves the element, the draft and the caret exactly as they were" "three readers answer into three separate cards" "a quoted span that is not in the text is marked, not dropped" "the blind reader's card says what she received" "carrying an observation back lands in the revision notes" "a follow-up goes to one reader only" "the blind reader's discussion is labelled a consultation and her first reading stands" "a reader that failed is shown failed, says it is not agreement, and can be retried alone" "an earlier reading reopens whole" "a whole-draft reading reopened after an edit says the draft has moved on" "the undo stack survived the whole invocation"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/moira.log" || { echo "== moira: missing check: $need"; status=1; }
 done
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log "$JOURNEY_OUT"/constitution.log "$JOURNEY_OUT"/anchorfit.log "$JOURNEY_OUT"/carry.log "$JOURNEY_OUT"/wayfinder.log "$JOURNEY_OUT"/map.log "$JOURNEY_OUT"/moira.log | awk '{s+=$2} END {print s+0}')
+# notebook stage A: the room keeps what you write. Each named check is a
+# defect measured before the repair; a journey that did not reach them is
+# not a pass.
+for need in "what was typed in the room is in the browser" "reopening the room brings back the selection he left" "the undo stack survived the close and reopen" "after a reload the words typed in the room are back on the page" "and the room reopens on the same words at the place he was" "one Escape inside the writing leaves the room open" "a second Escape within the window closes it" "from the bar one Escape closes the room" "with the type panel open, Escape closes the panel and leaves the room" "a paste that carries words beside a file, into the writing, is left to the browser as words" "a text drag inside the writing is the browser" "while a selection exists the real text shows itself and the picture steps aside"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/notebook.log" || { echo "== notebook: missing check: $need"; status=1; }
+done
+total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log "$JOURNEY_OUT"/constitution.log "$JOURNEY_OUT"/anchorfit.log "$JOURNEY_OUT"/carry.log "$JOURNEY_OUT"/wayfinder.log "$JOURNEY_OUT"/map.log "$JOURNEY_OUT"/moira.log "$JOURNEY_OUT"/notebook.log | awk '{s+=$2} END {print s+0}')
 echo "== journeys: $total checks, exit $status"
 exit $status

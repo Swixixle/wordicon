@@ -2222,6 +2222,118 @@ def _check_moira():
     return out
 
 
+def _check_notebook_a():
+    """Notebook stage A: the room keeps what you write. Pinned, each against
+    a defect measured before the repair: (1) every keystroke in the room
+    reaches the browser's session store — composeMirror calls rememberInput,
+    the same record the page box writes (before: 125 characters typed in
+    the room, 0 in the store, 0 after a reload); (2) the room copies the page
+    field into itself only when the two differ, and restores the place he
+    left into the SAME text only — a place is keyed to the text's length and
+    hash, never applied to another text (before: caret 10 → 0 across a close
+    and reopen, and a stale undo stack in WebKit); (3) the selection band is
+    the inverse of the page in every style, and in the inked styles a
+    selection makes the real text visible and hides the picture — the
+    picture is never told what is selected; (4) Escape is two presses from
+    inside the writing and one from the bar, the innermost panel closing
+    first, and the pinned close line of pass 80 is still the one door;
+    (5) a text drag or a text paste into a field the browser edits is left
+    to the browser, a file drop or a file-only paste is still the page's.
+    The journey (tests/journeys/notebook.js) measures each in WebKit."""
+    out = []
+    pg = (_pathlib.Path(cli.__file__).resolve().parents[1] / "webapp" / "index.html").read_text(encoding="utf-8")
+
+    def fn(name):
+        i = pg.index("function " + name)
+        j = pg.index("\n}", i)
+        return pg[i:j + 2]
+
+    # (1) the keystroke reaches the store
+    cm = fn("composeMirror()")
+    if not any(ln.strip() == "rememberInput();" for ln in cm.splitlines()):
+        out.append("A1: composeMirror no longer sends the keystroke to the session store — a reload "
+                   "loses everything typed in the room (measured: 125 typed, 0 stored, 0 after reload)")
+    # (2) copy only when different; the place keyed to the text
+    ow = fn("openWorkspace(mode)")
+    if "const changed = ta.value !== src.value;" not in ow or "if (changed) ta.value = src.value;" not in ow:
+        out.append("A2: the room reassigns the page field's value unconditionally — an unchanged draft "
+                   "loses its caret and, in WebKit, keeps a stale undo stack")
+    if "roomPlaceFor(ta.value)" not in ow or "ta.setSelectionRange(kept.s, kept.e" not in ow:
+        out.append("A2: reopening the room does not restore the place he left")
+    if "function roomTextKey(text)" not in pg or "sess.place.key === roomTextKey(text)" not in pg:
+        out.append("A2: a saved place is not keyed to the text it was saved for — it could be applied to "
+                   "a different draft")
+    rp = fn("rememberRoomPlace(ta)")
+    if "key: roomTextKey(ta.value)" not in rp:
+        out.append("A2: the saved place carries no key for its text")
+    cw = fn("closeWorkspace()")
+    if cw.index("rememberRoomPlace(") > cw.index("composeMirror()"):
+        out.append("A2: close does not record the place before the draft goes home")
+    # (3) the band and the selecting state
+    for need, why in ((".compose textarea::selection { background: var(--write-ink); color: var(--write-bg); }",
+                       "the plain selection band is not the inverse of the page"),
+                      (".compose.inked textarea::selection { background: var(--write-ink); color: var(--write-bg); }",
+                       "the inked selection band is not the inverse of the page"),
+                      (".compose.inked.selecting textarea { color: var(--write-ink); }",
+                       "a selection in an inked style does not make the real text visible"),
+                      (".compose.inked.selecting .ink { visibility: hidden; }",
+                       "the picture keeps painting under a selection"),
+                      ("document.addEventListener('selectionchange', roomSelectionChanged);",
+                       "nothing watches the selection")):
+        if need not in pg:
+            out.append(f"A3: {why} ({need[:60]!r})")
+    if "rgba(255, 217, 125, 0.22)" in pg:
+        out.append("A3: the 22% tint is back")
+    rs = fn("roomSelectionChanged()")
+    for bad in ("innerHTML", "paintInk(", ".g'", "querySelectorAll('.g"):
+        if bad in rs:
+            out.append(f"A3: the selection watcher touches the picture's letters ({bad!r}) — the picture is "
+                       "never told what is selected; it only stops painting")
+    # (4) Escape: two presses inside, one outside; the pass-80 door untouched
+    kd = fn("roomKeydown(e)")
+    if "ESC_PRESSES = (Date.now() - ESC_AT < ESC_WINDOW_MS) ? ESC_PRESSES + 1 : 1;" not in kd:
+        out.append("A4: the writing does not count Escape presses — one press closes the room again")
+    if "function escapeWouldClose(e)" not in pg or "return !inWriting || ESC_PRESSES >= 2;" not in pg:
+        out.append("A4: the document handler does not ask whether this Escape should close")
+    esc = pg[pg.index("if (DEEP_ASK) { e.preventDefault(); closeDeepAsk(); return; }"):]
+    esc = esc[:esc.index("});")]
+    if "if (closeInnermostRoomPanel()) { e.preventDefault(); ESC_PRESSES = 0; return; }" not in esc:
+        out.append("A4: Escape does not close the innermost panel first")
+    if esc.index("if (!escapeWouldClose(e)) return;") > esc.index("closeWorkspace();"):
+        out.append("A4: the close runs before the question is asked")
+    if ("if (document.body.classList.contains('ws-open')) "
+            "{ e.preventDefault(); closeWorkspace(); }") not in esc:
+        out.append("A4: the pass-80 door is gone — esc no longer closes through the one door")
+    if 'onclick="closeWorkspace()" title="Escape twice, from the writing, does the same">done</button>' not in pg:
+        out.append("A4: the exit button does not say done, or no longer says what Escape does")
+    if "Escape twice closes the room." not in pg:
+        out.append("A4: the screen reader is not told that Escape twice closes the room")
+    # (5) text drags and pastes are the browser's
+    for need, why in (("if (editsText(e.target) && !carriesFiles(e.dataTransfer)) return;   // the browser's own text drag",
+                       "a text drag over the writing is cancelled again"),
+                      ("if (editsText(e.target) && !carriesFiles(e.dataTransfer)) return;   // text landing where it was dragged",
+                       "a text drop into the writing is cancelled again"),
+                      ("if (editsText(e.target) && carriesText(e.clipboardData)) return;    // words pasted into a field stay words",
+                       "a paste carrying words into the writing can become an upload again")):
+        if need not in pg:
+            out.append(f"A5: {why}")
+    if "if (f) uploadFile(f);" not in pg:
+        out.append("A5: a file drop no longer uploads")
+    # the journey exists and the runner requires its named checks
+    root = _pathlib.Path(cli.__file__).resolve().parents[1]
+    if not (root / "tests" / "journeys" / "notebook.js").exists():
+        out.append("A: tests/journeys/notebook.js is missing")
+    run = (root / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
+    if " notebook" not in run.split("for j in", 1)[1].split(";", 1)[0]:
+        out.append("A: the notebook journey is not in the runner's list")
+    for need in ("what was typed in the room is in the browser", "reopening the room brings back the selection he left",
+                 "after a reload the words typed in the room are back on the page", "one Escape inside the writing leaves the room open",
+                 "a text drag inside the writing is the browser"):
+        if need not in run:
+            out.append(f"A: the runner does not require the journey's check {need!r}")
+    return out
+
+
 def _check_moira_routes(server, paired):
     """Block 125, the doors: the panel's reads spend nothing (a gateway whose
     complete() raises is installed, and config / list / view / notebook /
@@ -2736,6 +2848,7 @@ def main() -> int:
     failures.extend(_check_law_filing())
     failures.extend(_check_carry_back())
     failures.extend(_check_moira())
+    failures.extend(_check_notebook_a())
     failures.extend(_check_write_order())
     failures.extend(_check_map_focus())
     failures.extend(_check_map_focus_page())
@@ -6124,15 +6237,25 @@ const els = {'compose-text': {value: 'a half-written sentence'}, 'input-text': {
 const document = {getElementById: id => els[id] || null};
 function toggleClearBtn() {}
 function inkUpdate() {}   // the picture; block 65 tests it, this tests the mirror
+// notebook stage A: the mirror must ALSO send the keystroke to the session
+// store — for as long as it did not, "a draft lost when the tab dies" was
+// exactly what happened to everything typed in the room.
+let remembered = 0;
+function rememberInput() { remembered += 1; }
 """ + _fn61 + """
 composeMirror();
-console.log(JSON.stringify(els['input-text'].value));
+console.log(JSON.stringify([els['input-text'].value, remembered]));
 """
         _r61 = _sp58.run([_sh58.which("node"), "-e", _prog61], capture_output=True, text=True, timeout=30)
         if _r61.returncode != 0:
             failures.append(f"61: composeMirror did not run: {_r61.stderr.strip()[:120]}")
-        elif _json.loads(_r61.stdout) != "a half-written sentence":
-            failures.append("61: what was typed in the writing room did not reach the real input")
+        else:
+            _mirror61, _rem61 = _json.loads(_r61.stdout)
+            if _mirror61 != "a half-written sentence":
+                failures.append("61: what was typed in the writing room did not reach the real input")
+            if _rem61 != 1:
+                failures.append(f"61: the keystroke reached the page field but not the session store "
+                                f"(rememberInput called {_rem61} time(s)) — a reload loses the room's text")
     # Esc must leave. A full-page surface with no keyboard exit is a trap.
     if "closeCompose()" not in _pg61 or "'Escape'" not in _pg61:
         failures.append("61: the writing room cannot be left from the keyboard")

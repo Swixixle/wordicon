@@ -173,7 +173,16 @@
   /* The real box goes transparent and rides on top: it owns the caret, the
      selection and every keystroke; the ink layer owns only the picture. */
   .compose.inked textarea { color: transparent; background: transparent; position: relative; z-index: 1; }
-  .compose.inked textarea::selection { background: rgba(255, 217, 125, 0.22); color: transparent; }
+  /* Notebook stage A: an unmistakable selection. While a selection exists the
+     real text shows itself and the picture steps aside — same glyphs, same
+     box, same lines, so nothing moves — and the band is the inverse of the
+     page: ink-coloured band, page-coloured words. Before this the band was a
+     22% tint over transparent glyphs, visible if you looked for it. The
+     picture never learns what is selected; it only stops painting while a
+     selection is on screen, which is the paint contract's "mirror, never own". */
+  .compose.inked.selecting textarea { color: var(--write-ink); }
+  .compose.inked.selecting .ink { visibility: hidden; }
+  .compose.inked textarea::selection { background: var(--write-ink); color: var(--write-bg); }
   /* THE CARET BUG, and the whole of it.
      A settled letter is ordinary inline text. It used to be an inline-BLOCK,
      and an inline-block is an ATOMIC box: a run of them breaks between
@@ -248,7 +257,7 @@
     .ink .g.landing { color: inherit; }
   }
   .compose textarea::placeholder { color: var(--write-faint); }
-  .compose textarea::selection { background: rgba(255, 217, 125, 0.22); }
+  .compose textarea::selection { background: var(--write-ink); color: var(--write-bg); }
   .compose-bar { position: fixed; top: calc(env(safe-area-inset-top, 0) + 14px); right: 16px;
     display: flex; gap: 8px; z-index: 61; }
   .compose-exit { background: transparent; border: 1px solid var(--write-faint);
@@ -1014,7 +1023,7 @@
                 oninput="composeMirror()" onscroll="inkScroll()"
                 onkeydown="roomKeydown(event)"></textarea>
       <p id="room-keys" class="sr-only">Tab inserts an indent. Shift with Tab removes one.
-        To leave the writing with the keyboard, press Escape and then Tab.</p>
+        To leave the writing with the keyboard, press Escape and then Tab. Escape twice closes the room.</p>
     </div>
   </div>
   <div id="write-style" class="write-style" style="display:none"></div>
@@ -1048,7 +1057,7 @@
   <button class="compose-exit" id="ws-write-btn" onclick="setWorkspaceMode('write')">⤢ write</button>
   <button class="compose-exit" id="ws-info-btn" onclick="setWorkspaceMode('info')">☰ page</button>
   <button class="compose-exit ws-write-only" onclick="toggleWriteSave()" aria-label="save this">⤓ save</button>
-  <button class="compose-exit" onclick="closeWorkspace()">done · esc</button>
+  <button class="compose-exit" onclick="closeWorkspace()" title="Escape twice, from the writing, does the same">done</button>
 </div>
 <div id="ws-divider" aria-hidden="true"></div>
 
@@ -5499,6 +5508,15 @@ function composeMirror() {
   dst.value = src.value;
   toggleClearBtn();
   inkUpdate();
+  // Notebook stage A. Assigning the page field's value fires no input event
+  // on it, so for as long as this mirror existed nothing typed in the room
+  // ever reached the browser's session store: a reload, a crash or a closed
+  // tab lost every word written here, while a word typed in the page box
+  // survived. Measured before the repair: 125 characters typed in the room,
+  // 0 in the store, 0 after reload. The keystroke now goes to the store the
+  // same way the page box's does — the same key, the same record — so what
+  // comes back after a reload is what was written, wherever it was written.
+  rememberInput();
 }
 
 // ---- Tab ---------------------------------------------------------------
@@ -5530,6 +5548,41 @@ function composeMirror() {
 const INDENT = '    ';      // plain text, four spaces — nothing structural
 let TAB_ESCAPED = false;
 let TAB_TOLD = false;
+// Notebook stage A: Escape is two presses from inside the writing. The first
+// arms the Tab exit and says so; a second within the window closes the room
+// through the same door the done button uses. From anywhere else in the
+// workspace one Escape closes it, as before.
+const ESC_WINDOW_MS = 1500;
+let ESC_PRESSES = 0;
+let ESC_AT = 0;
+function escapeWouldClose(e) {
+  const inWriting = document.activeElement && document.activeElement.id === 'compose-text';
+  return !inWriting || ESC_PRESSES >= 2;
+}
+
+// ---- an unmistakable selection (notebook stage A) ----------------------
+// The picture paints the settled letters; the real text is transparent on
+// top of it in the inked styles. A selection band drawn over transparent
+// glyphs is a tint over the picture — visible if you look for it. So while
+// a selection exists the room is marked `selecting`: the real text shows
+// itself and the picture stops painting. Same glyphs, same box, same lines;
+// nothing moves. The picture is never told what is selected.
+function roomSelectionChanged() {
+  const box = document.getElementById('compose');
+  const ta = document.getElementById('compose-text');
+  if (!box || !ta) return;
+  const on = document.activeElement === ta && ta.selectionStart !== ta.selectionEnd;
+  box.classList.toggle('selecting', on);
+  // the place he is at, for a reload — coalesced to one write per frame
+  if (document.activeElement === ta && document.body.classList.contains('ws-open')) {
+    if (!roomSelectionChanged._raf && typeof requestAnimationFrame === 'function') {
+      roomSelectionChanged._raf = requestAnimationFrame(() => {
+        roomSelectionChanged._raf = 0;
+        rememberRoomPlace(document.getElementById('compose-text'));
+      });
+    }
+  }
+}
 
 // One edit, on the native undo stack, selection under our control afterwards.
 function roomInsert(ta, text) {
@@ -5583,12 +5636,20 @@ function roomKeydown(e) {
   if (!ta || ta.id !== 'compose-text') return;
   if (e.key === 'Escape') {
     // Escape is not swallowed — the panels still close on it. It only arms
-    // the exit, and says so once.
+    // the exit, and says so once. Notebook stage A: one Escape no longer
+    // closes the room out from under the writing (it used to, on the same
+    // press that armed the Tab exit — two meanings on one key). The count
+    // below is what the document-level handler reads: a second Escape
+    // within the window closes the room; a first one only arms.
     TAB_ESCAPED = true;
-    roomRun('Tab will now leave the writing. Type anything and it indents again.');
+    ESC_PRESSES = (Date.now() - ESC_AT < ESC_WINDOW_MS) ? ESC_PRESSES + 1 : 1;
+    ESC_AT = Date.now();
+    if (ESC_PRESSES < 2) {
+      roomRun('Escape again, or done, closes the room. Tab will now leave the writing; type anything and it indents again.');
+    }
     return;
   }
-  if (e.key !== 'Tab') { TAB_ESCAPED = false; return; }
+  if (e.key !== 'Tab') { TAB_ESCAPED = false; ESC_PRESSES = 0; return; }
   if (TAB_ESCAPED) { TAB_ESCAPED = false; roomRun(''); return; }   // the browser gets this one
   if (e.metaKey || e.ctrlKey || e.altKey) return;                  // a chord is not an indent
   e.preventDefault();
@@ -5632,7 +5693,14 @@ function openWorkspace(mode) {
   const src = document.getElementById('input-text');
   if (!box || !ta || !src) return;
   if (!document.body.classList.contains('ws-open')) {
-    ta.value = src.value;
+    // Notebook stage A. The page field is copied into the room only when it
+    // differs. Reassigning an equal value is not free: it puts the caret at
+    // the end (measured: caret 10 → 0 across a close and reopen) and, in
+    // WebKit, leaves the element's undo stack holding steps whose text nodes
+    // are gone. An unchanged draft keeps its element untouched, and the
+    // selection and scroll he left are restored below.
+    const changed = ta.value !== src.value;
+    if (changed) ta.value = src.value;
     applyWriteStyle();
     applyInk();
     const prefs = wsPrefs();
@@ -5648,7 +5716,14 @@ function openWorkspace(mode) {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) { meta.dataset.prev = meta.dataset.prev || meta.content; meta.content = '#0f2350'; }
     ta.focus({preventScroll: true});
-    if (!ta.value || WS_MODE === '') ta.setSelectionRange(ta.value.length, ta.value.length);
+    const kept = roomPlaceFor(ta.value);
+    if (kept) {
+      // the place he left: start, end, direction and scroll, in that document
+      try { ta.setSelectionRange(kept.s, kept.e, kept.d || 'none'); } catch (e) {}
+      ta.scrollTop = kept.top || 0;
+    } else if (!ta.value || WS_MODE === '') {
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+    }
   }
   setWorkspaceMode(mode || 'write');
   // Coming into the room is one of the two moments an answer that was waiting
@@ -5697,9 +5772,38 @@ function swapSides() {
   wsSavePrefs({side: document.body.classList.contains('write-left') ? 'left' : 'right'});
 }
 
+// Notebook stage A: the place he left in the document — selection start,
+// end, direction and the room's own scroll — kept in memory for a close and
+// reopen, and in the session for a reload. It is restored only into the SAME
+// text: a place in a document that has since changed is no place at all.
+let ROOM_PLACE = null;
+// The key a place is tied to: the text's length and a cheap hash of it. A
+// place saved for one text is never applied to another, however alike.
+function roomTextKey(text) {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+  return text.length + ':' + h.toString(16);
+}
+function rememberRoomPlace(ta) {
+  if (!ta || typeof ta.value !== 'string') return;
+  ROOM_PLACE = {text: ta.value, s: ta.selectionStart, e: ta.selectionEnd,
+                d: ta.selectionDirection, top: ta.scrollTop};
+  if (typeof saveSession === 'function') {
+    saveSession({place: {key: roomTextKey(ta.value), s: ROOM_PLACE.s, e: ROOM_PLACE.e,
+                         d: ROOM_PLACE.d, top: ROOM_PLACE.top}});
+  }
+}
+function roomPlaceFor(text) {
+  if (ROOM_PLACE && ROOM_PLACE.text === text) return ROOM_PLACE;
+  const sess = (typeof SESSION !== 'undefined' && SESSION) || {};
+  if (sess.place && sess.place.key === roomTextKey(text)) return sess.place;
+  return null;
+}
+
 function closeWorkspace() {
   const box = document.getElementById('compose');
   if (!box || !document.body.classList.contains('ws-open')) return;
+  rememberRoomPlace(document.getElementById('compose-text'));
   composeMirror();   // the draft goes home to the page input FIRST
   const pg = document.getElementById('page');
   const y = pg ? pg.scrollTop : 0;
@@ -6308,8 +6412,21 @@ document.addEventListener('keydown', e => {
   // room out from under an unanswered question would be the wrong order.
   if (DEEP_ASK) { e.preventDefault(); closeDeepAsk(); return; }
   if (moiraOpen()) { e.preventDefault(); closeMoira(); return; }
+  // Notebook stage A: the innermost thing closes first — the type panel, the
+  // revision notes, the download choices — and from inside the writing it
+  // takes a second Escape to close the room itself (roomKeydown counts).
+  if (closeInnermostRoomPanel()) { e.preventDefault(); ESC_PRESSES = 0; return; }   // a press spent on a panel is not a press on the room
+  if (!escapeWouldClose(e)) return;
+  ESC_PRESSES = 0;
   if (document.body.classList.contains('ws-open')) { e.preventDefault(); closeWorkspace(); }
 });
+function closeInnermostRoomPanel() {
+  for (const id of ['write-style', 'write-save', 'carry-tray']) {
+    const el = document.getElementById(id);
+    if (el && el.style.display !== 'none' && el.style.display !== '') { el.style.display = 'none'; return true; }
+  }
+  return false;
+}
 
 // ---- Professor Moira — the readers (block 125) ----------------------------
 //
@@ -7713,14 +7830,35 @@ async function confirmRep() {
   } catch (e) { /* the card stays; nothing is lost */ }
 }
 
-// drag anywhere, and paste a screenshot straight in
-document.addEventListener('dragover', e => { e.preventDefault(); });
+// drag anywhere, and paste a screenshot straight in — but never at the
+// expense of ordinary text editing (notebook stage A). These handlers used
+// to cancel EVERY drop, so dragging a selected phrase to another place in
+// the writing was cancelled by the page, and a paste that carried a file
+// item beside its text (some apps put an image on the clipboard with the
+// words) became an upload with the words thrown away. A text drag or a
+// text paste into a field the browser edits is the browser's; a file drop
+// anywhere, or a paste that carries only a file, is still the page's.
+function editsText(target) {
+  return !!(target && target.closest && target.closest('textarea, input, [contenteditable="true"]'));
+}
+function carriesFiles(dt) {
+  try { return !!(dt && dt.types && Array.from(dt.types).includes('Files')); } catch (e) { return false; }
+}
+function carriesText(dt) {
+  try { return !!(dt && dt.types && Array.from(dt.types).includes('text/plain')); } catch (e) { return false; }
+}
+document.addEventListener('dragover', e => {
+  if (editsText(e.target) && !carriesFiles(e.dataTransfer)) return;   // the browser's own text drag
+  e.preventDefault();
+});
 document.addEventListener('drop', e => {
+  if (editsText(e.target) && !carriesFiles(e.dataTransfer)) return;   // text landing where it was dragged
   e.preventDefault();
   const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
   if (f) uploadFile(f);
 });
 document.addEventListener('paste', e => {
+  if (editsText(e.target) && carriesText(e.clipboardData)) return;    // words pasted into a field stay words
   const items = (e.clipboardData && e.clipboardData.items) || [];
   for (const it of items) {
     if (it.kind === 'file') { const f = it.getAsFile(); if (f) { uploadFile(f); e.preventDefault(); return; } }
@@ -7737,6 +7875,7 @@ loadCarries();   // block 123: the revision-notes control, only if there is anyt
 // the room rather than to Home.
 resumeRun();
 resumeMoira();   // block 125: a reading that was out when the page went away
+document.addEventListener('selectionchange', roomSelectionChanged);   // notebook stage A: the selection band and the place he is at
 moiraConfig();   // block 125: the faculty's ruled name for the door behind Aa; reads no draft, calls no model
 // Panels he closed stay closed; then the page he left comes back. Neither
 // of these clears anything — a reset is something he asks for.

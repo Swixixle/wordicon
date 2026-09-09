@@ -1,5 +1,69 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.20.0 — Notebook stage A: the room keeps what you write
+
+The first stage of the writing-notebook repair (the owner's brief of
+2026-09-09: "the blue writing surface should behave like an ordinary
+notebook"). Five defects, each measured before the repair against a scratch
+store, each now pinned by `_check_notebook_a` and measured in WebKit by
+`tests/journeys/notebook.js`.
+
+**Nothing typed in the room ever reached the store.** `composeMirror()`
+copied the room's text into the page field by assignment, which fires no
+input event, and only the page field's own input handler wrote the session
+record. Measured: 125 characters typed in the room, 0 in the store, 0 after
+a reload — and closing the room with "done" did not persist it either. A
+reload, a crash or a closed tab lost everything written in the room while
+a word typed in the page box survived. The keystroke now goes to the same
+record by the same call (`rememberInput()`), and what comes back after a
+reload is what was written, wherever it was written. The Continue card
+("N words in the room, unsent. Kept in this browser only.") was already
+true of the page box; it is now true of the room.
+
+**Close and reopen lost the caret.** `openWorkspace` reassigned the page
+field's value into the room even when equal, which puts the caret at the
+end (measured: 10 → 0) and, in WebKit, leaves the element's undo stack
+holding steps whose text nodes are gone — the mechanism the undo probe
+found under the Mac's failing check. The value is copied only when it
+differs, and the place he left (selection start, end, direction, the room's
+scroll) is restored — into the same text only: a place is keyed to the
+text's length and hash, in memory for a close and in the session for a
+reload, and is never applied to a draft that has changed.
+
+**One Escape closed the room.** The document-level handler closed the
+workspace on the same press that armed the Tab exit. Escape now closes the
+innermost panel first (the readers, the ask, the type panel, the revision
+notes, the download choices); from inside the writing it takes a second
+press within 1.5 s to close the room, and the first says so; from the bar
+one press closes it, through the one door pass 80 pins. The exit button
+reads "done". The screen-reader description adds "Escape twice closes the
+room"; "Escape and then Tab" still leaves the writing.
+
+**A text drag was cancelled and a text paste could become an upload.** The
+page cancelled every `dragover` and `drop` so that a file could be dropped
+anywhere, which also cancelled a phrase dragged within the writing; and a
+paste carrying a file item beside its words became an upload with the words
+thrown away. A text drag or a text paste into a field the browser edits is
+now the browser's; a file drop anywhere, and a paste that carries only a
+file, are still the page's.
+
+**The selection was a tint.** A 22%-alpha band over transparent glyphs. The
+band is now the inverse of the page — ink-coloured band, page-coloured
+words — and in the inked styles a selection makes the real text show itself
+while the picture steps aside (same glyphs, same box, same lines; nothing
+moves). The picture is never told what is selected; it only stops painting
+while a selection is on screen, which is the paint contract's "mirror,
+never own".
+
+Not in this stage, by the brief's order: saved documents with titles, My
+writing, New and Continue writing, the server store, honest save states and
+the one-time migration of the session draft (stage B); the title and save
+header, the desktop rail, colour presets, Download, Add to revision notes
+and Get feedback outside Aa (stage C); the Mac's own verification (stage D).
+The browser session store is the only persistence in this stage, as it was
+for the page box; the constitution's "the draft in the room stays in this
+browser" is unchanged and true.
+
 ## v1.19.0 — The readers: three aspects beside the draft, kept apart (block 125)
 
 One block, by the owner's instruction of 2026-09-09: a working faculty to use

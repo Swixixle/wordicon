@@ -27,7 +27,7 @@ page:
 
 The writing room sits at `#compose` with its own bar: `Aa` (face, size, view,
 landing style), `⇄ sides`, `⫞ split`, `⤢ write`, `☰ page`, `⤓ save`,
-`done · esc`.
+`done` (Escape twice, from inside the writing, does the same; from the bar, once).
 
 ---
 
@@ -125,7 +125,7 @@ the provider-side web search that sprout, etymon, refract and verify trigger.
 |---|---|---|
 | `⌘⇧P` | writing room | workup on the whole draft |
 | `⌘⇧⏎` | writing room | workup on this paragraph |
-| `Esc` | writing room | closes the ask panel, then the workspace |
+| `Esc` | writing room | closes the innermost panel (readers, ask, type, notes, download); inside the writing a second press within 1.5 s closes the room; from the bar one press does |
 | `Tab` / `⇧Tab` | writing room | indent / outdent, one undo step |
 | `Esc` then `Tab` | writing room | leaves the field instead of indenting |
 | `Enter` | doc search, warp note | submit |
