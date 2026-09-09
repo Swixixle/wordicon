@@ -1716,8 +1716,21 @@ def _check_map_focus():
     _root = Path(cli.__file__).resolve().parents[1]
     if (_root / ".git").exists():
         import subprocess as _sp
+        first = ""
         try:
-            first = _sp.run(["git", "log", "--reverse", "--format=%cI"], cwd=str(_root), capture_output=True, text=True, timeout=30).stdout.split("\n")[0].strip()
+            # CI checks out ONE commit (actions/checkout's default depth), and
+            # in that clone "the first commit in the log" is today's commit —
+            # the pin failed two CI runs on that before it failed on anything
+            # true. A shallow clone cannot answer the question; it says so.
+            shallow = _sp.run(["git", "rev-parse", "--is-shallow-repository"], cwd=str(_root), capture_output=True,
+                              text=True, timeout=30).stdout.strip() == "true"
+            if shallow:
+                SKIPPED.append("focus: TRACKED_SINCE against the first tracked commit's time — this checkout is "
+                               "shallow (one commit), so the first commit is not here to read; proven only in a "
+                               "full clone (the owner's Mac, this container)")
+            else:
+                first = _sp.run(["git", "log", "--reverse", "--format=%cI"], cwd=str(_root), capture_output=True,
+                                text=True, timeout=30).stdout.split("\n")[0].strip()
         except Exception:  # noqa: BLE001
             first = ""
         # the same instant, whatever the spelling: newer gits print a UTC
