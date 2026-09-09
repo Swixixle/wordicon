@@ -2471,6 +2471,25 @@ def _check_notebook_b(server, paired):
                 out.append("B: a boolean base_revision was accepted")
             except nbk.NotebookError:
                 pass
+            # Revision numbers matter even when content recurs. A → B → A gives
+            # revision 3 the fingerprint of revision 1, so a copy taken at
+            # revision 1 carries a fingerprint that matches the head again —
+            # and its base is still stale. The fingerprint alone would let it
+            # through; the sabotage battery dropped the revision check and the
+            # cases above did not notice, because none of them recurred.
+            back = nbk.save(d, title="", title_is_manual=False, body=body, base_revision=2,
+                            base_fingerprint=b["fingerprint"], request_id="req_suite_00000008")
+            if back["revision"] != 3 or back["fingerprint"] != a["fingerprint"]:
+                out.append("B: A→B→A did not land at revision 3 with revision 1's fingerprint (the fingerprint is content, not identity)")
+            try:
+                nbk.save(d, title="", title_is_manual=False, body="from the stale copy", base_revision=1,
+                         base_fingerprint=a["fingerprint"], request_id="req_suite_00000009")
+                out.append("B: a STALE base whose fingerprint recurs at the head was accepted — the revision check is not there")
+            except nbk.NotebookError as e:
+                if e.status != 409:
+                    out.append(f"B: a stale base with a recurring fingerprint is HTTP {e.status}, not 409")
+            if nbk.get(d)["body"] != body:
+                out.append("B: the refused recurring-fingerprint save changed the stored body")
         except Exception as e:  # noqa: BLE001
             out.append(f"B: the store raised {type(e).__name__}: {e}")
 
