@@ -25,8 +25,9 @@ page:
 | **Library** | Documents · Open questions · Media · Sources | four disclosures |
 | **The Keeper · About** | the constitution and the proof | no nav link — `#system` or scroll |
 
-The writing room sits at `#compose` with its own bar: `Aa` (face, size, view,
-landing style), `⇄ sides`, `⫞ split`, `⤢ write`, `☰ page`, `⤓ save`,
+The writing room sits at `#compose` with its own bar: a quiet save state (Saving… · Saved · time ·
+Saved on this device · waiting to sync · Couldn't save · Another copy has changes), then `Aa` (face, size, view,
+landing style, **My writing** and **New** — the documents behind the room, saved as you write), `⇄ sides`, `⫞ split`, `⤢ write`, `☰ page`, `⤓ save` (download),
 `done` (Escape twice, from inside the writing, does the same; from the bar, once).
 
 ---
@@ -126,6 +127,7 @@ the provider-side web search that sprout, etymon, refract and verify trigger.
 | `⌘⇧P` | writing room | workup on the whole draft |
 | `⌘⇧⏎` | writing room | workup on this paragraph |
 | `Esc` | writing room | closes the innermost panel (readers, ask, type, notes, download); inside the writing a second press within 1.5 s closes the room; from the bar one press does |
+| `⌘S` / `Ctrl-S` | writing room | saves the document now and takes a checkpoint — never the browser's Save Page |
 | `Tab` / `⇧Tab` | writing room | indent / outdent, one undo step |
 | `Esc` then `Tab` | writing room | leaves the field instead of indenting |
 | `Enter` | doc search, warp note | submit |

@@ -1,5 +1,76 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.21.0 — Notebook stage B: saved documents
+
+The second stage of the writing-notebook repair: the document store the
+room was missing. `scripts/notebook.py`, the `/api/notebook/*` routes, the
+saving code in the page, My writing and New behind Aa, Continue writing on
+Home, a constitution paragraph with its pins, `_check_notebook_b` (the store,
+the routes, the page's rules, nine sabotage mutations caught by name) and
+28 more checks in `tests/journeys/notebook.js` (61 in all).
+
+**The store.** One SQLite file, `local_state/notebook.sqlite3`, derived from
+`cli.LOCAL_STATE` at call time so the suite's redirection covers it and the
+Vault stages it with everything else (not on the exclusion list; the
+default rollback journal, never WAL, so a staged copy taken with the writers
+drained is consistent; `synchronous=FULL`). Documents carry a stable id
+(never the title, never a hash of the text), the exact body, an integer
+revision and a fingerprint of the stored fields; every accepted save is
+kept by the request id the browser minted, so a retry whose reply was lost
+gets the same acknowledgement and a request id reused for different data is
+refused; checkpoints are copies at a revision with a reason (save, new,
+interval, open, migration). One `BEGIN IMMEDIATE` transaction per save: a
+document is created from base revision 0 and updated only from the head's
+exact revision AND fingerprint — a stale base is 409 with the head returned,
+never an overwrite (a matching revision with a different fingerprint is
+also refused, because revision numbers recur after a restore); unchanged
+content does not bump the revision; an explicit checkpoint rides in the same
+transaction; a checkpoint of a moved head is refused; the body round-trips
+exactly (leading spaces, tabs, blank paragraphs, emoji, a trailing newline)
+and an empty body is a valid document. The list is newest saved first with
+a cursor that never repeats or skips; search matches title or body,
+case-insensitively, wildcards escaped. Timestamps carry microseconds so two
+saves inside one second stay two events. No route reaches a model.
+
+**The page.** Every keystroke in the room updates a local edit sequence and
+this tab's recovery record (one per editing tab, so two tabs never overwrite
+each other's unsent text) at once; the server write is debounced — 750 ms
+of quiet, at most 2 s under continuous typing — with one write in flight
+per document, newer words coalescing into the next. The pending request is
+written to the recovery record BEFORE it is sent; a retry carries the same
+request id and payload (2, 5, 15, 30 s); a reply that is not the request in
+flight is ignored, so an older reply cannot mark newer typing saved; a 409
+becomes a conflict that stops automatic saving and keeps both versions —
+Keep mine as a new copy (durable first) or Open saved version (my text
+kept in this browser's recovery record, not deleted). The room says exactly
+one of: Saving… · Saved · time · Saved on this device · waiting to sync ·
+Saving… · device recovery unavailable · Couldn't save (Retry, Download) ·
+Another copy has changes (Review). Cmd-S / Ctrl-S saves the document now
+with a checkpoint instead of opening the browser's Save Page. The title is
+the first non-empty line until he names it (Untitled for whitespace);
+deriving it never alters the body.
+
+**Finding it again.** My writing (behind Aa, and from the Continue card)
+lists every document newest first with title, first line, word count and
+saved time, searchable; opening one loads its exact text under its own
+identity, recovering a newer unsent copy from this browser's records when
+one exists; New checkpoints the current document as it stands and opens a
+separate empty page; Continue writing on Home names the document and says
+where it is kept. A submitted passage in the Library (now labelled
+Submitted passages — everything you sent to a run, as sent) can open as a
+new document from its exact original text; the record of the submission
+stays what it was. A reading now records which document, at which edit
+sequence and revision, it was read from. The old session draft becomes a
+document once, on the first load of this build, with an id derived from the
+snapshot so two tabs starting together arrive at the same document; the
+marker keeps the original snapshot and the old key is not deleted.
+
+**Not yet.** Manual titles (the API carries them; the header is stage C), a
+timed checkpoint while editing (the interval is wired, the header is stage
+C), the Vault's own verification that a restore replays pending edits (a
+restore makes them conflicts by construction, which is the safe outcome;
+the drill is stage D), IndexedDB (the recovery record is a single atomic
+localStorage value per tab; the same durability class, a smaller quota).
 ## v1.20.0 — Notebook stage A: the room keeps what you write
 
 The first stage of the writing-notebook repair (the owner's brief of

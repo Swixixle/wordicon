@@ -2334,6 +2334,271 @@ def _check_notebook_a():
     return out
 
 
+def _check_notebook_b(server, paired):
+    """Notebook stage B: the document store behind the room. Proven on the
+    store (scripts/notebook.py) in an isolated scratch store, over the
+    routes with the paired test client, and by pins on the page's own
+    saving code. What must hold: a document is created from base revision 0
+    and updated only from the head's exact revision AND fingerprint — a
+    stale base is refused with the head returned, never overwritten; a
+    repeated request id with the same data gets the same acknowledgement
+    (a lost reply is not a second write) and with different data is an
+    error; unchanged content does not bump the revision; the body is stored
+    exactly — leading spaces, tabs, blank paragraphs, emoji, a trailing
+    newline — and an empty body is valid; a checkpoint of the head is
+    idempotent and a checkpoint of a moved head is refused; the store's file
+    lives under cli.LOCAL_STATE (so the suite's redirection and the Vault's
+    staging both cover it) and is not on the Vault's exclusion list; the
+    page writes the pending request to its recovery record BEFORE sending,
+    ignores a reply that is not the request in flight, retries with the
+    same request id, turns a 409 into a conflict that stops autosave, and
+    says exactly the wordings of the brief's table; a save is not a run —
+    no route here reaches a model."""
+    out = []
+    import importlib, json as _json
+    try:
+        nbk = importlib.import_module("notebook")
+    except Exception as e:  # noqa: BLE001
+        out.append(f"B: scripts/notebook.py does not import ({type(e).__name__}: {e})")
+        return out
+    importlib.reload(nbk)
+    vault_mod = importlib.import_module("vault")
+    if nbk.DB_NAME in getattr(vault_mod, "EXCLUDE_NAMES", set()) or any(nbk.DB_NAME in r for r in getattr(vault_mod, "EXCLUDE_REL", set())):
+        out.append("B: the notebook is on the Vault's exclusion list — the documents would not be backed up")
+    for bad in ("WAL", "wal"):
+        src_nb = (_pathlib.Path(cli.__file__).resolve().parent / "notebook.py").read_text(encoding="utf-8")
+        if f"journal_mode={bad}" in src_nb or f"journal_mode = {bad}" in src_nb:
+            out.append("B: the notebook turned WAL on — the Vault stages file copies, and a WAL store copied "
+                       "mid-checkpoint is not a consistent notebook")
+    if "PRAGMA synchronous=FULL" not in src_nb or "BEGIN IMMEDIATE" not in src_nb:
+        out.append("B: the store is not durable-synchronous, or its writes do not begin IMMEDIATE")
+
+    with _isolated_store("notebook_b") as root:
+        importlib.reload(nbk)
+        try:
+            nbk.db_path().unlink()          # the case's truth depends on the store holding exactly what it writes
+        except FileNotFoundError:
+            pass
+        if not str(nbk.db_path()).startswith(str(root)):
+            out.append(f"B: the notebook's file is not under the redirected store ({nbk.db_path()})")
+        body = "  leading spaces\n\ttabbed\n\nblank paragraph above\nemoji \U0001F642 and a trailing newline\n"
+        d = nbk.new_id()
+        try:
+            a = nbk.save(d, title="", title_is_manual=False, body=body, base_revision=0, base_fingerprint="",
+                         request_id="req_suite_00000001")
+            if a["revision"] != 1 or not a["created"]:
+                out.append(f"B: creating from base 0 did not land at revision 1 ({a})")
+            g = nbk.get(d)
+            if g["body"] != body:
+                out.append("B: the body did not round-trip exactly")
+            if g["display_title"] != "leading spaces":
+                out.append(f"B: the derived title is not the first non-empty line ({g['display_title']!r})")
+            if g["title"] != "" or g["title_is_manual"]:
+                out.append("B: deriving a title altered the stored title fields")
+            a2 = nbk.save(d, title="", title_is_manual=False, body=body, base_revision=0, base_fingerprint="",
+                          request_id="req_suite_00000001")
+            if not a2["repeated"] or a2["revision"] != a["revision"] or a2["saved_at"] != a["saved_at"]:
+                out.append("B: a repeated request id with the same data did not get the same acknowledgement")
+            try:
+                nbk.save(d, title="x", title_is_manual=True, body=body, base_revision=1, base_fingerprint=a["fingerprint"],
+                         request_id="req_suite_00000001")
+                out.append("B: a request id reused for DIFFERENT data was accepted")
+            except nbk.NotebookError as e:
+                if e.status != 400:
+                    out.append(f"B: a reused request id is HTTP {e.status}, not 400")
+            b = nbk.save(d, title="", title_is_manual=False, body=body + "more\n", base_revision=1,
+                         base_fingerprint=a["fingerprint"], request_id="req_suite_00000002", checkpoint_reason="save")
+            if b["revision"] != 2 or not (b["checkpoint"] and b["checkpoint"]["created"]):
+                out.append(f"B: an update from the exact base did not land at revision 2 with its checkpoint ({b})")
+            try:
+                nbk.save(d, title="", title_is_manual=False, body="other", base_revision=1, base_fingerprint=a["fingerprint"],
+                         request_id="req_suite_00000003")
+                out.append("B: a save from a STALE base overwrote the head")
+            except nbk.NotebookError as e:
+                if e.status != 409 or not e.head or e.head.get("revision") != 2 or e.head.get("body") != body + "more\n":
+                    out.append(f"B: the stale-base refusal does not carry the head ({e.status}, {bool(e.head)})")
+            if nbk.get(d)["body"] != body + "more\n":
+                out.append("B: the refused save changed the stored body")
+            try:
+                nbk.save(d, title="", title_is_manual=False, body=body + "more\n", base_revision=2, base_fingerprint="fp_wrong",
+                         request_id="req_suite_00000003b")
+                out.append("B: a matching revision with a WRONG fingerprint was accepted — after a restore, revision numbers recur")
+            except nbk.NotebookError as e:
+                if e.status != 409:
+                    out.append(f"B: wrong fingerprint is HTTP {e.status}, not 409")
+            c = nbk.save(d, title="", title_is_manual=False, body=body + "more\n", base_revision=2,
+                         base_fingerprint=b["fingerprint"], request_id="req_suite_00000004", checkpoint_reason="save")
+            if c["revision"] != 2 or c["checkpoint"]["created"]:
+                out.append("B: unchanged content bumped the revision or duplicated the checkpoint")
+            k = nbk.checkpoint(d, revision=2, fingerprint_=b["fingerprint"], reason="save")
+            if k["created"]:
+                out.append("B: a checkpoint of the same head and reason was taken twice")
+            try:
+                nbk.checkpoint(d, revision=1, fingerprint_=a["fingerprint"], reason="new")
+                out.append("B: a checkpoint of a revision that is no longer the head was captured")
+            except nbk.NotebookError as e:
+                if e.status != 409:
+                    out.append(f"B: a moved-head checkpoint is HTTP {e.status}, not 409")
+            e_id = nbk.new_id()
+            nbk.save(e_id, title="", title_is_manual=False, body="", base_revision=0, base_fingerprint="",
+                     request_id="req_suite_00000005")
+            if nbk.get(e_id)["display_title"] != nbk.UNTITLED or nbk.get(e_id)["body"] != "":
+                out.append("B: an empty body is not a valid document, or is not Untitled")
+            lst = nbk.list_documents()
+            if lst["total"] != 2 or [x["doc_id"] for x in lst["documents"]] != [e_id, d]:
+                out.append(f"B: the list is not every document, newest saved first ({lst['total']}, {[x['doc_id'] for x in lst['documents']]})")
+            if [x["doc_id"] for x in nbk.list_documents(q="EMOJI")["documents"]] != [d]:
+                out.append("B: search does not match a body word case-insensitively")
+            if nbk.list_documents(q="100%")["documents"] or nbk.list_documents(q="_")["documents"] != []:
+                out.append("B: LIKE wildcards in a search are not escaped")
+            if [(x["revision"], x["reason"]) for x in nbk.list_checkpoints(d)] != [(2, "save")]:
+                out.append(f"B: the checkpoint list is wrong ({nbk.list_checkpoints(d)})")
+            for bad_id in ("x", "a b", "../etc", "doc_" + "x" * 80):
+                try:
+                    nbk.get(bad_id)
+                    out.append(f"B: a malformed id was accepted ({bad_id!r})")
+                except nbk.NotebookError:
+                    pass
+            try:
+                nbk.save(d, title=5, title_is_manual=False, body="", base_revision=2, base_fingerprint=b["fingerprint"],
+                         request_id="req_suite_00000006")
+                out.append("B: a non-text title was accepted")
+            except nbk.NotebookError:
+                pass
+            try:
+                nbk.save(d, title="", title_is_manual=False, body="", base_revision=True, base_fingerprint="",
+                         request_id="req_suite_00000007")
+                out.append("B: a boolean base_revision was accepted")
+            except nbk.NotebookError:
+                pass
+        except Exception as e:  # noqa: BLE001
+            out.append(f"B: the store raised {type(e).__name__}: {e}")
+
+        # ---- the routes, paired ----
+        try:
+            cl = paired(server.app.test_client())
+            rid = nbk.new_id()
+            r = cl.put(f"/api/notebook/documents/{rid}", json={"title": "", "title_is_manual": False, "body": "Route body.\n",
+                                                                "base_revision": 0, "base_fingerprint": "", "request_id": "req_route_00000001"})
+            if r.status_code != 201 or r.get_json().get("revision") != 1:
+                out.append(f"B: PUT did not create at 201/revision 1 (HTTP {r.status_code}: {r.get_json()})")
+            fp = (r.get_json() or {}).get("fingerprint", "")
+            r = cl.get(f"/api/notebook/documents/{rid}")
+            if r.status_code != 200 or r.get_json().get("body") != "Route body.\n":
+                out.append("B: GET did not return the exact document")
+            r = cl.put(f"/api/notebook/documents/{rid}", json={"title": "", "title_is_manual": False, "body": "Other.",
+                                                                "base_revision": 0, "base_fingerprint": "", "request_id": "req_route_00000002"})
+            if r.status_code != 409 or not (r.get_json().get("head") or {}).get("revision") == 1:
+                out.append(f"B: a stale PUT is not 409 with the head (HTTP {r.status_code})")
+            r = cl.put(f"/api/notebook/documents/{rid}", json={"title": "", "body": "x", "base_revision": "1", "base_fingerprint": fp,
+                                                                "request_id": "req_route_00000003"})
+            if r.status_code != 400:
+                out.append("B: a non-integer base_revision was accepted over the route")
+            r = cl.post(f"/api/notebook/documents/{rid}/checkpoints", json={"revision": 1, "fingerprint": fp, "reason": "save"})
+            if r.status_code != 201:
+                out.append(f"B: a checkpoint of the head was not created (HTTP {r.status_code})")
+            r2 = cl.post(f"/api/notebook/documents/{rid}/checkpoints", json={"revision": 1, "fingerprint": fp, "reason": "save"})
+            if r2.status_code != 200 or r2.get_json().get("created") is not False:
+                out.append("B: a second identical checkpoint was not returned as the existing one")
+            r = cl.get(f"/api/notebook/documents?q=route")
+            if r.status_code != 200 or [x["doc_id"] for x in r.get_json()["documents"]] != [rid]:
+                out.append("B: the list route does not search")
+            r = cl.get("/api/notebook/documents/doc_00000000000000000000000000000000")
+            if r.status_code != 404:
+                out.append("B: an unknown document is not 404")
+            r = cl.get("/api/notebook/summary")
+            if r.status_code != 200 or "population" not in r.get_json():
+                out.append("B: the summary does not name its population")
+        except Exception as e:  # noqa: BLE001
+            out.append(f"B: the routes raised {type(e).__name__}: {e}")
+
+    # ---- the page's saving code ----
+    pg = (_pathlib.Path(cli.__file__).resolve().parents[1] / "webapp" / "index.html").read_text(encoding="utf-8")
+    srv = (_pathlib.Path(cli.__file__).resolve().parents[1] / "server.py").read_text(encoding="utf-8")
+
+    def fn(name):
+        i = pg.index("function " + name)
+        j = pg.index("\n}", i)
+        return pg[i:j + 2]
+
+    cm = fn("composeMirror()")
+    if "nbNoteEdit();" not in cm:
+        out.append("B: the room's keystroke no longer reaches the document (composeMirror does not call nbNoteEdit)")
+    fl = fn("nbFlush(reason)")
+    if fl.index("nbRecord();") > fl.index("await nbSend();"):
+        out.append("B: the pending request is not on disk BEFORE it is sent — a lost reply could not be replayed")
+    if "if (NB.inflight) return;" not in fl:
+        out.append("B: more than one save can be in flight for a document")
+    sd = fn("nbSend()")
+    if sd.count("if (NB.inflight !== inf) return;") < 2:
+        out.append("B: an older reply can speak for newer text (nbSend must check the request in flight both "
+                   "after a failure and after a reply)")
+    if "if (r.status === 409) {" not in sd or "NB.conflict = {head: d.head || null, mine: inf.payload.body" not in sd:
+        out.append("B: a 409 does not become a conflict holding both versions")
+    if "NB.ackSeq = inf.seq;" not in sd:
+        out.append("B: Saved is not tied to the edit sequence that was acknowledged")
+    rl = fn("nbRetryLater(why)")
+    if "nbSend();" not in rl or "nbFlush(" in rl:
+        out.append("B: a retry does not reuse the request in flight (same id, same payload)")
+    ne = fn("nbNoteEdit()")
+    for bad in ("compose-text').value =", ".value = "):
+        if bad in ne:
+            out.append("B: the edit handler writes into an editor")
+    if "if (NB.conflict) { nbRenderStatus(); return; }" not in ne:
+        out.append("B: a conflict does not stop automatic saving")
+    for wording in ("'Saving…'", "'Saved · ' + when", "'Saved on this device · waiting to sync'",
+                    "'Saving… · device recovery unavailable'", '"Couldn\'t save"', "'Another copy has changes'"):
+        if wording not in pg:
+            out.append(f"B: the save state wording {wording} is missing")
+    if "Keep mine as a new copy" not in pg or "Open saved version" not in pg:
+        out.append("B: the conflict's two choices are not offered")
+    if "(e.key === 's' || e.key === 'S')" not in pg or "nbFlush('save');" not in pg:
+        out.append("B: Cmd-S does not save the document")
+    if 'id="nb-door"' not in pg or "nbOpenPanel('list')" not in pg or "nbNew()" not in pg:
+        out.append("B: My writing and New are not reachable from the room")
+    if "open as a new document" not in pg or "nbNewFrom(" not in pg:
+        out.append("B: a submitted passage cannot open as a new document")
+    if "Submitted passages" not in pg:
+        out.append("B: the submitted passages are not labelled as what they are")
+    if "document: nbDocumentRef()" not in pg or '"document": document_ref(document)' not in (
+            _pathlib.Path(cli.__file__).resolve().parent / "moira.py").read_text(encoding="utf-8"):
+        out.append("B: a reading does not record which document, at which edit, it was read from")
+    if "nikodemus.notebook.migrated.v1" not in pg or "'doc_migrated_' + key" not in pg:
+        out.append("B: the one-time migration of the session draft is missing or not keyed to the snapshot")
+    if "localStorage.removeItem('wordicon.session.v1')" in pg:
+        out.append("B: the migration deletes the old session key")
+    for route in ('@app.route("/api/notebook/documents/<doc_id>", methods=["PUT"])',
+                  '@app.route("/api/notebook/documents/<doc_id>/checkpoints", methods=["POST"])',
+                  '@app.route("/api/notebook/documents")'):
+        if route not in srv:
+            out.append(f"B: route missing: {route}")
+    nbsec = srv[srv.index("# ---- The writer's notebook (stage B)"):srv.index("# ---- Carry Back (block 123)")]
+    for bad in ("server_gateway(", ".complete(", "make_gateway(", "run_deep(", "run_decompose("):
+        if bad in nbsec:
+            out.append(f"B: a notebook route reaches a model ({bad})")
+    # the constitution: the wing amended it, with the sentences the code keeps
+    canon = _re.sub(r"\s+", " ", _canon_source())
+    for sent in ("saved as you write it, on this", "with no run, no submission and no download",
+                 "a document's identity is never its title and never its words",
+                 "Saved is an acknowledgement of the latest words, never a timer",
+                 "an older reply cannot mark newer typing saved",
+                 "A copy that changed elsewhere is never overwritten: both versions are kept and the choice is yours",
+                 "nothing in the notebook calls a model, and opening a document never starts a run",
+                 "a second Esc closes the room"):
+        if sent not in canon:
+            out.append(f"B: the constitution no longer says {sent!r}")
+    if ('data-canon="the-room-where-writing-happens" href="/constitution#the-room-where-writing-happens">'
+            'Saved is an acknowledgement of the latest words, never a timer</a>') not in _about_panel(pg):
+        out.append("B: the What-is panel carries no excerpt of the notebook's clause")
+    run = (_pathlib.Path(cli.__file__).resolve().parents[1] / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
+    for need in ("what was typed is saved on this installation without any run", "and Saved is said only when the newest words are in the store",
+                 "with the server unreachable the room says the words are on this device", "a save whose reply was lost is retried with the same request id and lands once",
+                 "Keep mine as a new copy makes my text a durable document", "the old session draft became one document, once"):
+        if need not in run:
+            out.append(f"B: the runner does not require the journey's check {need!r}")
+    return out
+
+
 def _check_moira_routes(server, paired):
     """Block 125, the doors: the panel's reads spend nothing (a gateway whose
     complete() raises is installed, and config / list / view / notebook /
@@ -2966,6 +3231,7 @@ def main() -> int:
         failures.append("server did not pass global_constraints through")
     failures.extend(_check_map_focus_routes(server, _paired))
     failures.extend(_check_moira_routes(server, _paired))
+    failures.extend(_check_notebook_b(server, _paired))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key
@@ -6099,7 +6365,10 @@ console.log(JSON.stringify([lineageTag('recorded'), lineageTag('derived'), linea
     if "const sec = (label, html, n) =>" not in _pg60:
         failures.append("60: the shelves no longer share one header builder — the place "
                         "where a written count and a computed body drift apart")
-    for _need in ("Rabbitholes", "Refractions", "Revisions", "Your writing"):
+    # notebook stage B: the shelf of what was SENT is labelled as that —
+    # "Submitted passages" — because the writing itself now lives in the
+    # notebook (My writing), and a submission record is not a document.
+    for _need in ("Rabbitholes", "Refractions", "Revisions", "Submitted passages"):
         if _need not in _pg60:
             failures.append(f"60: the Library has no {_need!r} shelf")
     # 69 of the 106 lineage links in this corpus exist ONLY because the

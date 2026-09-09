@@ -571,8 +571,31 @@ def _snapshot(text: str, scope: str) -> dict:
             "identity_rule": "exact bytes; a whitespace change is a different snapshot"}
 
 
+def document_ref(document) -> dict | None:
+    """Notebook stage B: which document, at which local edit sequence and
+    which committed revision, a reading was taken from — so a result that
+    returns after edits or a document switch stays attached to the snapshot
+    it was read from. Identity and counters only; the text is the snapshot."""
+    if not isinstance(document, dict):
+        return None
+    doc_id = document.get("id")
+    if not isinstance(doc_id, str) or not doc_id or len(doc_id) > 64:
+        return None
+    out = {"id": doc_id}
+    for k in ("seq", "revision"):
+        v = document.get(k)
+        if isinstance(v, int) and not isinstance(v, bool) and v >= 0:
+            out[k] = v
+    sel = document.get("selection")
+    if isinstance(sel, dict) and all(isinstance(sel.get(k), int) for k in ("start", "end")):
+        out["selection"] = {"start": sel["start"], "end": sel["end"],
+                            "direction": str(sel.get("direction") or "none")[:8], "units": "utf16"}
+    return out
+
+
 def start_reading(text: str, scope: str = "draft", previous_reading_id: str = "",
-                  readers: list[str] | None = None, models: dict | None = None) -> dict:
+                  readers: list[str] | None = None, models: dict | None = None,
+                  document: dict | None = None) -> dict:
     """Freeze one snapshot and write the reading record: what will be read,
     by whom, under which settings and which notebook. Nothing is called
     here — the caller dispatches run_reader() per reader, separately."""
@@ -604,6 +627,7 @@ def start_reading(text: str, scope: str = "draft", previous_reading_id: str = ""
            "snapshot": _snapshot(text, scope), "input_text": text,
            "faculty_name": fac["name"], "readers": dispatch,
            "previous_reading_id": _safe_id(previous_reading_id),
+           "document": document_ref(document),
            "means": "three separate readings of one exact snapshot; no conference, no verdict, no score"}
     _write_once(readings_dir() / f"{rid}.json", rec)
     return rec

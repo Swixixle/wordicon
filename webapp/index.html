@@ -282,6 +282,21 @@
   #deep-ask .fact b { color: var(--write-ink); font-weight: 600; }
   /* Block 125: the readers' panel — the same quiet furniture again. */
   #moira-ask { width: min(380px, calc(100vw - 32px)); max-height: calc(100vh - 90px); overflow: auto; }
+  /* Stage B: the save state in the bar (a word, never a button count) and
+     My writing / the conflict's two versions as one more quiet panel. */
+  .nb-status { align-items: center; gap: 6px; font-size: 12px; color: var(--write-faint);
+    margin-right: 6px; white-space: nowrap; }
+  .nb-status .nb-act { background: transparent; border: 1px solid var(--write-faint); color: var(--write-ink);
+    border-radius: 7px; padding: 2px 8px; font-size: 11.5px; font-family: inherit; cursor: pointer; }
+  .nb-panel .nb-list { max-height: 50vh; overflow: auto; margin-top: 6px; }
+  .nb-panel .nb-row { padding: 7px 0; border-top: 1px solid var(--write-faint); }
+  .nb-panel .nb-row a { color: var(--write-ink); cursor: pointer; text-decoration: none; font-size: 13.5px; }
+  .nb-panel .nb-row.cur a b { text-decoration: underline; }
+  .nb-panel .fact { color: var(--write-panel-ink); font-size: 11.5px; line-height: 1.45; margin: 3px 0; }
+  .nb-panel .nb-versions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0; }
+  .nb-panel .nb-pre { white-space: pre-wrap; font: inherit; font-size: 12px; color: var(--write-ink);
+    max-height: 30vh; overflow: auto; border-left: 3px solid var(--write-faint); padding-left: 8px; margin: 4px 0 8px; }
+  @media (max-width: 820px) { .nb-panel .nb-versions { grid-template-columns: 1fr; } }
   #moira-ask .scope { color: var(--write-ink); font-size: 13px; margin: 0 0 6px; }
   #moira-ask .preview { color: var(--write-panel-ink); font-size: 12px; line-height: 1.4;
     margin: 0 0 8px; max-height: 4.6em; overflow: hidden; }
@@ -960,6 +975,7 @@
         <li><a class="canon-link" data-canon="whether-any-of-this-beats-a-plain-prompt" href="/constitution#whether-any-of-this-beats-a-plain-prompt">Under six decided pairs it refuses to conclude anything.</a></li>
         <li><a class="canon-link" data-canon="what-it-is" href="/constitution#what-it-is">the critic advises and never decides</a></li>
         <li><a class="canon-link" data-canon="the-readers-three-aspects-kept-apart" href="/constitution#the-readers-three-aspects-kept-apart">The readers answer separately and stay separate: no conference, no verdict, no score, and nothing here combines them.</a></li>
+        <li><a class="canon-link" data-canon="the-room-where-writing-happens" href="/constitution#the-room-where-writing-happens">Saved is an acknowledgement of the latest words, never a timer</a></li>
       </ul>
       <p class="body" style="margin-top:14px"><a href="/constitution"><strong>Read the full constitution</strong></a>
       — all five movements, whole, with a table of contents. That page is the law; this panel
@@ -1029,6 +1045,8 @@
   <div id="write-style" class="write-style" style="display:none"></div>
   <div id="carry-tray" class="write-style carry-tray" style="display:none" role="region" aria-label="revision notes"></div>
   <div id="write-save" class="write-style" style="display:none"></div>
+  <!-- Stage B: My writing — the documents behind the room, and a conflict's two versions. Opening this spends nothing. -->
+  <div id="nb-panel" class="write-style nb-panel" style="display:none" role="region" aria-label="my writing"></div>
   <!-- Pass 2. A keystroke may not spend money, so it opens this instead: one
        panel that says what would be sent, down which lane, at what cost, and
        that it keeps going without you. One press starts it; escape spends
@@ -1051,6 +1069,7 @@
      mode the room is off screen, and the way back to the split must not
      leave with it. -->
 <div id="ws-bar" class="compose-bar">
+  <span id="nb-status" class="nb-status" aria-live="polite" style="display:none"></span>
   <button class="compose-exit ws-write-only" onclick="toggleWriteStyle()" aria-label="change the type">Aa</button>
   <button class="compose-exit" onclick="swapSides()" title="swap which side the writing is on">⇄ sides</button>
   <button class="compose-exit" id="ws-split-btn" onclick="setWorkspaceMode('split')">⫞ split</button>
@@ -4955,6 +4974,10 @@ function renderWriteStyle() {
        <button onclick="nudgeWriteSize(1)" aria-label="larger">+</button>
        ${cur ? `<button onclick="resetWriteSize()">reset</button>` : ''}
      </div>` +
+    `<div class="lbl" style="margin-top:10px">My writing — saved as you write, on this ${escapeHtml(brand())}</div><div class="row">` +
+    `<button id="nb-door" onclick="toggleWriteStyle();nbOpenPanel('list')" title="every document, newest first; search titles and words">My writing</button>` +
+    `<button onclick="toggleWriteStyle();nbNew()" title="a fresh page; this one is kept and checkpointed as it stands">New</button>` +
+    `</div>` +
     `<div class="lbl" style="margin-top:10px">Go deep</div><div class="row">` +
     `<button onclick="toggleWriteStyle();askDeep('paragraph')" title="the paragraph the caret is in — or your selection">This paragraph <span style="opacity:.6">${DEEP_CHORDS.paragraph.label}</span></button>` +
     `<button onclick="toggleWriteStyle();askDeep('draft')" title="everything in the room">The whole draft <span style="opacity:.6">${DEEP_CHORDS.draft.label}</span></button>` +
@@ -5035,6 +5058,8 @@ function toggleWriteStyle() {
   if (!open) {
     const sv = document.getElementById('write-save');
     if (sv) sv.style.display = 'none';
+    const nbp = document.getElementById('nb-panel');
+    if (nbp) nbp.style.display = 'none';
     renderWriteStyle();
   }
 }
@@ -5517,6 +5542,7 @@ function composeMirror() {
   // same way the page box's does — the same key, the same record — so what
   // comes back after a reload is what was written, wherever it was written.
   rememberInput();
+  if (typeof nbNoteEdit === 'function') nbNoteEdit();   // stage B: the document behind the room, autosaved
 }
 
 // ---- Tab ---------------------------------------------------------------
@@ -5818,6 +5844,8 @@ function closeWorkspace() {
   if (panel) panel.style.display = 'none';
   const saver = document.getElementById('write-save');
   if (saver) saver.style.display = 'none';
+  const nbp = document.getElementById('nb-panel');
+  if (nbp) nbp.style.display = 'none';
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta && meta.dataset.prev) meta.content = meta.dataset.prev;
   // ...and the page pane's scroll goes home to the window.
@@ -6421,7 +6449,7 @@ document.addEventListener('keydown', e => {
   if (document.body.classList.contains('ws-open')) { e.preventDefault(); closeWorkspace(); }
 });
 function closeInnermostRoomPanel() {
-  for (const id of ['write-style', 'write-save', 'carry-tray']) {
+  for (const id of ['nb-panel', 'write-style', 'write-save', 'carry-tray']) {
     const el = document.getElementById(id);
     if (el && el.style.display !== 'none' && el.style.display !== '') { el.style.display = 'none'; return true; }
   }
@@ -6565,7 +6593,8 @@ async function startMoira() {
   roomRun('readers · submitted');
   try {
     const r = await fetch('/api/moira/readings', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({text: scope.text, scope: scope.kind, previous_reading_id: prev || ''})});
+      body: JSON.stringify({text: scope.text, scope: scope.kind, previous_reading_id: prev || '',
+                            document: nbDocumentRef()})});   // stage B: which document, at which edit, this was read from
     const d = await r.json();
     if (!r.ok || d.error) { roomRun('the readers could not start — ' + failureClass(d.error)); return; }
     MOIRA = {reading: d.reading_id, revealed: false};
@@ -6933,6 +6962,413 @@ async function moiraSaveSettings() {
     if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status));
     MOIRA_CFG = null; renderMoira();
   } catch (e) { pageNote('Could not save the settings: ' + escapeHtml(String(e))); }
+}
+
+// ---- The writer's notebook (stage B) ---------------------------------------
+//
+// Saving is part of writing. Before this stage the room's only copy was
+// the browser's session record (stage A made it reach that record at all);
+// the server knew a passage only when a run was submitted, as a line in an
+// append-only log. This is the document behind the room: a stable id, an
+// exact body, a revision, a title derived from the first line until he
+// names it himself, autosaved to this installation's own store
+// (/api/notebook, scripts/notebook.py) while he writes, reopenable from
+// My writing, checkpointed on an explicit save and on New.
+//
+// The rules, all from the brief: saving requires no reader call, no
+// submission and no download; "Saved" is an acknowledgement of the latest
+// content, never a timer — a successful older reply cannot mark newer
+// typing saved, and an older failure cannot downgrade a newer success;
+// the browser keeps a recovery record of its own (one per editing tab, so
+// two tabs never overwrite each other's unsent text) and never mirrors it
+// back into the live editor; one server write is in flight per document,
+// newer content coalesces into the next; a retry whose reply was lost
+// carries the SAME request id and payload, persisted before it is sent, so
+// a restart can replay it safely; a stale base is a conflict (409) that
+// stops automatic saving and keeps both versions — never a silent merge,
+// never an overwrite; opening a document or a page never starts a run; a
+// different document is a deliberate editing-session boundary.
+//
+// Where the words live: the page field and the room share one draft (the
+// mirror), so the document's body is that draft. Edits made in the room
+// are what autosave watches; the page box stays the intake it always was.
+const NB_DOC_KEY = 'nikodemus.notebook.doc.v1';           // the active document's identity, this browser
+const NB_TAB_KEY = 'nikodemus.notebook.tab.v1';           // sessionStorage: this tab's editing-session id
+const NB_RECOVERY_PREFIX = 'nikodemus.notebook.recovery.v1.';   // localStorage, one record per editing tab
+const NB_MIGRATION_KEY = 'nikodemus.notebook.migrated.v1'; // the one-time migration of the session draft
+const NB_IDLE_MS = 750, NB_MAX_WAIT_MS = 2000, NB_RETRY_MS = [2000, 5000, 15000, 30000];
+const NB_INTERVAL_CHECKPOINT_MS = 5 * 60 * 1000;
+let NB = nbBlank();
+let NB_PANEL = '';   // '' | 'list' | 'conflict'
+
+function nbBlank() {
+  return {id: '', title: '', title_is_manual: false, revision: 0, fingerprint: '', origin: '',
+          seq: 0, sentSeq: 0, ackSeq: 0, savedAt: '', inflight: null, timer: null, firstEditAt: 0,
+          status: 'idle', localOk: true, serverError: '', conflict: null, retryTimer: null, retries: 0,
+          lastCheckpointAt: 0, pendingReason: ''};
+}
+function nbTabId() {
+  try {
+    let t = sessionStorage.getItem(NB_TAB_KEY);
+    if (!t) { t = 'tab_' + Math.random().toString(16).slice(2, 12) + Date.now().toString(16); sessionStorage.setItem(NB_TAB_KEY, t); }
+    return t;
+  } catch (e) { return 'tab_volatile'; }
+}
+function nbNewId() {
+  const rnd = (typeof crypto !== 'undefined' && crypto.getRandomValues) ? Array.from(crypto.getRandomValues(new Uint8Array(12)), b => b.toString(16).padStart(2, '0')).join('') : Math.random().toString(16).slice(2) + Date.now().toString(16);
+  return 'doc_' + rnd;
+}
+function nbRequestId() { return 'req_' + nbNewId().slice(4) + '_' + Date.now().toString(36); }
+function nbBody() { const b = document.getElementById('input-text'); return b ? b.value : (SESSION.input || ''); }
+function nbAutoTitle(body) {
+  for (const line of (body || '').split('\n')) { const t = line.replace(/\s+/g, ' ').trim(); if (t) return t.slice(0, 80); }
+  return 'Untitled';
+}
+function nbTitle() { return NB.title_is_manual ? NB.title : ''; }
+function nbDisplayTitle() { return NB.title_is_manual && NB.title.trim() ? NB.title : nbAutoTitle(nbBody()); }
+function nbDocumentRef() {
+  if (!NB.id) return null;
+  const ta = document.getElementById('compose-text');
+  return {id: NB.id, seq: NB.seq, revision: NB.revision,
+          selection: ta ? {start: ta.selectionStart, end: ta.selectionEnd, direction: ta.selectionDirection} : undefined};
+}
+
+// ---- identity, kept in this browser -----------------------------------------
+function nbLoadIdentity() {
+  try {
+    const d = JSON.parse(localStorage.getItem(NB_DOC_KEY) || 'null');
+    if (d && d.id) { NB.id = String(d.id); NB.title = String(d.title || ''); NB.title_is_manual = !!d.title_is_manual;
+      NB.revision = d.revision | 0; NB.fingerprint = String(d.fingerprint || ''); NB.savedAt = String(d.savedAt || ''); NB.origin = String(d.origin || ''); }
+  } catch (e) {}
+}
+function nbSaveIdentity() {
+  try { localStorage.setItem(NB_DOC_KEY, JSON.stringify({id: NB.id, title: NB.title, title_is_manual: NB.title_is_manual,
+    revision: NB.revision, fingerprint: NB.fingerprint, savedAt: NB.savedAt, origin: NB.origin})); } catch (e) {}
+}
+
+// ---- the recovery record: this tab's, written on every edit -----------------
+function nbRecoveryKey() { return NB_RECOVERY_PREFIX + nbTabId(); }
+function nbRecord() {
+  if (!NB.id) return;
+  const rec = {doc_id: NB.id, seq: NB.seq, body: nbBody(), title: NB.title, title_is_manual: NB.title_is_manual,
+               base_revision: NB.revision, base_fingerprint: NB.fingerprint, pending: NB.inflight ? {request_id: NB.inflight.request_id, seq: NB.inflight.seq, payload: NB.inflight.payload} : null,
+               pending_reason: NB.pendingReason || '', at: new Date().toISOString(), tab: nbTabId()};
+  try { localStorage.setItem(nbRecoveryKey(), JSON.stringify(rec)); if (!NB.localOk) { NB.localOk = true; nbRenderStatus(); } }
+  catch (e) { if (NB.localOk) { NB.localOk = false; nbRenderStatus(); } }
+}
+function nbRecoveryRecords(docId) {
+  const out = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || k.indexOf(NB_RECOVERY_PREFIX) !== 0) continue;
+      try { const r = JSON.parse(localStorage.getItem(k) || 'null'); if (r && (!docId || r.doc_id === docId)) out.push(r); } catch (e) {}
+    }
+  } catch (e) {}
+  return out;
+}
+
+// ---- edits and scheduling ---------------------------------------------------
+// Called from composeMirror on every keystroke in the room. Debounces the
+// SERVER write only; the recovery record is written at once (coalesced to
+// one write per frame), and nothing here touches the live editor.
+function nbNoteEdit() {
+  if (!NB.id) { nbAdopt(nbNewId(), 'room'); }
+  NB.seq += 1;
+  if (!nbNoteEdit._raf && typeof requestAnimationFrame === 'function') {
+    nbNoteEdit._raf = requestAnimationFrame(() => { nbNoteEdit._raf = 0; nbRecord(); });
+  } else if (typeof requestAnimationFrame !== 'function') nbRecord();
+  if (NB.conflict) { nbRenderStatus(); return; }        // a conflict stops automatic saving until he chooses
+  const now = Date.now();
+  if (!NB.firstEditAt) NB.firstEditAt = now;
+  if (NB.timer) clearTimeout(NB.timer);
+  if (now - NB.firstEditAt >= NB_MAX_WAIT_MS) { NB.timer = null; nbFlush(); return; }
+  NB.timer = setTimeout(() => { NB.timer = null; nbFlush(); }, NB_IDLE_MS);
+  if (NB.status !== 'saving' && NB.status !== 'local' && NB.status !== 'nolocal') { NB.status = 'pending'; nbRenderStatus(); }
+}
+function nbAdopt(id, origin) {
+  NB = Object.assign(nbBlank(), {id, origin: origin || '', localOk: NB.localOk});
+  nbSaveIdentity();
+}
+// One write in flight per document; newer content waits and coalesces.
+async function nbFlush(reason) {
+  if (!NB.id) return;
+  if (reason) NB.pendingReason = reason;
+  if (NB.inflight) return;                              // it will look again when the reply lands
+  if (NB.conflict) return;
+  const seq = NB.seq;
+  if (seq === NB.ackSeq && !NB.pendingReason) return;   // nothing newer than what was acknowledged
+  NB.firstEditAt = 0;
+  const payload = {title: nbTitle(), title_is_manual: NB.title_is_manual, body: nbBody(),
+                   base_revision: NB.revision, base_fingerprint: NB.fingerprint, request_id: nbRequestId(),
+                   origin: NB.origin || 'room'};
+  if (NB.pendingReason) { payload.checkpoint_reason = NB.pendingReason; }
+  else if (NB.lastCheckpointAt && Date.now() - NB.lastCheckpointAt > NB_INTERVAL_CHECKPOINT_MS) payload.checkpoint_reason = 'interval';
+  NB.inflight = {request_id: payload.request_id, seq, payload, ctl: (typeof AbortController === 'function') ? new AbortController() : null};
+  NB.sentSeq = seq;
+  nbRecord();                                           // the pending request is on disk BEFORE it is sent
+  NB.status = 'saving'; nbRenderStatus();
+  await nbSend();
+}
+async function nbSend() {
+  const inf = NB.inflight;
+  if (!inf) return;
+  let r, d;
+  try {
+    r = await fetch('/api/notebook/documents/' + encodeURIComponent(NB.id), {method: 'PUT', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(inf.payload), signal: inf.ctl ? inf.ctl.signal : undefined});
+    d = await r.json();
+  } catch (e) {
+    if (NB.inflight !== inf) return;                    // superseded
+    nbRetryLater('the server could not be reached');
+    return;
+  }
+  if (NB.inflight !== inf) return;                      // an older reply: it cannot speak for newer text
+  if (r.status === 409) {
+    NB.inflight = null; NB.retries = 0;
+    NB.conflict = {head: d.head || null, mine: inf.payload.body, at: new Date().toISOString()};
+    NB.status = 'conflict'; nbRecord(); nbRenderStatus();
+    return;
+  }
+  if (!r.ok || d.error) {
+    if (r.status >= 500) { nbRetryLater(d.error || ('HTTP ' + r.status)); return; }
+    NB.inflight = null; NB.retries = 0; NB.serverError = d.error || ('HTTP ' + r.status);
+    NB.status = 'failed'; nbRecord(); nbRenderStatus();
+    return;
+  }
+  NB.inflight = null; NB.retries = 0; NB.serverError = '';
+  NB.revision = d.revision | 0; NB.fingerprint = d.fingerprint || ''; NB.savedAt = d.saved_at || '';
+  NB.ackSeq = inf.seq;
+  if (inf.payload.checkpoint_reason) { NB.lastCheckpointAt = Date.now(); if (NB.pendingReason === inf.payload.checkpoint_reason) NB.pendingReason = ''; }
+  if (!NB.lastCheckpointAt) NB.lastCheckpointAt = Date.now();
+  nbSaveIdentity(); nbRecord();
+  if (NB.seq !== NB.ackSeq || NB.pendingReason) { NB.status = 'pending'; nbRenderStatus(); nbFlush(); }   // newer words arrived meanwhile
+  else { NB.status = 'saved'; nbRenderStatus(); }
+  if (typeof renderContinue === 'function' && !document.body.classList.contains('ws-open')) { try { renderContinue(); } catch (e) {} }
+}
+function nbRetryLater(why) {
+  NB.serverError = why;
+  NB.status = NB.localOk ? 'local' : 'nolocal';
+  nbRenderStatus();
+  const wait = NB_RETRY_MS[Math.min(NB.retries, NB_RETRY_MS.length - 1)];
+  NB.retries += 1;
+  if (NB.retryTimer) clearTimeout(NB.retryTimer);
+  NB.retryTimer = setTimeout(() => {
+    NB.retryTimer = null;
+    if (!NB.inflight) return;
+    // the same request id and the same payload, so a reply that was lost is
+    // recognized by the store and answered the same way
+    nbSend();
+  }, wait);
+}
+function nbRetryNow() {
+  if (NB.retryTimer) { clearTimeout(NB.retryTimer); NB.retryTimer = null; }
+  if (NB.inflight) { NB.status = 'saving'; nbRenderStatus(); nbSend(); }
+  else { NB.status = 'pending'; nbFlush('save'); }
+}
+
+// ---- what the room says about it ---------------------------------------------
+function nbStatusText() {
+  const when = NB.savedAt ? new Date(NB.savedAt).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'}) : '';
+  switch (NB.status) {
+    case 'saving': case 'pending': return NB.localOk ? 'Saving…' : 'Saving… · device recovery unavailable';
+    case 'saved': return 'Saved · ' + when;
+    case 'local': return 'Saved on this device · waiting to sync';
+    case 'nolocal': return 'Saving… · device recovery unavailable';
+    case 'failed': return "Couldn't save";
+    case 'conflict': return 'Another copy has changes';
+    default: return NB.id && NB.revision ? 'Saved · ' + when : '';
+  }
+}
+function nbRenderStatus() {
+  const el = document.getElementById('nb-status');
+  if (!el) return;
+  const text = nbStatusText();
+  let extra = '';
+  if (NB.status === 'failed') extra = ` <button class="nb-act" onclick="nbRetryNow()">Retry</button> <button class="nb-act" onclick="exportWriting('download')">Download</button>`;
+  if (NB.status === 'conflict') extra = ` <button class="nb-act" onclick="nbOpenPanel('conflict')">Review</button>`;
+  el.innerHTML = text ? `<span class="nb-word" title="${escapeHtml(NB.serverError || '')}">${escapeHtml(text)}</span>${extra}` : '';
+  el.style.display = text ? 'flex' : 'none';
+}
+
+// ---- opening, new, the list --------------------------------------------------
+function nbSetDraft(text, place) {
+  // A deliberate document switch: the one moment the room's value is
+  // assigned from outside. The session record follows; the undo history of
+  // the previous document is not carried into this one.
+  const box = document.getElementById('input-text');
+  if (box) { box.value = text; toggleClearBtn(); rememberInput(); }
+  const ta = document.getElementById('compose-text');
+  if (ta && document.body.classList.contains('ws-open')) {
+    ta.value = text; inkUpdate();
+    const p = place || {s: 0, e: 0};
+    try { ta.setSelectionRange(p.s, p.e); } catch (e) {}
+    ta.scrollTop = 0;
+  }
+  ROOM_PLACE = null;
+}
+async function nbOpen(id) {
+  if (!id || id === NB.id) { nbOpenPanel(''); if (!document.body.classList.contains('ws-open')) openWorkspace('write'); return; }
+  await nbFlush();                                       // the current document first, with whatever is unsent
+  let d;
+  try { const r = await fetch('/api/notebook/documents/' + encodeURIComponent(id)); d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); }
+  catch (e) { pageNote('Could not open that document: ' + escapeHtml(String(e))); return; }
+  // a newer unsent copy of THIS document in some tab's recovery record
+  const newer = nbRecoveryRecords(id).filter(rc => rc.base_revision === d.revision && (rc.body !== d.body)).sort((a, b) => (b.at || '').localeCompare(a.at || ''))[0];
+  NB = Object.assign(nbBlank(), {id: d.doc_id, title: d.title || '', title_is_manual: !!d.title_is_manual, revision: d.revision | 0,
+                                  fingerprint: d.fingerprint || '', savedAt: d.saved_at || '', origin: d.origin || '', status: 'saved', localOk: NB.localOk, lastCheckpointAt: Date.now()});
+  nbSaveIdentity();
+  nbSetDraft(newer ? newer.body : d.body);
+  if (newer) { NB.seq = 1; NB.status = 'pending'; nbRecord(); nbFlush(); pageNote('Opened with unsent changes recovered from this browser (newer than the saved copy).'); }
+  else nbRecord();
+  nbOpenPanel('');
+  nbRenderStatus();
+  if (!document.body.classList.contains('ws-open')) openWorkspace('write');
+}
+async function nbNew() {
+  if (NB.id && (nbBody().trim() || NB.revision)) await nbFlush('new');   // the current document is checkpointed as it stands
+  nbAdopt(nbNewId(), 'new');
+  nbSetDraft('');
+  NB.status = 'idle'; nbRecord(); nbRenderStatus();
+  nbOpenPanel('');
+  if (!document.body.classList.contains('ws-open')) openWorkspace('write');
+  const ta = document.getElementById('compose-text'); if (ta) ta.focus({preventScroll: true});
+}
+async function nbNewFrom(text, origin) {
+  // a new document from a historical passage: the original stays what it was
+  if (NB.id && (nbBody().trim() || NB.revision)) await nbFlush('new');
+  nbAdopt(nbNewId(), origin || 'submitted');
+  nbSetDraft(String(text || ''));
+  NB.seq = 1; NB.status = 'pending'; nbRecord();
+  await nbFlush('open');
+  if (!document.body.classList.contains('ws-open')) openWorkspace('write');
+}
+async function nbKeepMineAsNew() {
+  // the conflict's own way out: my text becomes a new document, durable,
+  // before anything is abandoned; the other copy keeps its id
+  const mine = NB.conflict ? NB.conflict.mine : nbBody();
+  const current = nbBody();
+  const text = current !== mine && NB.seq > NB.sentSeq ? current : mine;
+  NB.conflict = null;
+  nbAdopt(nbNewId(), 'conflict-copy');
+  nbSetDraft(text);
+  NB.seq = 1; NB.status = 'pending'; nbRecord();
+  await nbFlush('save');
+  nbOpenPanel('');
+}
+async function nbOpenSaved() {
+  // the head wins; my text is kept in this tab's recovery record as an
+  // abandoned session, never deleted here
+  const head = NB.conflict && NB.conflict.head;
+  if (!head) return;
+  try { localStorage.setItem(NB_RECOVERY_PREFIX + 'abandoned.' + Date.now().toString(36), JSON.stringify({doc_id: NB.id, body: nbBody(), title: NB.title, at: new Date().toISOString(), abandoned: true, tab: nbTabId()})); } catch (e) {}
+  NB.conflict = null;
+  NB.revision = head.revision | 0; NB.fingerprint = head.fingerprint || ''; NB.savedAt = head.saved_at || '';
+  NB.title = head.title || ''; NB.title_is_manual = !!head.title_is_manual;
+  nbSetDraft(head.body || '');
+  NB.seq = 0; NB.ackSeq = 0; NB.status = 'saved'; nbSaveIdentity(); nbRecord(); nbRenderStatus();
+  nbOpenPanel('');
+}
+function nbOpenPanel(mode) {
+  const el = document.getElementById('nb-panel');
+  if (!el) return;
+  NB_PANEL = mode || '';
+  if (!NB_PANEL) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  for (const id of ['write-style', 'write-save']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
+  el.style.display = 'block';
+  if (NB_PANEL === 'conflict') { nbRenderConflict(el); return; }
+  nbRenderList(el, '');
+}
+function nbRenderConflict(el) {
+  const c = NB.conflict || {};
+  const head = c.head || {};
+  const mine = (c.mine || '').slice(0, 300), theirs = (head.body || '').slice(0, 300);
+  el.innerHTML = `<div class="lbl">Another copy has changes</div>
+    <p class="fact">This document was saved from somewhere else after this copy was taken (their revision ${escapeHtml(String(head.revision || '?'))}, saved ${escapeHtml(head.saved_at ? new Date(head.saved_at).toLocaleString() : 'unknown')}). Nothing was overwritten. Both versions are here; choose.</p>
+    <div class="nb-versions">
+      <div><div class="lbl">Mine — in this room now</div><pre class="nb-pre">${escapeHtml(mine)}${(c.mine || '').length > 300 ? '…' : ''}</pre>
+        <button onclick="nbKeepMineAsNew()">Keep mine as a new copy</button></div>
+      <div><div class="lbl">The saved version</div><pre class="nb-pre">${escapeHtml(theirs)}${(head.body || '').length > 300 ? '…' : ''}</pre>
+        <button onclick="nbOpenSaved()">Open saved version</button></div>
+    </div>
+    <p class="fact">Keep mine makes a durable new document of this text first; Open saved keeps this text in this browser's recovery record, not deleted.</p>
+    <div class="row"><button onclick="nbOpenPanel('')">Close</button></div>`;
+}
+async function nbRenderList(el, q) {
+  el.innerHTML = `<div class="lbl">My writing</div>
+    <div class="row"><input class="note" id="nb-search" placeholder="search titles and words…" value="${escapeHtml(q || '')}" oninput="nbSearchTyped(this.value)">
+      <button onclick="nbNew()">New</button><button onclick="nbOpenPanel('')">Close</button></div>
+    <div id="nb-list" class="nb-list"><span class="fact">reading the notebook…</span></div>`;
+  let d;
+  try { const r = await fetch('/api/notebook/documents?q=' + encodeURIComponent(q || '') + '&limit=50'); d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); }
+  catch (e) { const l = document.getElementById('nb-list'); if (l) l.innerHTML = `<span class="fact">The notebook could not be read: ${escapeHtml(String(e))}</span>`; return; }
+  const list = document.getElementById('nb-list');
+  if (!list || NB_PANEL !== 'list') return;
+  const rows = (d.documents || []).map(doc => {
+    const cur = doc.doc_id === NB.id;
+    return `<div class="nb-row${cur ? ' cur' : ''}">
+      <a onclick="nbOpen('${escapeJs(doc.doc_id)}')"><b>${escapeHtml(doc.display_title || 'Untitled')}</b>${cur ? ' <span class="fact">· open now</span>' : ''}</a>
+      <div class="fact">${escapeHtml(doc.preview || '')}</div>
+      <div class="fact">${doc.words} word${doc.words === 1 ? '' : 's'} · saved ${escapeHtml(doc.saved_at ? new Date(doc.saved_at).toLocaleString() : '')} · revision ${doc.revision}</div>
+    </div>`;
+  }).join('');
+  list.innerHTML = rows || `<span class="fact">${q ? 'Nothing matches.' : 'Nothing saved yet — what you write in the room is saved here as you write it.'}</span>`
+    + (d.next_cursor ? `<div class="fact">the newest 50 of ${d.total}; search to find an older one</div>` : '');
+}
+function nbSearchTyped(v) {
+  if (nbSearchTyped._t) clearTimeout(nbSearchTyped._t);
+  nbSearchTyped._t = setTimeout(() => { const el = document.getElementById('nb-panel'); if (el && NB_PANEL === 'list') nbRenderList(el, v); }, 250);
+}
+
+// ---- keys: Cmd-S / Ctrl-S saves the document, not the page -------------------
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key === 's' || e.key === 'S')
+      && document.body.classList.contains('ws-open')) {
+    e.preventDefault();
+    if (!NB.id) nbAdopt(nbNewId(), 'room');
+    if (NB.seq === NB.ackSeq && NB.revision) { NB.status = 'saved'; nbRenderStatus(); }
+    nbFlush('save');
+  }
+});
+
+// ---- the one-time migration of the session draft ------------------------------
+// The words that were in the browser's session record before this stage
+// existed become a document ONCE, with an id derived from the snapshot, so
+// two tabs starting together arrive at the same document rather than two.
+// The marker keeps the original snapshot; the old key is not deleted.
+async function nbMigrateIfNeeded() {
+  if (NB.id) return;
+  let marker = null;
+  try { marker = JSON.parse(localStorage.getItem(NB_MIGRATION_KEY) || 'null'); } catch (e) {}
+  if (marker && marker.doc_id) { nbAdopt(marker.doc_id, 'migration'); NB.revision = marker.revision | 0; NB.fingerprint = marker.fingerprint || ''; nbSaveIdentity(); return; }
+  const text = (typeof SESSION !== 'undefined' && typeof SESSION.input === 'string') ? SESSION.input : '';
+  if (!text) return;
+  const key = roomTextKey(text).replace(':', '_');
+  const id = 'doc_migrated_' + key;
+  const req = 'req_migrated_' + key;
+  nbAdopt(id, 'migration');
+  NB.inflight = {request_id: req, seq: 0, payload: {title: '', title_is_manual: false, body: text, base_revision: 0, base_fingerprint: '', request_id: req, origin: 'migration', checkpoint_reason: 'migration'}, ctl: null};
+  NB.status = 'saving'; nbRenderStatus();
+  await nbSend();
+  try { localStorage.setItem(NB_MIGRATION_KEY, JSON.stringify({doc_id: id, request_id: req, snapshot: text, at: new Date().toISOString(),
+    revision: NB.revision, fingerprint: NB.fingerprint})); } catch (e) {}
+}
+async function nbInit() {
+  nbLoadIdentity();
+  await nbMigrateIfNeeded();
+  if (NB.id) {
+    // a pending request this tab never heard back about is replayed as it was
+    try {
+      const rc = JSON.parse(localStorage.getItem(nbRecoveryKey()) || 'null');
+      if (rc && rc.doc_id === NB.id && rc.pending && rc.pending.request_id && rc.pending.payload) {
+        NB.inflight = {request_id: rc.pending.request_id, seq: rc.pending.seq | 0, payload: rc.pending.payload, ctl: null};
+        NB.seq = Math.max(NB.seq, rc.seq | 0);
+        NB.status = 'saving'; nbRenderStatus();
+        await nbSend();
+      }
+    } catch (e) {}
+  }
+  nbRenderStatus();
 }
 
 // ---- the page you left --------------------------------------------------
@@ -7506,7 +7942,9 @@ function renderLibrary(q) {
   });
 
   // His own writing, whole. Everything submitted, kept forever; the run it
-  // started is one click away when the run survived.
+  // started is one click away when the run survived. Stage B: a submitted
+  // passage can open as a NEW document, from its exact original text; the
+  // record of the submission stays what it was and is never the document.
   const writing = (libraryData.inputs || []).filter(i => hit(i.text) || hit(i.mode));
   const runByPreview = {};
   (libraryData.runs || []).forEach(r => {
@@ -7522,6 +7960,7 @@ function renderLibrary(q) {
       <div class="history-meta" style="font-size:12.5px;white-space:pre-wrap;color:var(--text);opacity:0.85">${escapeHtml(t.slice(0, 600))}</div>
       <div style="margin-top:4px">
         <button class="judge-btn" style="font-size:11px;padding:2px 6px" onclick="restoreInput(${JSON.stringify(t).replace(/"/g, '&quot;')})">put it back in the box</button>
+        <button class="judge-btn" style="font-size:11px;padding:2px 6px;margin-left:4px" onclick="nbNewFrom(${JSON.stringify(i.text || '').replace(/"/g, '&quot;')}, 'submitted')" title="a new document from the exact original text; this record stays what it was">open as a new document</button>
         ${r ? `<button class="judge-btn" style="font-size:11px;padding:2px 6px;margin-left:4px" onclick="loadPastResult('${escapeJs(r.trace_id)}','library-writing','')">the run it started</button>` : '<span class="muted" style="font-size:11px;margin-left:6px">no run survives from this</span>'}
       </div>
     </div>`;
@@ -7689,7 +8128,7 @@ function renderLibrary(q) {
       ${sec('Revisions — second and third passes', rows(shelf.revise), shelf.revise.length)}
       ${sec('First passes — forges, riffs, cracks', rows(shelf.root), shelf.root.length)}
       ${sec('Bench — words taken apart', benchHtml + orphanHtml, bench.length)}
-      ${sec('Your writing — everything you typed', writingHtml, writing.length)}
+      ${sec('Submitted passages — everything you sent to a run, as sent', writingHtml, writing.length)}
     </details>`;
 }
 
@@ -7881,6 +8320,7 @@ moiraConfig();   // block 125: the faculty's ruled name for the door behind Aa; 
 // of these clears anything — a reset is something he asks for.
 resumeJobIfAny();
 restoreSession();
+nbInit();        // stage B: the document behind the room — its identity, a pending save replayed, the one-time migration
 toggleClearBtn();
 
 // ---- Documents (the Library wing, Phase 0) --------------------------------
@@ -9251,10 +9691,18 @@ function draftCard() {
   if (!text) return '';
   const words = text.split(/\s+/).filter(Boolean).length;
   const head = text.slice(0, 70).replace(/\s+/g, ' ');
-  return `<div class="cont" data-kind="writing" data-id="draft"><div class="kind"><i style="background:var(--good)"></i>Writing · left open on this device</div>
+  // Stage B: the draft is a document now. Say where it is kept, exactly:
+  // saved on this installation at a time, or only in this browser so far.
+  const nb = (typeof NB !== 'undefined' && NB && NB.id) ? NB : null;
+  const saved = nb && nb.revision && nb.savedAt && nb.seq === nb.ackSeq;
+  const kept = saved
+    ? `Saved on this ${escapeHtml(brand())} · ${escapeHtml(new Date(nb.savedAt).toLocaleString())}`
+    : (nb && nb.revision ? `Saved on this ${escapeHtml(brand())} · newer words kept in this browser only so far` : 'Kept in this browser only so far.');
+  const title = nb ? (nb.title_is_manual && nb.title.trim() ? nb.title : nbAutoTitle(text)) : '';
+  return `<div class="cont" data-kind="writing" data-id="draft"><div class="kind"><i style="background:var(--good)"></i>Writing · left open on this device${nb ? ' · ' + escapeHtml(title) : ''}</div>
     <div class="obj">“${escapeHtml(head)}${text.length > 70 ? '…' : ''}”</div>
-    <div class="what">${words} word${words === 1 ? '' : 's'} in the room, unsent. Kept in this browser only.</div>
-    <div class="resume"><a onclick="openCompose()">Back into the room</a><a onclick="openWorkspace('split')">Write beside the page</a></div></div>`;
+    <div class="what">${words} word${words === 1 ? '' : 's'} in the room, unsent. ${kept}</div>
+    <div class="resume"><a onclick="openCompose()">Continue writing</a><a onclick="openWorkspace('split')">Write beside the page</a>${nb ? `<a onclick="openCompose();nbOpenPanel('list')">My writing</a>` : ''}</div></div>`;
 }
 function workRoomCard() {
   try {

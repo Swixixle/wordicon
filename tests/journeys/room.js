@@ -228,7 +228,8 @@ const DRAFT = [
   ok(w1.draft === f1.draft && w1.caret === f1.caret, 'changing the view touches neither the draft nor the caret: ' + JSON.stringify([f1.draft, f1.caret, w1.draft, w1.caret]));
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('wordicon.write.style.v1') || '{}'));
   ok(stored.view === 'wide', 'the view is remembered on this device and nowhere else: ' + JSON.stringify(stored));
-  const posts = []; page.on('request', r => { if (r.method() !== 'GET') posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
+  const posts = []; // stage B: a document save (/api/notebook/) is not a spend and not a run; it is counted by the notebook journey, not here
+  page.on('request', r => { if (r.method() !== 'GET' && r.url().indexOf('/api/notebook/') === -1) posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
   await page.evaluate(() => setWriteView('focused')); await page.waitForTimeout(500);
   ok(posts.length === 0, 'changing the view records nothing: ' + JSON.stringify(posts));
   const f2 = await measure();

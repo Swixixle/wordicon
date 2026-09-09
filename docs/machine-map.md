@@ -86,6 +86,11 @@ custody by institutional role, declared and never inferred supersession, one top
 a workup back beside his draft (`local_state/carries.jsonl`), each carry's excerpt and
 standing resolved from the run's own record and bound, by the run's recorded lineage,
 to the text the run examined — file I/O only, no model, no network.
+`scripts/notebook.py` is the writer's notebook: the document store behind the room
+(`local_state/notebook.sqlite3` — documents with a stable id, exact body, revision and
+fingerprint; every accepted save by its request id, so a lost reply is answered once;
+checkpoints), one `BEGIN IMMEDIATE` transaction per save, a stale base refused with the
+head returned — SQLite only, no model, no network; the Vault stages the file with the rest.
 `scripts/map_focus.py` is Map · focus: the served projection behind one place's ring —
 exact-identity issuer derivation (`edge_specs_from_snapshot`, `SnapshotIndex`,
 `derive_issuer`), provenance resolution, the ring with its burden, facets, groups and

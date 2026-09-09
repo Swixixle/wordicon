@@ -49,7 +49,8 @@ function deepResult() {
   // every non-GET the page makes, so "spends nothing" can be measured rather
   // than asserted
   const posts = [];
-  page.on('request', r => { if (r.method() !== 'GET') posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
+  // stage B: a document save (/api/notebook/) is not a spend and not a run; it is counted by the notebook journey, not here
+  page.on('request', r => { if (r.method() !== 'GET' && r.url().indexOf('/api/notebook/') === -1) posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
 
   await page.route('**/api/config', r => r.fulfill({ json: { gateway: 'probe-lane', model: 'probe-model-1', ok: true } }));
   let polls = 0;

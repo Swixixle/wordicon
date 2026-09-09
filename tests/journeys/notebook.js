@@ -26,6 +26,10 @@ const { webkit } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
+// A tag for this run, so the journey can be run again against a kept store —
+// the second document's words and the other tab's request id are its own.
+const RUN = Date.now().toString(36);
+const SECOND = 'Second document, run ' + RUN + '.';
 const TEXT = [
   'A first paragraph typed only in the room, never submitted anywhere.',
   '',
@@ -60,7 +64,7 @@ const TEXT = [
   await page.keyboard.type(TEXT, { delay: 0 }); await page.waitForTimeout(300);
   const s1 = await session();
   ok(s1.input === TEXT, 'what was typed in the room is in the browser\'s store, keystroke by keystroke: ' + (s1.input || '').length + ' of ' + TEXT.length + ' characters');
-  ok(posts.length === 0, 'and typing posted nothing: ' + JSON.stringify(posts));
+  ok(posts.every(x => /\/api\/notebook\//.test(x)), 'and typing posted nothing but the document\'s own save: ' + JSON.stringify(posts));
 
   // ---- an unmistakable selection ----------------------------------------
   const inked = await page.evaluate(() => document.getElementById('compose').classList.contains('inked'));
@@ -122,6 +126,154 @@ const TEXT = [
   await page.evaluate(() => openWorkspace('write')); await page.waitForTimeout(400);
   const again = await page.evaluate(() => { const ta = document.getElementById('compose-text'); return { v: ta.value, s: ta.selectionStart, e: ta.selectionEnd }; });
   ok(again.v === TEXT && again.s === 20 && again.e === 20, 'and the room reopens on the same words at the place he was: ' + JSON.stringify([again.s, again.e]));
+
+  // =======================================================================
+  // Stage B: saved documents. The draft is a document on this installation:
+  // autosaved as he writes, honest about its state, reopenable from My
+  // writing, checkpointed on New and on an explicit save, kept apart from
+  // any other copy that changed meanwhile.
+  // =======================================================================
+  const status = () => page.evaluate(() => document.getElementById('nb-status').textContent.trim());
+  const nbState = () => page.evaluate(() => ({ id: NB.id, rev: NB.revision, seq: NB.seq, ack: NB.ackSeq, fp: NB.fingerprint }));
+  const serverDoc = id => page.evaluate(async i => { const r = await fetch('/api/notebook/documents/' + i); return await r.json(); }, id);
+  const settled = async (ms) => { const until = Date.now() + (ms || 6000); while (Date.now() < until) { const t = await status(); if (/^Saved · /.test(t)) return t; await page.waitForTimeout(150); } return await status(); };
+
+  // ---- autosaved while writing, exactly ----------------------------------
+  const st1 = await settled();
+  const n1 = await nbState();
+  ok(/^Saved · \d/.test(st1) && n1.id && n1.rev >= 1 && n1.seq === n1.ack, 'what was typed is saved on this installation without any run, submission or download, and the room says so: ' + JSON.stringify([st1, n1.rev]));
+  const saves = posts.filter(x => /^PUT \/api\/notebook\/documents\//.test(x));
+  ok(saves.length >= 1 && saves.every(x => x.indexOf(n1.id) !== -1), 'every save went to the one document, by its id: ' + JSON.stringify(saves.length));
+  const d1 = await serverDoc(n1.id);
+  ok(d1.body === TEXT, 'the store holds the exact text — leading paragraph, blank line and all: ' + d1.body.length + ' characters');
+  ok(d1.display_title === 'A first paragraph typed only in the room, never submitted anywhere.' && d1.title === '' && d1.title_is_manual === false,
+    'the title is the first line, derived, until he names it: ' + JSON.stringify(d1.display_title));
+  const identityKept = await page.evaluate(() => JSON.parse(localStorage.getItem('nikodemus.notebook.doc.v1') || '{}').id);
+  ok(identityKept === n1.id, 'the document\'s identity is kept in this browser and survived the reload above');
+
+  // ---- an older reply cannot mark newer typing saved ---------------------
+  await page.route('**/api/notebook/documents/*', async route => { await new Promise(r => setTimeout(r, 1500)); await route.continue(); });
+  await page.click('#compose-text');
+  await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.setSelectionRange(ta.value.length, ta.value.length); });
+  await page.keyboard.type(' More words.', { delay: 0 });
+  await page.waitForTimeout(900);
+  await page.keyboard.type(' Even more.', { delay: 0 });
+  const mid = await status();
+  ok(mid === 'Saving…', 'while newer words are behind a save still in flight the room says Saving…, not Saved: ' + JSON.stringify(mid));
+  const st2 = await settled(8000);
+  await page.unroute('**/api/notebook/documents/*');
+  const d2 = await serverDoc(n1.id);
+  ok(/^Saved · /.test(st2) && d2.body === TEXT + ' More words. Even more.', 'and Saved is said only when the newest words are in the store: ' + JSON.stringify(st2));
+
+  // ---- offline: honest about where the words are -------------------------
+  await page.route('**/api/notebook/documents/*', route => route.abort());
+  await page.keyboard.type(' Offline words.', { delay: 0 });
+  await page.waitForTimeout(1600);
+  const off = await status();
+  ok(off === 'Saved on this device · waiting to sync', 'with the server unreachable the room says the words are on this device and waiting, not Saved: ' + JSON.stringify(off));
+  const rec = await page.evaluate(() => { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.indexOf('nikodemus.notebook.recovery.v1.') === 0) { const r = JSON.parse(localStorage.getItem(k)); if (!r.abandoned) return r; } } return null; });
+  ok(rec && rec.doc_id === n1.id && rec.body === TEXT + ' More words. Even more. Offline words.' && rec.pending && rec.pending.request_id,
+    'this tab\'s recovery record holds the exact text and the pending request, before the retry: ' + JSON.stringify(rec && rec.pending && rec.pending.request_id));
+  await page.unroute('**/api/notebook/documents/*');
+  const synced = await settled(12000);
+  const d3 = await serverDoc(n1.id);
+  ok(/^Saved · /.test(synced) && d3.body.endsWith(' Offline words.'), 'when the server is back the same request is retried and the store catches up: ' + JSON.stringify(synced));
+
+  // ---- a lost reply: the retry carries the same request, the store answers once
+  const before3 = d3.revision;
+  await page.route('**/api/notebook/documents/*', async route => { await route.fetch(); await route.abort(); });   // the server commits; the reply is lost
+  await page.keyboard.type(' Lost reply.', { delay: 0 });
+  await page.waitForTimeout(1600);
+  await page.unroute('**/api/notebook/documents/*');
+  const back2 = await settled(12000);
+  const d4 = await serverDoc(n1.id);
+  ok(/^Saved · /.test(back2) && d4.body.endsWith(' Lost reply.') && d4.revision === before3 + 1,
+    'a save whose reply was lost is retried with the same request id and lands once — one revision, not two: ' + JSON.stringify([before3, d4.revision]));
+
+  // ---- Continue writing, My writing, New, reopen, search -----------------
+  await page.reload(); await page.waitForTimeout(1500);
+  const card2 = await page.evaluate(() => (document.querySelector('.cont[data-kind="writing"]') || {}).innerText || '');
+  ok(/Saved on this Nikodemus/.test(card2) && /Continue writing/.test(card2) && /My writing/.test(card2), 'Home offers Continue writing and says the document is saved on this installation: ' + JSON.stringify(card2.replace(/\s+/g, ' ').slice(0, 120)));
+  await page.evaluate(() => openWorkspace('write')); await page.waitForTimeout(300);
+  await page.evaluate(() => nbOpenPanel('list')); await page.waitForTimeout(900);
+  // The store is this installation's, not this journey's: every journey that
+  // typed in the room before this one left a document here. So the claim is
+  // not "one document" but "this one first, by its title, and the panel shows
+  // exactly what the store lists" — the population is named, not assumed.
+  const list1 = await page.evaluate(() => Array.from(document.querySelectorAll('#nb-list .nb-row a b')).map(b => b.textContent));
+  const store1 = await page.evaluate(async () => { const r = await fetch('/api/notebook/documents?limit=50'); const j = await r.json(); return { titles: j.documents.map(x => x.display_title || 'Untitled'), total: j.total }; });
+  ok(list1.length >= 1 && list1[0] === d1.display_title && JSON.stringify(list1) === JSON.stringify(store1.titles),
+    'My writing lists this document first, by its title, and the panel shows exactly the documents the store lists on this installation: ' + JSON.stringify([list1[0], list1.length + ' of ' + store1.total]));
+  await page.evaluate(() => nbNew()); await page.waitForTimeout(1500);
+  const afterNew = await page.evaluate(() => ({ id: NB.id, room: document.getElementById('compose-text').value, home: document.getElementById('input-text').value }));
+  ok(afterNew.id !== n1.id && afterNew.room === '' && afterNew.home === '', 'New opens a separate empty page with its own identity');
+  const ck1 = await page.evaluate(async id => { const r = await fetch('/api/notebook/documents/' + id + '/checkpoints'); return (await r.json()).checkpoints.map(c => [c.revision, c.reason]); }, n1.id);
+  ok(ck1.some(c => c[1] === 'new'), 'and the document left behind was checkpointed as it stood: ' + JSON.stringify(ck1));
+  await page.click('#compose-text'); await page.keyboard.type(SECOND, { delay: 0 });
+  const st5 = await settled();
+  const n2 = await nbState();
+  ok(/^Saved · /.test(st5) && n2.id === afterNew.id, 'the new page saves under its own id: ' + JSON.stringify(st5));
+  await page.evaluate(() => nbOpenPanel('list')); await page.waitForTimeout(900);
+  const list2 = await page.evaluate(() => Array.from(document.querySelectorAll('#nb-list .nb-row a b')).map(b => b.textContent));
+  ok(list2[0] === SECOND && list2[1] === d1.display_title, 'My writing lists both, newest saved first: ' + JSON.stringify(list2));
+  await page.evaluate(id => nbOpen(id), n1.id); await page.waitForTimeout(1200);
+  const reopened = await page.evaluate(() => ({ id: NB.id, body: document.getElementById('compose-text').value, open: document.body.classList.contains('ws-open') }));
+  ok(reopened.id === n1.id && reopened.body === d4.body && reopened.open, 'opening the first again brings back its exact text under its own identity');
+  const found = await page.evaluate(async q => { const r = await fetch('/api/notebook/documents?q=' + encodeURIComponent(q)); return (await r.json()).documents.map(x => x.display_title); }, ('document, run ' + RUN).toUpperCase());
+  ok(found.length === 1 && found[0] === SECOND, 'search finds a document by words in its body, case aside — this run\'s second document and no other: ' + JSON.stringify(found));
+
+  // ---- a conflict keeps both versions ------------------------------------
+  const cur = await nbState();
+  const ctx2 = await browser.newContext(); await ctx2.addCookies([{ name: fs.readFileSync(path.join(DIR, 'cookie'), 'utf8').trim(), value: fs.readFileSync(path.join(DIR, 'token'), 'utf8').trim(), domain: '127.0.0.1', path: '/' }]);
+  const p2 = await ctx2.newPage(); await p2.goto(BASE + '/'); await p2.waitForTimeout(800);
+  // the id is handed in: the page has a global RUN of its own, and a name
+  // written inside evaluate() is resolved in the page, not here
+  const other = await p2.evaluate(async ({ c, rid }) => { const r = await fetch('/api/notebook/documents/' + c.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: '', title_is_manual: false, body: 'The other tab wrote this.', base_revision: c.rev, base_fingerprint: c.fp, request_id: rid, origin: 'journey' }) }); const j = await r.json(); return [r.status, j.revision, j.error || null]; }, { c: cur, rid: 'req_othertab_' + RUN });
+  ok(other[0] === 200 && other[1] === cur.rev + 1, 'another tab saved the same document from the same base first: ' + JSON.stringify(other));
+  await page.click('#compose-text');
+  await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.setSelectionRange(ta.value.length, ta.value.length); });
+  await page.keyboard.type(' Mine.', { delay: 0 }); await page.waitForTimeout(1600);
+  const conf = await page.evaluate(() => ({ status: document.getElementById('nb-status').textContent.replace(/\s+/g, ' ').trim(), conflict: !!NB.conflict }));
+  ok(conf.conflict && /^Another copy has changes/.test(conf.status) && /Review/.test(conf.status), 'this tab\'s save is refused and the room says another copy has changes, with Review: ' + JSON.stringify(conf.status));
+  const theirs1 = await serverDoc(cur.id);
+  ok(theirs1.body === 'The other tab wrote this.', 'nothing was overwritten');
+  await page.evaluate(() => nbOpenPanel('conflict')); await page.waitForTimeout(300);
+  const review = await page.evaluate(() => document.getElementById('nb-panel').textContent.replace(/\s+/g, ' '));
+  ok(/Mine — in this room now/.test(review) && /The saved version/.test(review) && /Keep mine as a new copy/.test(review) && /Open saved version/.test(review), 'the review shows both versions and the two choices');
+  await page.evaluate(() => nbKeepMineAsNew()); await page.waitForTimeout(1600);
+  const kept = await page.evaluate(() => ({ id: NB.id, body: document.getElementById('compose-text').value, status: document.getElementById('nb-status').textContent.trim() }));
+  const theirs2 = await serverDoc(cur.id);
+  const mine2 = await serverDoc(kept.id);
+  ok(kept.id !== cur.id && /^Saved · /.test(kept.status) && mine2.body === kept.body && kept.body.endsWith(' Mine.') && theirs2.body === 'The other tab wrote this.',
+    'Keep mine as a new copy makes my text a durable document of its own and leaves the other copy intact');
+  await ctx2.close();
+
+  // ---- Cmd-S saves the document, not the page ----------------------------
+  await page.click('#compose-text');
+  await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.setSelectionRange(ta.value.length, ta.value.length); });
+  await page.keyboard.type(' S.', { delay: 0 });
+  await page.keyboard.press('ControlOrMeta+s'); await page.waitForTimeout(900);
+  const cs = await status();
+  const ck2 = await page.evaluate(async id => { const r = await fetch('/api/notebook/documents/' + id + '/checkpoints'); return (await r.json()).checkpoints.map(c => c.reason); }, kept.id);
+  ok(/^Saved · /.test(cs) && ck2.includes('save'), 'Cmd-S flushes the save at once and takes an explicit checkpoint: ' + JSON.stringify([cs, ck2]));
+
+  // ---- the one-time migration of the session draft, once across two tabs ---
+  const ctx3 = await browser.newContext(); await ctx3.addCookies([{ name: fs.readFileSync(path.join(DIR, 'cookie'), 'utf8').trim(), value: fs.readFileSync(path.join(DIR, 'token'), 'utf8').trim(), domain: '127.0.0.1', path: '/' }]);
+  await ctx3.addInitScript(() => { if (!localStorage.getItem('nikodemus.notebook.migrated.v1') && !localStorage.getItem('nikodemus.notebook.doc.v1') && !localStorage.getItem('wordicon.session.v1'))
+    localStorage.setItem('wordicon.session.v1', JSON.stringify({ input: 'Old words from before the notebook existed.', job: '', shown: '', label: '' })); });
+  const t1 = await ctx3.newPage(); const t2 = await ctx3.newPage();
+  await Promise.all([t1.goto(BASE + '/'), t2.goto(BASE + '/')]); await t1.waitForTimeout(2000);
+  const m1 = await t1.evaluate(() => ({ id: NB.id, marker: JSON.parse(localStorage.getItem('nikodemus.notebook.migrated.v1') || 'null'), session: JSON.parse(localStorage.getItem('wordicon.session.v1') || '{}').input }));
+  const m2 = await t2.evaluate(() => NB.id);
+  const migrated = await t1.evaluate(async () => { const r = await fetch('/api/notebook/documents?q=' + encodeURIComponent('before the notebook existed')); return (await r.json()).documents; });
+  ok(m1.id && m1.id === m2 && migrated.length === 1 && migrated[0].doc_id === m1.id && migrated[0].origin === 'migration',
+    'the old session draft became one document, once, with the same id from both tabs: ' + JSON.stringify([m1.id, m2, migrated.length]));
+  ok(m1.marker && m1.marker.snapshot === 'Old words from before the notebook existed.' && m1.session === 'Old words from before the notebook existed.',
+    'the migration marker keeps the original snapshot and the old session key is not deleted');
+  const mdoc = await t1.evaluate(async id => { const r = await fetch('/api/notebook/documents/' + id); return await r.json(); }, m1.id);
+  ok(mdoc.body === 'Old words from before the notebook existed.', 'and the migrated document holds the exact words');
+  await ctx3.close();
 
   // ---- Escape: two presses from inside the writing, one from the bar ------
   await page.click('#compose-text');

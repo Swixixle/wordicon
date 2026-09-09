@@ -83,6 +83,7 @@ import federation  # noqa: E402  (connected instruments — block 107; Open Case
 import carry  # noqa: E402  (Carry Back — block 123; the bridge from a workup to the writing room. No model, no network)
 import map_focus  # noqa: E402  (Map · focus — one place's ring, read-only. No model, no network, no write)
 import moira  # noqa: E402  (Professor Moira — block 125; three readers beside the draft, each on its own call)
+import notebook as nbk  # noqa: E402  (the writer's notebook — stage B; the document store the room was missing. No model, no network)
 import inquiry  # noqa: E402  (the Inquiry — block 111 phase 1; a question kept, branched and returnable. Zero model calls)
 from wordicon_corpus.objects import Judgment  # noqa: E402
 
@@ -1328,7 +1329,8 @@ def api_moira_start():
     try:
         reading = moira.start_reading(str(text or ""), str(data.get("scope") or "draft"),
                                       previous_reading_id=str(data.get("previous_reading_id") or ""),
-                                      readers=readers, models=moira_models())
+                                      readers=readers, models=moira_models(),
+                                      document=data.get("document"))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     _moira_dispatch(reading)
@@ -1466,6 +1468,107 @@ def api_moira_phase0():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"ok": True, "ruling": row, "faculty": moira.faculty()})
+
+
+# ---- The writer's notebook (stage B) -----------------------------------------
+#
+# The document store behind the writing room. Every route is under the
+# pairing gate; every mutating request holds the corpus-writers lock for its
+# whole life and marks the corpus dirty at the gate, like every other write,
+# so a Vault staging copy never catches a half-written notebook. The store
+# itself (scripts/notebook.py) does one short transaction per save. Nothing
+# here calls a model, and opening a document never starts a run.
+
+def _nbk_error(e: "nbk.NotebookError"):
+    body = {"error": str(e)}
+    if e.head is not None:
+        body["head"] = e.head
+    return jsonify(body), e.status
+
+
+@app.route("/api/notebook/documents")
+def api_notebook_list():
+    try:
+        return jsonify(nbk.list_documents(q=request.args.get("q", ""), cursor=request.args.get("cursor", ""),
+                                          limit=int(request.args.get("limit", "50") or 50)))
+    except nbk.NotebookError as e:
+        return _nbk_error(e)
+    except ValueError:
+        return jsonify({"error": "limit must be a number"}), 400
+
+
+@app.route("/api/notebook/summary")
+def api_notebook_summary():
+    return jsonify(nbk.summary())
+
+
+@app.route("/api/notebook/documents/<doc_id>")
+def api_notebook_get(doc_id):
+    try:
+        d = nbk.get(doc_id)
+    except nbk.NotebookError as e:
+        return _nbk_error(e)
+    if d is None:
+        return jsonify({"error": "no document with that id"}), 404
+    return jsonify(d)
+
+
+@app.route("/api/notebook/documents/<doc_id>", methods=["PUT"])
+def api_notebook_put(doc_id):
+    """One save. The browser names the revision and fingerprint its copy was
+    based on and the request id it minted; the store answers with the
+    committed revision, or 409 with the head it refused to overwrite."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "send a JSON object"}), 400
+    base_rev = data.get("base_revision", 0)
+    if isinstance(base_rev, bool) or not isinstance(base_rev, int):
+        return jsonify({"error": "base_revision must be an integer"}), 400
+    reason = data.get("checkpoint_reason")
+    if reason is not None and not isinstance(reason, str):
+        return jsonify({"error": "checkpoint_reason must be text"}), 400
+    try:
+        ack = nbk.save(doc_id, title=data.get("title", ""), title_is_manual=bool(data.get("title_is_manual", False)),
+                       body=data.get("body", ""), base_revision=base_rev,
+                       base_fingerprint=data.get("base_fingerprint", "") or "", request_id=data.get("request_id", ""),
+                       checkpoint_reason=reason, origin=str(data.get("origin") or "")[:100])
+    except nbk.NotebookError as e:
+        return _nbk_error(e)
+    return jsonify(ack), (201 if ack.get("created") else 200)
+
+
+@app.route("/api/notebook/documents/<doc_id>/checkpoints")
+def api_notebook_checkpoints(doc_id):
+    try:
+        return jsonify({"checkpoints": nbk.list_checkpoints(doc_id),
+                        "population": "every checkpoint of this document, newest revision first"})
+    except nbk.NotebookError as e:
+        return _nbk_error(e)
+
+
+@app.route("/api/notebook/documents/<doc_id>/checkpoints", methods=["POST"])
+def api_notebook_checkpoint(doc_id):
+    data = request.get_json(silent=True) or {}
+    rev = data.get("revision")
+    if isinstance(rev, bool) or not isinstance(rev, int):
+        return jsonify({"error": "revision must be an integer"}), 400
+    try:
+        out = nbk.checkpoint(doc_id, revision=rev, fingerprint_=str(data.get("fingerprint") or ""),
+                             reason=str(data.get("reason") or ""))
+    except nbk.NotebookError as e:
+        return _nbk_error(e)
+    return jsonify(out), (201 if out.get("created") else 200)
+
+
+@app.route("/api/notebook/documents/<doc_id>/checkpoints/<checkpoint_id>")
+def api_notebook_checkpoint_get(doc_id, checkpoint_id):
+    try:
+        c = nbk.get_checkpoint(doc_id, checkpoint_id)
+    except nbk.NotebookError as e:
+        return _nbk_error(e)
+    if c is None:
+        return jsonify({"error": "no such checkpoint"}), 404
+    return jsonify(c)
 
 
 # ---- Carry Back (block 123) -------------------------------------------------
