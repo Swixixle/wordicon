@@ -138,8 +138,10 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
     await page.keyboard.press('End'); await page.keyboard.type(', and the tree has a debt');
     const V1 = await page.evaluate(() => document.getElementById('compose-text').value);
     await page.keyboard.type(' — undo me');
+    // ControlOrMeta: undo is Meta+z on a Mac, and Control+z there does nothing
+    // — six checks failed on the owner's Mac on that alone while CI stayed green
     let undone = false;
-    for (let i = 0; i < 20; i++) { await page.keyboard.press('Control+z'); await page.waitForTimeout(40); if ((await page.evaluate(() => document.getElementById('compose-text').value)) === V1) { undone = true; break; } }
+    for (let i = 0; i < 20; i++) { await page.keyboard.press('ControlOrMeta+z'); await page.waitForTimeout(40); if ((await page.evaluate(() => document.getElementById('compose-text').value)) === V1) { undone = true; break; } }
     ok(undone, 'undo works inside the room (typed text undone back to ' + JSON.stringify(V1) + ')');
     await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.setSelectionRange(9, 9); ta.scrollTop = 0; });
     const same = async (label) => {
@@ -155,7 +157,7 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
     // undo history survives the round trip: more undo removes what was typed before it
     await page.evaluate(() => openCompose()); await page.waitForTimeout(200); await page.focus('#compose-text');
     let shrank = false;
-    for (let i = 0; i < 40; i++) { await page.keyboard.press('Control+z'); await page.waitForTimeout(30); const v = await page.evaluate(() => document.getElementById('compose-text').value); if (v.length < V1.length) { shrank = true; break; } }
+    for (let i = 0; i < 40; i++) { await page.keyboard.press('ControlOrMeta+z'); await page.waitForTimeout(30); const v = await page.evaluate(() => document.getElementById('compose-text').value); if (v.length < V1.length) { shrank = true; break; } }
     ok(shrank, 'undo history survived the split/swap/full-page round trip');
     await page.evaluate(() => { document.getElementById('compose-text').value = ''; }); await page.fill('#compose-text', V1); await page.evaluate(() => closeWorkspace());
     // Bench and back: the draft comes back
