@@ -161,6 +161,18 @@ function deepResult() {
   ok(/3 components found · about 14 model calls, still an estimate/.test(running.line),
     'the estimate becomes an exact count the moment the split comes back, and is still called an '
     + 'estimate: ' + JSON.stringify(running.line));
+  if (!/3 components found/.test(running.line)) {
+    // The line did not move. Say what the page was doing rather than leaving
+    // the next checks to fail in silence: how many polls the route answered,
+    // the page errors so far, and the room's own idea of the run.
+    const stall = await page.evaluate(() => ({
+      run: (typeof RUN !== 'undefined') ? RUN : null, watching: (typeof WATCHING !== 'undefined') ? WATCHING : null,
+      timer: (typeof activePollTimer !== 'undefined') ? !!activePollTimer : null,
+      visibility: document.visibilityState,
+      result: (document.getElementById('result-area') || {}).innerText || '' }));
+    console.log('note deep: the running line did not move — polls answered by the route: ' + polls
+      + ' · page errors so far: ' + JSON.stringify(errs) + ' · page state: ' + JSON.stringify(stall).slice(0, 600));
+  }
   ok(running.pointer === 'none', 'the running line cannot be clicked and is never in the way');
   ok(/ws-write/.test(running.mode) && !/ws-split/.test(running.mode),
     'the room has NOT split while the run is still going: ' + running.mode);
@@ -198,14 +210,14 @@ function deepResult() {
     return { cls: b.className, border: cs.borderTopStyle, cursor: cs.cursor,
              status: (b.querySelector('.dest-status') || {}).textContent || '' };
   });
-  ok(exp.disabled && exp.aria === 'true' && /not built —/.test(exp.text),
+  ok(exp && exp.disabled && exp.aria === 'true' && /not built —/.test(exp.text),
     'and it is a door with its price on it, not a button that fires nine calls');
   ok(doorLook && /\bunbuilt\b/.test(doorLook.cls) && doorLook.border === 'dashed'
      && doorLook.cursor === 'not-allowed' && /sprout/.test(doorLook.status),
     'it renders as this page\'s unbuilt door — dashed, inert, naming its own reason — not as a '
     + 'greyed-out button that reads as broken: ' + JSON.stringify(doorLook));
   const afterExp = posts.length;
-  await page.evaluate(() => { const b = document.querySelector('#deep-expansion button'); b.click(); });
+  await page.evaluate(() => { const b = document.querySelector('#deep-expansion button'); if (b) b.click(); });
   await page.waitForTimeout(400);
   ok(posts.length === afterExp, 'clicking it runs nothing: ' + JSON.stringify(posts.slice(afterExp)));
 

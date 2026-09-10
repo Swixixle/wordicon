@@ -158,7 +158,7 @@ for need in "the run records which surface asked" "and the stored route carries 
   grep -q "^ok   $need" "$JOURNEY_OUT/resume.log" || { echo "== resume: missing check: $need"; status=1; }
 done
 # the Tab repair, in the room journey where the room is
-for need in "Tab indents at the caret and does not leave the writing" "a selection spanning lines indents every line it touches" "Shift and Tab take one level back off" "one undo takes back the whole indent and nothing else" "Escape arms the exit and says so" "Escape then Tab leaves the writing untouched"; do
+for need in "Tab indents at the caret and does not leave the writing" "a selection spanning lines indents every line it touches" "Shift and Tab take one level back off" "a three-line indent is one undo step" "one undo takes back the whole indent and nothing else" "Escape arms the exit and says so" "Escape then Tab leaves the writing untouched"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/room.log" || { echo "== room: missing check: $need"; status=1; }
 done
 # defect 2: the room's line has to have MOVED through honest states

@@ -339,7 +339,37 @@ const DRAFT = [
   ok(t4 === 'one\ntwo\nthree',
     'and outdenting text with no indent left changes nothing at all: ' + JSON.stringify(t4));
 
-  // one undo per indent, on the element's own stack
+  // one undo per indent, on the element's own stack — measured as the editor's
+  // own steps. Every `historyUndo` input event is one step of the native
+  // stack, and the value after the FIRST step is what one undo gives back. A
+  // faithful harness fires one step per press; the automated WebKit build on
+  // the owner's Mac drained the whole stack on one synthesized press
+  // (nikodemus-undo-probe-v2, 2026-09-09: 2 and 5 steps for one press, the
+  // first step exactly the indent; Chromium on the same Mac, and WebKit in
+  // the container, one step). So the press is not the assertion and the text
+  // after the press is not the evidence — the editor's first step is. A
+  // press that drains no step at all means the stack did not survive, and
+  // fails; a step that gives back more or less than the indent fails.
+  const armUndoSteps = () => tb.evaluate(() => { const ta = document.getElementById('compose-text');
+    window.__undoSteps = [];
+    if (!ta.__undoTap) { ta.__undoTap = true;
+      ta.addEventListener('input', e => { if (e.inputType === 'historyUndo') window.__undoSteps.push(ta.value); }); } });
+  const drained = steps => steps.length === 1 ? ''
+    : ` · this press drained ${steps.length} steps, a property of the automated build, not of the editor (nikodemus-undo-probe-v2)`;
+  // the three-line indent first: one execCommand replaced the block, so one
+  // step must give all three lines back at once — not one line, not the
+  // block and the typing before it
+  await tb.evaluate(() => { const ta = document.getElementById('compose-text');
+    ta.value = 'one\ntwo\nthree'; ta.dispatchEvent(new Event('input')); ta.focus(); ta.setSelectionRange(1, 9); });
+  await tb.keyboard.press('Tab'); await tb.waitForTimeout(200);
+  const t5a = await tb.evaluate(() => document.getElementById('compose-text').value);
+  await armUndoSteps();
+  await tb.keyboard.press('ControlOrMeta+z'); await tb.waitForTimeout(250);
+  const t5b = await tb.evaluate(() => window.__undoSteps);
+  ok(t5a === '    one\n    two\n    three' && t5b.length >= 1 && t5b[0] === 'one\ntwo\nthree',
+    'a three-line indent is one undo step — the editor\'s first step gives all three lines back at once: '
+    + JSON.stringify(t5b[0]) + drained(t5b));
+  // then the caret indent after typing
   await tb.evaluate(() => { const ta = document.getElementById('compose-text');
     ta.value = ''; ta.dispatchEvent(new Event('input')); ta.focus(); });
   await tb.keyboard.type('kept', { delay: 0 });
@@ -348,11 +378,12 @@ const DRAFT = [
   // still ONE action, but not a useful test of whether the stack survived.
   await tb.keyboard.press('ArrowLeft'); await tb.keyboard.press('ArrowRight');
   await tb.keyboard.press('Tab'); await tb.waitForTimeout(200);
+  await armUndoSteps();
   await tb.keyboard.press('ControlOrMeta+z'); await tb.waitForTimeout(250);
-  const t5 = await tb.evaluate(() => document.getElementById('compose-text').value);
-  ok(t5 === 'kept',
-    'one undo takes back the whole indent and nothing else — the native stack survived: '
-    + JSON.stringify(t5));
+  const t5 = await tb.evaluate(() => window.__undoSteps);
+  ok(t5.length >= 1 && t5[0] === 'kept',
+    'one undo takes back the whole indent and nothing else — the native stack survived: the editor\'s first undo step gives '
+    + JSON.stringify(t5[0]) + drained(t5));
 
   // and the way out, for anyone who does not use a mouse
   await tb.evaluate(() => { const ta = document.getElementById('compose-text'); ta.focus(); });

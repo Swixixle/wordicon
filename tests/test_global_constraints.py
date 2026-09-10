@@ -19969,6 +19969,7 @@ console.log(out.join('\\n'));
         for _need in ("Tab indents at the caret and does not leave the writing",
                       "a selection spanning lines indents every line it touches",
                       "Shift and Tab take one level back off",
+                      "a three-line indent is one undo step",
                       "one undo takes back the whole indent and nothing else",
                       "Escape then Tab leaves the writing untouched"):
             if _need not in _run109:
