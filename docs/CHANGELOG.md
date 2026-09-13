@@ -1,5 +1,54 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.29.0 — Run identity: no run overwrites another
+
+His order of 13 September, first of four: "Fix the saved-run overwrite
+risk first. Use a shared, collision-resistant run-ID mechanism across the
+affected lanes… Creating a new run must never silently overwrite another
+run. Preserve existing IDs and records."
+
+Every lane — forge/riff/crack/play, revise, sprout, recheck, etymon,
+archetype, refract, the map's road proposals and route analyses, the
+library's support question — minted its id from the input and the clock's
+second, so a second run on the same input inside one second took the
+first's id and overwrote its receipt and snapshot in silence. One mint now,
+`mint_trace_id`: the input, the precise clock and sixteen random bytes,
+checked against the results and receipts stores and against the ids this
+process has already handed out, re-minted until unused. And the writers
+create exclusively: `write_run_snapshot` and `persist_receipt` raise
+`RunRecordCollision` on an existing file and leave it as it was — a
+RuntimeError on purpose, so the map and library writers that tolerate a
+disk error cannot swallow it. Job ids are minted the same way against the
+live job table. The refract lane's interim mint from v1.27.0 is folded into
+the shared one. The shape of an id (prefix + ten hex) is unchanged; nothing
+in the store is renamed or migrated.
+
+Proven on the real lanes with the clock frozen (`_check_run_identity`):
+two sprouts on identical input at the same clock value get two ids and two
+records, each reopening through `/api/result`; eight etymon runs on one
+word started at the same instant on eight threads get eight ids and eight
+snapshots; an id the process already handed out, or one the store already
+holds, is never handed out again; a snapshot or receipt written over an
+existing one is refused and the existing file is byte-identical afterwards;
+a record under an old-style id reopens untouched. The gate-0 order pin now
+reads the exclusive writer.
+
+## v1.28.1 — An unnamed pass makes no box on the map
+
+Found by the full journey run on the tree above, not by source review.
+The map's overworld builder synthesizes a refract run's seed box from the
+snapshot's title; a pass from a described meaning or a selection has no
+title, so it synthesized a box with an empty label — and the Wayfinder's
+loose match (`startsWith`) read an empty name as a prefix of every place,
+so "Cassandra" became ambiguous and no route could be plotted. The
+builder now makes no seed box and no synthesized road for a nameless pass
+(the same rule the writer already applied to its recorded roads; the
+translations still appear as the run's items), and the Wayfinder ignores
+a box with no name. Pinned in `_check_related_words`. The related
+fixture's legacy record moved off "Lantern Debt", the map fixture's own
+title-keyed place, which its roads had been landing on; the room journey's
+view checks follow the centred default measure.
+
 ## v1.28.0 — Stage C: the room's colours, Download in words, the measure
 
 The rest of the notebook brief's quiet surface, on his go-ahead of 13
@@ -47,22 +96,6 @@ fallback, forced colours, the Download words, the Text download, the body
 as it stands); the views pin amended for the third measure. The notebook
 journey adds seventeen checks, named in run.sh. Constitution: the room
 clause amended. Surface map.
-
-## v1.28.1 — An unnamed pass makes no box on the map
-
-Found by the full journey run on the tree above, not by source review.
-The map's overworld builder synthesizes a refract run's seed box from the
-snapshot's title; a pass from a described meaning or a selection has no
-title, so it synthesized a box with an empty label — and the Wayfinder's
-loose match (`startsWith`) read an empty name as a prefix of every place,
-so "Cassandra" became ambiguous and no route could be plotted. The
-builder now makes no seed box and no synthesized road for a nameless pass
-(the same rule the writer already applied to its recorded roads; the
-translations still appear as the run's items), and the Wayfinder ignores
-a box with no name. Pinned in `_check_related_words`. The related
-fixture's legacy record moved off "Lantern Debt", the map fixture's own
-title-keyed place, which its roads had been landing on; the room journey's
-view checks follow the centred default measure.
 
 ## v1.27.0 — Find related words
 

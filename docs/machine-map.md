@@ -107,9 +107,15 @@ before this date has none), `source.entry` (concept / description / selection),
 `source.passage` for a selection, `source.only_languages` for a follow-up.
 `REFRACT_REQUIRED` is Spanish, Latin and Greek, under any period name
 (`canonical_language`); a pass with no title records no road, because there is no box
-to tie one to; its trace id is minted from the precise clock and the pass's shape, not
-the second. `GET /api/related/saved` lists an idea's saved comparisons — by id
+to tie one to. `GET /api/related/saved` lists an idea's saved comparisons — by id
 (`recorded`) or by title (`derived`) — reads only.
+Run identity (2026-09-13): every lane mints its id through `mint_trace_id` — the input,
+the precise clock and sixteen random bytes, checked against the results and receipts
+stores and against the ids this process has handed out — and writes its snapshot and
+receipt through `write_run_snapshot` / `persist_receipt`, which create exclusively and
+raise `RunRecordCollision` (a RuntimeError, so the writers that tolerate a disk error
+cannot swallow it) rather than overwrite. Job ids are minted the same way against the
+live job table. The shape of an id is unchanged and nothing in the store is renamed.
 `scripts/map_focus.py` is Map · focus: the served projection behind one place's ring —
 exact-identity issuer derivation (`edge_specs_from_snapshot`, `SnapshotIndex`,
 `derive_issuer`), provenance resolution, the ring with its burden, facets, groups and

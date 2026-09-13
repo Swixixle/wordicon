@@ -5929,11 +5929,74 @@ def judgments_for_concept(concept_id: str) -> "list[dict]":
     return out
 
 
-def persist_receipt(receipt: dict) -> Path:
-    RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
-    path = RECEIPTS_DIR / f"{receipt['receipt_id']}.json"
-    path.write_text(json.dumps(receipt, indent=2))
+# ---- run identity (2026-09-13, the owner's order: creating a run must never
+# silently overwrite another) --------------------------------------------
+#
+# Every lane used to mint its id from the input and the clock's SECOND, so a
+# second run on the same input inside one second shared the first's id and
+# its receipt and snapshot were overwritten in silence — seen in the offline
+# smoke test on the refract lane, and waited out by hand in the map fixture.
+# One mint now, for every lane: the input, the precise clock and sixteen
+# random bytes, checked against the results and receipts stores and against
+# the ids this process has already handed out, re-minted until unused. And
+# the writers create exclusively: a record that would land on an existing
+# file raises RunRecordCollision instead of replacing it. The shape of an id
+# (prefix + 10 hex) is unchanged, so every existing id and record stays what
+# it was; nothing is migrated.
+class RunRecordCollision(RuntimeError):
+    """A run's record would have overwritten another run's. Not an OSError on
+    purpose: the writers that tolerate a disk error must not swallow this."""
+
+
+_MINT_LOCK = threading.Lock()
+_MINTED: "set[str]" = set()
+
+
+def run_record_exists(trace_id: str) -> bool:
+    """Whether a run by this id already has a snapshot or a receipt in the
+    store this process is pointed at."""
+    return ((RESULTS_DIR / f"{trace_id}.json").exists()
+            or (RECEIPTS_DIR / f"receipt_{trace_id}.json").exists())
+
+
+def mint_trace_id(input_text: str, prefix: str = "trace_cli_") -> str:
+    """An id no run in this store and no run started by this process holds.
+    Two runs on identical input inside the same clock tick, or started at the
+    same instant on two threads, get different ids; a value already used is
+    re-minted."""
+    with _MINT_LOCK:
+        for _ in range(64):
+            tid = prefix + hashlib.sha256(
+                (input_text + _now_precise() + os.urandom(16).hex()).encode()).hexdigest()[:10]
+            if tid in _MINTED or run_record_exists(tid):
+                continue
+            _MINTED.add(tid)
+            return tid
+    raise RuntimeError("could not mint an unused run id in 64 attempts — the store is not answering as a store")
+
+
+def _write_exclusive(path: Path, text: str, what: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(path, "x", encoding="utf-8") as f:
+            f.write(text)
+    except FileExistsError:
+        raise RunRecordCollision(
+            f"{what} {path.name} already exists in the store; refusing to overwrite it — "
+            "this run keeps its result in memory and the record that was there is untouched") from None
     return path
+
+
+def write_run_snapshot(trace_id: str, data: dict, **dump_kw) -> Path:
+    """The first and only write of a run's snapshot, created exclusively. A
+    snapshot is never rewritten through here; a path that already exists is
+    another run's record and raises."""
+    return _write_exclusive(RESULTS_DIR / f"{trace_id}.json", json.dumps(data, **dump_kw), "the snapshot")
+
+
+def persist_receipt(receipt: dict) -> Path:
+    return _write_exclusive(RECEIPTS_DIR / f"{receipt['receipt_id']}.json",
+                            json.dumps(receipt, indent=2), "the receipt")
 
 
 def composite_completion(groups: "list[dict]") -> "tuple[str, int]":
@@ -6005,7 +6068,7 @@ def record_composite_run(kind: str, result: dict, input_text: str, gateway=None,
         schema_loader.validate("receipt.schema.json", receipt)
         persist_receipt(receipt)
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
+        write_run_snapshot(trace_id, {
             "trace_id": trace_id, "receipt_id": receipt["receipt_id"], "mode": kind,
             "input_text": input_text, "created_at": receipt["created_at"],
             "gesture": composite.get("gesture", ""), "attack": result.get("attack") or {},
@@ -6025,7 +6088,7 @@ def record_composite_run(kind: str, result: dict, input_text: str, gateway=None,
             # ledger never sees at all.
             "attempts": list(attempts or []),
             "attempt_summary": attempt_summary(attempts or []),
-        }, ensure_ascii=False))
+        }, ensure_ascii=False)
         out["recorded"] = True
     except Exception as e:  # noqa: BLE001 — reported in the result, never raised into the job
         out["recorded"] = False
@@ -6155,7 +6218,7 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
               f"({named['definition']})\nContinuing anyway to generate alternatives — "
               f"but this is the kind of hit that should usually end the operation here.\n")
 
-    trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
+    trace_id = mint_trace_id(input_text)
     _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
     _parse_mark = parse_notes_mark()   # repaired parses, drained into the receipt's warnings
     # block 119: the HTTP attempts this run makes. A NESTED forge (one
@@ -6446,7 +6509,7 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
     # Friction text of past runs is unrecoverable and history can't be
     # reopened. Local file on your machine, same as everything else.
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
+    write_run_snapshot(trace_id, {
         "trace_id": trace_id, "mode": mode, "input_text": input_text,
         "created_at": _now(),
         "candidates": [{"title": r["bff"]["title"], "bff": r["bff"],
@@ -6454,7 +6517,7 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
         "summary": summary_line(private_receipt, results),
         "metrics": metrics.as_dict(),
         "parse_notes": list(private_receipt.get("warnings") or []),
-    }, indent=2))
+    }, indent=2)
 
     # Write order (gate 0): the roads last, after the receipt and the
     # snapshot they cite exist. Map layer: each candidate is a node the map
@@ -7741,7 +7804,7 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
         input_text = f"wordify of '{original.get('title', '')}': {frozen_flesh['definition']}"
     else:
         input_text = f"revise of '{original.get('title', '')}': {frozen_flesh['definition']}"
-    trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
+    trace_id = mint_trace_id(input_text)
     _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
     _parse_mark = parse_notes_mark()
 
@@ -7895,7 +7958,7 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
         r["bff"]["receipt_id"] = private_receipt["receipt_id"]
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
+    write_run_snapshot(trace_id, {
         "trace_id": trace_id, "mode": "revise", "input_text": input_text,
         "created_at": _now(),
         # The original the roads leave from, by the identity the roads use
@@ -7906,7 +7969,7 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
         "candidates": [{"title": r["bff"]["title"], "bff": r["bff"],
                          "claims_detail": r["claims_detail"]} for r in results],
         "summary": summary_line(private_receipt, results),
-    }, indent=2))
+    }, indent=2)
 
     # Write order (gate 0): roads last, citing a receipt that now exists.
     for _write_road in deferred_edges:
@@ -8186,7 +8249,7 @@ def run_sprout(candidate: dict, gateway: Gateway,
     seed = load_seed_corpus()
     title = candidate.get("title", "")
     input_text = f"sprout of '{title}': {candidate.get('definition', '')[:160]}"
-    trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
+    trace_id = mint_trace_id(input_text)
     _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
 
     # The trail: rabbitholes are chains, and the chain is the point — the
@@ -8282,7 +8345,7 @@ def run_sprout(candidate: dict, gateway: Gateway,
                + (_acquisition_phrase(review_citations) if review_citations else ""))
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
+    write_run_snapshot(trace_id, {
         "trace_id": trace_id, "mode": "sprout", "sprout_rev": SPROUT_REV,
         "input_text": input_text,
         "created_at": _now(), "source": {
@@ -8311,7 +8374,7 @@ def run_sprout(candidate: dict, gateway: Gateway,
             # its own usage numbers, never ours, and "unknown" where it
             # reported nothing.
             "acquisition_usage": getattr(gateway, "last_acquisition", None),
-    }, indent=2))
+    }, indent=2)
 
     # Write order (Map Focus, gate 0): the roads come last, so every
     # citation they carry resolves the moment it is written. A failure
@@ -9356,7 +9419,7 @@ def run_recheck(candidate: dict, gateway: Gateway,
     title = candidate.get("title", "")
     definition = candidate.get("definition", "")
     input_text = f"recheck of '{title}': {definition[:160]}"
-    trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
+    trace_id = mint_trace_id(input_text)
     progress("friction", f"The critique on your definition of {title!r}…")
     print(f"[{gateway.name}] rechecking {title!r} against your own definition...")
 
@@ -9389,11 +9452,11 @@ def run_recheck(candidate: dict, gateway: Gateway,
                f"your lexicon" if near else "The critique on your own definition")
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
+    write_run_snapshot(trace_id, {
         "trace_id": trace_id, "mode": "recheck", "input_text": input_text,
         "created_at": _now(), "candidates": [{"bff": bff, "claims_detail": []}],
         "near_existing": [c.get("name", "") for c in near], "summary": summary,
-    }, indent=2))
+    }, indent=2)
 
     return {"trace_id": trace_id, "mode": "recheck", "summary": summary,
             "candidates": [{"bff": bff, "claims_detail": []}],
@@ -9578,7 +9641,7 @@ def run_etymon(word: str, gateway: Gateway,
 
     word = (word or "").strip()
     input_text = f"etymon of '{word}'"
-    trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
+    trace_id = mint_trace_id(input_text)
     progress("etymon", f"Taking {word!r} apart…")
     print(f"[{gateway.name}] taking the existing word {word!r} apart...")
     parsed = _extract_json(gateway.complete(build_etymon_prompt(word)))
@@ -9618,12 +9681,12 @@ def run_etymon(word: str, gateway: Gateway,
         print(f"  [{p['status']}] {p['label']}: {p['text'][:70]}")
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
+    write_run_snapshot(trace_id, {
         "trace_id": trace_id, "mode": "etymon", "input_text": input_text,
         "created_at": _now(), "word": word, "is_established": True,
         "sense_now": str(parsed.get("sense_now") or "")[:600],
         "parts": parts, "citations": citations, "summary": summary,
-    }, indent=2))
+    }, indent=2)
 
     return {"trace_id": trace_id, "mode": "etymon", "word": word,
             "is_established": True,
@@ -9639,7 +9702,7 @@ def run_archetype(candidate: dict, gateway: Gateway,
 
     title = candidate.get("title", "")
     input_text = f"archetype of '{title}': {candidate.get('definition', '')[:160]}"
-    trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
+    trace_id = mint_trace_id(input_text)
     progress("archetype", f"Building the figure behind {title!r}…")
     print(f"[{gateway.name}] building an archetype for {title!r}...")
 
@@ -9676,14 +9739,14 @@ def run_archetype(candidate: dict, gateway: Gateway,
         print(f"  EXEMPLARS: {f}")
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
+    write_run_snapshot(trace_id, {
         "trace_id": trace_id, "mode": "archetype", "input_text": input_text,
         "created_at": _now(),
         "source": {**{k: candidate.get(k, "") for k in ("title", "definition", "plain_gloss")},
                    "concept_id": candidate.get("concept_id", "") or ""},   # the identity the roads use (Map Focus)
         "archetype": arch, "near_existing": [c.get("name", "") for c in near],
         "summary": summary,
-    }, indent=2))
+    }, indent=2)
 
     # Write order (gate 0): the road last, citing the snapshot that now
     # exists. An archetype is a claim ABOUT a concept, not a step in its
@@ -9764,12 +9827,7 @@ def run_refract(candidate: dict, gateway: Gateway,
         input_text = f"refract of '{title}': {meaning[:160]}"
     else:
         input_text = f"related words for: {meaning[:160]}"
-    # Minted from the precise clock and the pass's shape, not the second:
-    # a follow-up on the same word inside the same second as the full pass
-    # would otherwise share its id and overwrite its snapshot (seen in the
-    # offline smoke test; the other lanes still mint by the second).
-    trace_id = "trace_cli_" + hashlib.sha256(
-        (input_text + _now_precise() + json.dumps(only_languages or []) + entry).encode()).hexdigest()[:10]
+    trace_id = mint_trace_id(input_text)
     _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
     _parse_mark = parse_notes_mark()
 
@@ -9945,7 +10003,7 @@ def run_refract(candidate: dict, gateway: Gateway,
             # reported nothing.
             "acquisition_usage": getattr(gateway, "last_acquisition", None),
     }
-    (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps(snapshot, indent=2))
+    write_run_snapshot(trace_id, snapshot, indent=2)
 
     # Write order (gate 0): roads last, citing a receipt that now exists.
     # Edge per refraction, verdict on the relationship: a real Chinese
@@ -11576,19 +11634,18 @@ def run_suggest_roads(from_label: str, to_label: str, from_def: str,
     parsed = _extract_json(raw)
     checked = check_road_candidates(parsed, label_to_key, kind)
     input_text = f"{kind} roads: {from_label} → {to_label}"
-    trace_id = "trace_map_" + hashlib.sha256(
-        (input_text + _now()).encode()).hexdigest()[:10]
+    trace_id = mint_trace_id(input_text, "trace_map_")
     # The proposal run is persisted like any other run: a ratified road
     # will point back at this snapshot, so declaration can never erase a
     # road's origin — and the untouched raw output rides in it.
     try:
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
+        write_run_snapshot(trace_id, {
             "trace_id": trace_id, "mode": "map_roads", "input_text": input_text,
             "created_at": _now(), "kind": kind,
             "from": from_label, "to": to_label,
             "candidates": checked["candidates"], "findings": checked["findings"],
-            "raw_response": raw}, indent=2))
+            "raw_response": raw}, indent=2)
     except OSError:
         pass
     log_wayfinder({"type": "suggest", "from": from_label, "to": to_label,
@@ -11754,16 +11811,15 @@ def run_route_analysis(stops: list, roads: list, strategy: str,
     checked = check_route_analysis(parsed, {r["id"] for r in roads})
     input_text = (f"route analysis ({strategy}): "
                   + " → ".join(s["label"] for s in stops)[:140])
-    trace_id = "trace_map_" + hashlib.sha256(
-        (input_text + _now()).encode()).hexdigest()[:10]
+    trace_id = mint_trace_id(input_text, "trace_map_")
     try:
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
+        write_run_snapshot(trace_id, {
             "trace_id": trace_id, "mode": "route_analysis",
             "analysis_rev": ANALYSIS_REV, "input_text": input_text,
             "created_at": _now(), "strategy": strategy,
             "stops": stops, "roads": roads, **checked,
-            "raw_response": raw}, indent=2))
+            "raw_response": raw}, indent=2)
     except OSError:
         pass
     log_wayfinder({"type": "analyze", "strategy": strategy,
@@ -11955,11 +12011,10 @@ def run_support_question(claim: str, span: str, span_ref: dict,
     checked = check_support(parsed, set(span_paths),
                              {c["path"] for c in context_sentences})
     input_text = f"support question: {claim[:100]}"
-    trace_id = "trace_lib_" + hashlib.sha256(
-        (input_text + _now()).encode()).hexdigest()[:10]
+    trace_id = mint_trace_id(input_text, "trace_lib_")
     try:
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
+        write_run_snapshot(trace_id, {
             "trace_id": trace_id, "mode": "library_support",
             "support_rev": SUPPORT_REV,
             "input_text": input_text, "created_at": _now(),
@@ -11968,7 +12023,7 @@ def run_support_question(claim: str, span: str, span_ref: dict,
             "span_paths": span_paths,
             "context_anchors": context_sentences, "heading": heading,
             "proposal_as_returned": parsed if isinstance(parsed, dict) else {},
-            **checked, "raw_response": raw}, indent=2))
+            **checked, "raw_response": raw}, indent=2)
     except OSError:
         pass
     return {"mode": "library_support", "trace_id": trace_id,

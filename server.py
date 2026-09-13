@@ -489,7 +489,16 @@ def _now_iso() -> str:
 
 
 def _new_job_id() -> str:
-    return "job_" + hashlib.sha256(f"{time.time()}{threading.get_ident()}".encode()).hexdigest()[:12]
+    """A job id no job in this process holds: the clock, the thread and eight
+    random bytes, re-minted while taken (2026-09-13: a job may never land
+    on another job's record in silence — the same rule as the run ids)."""
+    for _ in range(64):
+        jid = "job_" + hashlib.sha256(
+            f"{time.time()}{threading.get_ident()}{os.urandom(8).hex()}".encode()).hexdigest()[:12]
+        with JOBS_LOCK:
+            if jid not in JOBS:
+                return jid
+    raise RuntimeError("could not mint an unused job id in 64 attempts")
 
 
 def _update_job(job_id: str, **fields) -> None:

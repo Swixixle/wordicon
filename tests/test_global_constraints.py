@@ -2621,6 +2621,131 @@ def _check_related_words(server, paired):
     return out
 
 
+def _check_run_identity(server, paired):
+    """Run identity (the owner's order, 2026-09-13): creating a run must never
+    silently overwrite another. One mint for every lane — the input, the
+    precise clock and random bytes, checked against the store and against the
+    ids this process handed out — and exclusive writers: a snapshot or a
+    receipt that would land on an existing file raises RunRecordCollision and
+    leaves the file as it was. Proven here on the real lanes with the clock
+    FROZEN: two runs on identical input at the same clock value get two ids
+    and two records, each reopenable through /api/result; eight runs started
+    at the same instant on eight threads likewise; an id the process already
+    handed out, or one the store already holds, is never handed out again;
+    an existing record is never rewritten. Old ids keep their shape (prefix +
+    ten hex) and nothing in the store is renamed."""
+    out = []
+    import json as _json, threading as _th, os as _os
+    src = _pathlib.Path(cli.__file__).read_text(encoding="utf-8")
+    srv = _pathlib.Path(server.__file__).read_text(encoding="utf-8")
+    # ---- one mint, every lane ----------------------------------------
+    if "_now()).encode()).hexdigest()[:10]" in src:
+        out.append("ID: a lane still mints its id from the input and the clock's second")
+    n_mint = src.count("trace_id = mint_trace_id(input_text")
+    if n_mint < 10:
+        out.append(f"ID: only {n_mint} lane(s) mint through mint_trace_id — the old sites were ten")
+    if 'RESULTS_DIR / f"{trace_id}.json").write_text' in src:
+        out.append("ID: a snapshot is still written with write_text — the exclusive writer is bypassed")
+    if "path.write_text(json.dumps(receipt" in src:
+        out.append("ID: a receipt is still written with write_text")
+    if "os.urandom(8).hex()" not in srv or "if jid not in JOBS" not in srv:
+        out.append("ID: job ids are still the clock and the thread alone")
+    with _isolated_store("run_identity") as store:
+        gw = cli.MockGateway()
+        frozen = "2026-09-13T12:00:00+00:00"
+        real_now, real_precise = cli._now, cli._now_precise
+        cli._now = lambda: frozen
+        cli._now_precise = lambda: frozen + ".000000"
+        try:
+            cand = {"title": "Same Input", "definition": "the same definition, twice, at the same clock value"}
+            a = cli.run_sprout(cand, gw)
+            b = cli.run_sprout(cand, gw)
+            if a["trace_id"] == b["trace_id"]:
+                out.append("ID: two runs on identical input at the same clock value share an id")
+            for r in (a, b):
+                if not (cli.RESULTS_DIR / f"{r['trace_id']}.json").exists():
+                    out.append(f"ID: run {r['trace_id']} has no snapshot")
+                if not (cli.RECEIPTS_DIR / f"receipt_{r['trace_id']}.json").exists():
+                    out.append(f"ID: run {r['trace_id']} has no receipt")
+                if not _re.fullmatch(r"trace_cli_[0-9a-f]{10}", r["trace_id"]):
+                    out.append(f"ID: the id's shape changed ({r['trace_id']}) — old ids and records would no longer match")
+            c = paired(server.app.test_client())
+            for r in (a, b):
+                got = c.get(f"/api/result/{r['trace_id']}")
+                if got.status_code != 200 or (got.get_json() or {}).get("trace_id") != r["trace_id"]:
+                    out.append(f"ID: run {r['trace_id']} does not reopen on its own")
+            ga, gb = c.get(f"/api/result/{a['trace_id']}").get_json(), c.get(f"/api/result/{b['trace_id']}").get_json()
+            if ga.get("created_at") != frozen or gb.get("created_at") != frozen:
+                out.append("ID: the clock was not actually frozen for the two runs, so the case proves less than it says")
+            # concurrent starts, same input, same instant
+            ids, errs = [], []
+            def go():
+                try:
+                    ids.append(cli.run_etymon("liminal", gw)["trace_id"])
+                except Exception as e:  # noqa: BLE001
+                    errs.append(repr(e))
+            ts = [_th.Thread(target=go) for _ in range(8)]
+            for t in ts: t.start()
+            for t in ts: t.join()
+            if errs:
+                out.append(f"ID: a concurrent run failed ({errs[0][:120]})")
+            if len(set(ids)) != len(ids) or len(ids) != 8:
+                out.append(f"ID: eight concurrent runs on one input did not get eight ids ({len(set(ids))} of {len(ids)})")
+            for t in ids:
+                if not (cli.RESULTS_DIR / f"{t}.json").exists():
+                    out.append(f"ID: concurrent run {t} has no snapshot")
+            # an id already handed out, or already in the store, is never handed out again
+            real_urandom = cli.os.urandom
+            cli.os.urandom = lambda n: b"\x00" * n
+            try:
+                cli._MINTED.clear()
+                first = cli.mint_trace_id("fixed input")
+                try:
+                    cli.mint_trace_id("fixed input")
+                    out.append("ID: an id this process already handed out was handed out again")
+                except RuntimeError:
+                    pass
+                cli._MINTED.clear()
+                (cli.RESULTS_DIR / f"{first}.json").write_text("{}")
+                try:
+                    cli.mint_trace_id("fixed input")
+                    out.append("ID: an id the store already holds was handed out")
+                except RuntimeError:
+                    pass
+            finally:
+                cli.os.urandom = real_urandom
+                cli._MINTED.clear()
+            # an existing record is never rewritten
+            keep = cli.RESULTS_DIR / f"{a['trace_id']}.json"
+            before = keep.read_text()
+            try:
+                cli.write_run_snapshot(a["trace_id"], {"trace_id": a["trace_id"], "overwritten": True})
+                out.append("ID: a snapshot was written over an existing one")
+            except cli.RunRecordCollision:
+                pass
+            if keep.read_text() != before:
+                out.append("ID: the existing snapshot changed under a refused write")
+            rk = cli.RECEIPTS_DIR / f"receipt_{a['trace_id']}.json"
+            rbefore = rk.read_text()
+            try:
+                cli.persist_receipt({"receipt_id": f"receipt_{a['trace_id']}", "overwritten": True})
+                out.append("ID: a receipt was written over an existing one")
+            except cli.RunRecordCollision:
+                pass
+            if rk.read_text() != rbefore:
+                out.append("ID: the existing receipt changed under a refused write")
+            if issubclass(cli.RunRecordCollision, OSError):
+                out.append("ID: the collision is an OSError, which the map and library writers swallow")
+            # a record written under an old-style id still reopens, untouched
+            old = "trace_cli_0123456789"
+            (cli.RESULTS_DIR / f"{old}.json").write_text(_json.dumps({"trace_id": old, "mode": "forge", "candidates": []}))
+            if c.get(f"/api/result/{old}").status_code != 200:
+                out.append("ID: a record under an old-style id no longer reopens")
+        finally:
+            cli._now, cli._now_precise = real_now, real_precise
+    return out
+
+
 def _check_stage_c():
     """Stage C of the notebook brief (the owner's go-ahead, 2026-09-13):
     "blue & yellow default + simple colours, Download wording, desktop
@@ -3400,7 +3525,9 @@ def _check_write_order():
         # flush of deferred writers (run_revise builds its roads as closures
         # before the receipt and calls them after the snapshot)
         last_edge = max(body.rfind("record_edge("), body.rfind("_write_road()"))
-        snap = body.rfind('.json").write_text(')
+        # the snapshot is written through the exclusive writer since 2026-09-13
+        # (run identity); the order rule is the same
+        snap = body.rfind("write_run_snapshot(trace_id")
         if last_edge < 0 or snap < 0 or last_edge < snap:
             out.append(f"gate0: in {fn.strip('( ')} a road is still written before the snapshot")
     return out
@@ -3809,6 +3936,7 @@ def main() -> int:
     failures.extend(_check_plain_words())
     failures.extend(_check_related_words(server, _paired))
     failures.extend(_check_stage_c())
+    failures.extend(_check_run_identity(server, _paired))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key
