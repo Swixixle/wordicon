@@ -115,7 +115,13 @@ before this date says which sections were not part of the tool then. The
 route: `POST /api/jobs` mode `refract` with `original.definition` required,
 `original.title` optional, `entry` (concept / description / selection),
 `passage`, `only_languages`; `GET /api/related/saved?concept_id=&title=` lists
-the saved comparisons with `via: recorded | derived`.
+the saved comparisons with `via: recorded | derived`. On every result: *Explore
+this word* (the same panel, prefilled; Find is the only spend), *Compare with my
+idea* (your meaning beside the word's, from the record; absent fields say *not
+analysed in this pass*), *Save* (`POST /api/related/save` → one append to
+`local_state/saved_words.jsonl`; *Saved — remove* appends a removal; the Library's
+*Saved words* shelf lists what stands, each with the meaning it was found for and
+a door back to its comparison; `GET /api/related/saved_words`).
 
 **In the Inquiry rail** — *ask my record*, *research outside*, *trial*,
 *comparison*, *synthesis*, each with its own why.

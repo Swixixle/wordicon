@@ -109,6 +109,11 @@ before this date has none), `source.entry` (concept / description / selection),
 (`canonical_language`); a pass with no title records no road, because there is no box
 to tie one to. `GET /api/related/saved` lists an idea's saved comparisons — by id
 (`recorded`) or by title (`derived`) — reads only.
+`local_state/saved_words.jsonl` is the words he kept from related-words passes
+(`save_word` / `unsave_word` / `list_saved_words`): append-only, a removal is a second
+row, each row the item as it stood with its run, receipt, language, the meaning the
+pass was made for and the reviewer's axes; it reaches no judgment, no accepted concept,
+no document, no model; the Vault stages it with the rest.
 Run identity (2026-09-13): every lane mints its id through `mint_trace_id` — the input,
 the precise clock and sixteen random bytes, checked against the results and receipts
 stores and against the ids this process has handed out — and writes its snapshot and

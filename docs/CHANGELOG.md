@@ -1,5 +1,47 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.30.0 — Three actions on every related word, none of which spends
+
+His order of 13 September, second of four, with the three meanings he
+fixed: "Explore this word: open the existing exploration workflow with the
+word, language and intended sense filled in. Viewing saved information is
+free; any new model run uses the existing explicit start control. Compare
+with my idea: show the original meaning beside the saved word's meaning,
+fit, and what it keeps, drops or adds. Reuse existing results. Label
+missing analysis honestly. Save: bookmark the individual result so I can
+find it again, retaining its source run, language, intended meaning and
+review context. Saving must not accept a concept or change my writing."
+
+**Explore this word** opens the word-comparison panel under the result
+with the word as its handle, the word's own sense as the meaning line, a
+note of the language and the meaning it was found for, the saved
+comparisons for that word (by title, labelled a reconstruction), the lane
+and the two calls — and waits for Find. Nothing is sent by opening it.
+
+**Compare with my idea** renders, from the record already on the page, the
+meaning the pass was made for beside the word's own meaning, why it fits,
+what differs, what it brings, its period and register, and the reviewer's
+verdict and attestation. A field the pass did not produce reads *not
+analysed in this pass*; the English sections say they are recall, not
+reviewed. No call, no fetch; a second press closes it.
+
+**Save** appends one row to `local_state/saved_words.jsonl`: the item as
+it stood, its run and receipt ids, its section and index, the word and
+language, the meaning the pass was made for (and the title, concept id,
+entry kind), the reviewer's axes. *Saved — remove* appends a removal; the
+saved row stays. The Library gains a *Saved words* shelf — each with the
+meaning it was found for, its verdict, a door back to the comparison it
+came from, and remove — and the panel marks what is already kept, read
+free. The store reaches no judgment, no accepted concept, no document and
+no model; the Vault stages it with the rest.
+
+Routes: `POST /api/related/save`, `POST /api/related/unsave`, `GET
+/api/related/saved_words`; `/api/library` carries `saved_words`. Pins in
+`_check_related_words`: the saved row's fields, the append-only file, the
+refusals, the untouched judgments and accepted concepts, the Vault, the
+page's three buttons, Compare reaching no route, Explore starting nothing,
+Save reaching only its own routes. Journey `related` +16 checks (83).
+
 ## v1.29.0 — Run identity: no run overwrites another
 
 His order of 13 September, first of four: "Fix the saved-run overwrite

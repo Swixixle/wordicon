@@ -2550,8 +2550,78 @@ def _check_related_words(server, paired):
         fsnap = _json.loads((cli.RESULTS_DIR / f"{fu['trace_id']}.json").read_text())
         if (fsnap.get("source") or {}).get("only_languages") != ["Japanese", "Finnish"]:
             out.append("RW: the follow-up's record does not say which languages it was asked for")
+        # ---- the three actions (his definitions, 2026-09-13) ---------------
+        # Save: the item as it stood, its run, language, intended meaning and
+        # review, in one append; a removal is a second append; the judgments,
+        # the accepted concepts and the notebook are not touched.
+        jl_before = cli.JUDGMENTS_LOG.read_text() if cli.JUDGMENTS_LOG.exists() else ""
+        acc_before = cli.ACCEPTED_CONCEPTS_PATH.read_text() if cli.ACCEPTED_CONCEPTS_PATH.exists() else ""
+        latin_i = next(i for i, r in enumerate(rf["refractions"]) if r.get("language_canonical") == "Latin")
+        sw = cli.save_word(rf["trace_id"], "languages", latin_i)
+        for k, want in (("word", "limen"), ("language", "Latin"), ("trace_id", rf["trace_id"]),
+                        ("receipt_id", f"receipt_{rf['trace_id']}"), ("intended_meaning", "the sadness of being between stages"),
+                        ("section", "languages"), ("index", latin_i)):
+            if sw.get(k) != want:
+                out.append(f"RW: the saved word's {k} is {sw.get(k)!r}, not {want!r}")
+        if (sw.get("review") or {}).get("verdict") != "holds" or (sw.get("review") or {}).get("attestation") != "attested":
+            out.append("RW: the saved word lost its review context")
+        if (sw.get("item") or {}).get("term") != "limen" or (sw.get("source") or {}).get("concept_id") != "concept_rw_1":
+            out.append("RW: the saved word does not carry the item as it stood, or its source")
+        listed = cli.list_saved_words()
+        if [x["saved_id"] for x in listed] != [sw["saved_id"]]:
+            out.append("RW: the saved word is not listed")
+        if cli.list_saved_words(rf["trace_id"]) != listed or cli.list_saved_words("trace_cli_none"):
+            out.append("RW: listing by run is wrong")
+        for bad_sec, bad_idx in (("bogus", 0), ("languages", 99)):
+            try:
+                cli.save_word(rf["trace_id"], bad_sec, bad_idx)
+                out.append(f"RW: saving {bad_sec}/{bad_idx} was accepted")
+            except (ValueError, IndexError):
+                pass
+        cli.unsave_word(sw["saved_id"])
+        if cli.list_saved_words():
+            out.append("RW: a removed word still stands")
+        lines = cli.saved_words_path().read_text(encoding="utf-8").splitlines()
+        if len(lines) != 2 or _json.loads(lines[0]).get("saved_id") != sw["saved_id"] or _json.loads(lines[1]).get("removed") != sw["saved_id"]:
+            out.append("RW: the saved-words file is not append-only — the saved row and the removal are not both there")
+        try:
+            cli.unsave_word(sw["saved_id"])
+            out.append("RW: removing a word twice was accepted")
+        except KeyError:
+            pass
+        jl_after = cli.JUDGMENTS_LOG.read_text() if cli.JUDGMENTS_LOG.exists() else ""
+        acc_after = cli.ACCEPTED_CONCEPTS_PATH.read_text() if cli.ACCEPTED_CONCEPTS_PATH.exists() else ""
+        if jl_after != jl_before or acc_after != acc_before:
+            out.append("RW: saving a word touched the judgments or the accepted concepts")
+        sw_src = src[src.index("def saved_words_path()"):src.index("def keep_reply(")]
+        for bad in ("JUDGMENTS_LOG", "ACCEPTED_CONCEPTS_PATH", "notebook", "record_judgment", "accept_concept", "gateway.complete"):
+            if bad in sw_src:
+                out.append(f"RW: the saved-words store reaches {bad}")
+        import vault as _vault_rw
+        if "saved_words.jsonl" in getattr(_vault_rw, "EXCLUDE_NAMES", set()) or any("saved_words" in r for r in getattr(_vault_rw, "EXCLUDE_REL", set())):
+            out.append("RW: the saved words are excluded from the Vault")
         # ---- the routes ------------------------------------------------
         c = paired(server.app.test_client())
+        r = c.post("/api/related/save", json={"trace_id": rf["trace_id"], "section": "synonyms", "index": 0})
+        if r.status_code != 200 or ((r.get_json() or {}).get("saved") or {}).get("word") != "anticipatory grief":
+            out.append(f"RW: the save route did not save ({r.status_code} {r.get_json()})")
+        sid = r.get_json()["saved"]["saved_id"]
+        r = c.get(f"/api/related/saved_words?trace_id={rf['trace_id']}")
+        if [x["saved_id"] for x in (r.get_json() or {}).get("items") or []] != [sid]:
+            out.append("RW: the saved-words route does not list by run")
+        r = c.get("/api/library")
+        if not any(x.get("saved_id") == sid for x in (r.get_json() or {}).get("saved_words") or []):
+            out.append("RW: the Library payload does not carry the saved words")
+        for body, code in (({"trace_id": rf["trace_id"], "section": "bogus", "index": 0}, 400),
+                           ({"trace_id": rf["trace_id"], "section": "languages", "index": 99}, 400),
+                           ({"trace_id": "trace_cli_none", "section": "languages", "index": 0}, 404),
+                           ({"trace_id": rf["trace_id"], "section": "languages", "index": "x"}, 400)):
+            if c.post("/api/related/save", json=body).status_code != code:
+                out.append(f"RW: saving {body} did not answer {code}")
+        if c.post("/api/related/unsave", json={"saved_id": sid}).status_code != 200 or (c.get("/api/related/saved_words").get_json() or {}).get("items"):
+            out.append("RW: the unsave route did not remove")
+        if c.post("/api/related/unsave", json={"saved_id": "sw_nothing"}).status_code != 404:
+            out.append("RW: removing an unknown saved word did not answer 404")
         r = c.post("/api/jobs", json={"mode": "refract", "original": {"title": "X"}})
         if r.status_code != 400 or "original.definition" not in (r.get_json() or {}).get("error", ""):
             out.append("RW: a refract with no meaning is not refused for the right reason")
@@ -2594,6 +2664,29 @@ def _check_related_words(server, paired):
     ow_pg = (root / "webapp" / "overworld.html").read_text(encoding="utf-8")
     if "if (!have) continue;   // a box with no name is a prefix of every name" not in ow_pg:
         out.append("RW: the Wayfinder matches a nameless box as a prefix of every place")
+    # the three actions on the page: present on every result, and none spends
+    for need in (">Explore this word</button>", ">Compare with my idea</button>", "${saved ? 'Saved — remove' : 'Save'}</button>",
+                 "function rwExplore(uid, section, index)", "function rwCompare(uid, section, index)", "async function rwSaveToggle(uid, section, index)",
+                 "Saved words — kept from related-words passes, with the meaning each was found for",
+                 "not analysed in this pass", "Compare with my idea — from this pass, no model call"):
+        if need not in pg:
+            out.append(f"RW: the page lost {need!r}")
+    cmp_src = pg[pg.index("function rwCompare(uid, section, index)"):pg.index("async function rwLoadSaved(uid)")]
+    for bad in ("fetch(", "/api/", "startRefractInto", "submitRun"):
+        if bad in cmp_src:
+            out.append(f"RW: Compare with my idea reaches {bad} — it must come from the record alone")
+    exp_src = pg[pg.index("function rwExplore(uid, section, index)"):pg.index("function rwCompare(uid, section, index)")]
+    for bad in ("fetch(", "/api/jobs", "startRefractInto", "submitRun"):
+        if bad in exp_src:
+            out.append(f"RW: Explore this word starts something ({bad}) — only Find may spend")
+    if "openRelatedPanel(areaId" not in exp_src:
+        out.append("RW: Explore this word does not open the word-comparison panel")
+    save_src = pg[pg.index("async function rwSaveToggle(uid, section, index)"):pg.index("async function rwUnsaveFromShelf(savedId)")]
+    for bad in ("/api/jobs", "/api/judge", "/api/notebook", "startRefractInto", "compose-text"):
+        if bad in save_src:
+            out.append(f"RW: Save reaches {bad}")
+    if "'/api/related/save'" not in save_src or "'/api/related/unsave'" not in save_src:
+        out.append("RW: Save does not use the save and unsave routes")
     # the room's start path sends a COPY of the selection and touches nothing
     start = pg[pg.index("async function startRelatedFromRoom()"):pg.index("\n}", pg.index("async function startRelatedFromRoom()"))]
     for bad in ("ta.value", "setSelectionRange", "input-text"):

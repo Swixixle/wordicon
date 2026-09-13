@@ -59,11 +59,12 @@ const DRAFT = [
     bodies.push(b);
     return r.fulfill({ json: { job_id: 'job_rw' + bodies.length, status: 'queued' } });
   });
-  let polls = 0;
+  const pollsById = {};
   await page.route('**/api/jobs/job_rw*', r => {
-    polls += 1;
     const id = r.request().url().split('/').pop();
-    if (polls % 3 === 1) return r.fulfill({ json: { id, mode: 'refract', status: 'queued', progress: 'Queued…', result: null } });
+    pollsById[id] = (pollsById[id] || 0) + 1;
+    // queued first, so the room's honest states are walked rather than assumed
+    if (pollsById[id] === 1) return r.fulfill({ json: { id, mode: 'refract', status: 'queued', progress: 'Queued…', result: null } });
     return r.fulfill({ json: { id, mode: 'refract', status: 'complete', progress: 'done', input_text: served.input_text, result: served } });
   });
 
@@ -151,13 +152,72 @@ const DRAFT = [
   ok(/Ask another language/i.test(T), 'a follow-up on a named language is offered');
   ok(!/no close word — a gap, and the gap is the finding/.test(T), 'the old gap wording is gone');
 
+  // ---- 2b. the three actions on a result: none of them spends ------------
+  const nJobs = bodies.length;
+  const latinIdx = await page.evaluate(() => (RELATED_ITEMS[Object.keys(RELATED_ITEMS)[0]].languages || []).findIndex(r => canonLang(r.language) === 'Latin'));
+  ok(latinIdx >= 0, 'the Latin card is addressable by its index in the record: ' + latinIdx);
+  const uid = await page.evaluate(() => Object.keys(RELATED_ITEMS)[0]);
+  const actions = await page.evaluate(([u, i]) => [...document.querySelectorAll(`#rw-save-${u}-languages-${i}`)[0].parentElement.querySelectorAll('button')].map(b => b.textContent.trim()), [uid, latinIdx]);
+  ok(JSON.stringify(actions) === JSON.stringify(['Explore this word', 'Compare with my idea', 'Save']),
+     'every result carries Explore this word, Compare with my idea and Save: ' + JSON.stringify(actions));
+  // Compare with my idea: from the record, no call, missing analysis named
+  await page.evaluate(([u, i]) => rwCompare(u, 'languages', i), [uid, latinIdx]); await page.waitForTimeout(200);
+  const cmp = await page.evaluate(([u, i]) => document.getElementById(`rw-act-${u}-languages-${i}`).innerText.replace(/\s+/g, ' '), [uid, latinIdx]);
+  ok(/Compare with my idea — from this pass, no model call/i.test(cmp) && cmp.indexOf(IDS.meaning.slice(0, 40)) >= 0 && /limen · Latin/.test(cmp)
+     && /Its meaning: a threshold; by extension a beginning or a boundary/.test(cmp) && /Why it fits \(keeps\): The threshold itself\./.test(cmp) && /What differs \(drops\):/.test(cmp) && /Review: holds/.test(cmp),
+     'Compare sets your meaning beside the word\'s own meaning, fit and differences, with the review: ' + cmp.slice(0, 260));
+  await page.evaluate(([u, i]) => rwCompare(u, 'languages', i), [uid, latinIdx]); await page.waitForTimeout(100);
+  const cmpClosed = await page.evaluate(([u, i]) => document.getElementById(`rw-act-${u}-languages-${i}`).innerText.trim(), [uid, latinIdx]);
+  ok(cmpClosed === '', 'and a second press closes it');
+  await page.evaluate(u => rwCompare(u, 'synonyms', 0), uid); await page.waitForTimeout(200);
+  const cmpSyn = await page.evaluate(u => document.getElementById(`rw-act-${u}-synonyms-0`).innerText.replace(/\s+/g, ' '), uid);
+  ok(/anticipatory grief · English/.test(cmpSyn) && /What differs: not analysed in this pass/.test(cmpSyn) && /the English sections are recall, not reviewed/.test(cmpSyn),
+     'a field the pass did not produce is named as not analysed, and the English sections say they were not reviewed: ' + cmpSyn.slice(0, 200));
+  // Explore this word: the panel, filled in, and nothing sent
+  await page.evaluate(([u, i]) => rwExplore(u, 'languages', i), [uid, latinIdx]); await page.waitForTimeout(600);
+  const exp = await page.evaluate(([u, i]) => { const h = document.getElementById(`rw-act-${u}-languages-${i}`); const inp = h.querySelector('input[id^="rw-meaning-"]'); return { text: h.innerText.replace(/\s+/g, ' '), meaning: inp ? inp.value : null, find: !!h.querySelector('button[id^="rw-go-"]') }; }, [uid, latinIdx]);
+  ok(/Find related words for “limen”/i.test(exp.text) && exp.meaning === 'a threshold; by extension a beginning or a boundary' && exp.find && /Model calls: 2/.test(exp.text),
+     'Explore this word opens the word-comparison panel with the word, its sense and the cost, and waits for Find: ' + JSON.stringify([exp.meaning, exp.find]));
+  ok(/Latin — found for “/.test(exp.text), 'and says which language it was found in and for what meaning');
+  ok(bodies.length === nJobs, 'Compare and Explore sent no run: ' + bodies.length + ' = ' + nJobs);
+  // Save: kept with its run, language, meaning and review; found again on the shelf; removable
+  const postsBeforeSave = posts.length;
+  await page.evaluate(([u, i]) => rwSaveToggle(u, 'languages', i), [uid, latinIdx]); await page.waitForTimeout(700);
+  const savedBtn = await page.evaluate(([u, i]) => document.getElementById(`rw-save-${u}-languages-${i}`).textContent.trim(), [uid, latinIdx]);
+  ok(savedBtn === 'Saved — remove', 'Save keeps the result and says so: ' + JSON.stringify(savedBtn));
+  ok(posts.slice(postsBeforeSave).join(',') === 'POST /api/related/save', 'saving is one append and no run: ' + JSON.stringify(posts.slice(postsBeforeSave)));
+  const savedRec = await (await fetch(BASE + '/api/related/saved_words?trace_id=' + uid, { headers: { Cookie: cookieHeader } })).json();
+  const sr = (savedRec.items || [])[0] || {};
+  ok(sr.word === 'limen' && sr.language === 'Latin' && sr.trace_id === uid && sr.intended_meaning === IDS.meaning && (sr.review || {}).verdict === 'holds' && (sr.review || {}).attestation === 'attested' && sr.receipt_id === 'receipt_' + uid,
+     'the saved word carries its run, language, intended meaning and review: ' + JSON.stringify({ w: sr.word, l: sr.language, t: sr.trace_id === uid, v: (sr.review || {}).verdict }));
+  const stores = await (await fetch(BASE + '/api/library', { headers: { Cookie: cookieHeader } })).json();
+  ok((stores.saved_words || []).some(w => w.saved_id === sr.saved_id), 'and the Library payload lists it');
+  // nothing else moved: no judgment, no accepted concept, no document
+  await page.goto(BASE + '/#concepts'); await page.waitForTimeout(1500);
+  const shelf = await page.evaluate(() => (document.getElementById('library-content') || {}).innerText || '');
+  ok(/Saved words — kept from related-words passes, with the meaning each was found for — 1/i.test(shelf.replace(/\s+/g, ' ')) && /limen · Latin · holds/.test(shelf.replace(/\s+/g, ' ')),
+     'the Library has a Saved words shelf with the word, its language and its verdict: ' + (shelf.match(/Saved words[^\n]*/i) || [''])[0]);
+  ok(/for “The stance of one who exits/.test(shelf), 'and the meaning it was found for');
+  await page.evaluate(id => rwUnsaveFromShelf(id), sr.saved_id); await page.waitForTimeout(900);
+  const shelf2 = await page.evaluate(() => (document.getElementById('library-content') || {}).innerText || '');
+  ok(/Saved words — kept from related-words passes, with the meaning each was found for — 0/i.test(shelf2.replace(/\s+/g, ' ')), 'remove takes it off the shelf');
+  const afterUnsave = await (await fetch(BASE + '/api/related/saved_words', { headers: { Cookie: cookieHeader } })).json();
+  ok((afterUnsave.items || []).length === 0, 'and it no longer stands, though the record keeps both rows');
+  // back to the card for the follow-up
+  await page.goto(BASE + '/'); await page.waitForTimeout(1000);
+  await page.evaluate(t => loadPastResult(t), EP.groupOk); await page.waitForTimeout(900);
+  await page.evaluate(() => { const d = document.querySelector('#result-area details.explore-idea'); if (d) d.open = true; });
+  await page.click('#result-area details.explore-idea button:has-text("Find related words")'); await page.waitForTimeout(900);
+  served = FULL;
+  await page.click('[id^="refract-area-"] button:has-text("Find related words — 2 model calls")'); await page.waitForTimeout(8500);
+
   // ---- 3. the follow-up: one language, appended, nothing replaced --------
   served = FOLLOW;
   await page.fill('[id^="refract-area-"] input[id^="rw-lang-"]', 'Japanese');
   await page.click('[id^="refract-area-"] button:has-text("Ask it — 2 model calls")');
   await page.waitForTimeout(400);
-  const b2 = bodies[1] || {};
-  ok(bodies.length === 2 && b2.mode === 'refract' && JSON.stringify(b2.only_languages) === '["Japanese"]' && (b2.original || {}).concept_id === IDS.concept_id,
+  const b2 = bodies[2] || {};
+  ok(bodies.length === 3 && b2.mode === 'refract' && JSON.stringify(b2.only_languages) === '["Japanese"]' && (b2.original || {}).concept_id === IDS.concept_id,
      'the follow-up asks for exactly that language, on the same concept: ' + JSON.stringify(b2.only_languages));
   await page.waitForTimeout(8000);
   const after = await page.evaluate(() => document.querySelector('[id^="refract-area-"]').innerText.replace(/\s+/g, ' '));
@@ -235,8 +295,8 @@ const DRAFT = [
   await page.type('#related-meaning', 'staying true to a place you have left');
   served = SEL;
   await page.keyboard.press('Enter'); await page.waitForTimeout(500);
-  const b4 = bodies[2] || {};
-  ok(bodies.length === 3, 'Enter in the meaning line is the one press, and it started exactly one run: ' + bodies.length);
+  const b4 = bodies[3] || {};
+  ok(bodies.length === 4, 'Enter in the meaning line is the one press, and it started exactly one run: ' + bodies.length);
   ok(b4.mode === 'refract' && b4.entry === 'selection' && (b4.original || {}).title === '' && (b4.original || {}).concept_id === '',
      'the run needs no title and no accepted concept: ' + JSON.stringify({ entry: b4.entry, title: (b4.original || {}).title }));
   ok((b4.original || {}).definition === 'staying true to a place you have left', 'the meaning that went is the typed sense');

@@ -4067,6 +4067,7 @@ async function openRelatedPanel(areaId, original, focus) {
   area.innerHTML = `
     <div class="card" style="border-left:3px solid var(--accent, #888)">
       <div class="section-label" style="margin-top:0">Find related words${original.title ? ` for “${escapeHtml(original.title)}”` : ''}</div>
+      ${(original.note || '').trim() ? `<p class="body muted" style="font-size:12.5px;margin:0 0 4px">${escapeHtml(original.note)}</p>` : ''}
       <p class="body muted" style="font-size:12.5px;margin:0 0 4px">The meaning to match — correct it here if the sense is off; the title is only a handle:</p>
       <input class="note" id="rw-meaning-${id}" value="${escapeHtml(meaning)}" aria-label="the meaning to find related words for" maxlength="1500" style="width:100%">
       <div id="rw-saved-${id}"><p class="body muted" style="font-size:12.5px"><span class="spinner"></span>looking for saved comparisons…</p></div>
@@ -4404,6 +4405,8 @@ function verdictTagHtml(v) {
 // none of those is proof the language lacks the meaning. A comparison made
 // before the English sections existed says so rather than looking empty.
 const RELATED_SRC = {};   // trace id → the meaning a panel was made for, for follow-ups
+const RELATED_ITEMS = {}; // trace id → {synonyms, antonyms, languages, cultural}: the items as rendered, for the three actions
+const RELATED_SAVED = {}; // trace id → {"section:index": saved_id}: what is already kept, read free
 function canonLang(name) {
   const n = String(name || '').trim().toLowerCase();
   if (!n) return '';
@@ -4416,7 +4419,25 @@ function rwStatusHtml(text, kind) {
   const color = kind === 'absent' ? 'var(--bad)' : 'var(--muted)';
   return `<p class="body muted" style="font-style:italic;margin:4px 0 6px;border-left:2px solid ${color};padding-left:9px">${escapeHtml(text)}</p>`;
 }
-function rwTermCard(r, nCitations) {
+// The three actions on every result (the owner's definitions, 2026-09-13):
+// Explore this word opens the word-comparison panel with the word, its
+// language and its sense filled in — nothing runs until Find is pressed;
+// Compare with my idea sets the meaning this pass was made for beside the
+// word's own, from what the pass already found, no model call; Save keeps
+// the result with its source run, language, intended meaning and review —
+// it accepts no concept and touches no writing. None of the three spends.
+function rwActionsHtml(uid, section, index) {
+  if (!uid || section === undefined || index === undefined) return '';
+  const k = section + ':' + index;
+  const saved = (RELATED_SAVED[uid] || {})[k];
+  return `<div class="row rw-actions" style="margin-top:6px;gap:5px" data-key="${escapeHtml(k)}">
+      <button class="judge-btn" style="font-size:11.5px;padding:2px 7px" onclick="rwExplore('${escapeJs(uid)}','${escapeJs(section)}',${Number(index)})" title="the word-comparison panel with this word, its language and its sense filled in; nothing runs until you press Find">Explore this word</button>
+      <button class="judge-btn" style="font-size:11.5px;padding:2px 7px" onclick="rwCompare('${escapeJs(uid)}','${escapeJs(section)}',${Number(index)})" title="your meaning beside this word's, from what this pass already found — no model call">Compare with my idea</button>
+      <button class="judge-btn" style="font-size:11.5px;padding:2px 7px" id="rw-save-${escapeHtml(uid)}-${escapeHtml(section)}-${Number(index)}" onclick="rwSaveToggle('${escapeJs(uid)}','${escapeJs(section)}',${Number(index)})" title="keep this result with its run, language, intended meaning and review; accepts no concept, changes no writing">${saved ? 'Saved — remove' : 'Save'}</button>
+    </div>
+    <div id="rw-act-${escapeHtml(uid)}-${escapeHtml(section)}-${Number(index)}"></div>`;
+}
+function rwTermCard(r, nCitations, uid, index) {
   const hasTerm = (r.term || r.romanization || '').trim().length > 0;
   const attTag = r.attestation === 'likely-invented'
     ? `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">possibly invented</span>`
@@ -4451,9 +4472,10 @@ function rwTermCard(r, nCitations) {
         ${r.adds ? `<p class="body muted" style="font-size:12.5px;margin-top:6px"><em>What it brings:</em> ${escapeHtml(r.adds)}</p>` : ''}
         ${reviewerProseHtml(r.review_note, nCitations)}
       </details>` : ''}
+      ${hasTerm ? rwActionsHtml(uid, 'languages', index) : ''}
     </div>`;
 }
-function rwEnglishCard(it, kind) {
+function rwEnglishCard(it, kind, uid, index) {
   const isSyn = kind === 'synonyms';
   const tag = isSyn
     ? (it.closeness === 'close'
@@ -4470,9 +4492,10 @@ function rwEnglishCard(it, kind) {
       ${isSyn && (it.differs || '').trim() ? `<p class="body" style="font-size:13.5px"><em>What differs:</em> ${escapeHtml(it.differs)}</p>` : ''}
       ${!isSyn && (it.opposes || '').trim() ? `<p class="body" style="font-size:13.5px"><em>What it opposes:</em> ${escapeHtml(it.opposes)}</p>` : ''}
       ${(it.register || '').trim() ? `<p class="body muted" style="font-size:12px;margin:0">${escapeHtml(it.register)}</p>` : ''}
+      ${rwActionsHtml(uid, kind, index)}
     </div>`;
 }
-function rwComparisonCard(c, nCitations) {
+function rwComparisonCard(c, nCitations, uid, index) {
   const attTag = c.attestation === 'likely-invented'
     ? `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">possibly invented</span>`
     : c.attestation === 'uncertain'
@@ -4486,6 +4509,7 @@ function rwComparisonCard(c, nCitations) {
       ${(c.limits || '').trim() ? `<p class="body" style="font-size:13.5px"><em>Where it stops:</em> ${escapeHtml(c.limits)}</p>` : ''}
       ${(c.check || '').trim() ? `<p class="body muted" style="font-size:12.5px"><em>Where one search would settle it (not yet made):</em> ${escapeHtml(c.check)}</p>` : ''}
       ${c.review_note ? `<details style="margin-top:4px"><summary style="cursor:pointer;color:var(--muted);font-size:12px">more</summary>${reviewerProseHtml(c.review_note, nCitations)}</details>` : ''}
+      ${rwActionsHtml(uid, 'cultural', index)}
     </div>`;
 }
 
@@ -4500,6 +4524,9 @@ function buildRefractHtml(res, opts) {
   RELATED_SRC[uid] = {title: src.title || res.source_title || '', definition: src.definition || '',
                       plain_gloss: src.plain_gloss || '', concept_id: src.concept_id || '',
                       entry: src.entry || 'concept', passage: src.passage || ''};
+  RELATED_ITEMS[uid] = {synonyms: res.english_synonyms || [], antonyms: res.english_antonyms || [],
+                        languages: refs, cultural: res.cultural_comparisons || []};
+  if (res.trace_id) rwLoadSaved(String(res.trace_id));
   const summaryHtml = res.summary
     ? `<div class="muted" style="font-size:13px;margin:6px 0 10px">${escapeHtml(res.summary)}</div>` : '';
   // A language that was asked for and did not come back is the stage failing
@@ -4531,7 +4558,7 @@ function buildRefractHtml(res, opts) {
       <div class="section-label">Asked by name — ${names.map(escapeHtml).join(', ')}${src.title ? ` — for “${escapeHtml(src.title)}”` : ''}</div>
       ${summaryHtml}
       ${citationsHtml(res.citations)}
-      ${refs.map(r => rwTermCard(r, nCit)).join('') || rwStatusHtml('Nothing came back for the languages named.', 'absent')}`;
+      ${refs.map((r, i) => rwTermCard(r, nCit, uid, i)).join('') || rwStatusHtml('Nothing came back for the languages named.', 'absent')}`;
   }
 
   const sec = (id, label, bodyHtml) =>
@@ -4546,13 +4573,16 @@ function buildRefractHtml(res, opts) {
   const syns = res.english_synonyms || [], ants = res.english_antonyms || [];
   const aside = res.english_set_aside || [];
   const asideHtml = aside.length ? `<p class="body muted" style="font-size:12.5px;border-left:2px solid var(--bad);padding-left:9px">Set aside from the English sections, not shown as English: ${aside.map(a => `${escapeHtml(a.word)} — ${escapeHtml(a.reason)}`).join('; ')}.</p>` : '';
-  const synHtml = englishStatus(syns, 'synonyms') + syns.map(s => rwEnglishCard(s, 'synonyms')).join('') + asideHtml;
-  const antHtml = englishStatus(ants, 'opposites') + ants.map(a => rwEnglishCard(a, 'antonyms')).join('');
+  const synHtml = englishStatus(syns, 'synonyms') + syns.map((s, i) => rwEnglishCard(s, 'synonyms', uid, i)).join('') + asideHtml;
+  const antHtml = englishStatus(ants, 'opposites') + ants.map((a, i) => rwEnglishCard(a, 'antonyms', uid, i)).join('');
   // Latin and Greek have their own sections and are accounted for by name.
+  // every language card is addressed by its index in the record's own list,
+  // whichever section it is shown under
+  const idxOf = r => refs.indexOf(r);
   const byCanon = c => refs.filter(r => (r.language_canonical || canonLang(r.language)) === c);
   const classical = (c) => {
     const rows = byCanon(c);
-    if (rows.length) return rows.map(r => rwTermCard(r, nCit)).join('');
+    if (rows.length) return rows.map(r => rwTermCard(r, nCit, uid, idxOf(r))).join('');
     if ((res.missing_languages || []).some(m => canonLang(m) === c))
       return rwStatusHtml(`Not checked — ${c} was asked for and did not come back. That is the stage not doing as it was told, not ${c} having no word for this.`, 'absent');
     if (asked === null) return rwStatusHtml(`Not checked — ${c} was not asked for when this comparison was made.`, 'absent');
@@ -4561,13 +4591,13 @@ function buildRefractHtml(res, opts) {
   // The other languages, Spanish first, then as they came.
   const others = refs.filter(r => !['Latin', 'Greek'].includes(r.language_canonical || canonLang(r.language)));
   others.sort((a, b) => ((b.language_canonical || canonLang(b.language)) === 'Spanish') - ((a.language_canonical || canonLang(a.language)) === 'Spanish'));
-  const othersHtml = others.length ? others.map(r => rwTermCard(r, nCit)).join('')
+  const othersHtml = others.length ? others.map(r => rwTermCard(r, nCit, uid, idxOf(r))).join('')
     : rwStatusHtml('No other languages came back in this pass.', 'absent');
   const comps = res.cultural_comparisons || [];
   const compStatus = asked === null ? rwStatusHtml('Not checked — this comparison was made before cultural comparisons were part of the tool.', 'absent')
     : !asked.includes('cultural') ? rwStatusHtml('Not asked in this pass.', 'absent')
     : !comps.length ? rwStatusHtml('None offered in this pass — not proof there is nothing to compare.', 'gap') : '';
-  const compHtml = compStatus + comps.map(c => rwComparisonCard(c, nCit)).join('');
+  const compHtml = compStatus + comps.map((c, i) => rwComparisonCard(c, nCit, uid, i)).join('');
   const entryLine = src.entry === 'selection'
     ? `from a selection in your writing${src.passage_chars ? ` (${src.passage_chars} characters)` : ''}`
     : src.entry === 'description' ? 'from a meaning you described' : '';
@@ -4611,6 +4641,112 @@ function buildRefractHtml(res, opts) {
 function rwScrollTo(id, uid) {
   const el = document.getElementById(`rw-sec-${id}-${uid}`);
   if (el && el.scrollIntoView) el.scrollIntoView({block: 'start', behavior: 'smooth'});
+}
+
+// ---- the three actions ----------------------------------------------------
+function rwItem(uid, section, index) {
+  const list = (RELATED_ITEMS[uid] || {})[section] || [];
+  return list[Number(index)] || null;
+}
+function rwWordOf(section, it) {
+  if (!it) return {word: '', language: ''};
+  if (section === 'synonyms' || section === 'antonyms') return {word: it.word || '', language: 'English'};
+  if (section === 'cultural') return {word: it.name || '', language: it.tradition || ''};
+  return {word: it.term || it.romanization || '', language: it.language || ''};
+}
+// Explore this word: the word-comparison panel with the word, its language
+// and its sense filled in — saved comparisons shown, Find is the only spend.
+function rwExplore(uid, section, index) {
+  const it = rwItem(uid, section, index);
+  const src = RELATED_SRC[uid] || {};
+  const holder = document.getElementById(`rw-act-${uid}-${section}-${index}`);
+  if (!it || !holder) return;
+  const w = rwWordOf(section, it);
+  const sense = (section === 'cultural' ? (it.what || '') : (it.meaning || it.literal || it.fits || it.keeps || '')).trim();
+  const areaId = `rw-explore-${uid}-${section}-${index}`;
+  holder.innerHTML = `<div id="${areaId}" style="margin-top:6px"></div>`;
+  openRelatedPanel(areaId, {title: w.word, definition: sense, plain_gloss: '',
+                            note: (w.language ? w.language + ' — ' : '') + (src.definition ? `found for “${src.definition.slice(0, 120)}”` : 'from this pass'),
+                            concept_id: '', known_neighbors: '', entry: 'description'}, 'synonyms');
+}
+// Compare with my idea: the meaning this pass was made for beside the word's
+// own meaning, fit and differences — from the record, no model call. A field
+// the pass did not produce says so rather than reading as empty.
+function rwCompare(uid, section, index) {
+  const it = rwItem(uid, section, index);
+  const src = RELATED_SRC[uid] || {};
+  const holder = document.getElementById(`rw-act-${uid}-${section}-${index}`);
+  if (!it || !holder) return;
+  if (holder.querySelector('.rw-compare')) { holder.innerHTML = ''; return; }   // a second press closes it
+  const w = rwWordOf(section, it);
+  const na = '<span class="muted" style="font-style:italic">not analysed in this pass</span>';
+  const cell = v => (v || '').trim() ? escapeHtml(v) : na;
+  const rowsRight = section === 'synonyms'
+    ? [['Its meaning', it.meaning], ['Why it fits', it.fits], ['What differs', it.differs], ['Register', it.register]]
+    : section === 'antonyms'
+      ? [['Its meaning', it.meaning], ['What it opposes', it.opposes], ['Register', it.register]]
+      : section === 'cultural'
+        ? [['What it is', it.what], ['The connection', it.connection], ['Where it stops', it.limits]]
+        : [['Its meaning', it.meaning], ['Literally', it.literal], ['Why it fits (keeps)', it.keeps], ['What differs (drops)', it.drops], ['What it brings (adds)', it.adds], ['Period · register', [it.period, it.register].filter(x => (x || '').trim()).join(' · ')]];
+  const review = (it.review_verdict || it.attestation || it.review_note)
+    ? `${verdictTagHtml(it.review_verdict)} ${it.attestation ? `<span class="muted" style="font-size:12px">attestation: ${escapeHtml(it.attestation)}</span>` : ''}${it.review_note ? `<p class="body muted" style="font-size:12px;margin:4px 0 0">${escapeHtml(it.review_note)}</p>` : ''}`
+    : (section === 'synonyms' || section === 'antonyms' ? '<span class="muted" style="font-size:12px;font-style:italic">the English sections are recall, not reviewed</span>' : na);
+  holder.innerHTML = `
+    <div class="card rw-compare" style="margin-top:6px;border-left:3px solid var(--accent, #888)">
+      <div class="section-label" style="margin-top:0">Compare with my idea — from this pass, no model call</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div>
+          <div class="result-title" style="font-size:14px">Your meaning${src.title ? ` — “${escapeHtml(src.title)}”` : ''}</div>
+          <p class="body" style="font-size:13.5px">${cell(src.definition) === na ? '<span class="muted" style="font-style:italic">no meaning line was given — the passage was the sense</span>' : escapeHtml(src.definition)}</p>
+          ${(src.plain_gloss || '').trim() ? `<p class="body muted" style="font-size:12.5px">${escapeHtml(src.plain_gloss)}</p>` : ''}
+        </div>
+        <div>
+          <div class="result-title" style="font-size:14px">${escapeHtml(w.word)}${w.language ? ` <span class="muted" style="font-weight:400;font-size:12.5px">· ${escapeHtml(w.language)}</span>` : ''}</div>
+          ${rowsRight.map(([l, v]) => `<p class="body" style="font-size:13px;margin:3px 0"><em>${l}:</em> ${cell(v)}</p>`).join('')}
+          <p class="body" style="font-size:13px;margin:6px 0 0"><em>Review:</em> ${review}</p>
+        </div>
+      </div>
+    </div>`;
+}
+// Save / remove: one append to the record either way, and nothing else.
+async function rwLoadSaved(uid) {
+  try {
+    const r = await fetch('/api/related/saved_words?trace_id=' + encodeURIComponent(uid));
+    const d = await r.json();
+    const m = {};
+    (d.items || []).forEach(it => { m[it.section + ':' + it.index] = it.saved_id; });
+    RELATED_SAVED[uid] = m;
+    document.querySelectorAll(`.rw-actions[data-key]`).forEach(row => {
+      const b = row.querySelector('button[id^="rw-save-' + CSS.escape(uid) + '-"]');
+      if (b) b.textContent = m[row.dataset.key] ? 'Saved — remove' : 'Save';
+    });
+  } catch (e) { /* the buttons keep their last state */ }
+}
+async function rwSaveToggle(uid, section, index) {
+  const k = section + ':' + index;
+  const b = document.getElementById(`rw-save-${uid}-${section}-${index}`);
+  const savedId = (RELATED_SAVED[uid] || {})[k];
+  try {
+    if (savedId) {
+      const r = await fetch('/api/related/unsave', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({saved_id: savedId})});
+      if (!r.ok) { if (b) b.textContent = 'could not remove'; return; }
+      delete RELATED_SAVED[uid][k];
+      if (b) b.textContent = 'Save';
+    } else {
+      const r = await fetch('/api/related/save', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({trace_id: uid, section, index: Number(index)})});
+      const d = await r.json();
+      if (!r.ok || !d.saved) { if (b) b.textContent = 'could not save — ' + failureClass(d.error); return; }
+      (RELATED_SAVED[uid] = RELATED_SAVED[uid] || {})[k] = d.saved.saved_id;
+      if (b) b.textContent = 'Saved — remove';
+    }
+    if (typeof refreshLibraryIfOpen === 'function') refreshLibraryIfOpen();
+  } catch (e) { if (b) b.textContent = savedId ? 'could not remove' : 'could not save'; }
+}
+// A saved word, on the Library shelf: reopen the comparison it came from,
+// see it beside the meaning, or remove it.
+async function rwUnsaveFromShelf(savedId) {
+  try { await fetch('/api/related/unsave', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({saved_id: savedId})}); } catch (e) {}
+  refreshLibraryIfOpen();
 }
 
 // A follow-up on a language the owner names: the same meaning, that
@@ -8649,6 +8785,19 @@ function renderLibrary(q) {
 
   const sec = (label, html, n) =>
     `<div class="section-label" style="margin-top:18px">${label} — ${n}</div>${html}`;
+  // Saved words (2026-09-13): the results he kept, each with the meaning it
+  // was found for and the pass it came from; the count is the list's length.
+  const savedAll = (libraryData.saved_words || []);
+  const saved = savedAll.filter(w => hit(w.word) || hit(w.language) || hit(w.intended_meaning) || hit(w.intended_title));
+  const savedHtml = saved.length ? saved.map(w => `<div class="history-item">
+      <div class="history-title" style="font-size:13.5px">${escapeHtml(w.word)} <span class="muted" style="font-weight:400;font-size:12px">· ${escapeHtml(w.language || '')}${(w.review || {}).verdict ? ' · ' + escapeHtml(w.review.verdict) : ''}</span></div>
+      <div class="history-meta" style="font-size:12.5px">for “${escapeHtml((w.intended_meaning || '').slice(0, 160))}”${w.intended_title ? ` (${escapeHtml(w.intended_title)})` : ''}</div>
+      <div class="history-meta" style="font-size:12px">${w.at ? new Date(w.at).toLocaleString() : ''} · ${escapeHtml(w.section)} · ${escapeHtml((w.source || {}).entry || 'concept')}</div>
+      <div style="margin-top:4px">
+        <button class="judge-btn" style="font-size:11px;padding:2px 6px" onclick="loadPastResult('${escapeJs(w.trace_id)}','library-saved','${escapeJs(w.word)}')">open the comparison it came from</button>
+        <button class="judge-btn" style="font-size:11px;padding:2px 6px;margin-left:4px" onclick="rwUnsaveFromShelf('${escapeJs(w.saved_id)}')">remove</button>
+      </div>
+    </div>`).join('') : '<div class="empty">No saved words' + (needle ? ' match' : ' yet — Save on a result keeps it here') + '.</div>';
   const rows = list => list.length
     ? list.map(r => runRowHtml(r, byTrace, childrenOf)).join('')
     : '<div class="empty">Nothing here' + (needle ? ' matches' : ' yet') + '.</div>';
@@ -8802,6 +8951,7 @@ function renderLibrary(q) {
       shown.length !== allWords.length ? ` of ${allWords.length}` : ''}</div>
     <p class="history-meta" style="font-size:12px;margin:0 0 8px">${popNote}</p>
     ${observedHtml}${chipsHtml}${standingHtml}${hygieneHtml}${wordsHtml}
+    ${sec('Saved words — kept from related-words passes, with the meaning each was found for', savedHtml, saved.length)}
     <details style="margin-top:22px">
       <summary class="section-label" style="cursor:pointer;margin:0">Everything else it came from</summary>
       ${sec('Parallels explored — where a word led', rows(shelf.sprout), shelf.sprout.length)}

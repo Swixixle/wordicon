@@ -5193,6 +5193,115 @@ def _note_parse(note: dict) -> None:
     notes.append(note)
 
 
+# ---- saved words (2026-09-13, the owner's order: "Save: bookmark the
+# individual result so I can find it again, retaining its source run,
+# language, intended meaning and review context. Saving must not accept a
+# concept or change my writing.") ------------------------------------------
+#
+# One append-only file under local_state, staged by the Vault with the rest.
+# A saved word carries the item as it stood on the record it came from, the
+# meaning that pass was made for, and the reviewer's two axes; removing a
+# saved word appends a removal, never rewrites. Nothing here touches the
+# judgments log, the accepted concepts or the notebook.
+RELATED_SECTIONS = ("synonyms", "antonyms", "languages", "cultural")
+
+
+def saved_words_path() -> Path:
+    return Path(LOCAL_STATE) / "saved_words.jsonl"
+
+
+def _related_items(snapshot: dict, section: str) -> list:
+    key = {"synonyms": "english_synonyms", "antonyms": "english_antonyms",
+           "languages": "refractions", "cultural": "cultural_comparisons"}[section]
+    return [x for x in (snapshot.get(key) or []) if isinstance(x, dict)]
+
+
+def related_item_label(section: str, item: dict) -> "tuple[str, str]":
+    """(word, language) as the page shows them."""
+    if section in ("synonyms", "antonyms"):
+        return str(item.get("word") or ""), "English"
+    if section == "cultural":
+        return str(item.get("name") or ""), str(item.get("tradition") or "")
+    return (str(item.get("term") or item.get("romanization") or ""), str(item.get("language") or ""))
+
+
+def save_word(trace_id: str, section: str, index: int) -> dict:
+    """Bookmark one result of a related-words pass, from its record."""
+    if section not in RELATED_SECTIONS:
+        raise ValueError("section must be one of synonyms, antonyms, languages, cultural")
+    path = RESULTS_DIR / f"{trace_id}.json"
+    if not path.exists():
+        raise FileNotFoundError(f"no record for {trace_id}")
+    snap = json.loads(path.read_text())
+    if snap.get("mode") != "refract":
+        raise ValueError("that record is not a related-words pass")
+    items = _related_items(snap, section)
+    if not (0 <= int(index) < len(items)):
+        raise IndexError(f"no item {index} in the {section} of {trace_id}")
+    item = items[int(index)]
+    word, language = related_item_label(section, item)
+    src = snap.get("source") or {}
+    rec = {
+        "saved_id": "sw_" + hashlib.sha256((trace_id + section + str(index) + _now_precise() + os.urandom(8).hex()).encode()).hexdigest()[:12],
+        "at": _now(),
+        "trace_id": trace_id, "receipt_id": f"receipt_{trace_id}",
+        "section": section, "index": int(index),
+        "word": word, "language": language,
+        # the meaning the pass was made for, kept with the word so a reopen
+        # says what the comparison meant
+        "intended_meaning": str(src.get("definition") or ""),
+        "intended_title": str(src.get("title") or ""),
+        "source": {"title": src.get("title") or "", "concept_id": src.get("concept_id") or "",
+                   "entry": src.get("entry") or "concept", "passage_chars": src.get("passage_chars") or 0},
+        "item": item,
+        "review": {"verdict": item.get("review_verdict") or "", "attestation": item.get("attestation") or "",
+                   "note": item.get("review_note") or ""},
+        "sections_asked": snap.get("sections_asked") if isinstance(snap.get("sections_asked"), list) else None,
+        "by": "owner",
+    }
+    p = saved_words_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    return rec
+
+
+def unsave_word(saved_id: str) -> dict:
+    """A removal is appended; the saved row stays in the file."""
+    saved_id = str(saved_id or "").strip()
+    if not any(r.get("saved_id") == saved_id for r in list_saved_words()):
+        raise KeyError(f"no saved word {saved_id}")
+    rec = {"removed": saved_id, "at": _now()}
+    with open(saved_words_path(), "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec) + "\n")
+    return rec
+
+
+def list_saved_words(trace_id: "str | None" = None) -> list:
+    """The saved words that stand — newest first; a removal takes its row
+    out of this list and nothing else."""
+    p = saved_words_path()
+    if not p.exists():
+        return []
+    rows, removed = [], set()
+    for line in p.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            d = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if d.get("removed"):
+            removed.add(d["removed"])
+        elif d.get("saved_id"):
+            rows.append(d)
+    out = [r for r in rows if r["saved_id"] not in removed]
+    if trace_id:
+        out = [r for r in out if r.get("trace_id") == trace_id]
+    out.sort(key=lambda r: r.get("at") or "", reverse=True)
+    return out
+
+
 def keep_reply(raw: str, reason: str) -> str:
     """Write a model reply, whole and unaltered, under
     local_state/kept_replies/ (0600). Returns the path, or '' when the

@@ -4322,6 +4322,50 @@ def api_related_saved():
     return jsonify({"items": items[:20], "matched_by": matched_by})
 
 
+@app.route("/api/related/saved_words")
+def api_related_saved_words():
+    """The saved words that stand — all of them, or those from one pass
+    (`?trace_id=`), so a panel can mark what is already kept. Read-only."""
+    trace_id = (request.args.get("trace_id") or "").strip()[:64] or None
+    return jsonify({"items": cli.list_saved_words(trace_id)})
+
+
+@app.route("/api/related/save", methods=["POST"])
+def api_related_save():
+    """Save (2026-09-13): bookmark one result of a related-words pass, from
+    its record — the item as it stood, the meaning the pass was made for,
+    the reviewer's axes. It accepts no concept, moves no verdict and
+    touches no document: an append to local_state/saved_words.jsonl and
+    nothing else."""
+    data = request.get_json(force=True) or {}
+    trace_id = str(data.get("trace_id") or "").strip()[:64]
+    section = str(data.get("section") or "").strip()
+    try:
+        index = int(data.get("index"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "index must be a number"}), 400
+    if not trace_id or section not in cli.RELATED_SECTIONS:
+        return jsonify({"error": "trace_id and a section (synonyms, antonyms, languages, cultural) are required"}), 400
+    try:
+        rec = cli.save_word(trace_id, section, index)
+    except FileNotFoundError:
+        return jsonify({"error": "that record could not be found"}), 404
+    except (ValueError, IndexError) as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"saved": rec})
+
+
+@app.route("/api/related/unsave", methods=["POST"])
+def api_related_unsave():
+    """A removal is appended; the saved row stays in the file."""
+    data = request.get_json(force=True) or {}
+    try:
+        rec = cli.unsave_word(str(data.get("saved_id") or ""))
+    except KeyError:
+        return jsonify({"error": "no such saved word"}), 404
+    return jsonify({"removed": rec})
+
+
 @app.route("/api/concept/<concept_id>")
 def api_concept(concept_id):
     """Every judgment recorded against one concept_id — the visibility half
@@ -5068,6 +5112,8 @@ def api_library():
                      "lexicon": lexicon, "words": words, "runs": runs, "bench": benched,
                     "standing_keys": cli.standing_keys(),
                     "inputs": cli.load_inputs(500),
+                    # 2026-09-13: the words he kept from related-words passes
+                    "saved_words": cli.list_saved_words(),
                     "orphan_corrections": bench.get("orphan_corrections") or []})
 
 
