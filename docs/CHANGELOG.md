@@ -1,5 +1,29 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.25.0 — Plain words, second pass: the doors and the workup
+
+- **Sprout → Explore parallels**, **Refract → Explore other languages**,
+  **Archetype → Explore character patterns.** On every candidate card the
+  three doors sit in a stable group headed **Explore this idea** (the group
+  keeps its qualifier — "none of these change the rows above" — when a
+  contested card has a live door above it); each button carries the old name
+  as its tooltip (`title="formerly …"`) so the old word still finds the
+  door. The result headings follow ("Exploring parallels from …",
+  "Parallels — threads that run alongside it", "Exploring other languages
+  for …"), as do the failure lines, the stage line, the Recent chips
+  (`parallels`, `other languages`, `character patterns`) and the Library's
+  shelves (Parallels explored, Other languages explored).
+- **Go deep → Full workup.** The intake button, the Aa panel's heading, the
+  room's question panel and its button, the Recent chip (`full workup`) and
+  the reopened run's header ("From the record — a full workup").
+- The constitution introduces each new name with the old one once, as
+  provenance; README and the surface map say the new words. The modes
+  (`sprout`, `refract`, `archetype`, `deep`), the routes, the record's keys
+  and every stored row are unchanged — `_check_plain_words` pins that too.
+  Not in this pass: forge / crack / riff / play / decompose / etymon as
+  chip labels, the Wayfinder's *Friction roads* (a road type), the Bench,
+  Warps, Keeper, Vault and the other words in the handoff's table.
+
 ## v1.24.0 — Plain words, first pass: Claims & sources, Meaning, Critique
 
 The owner's authorization (2026-09-13) for the plain-language renaming, in

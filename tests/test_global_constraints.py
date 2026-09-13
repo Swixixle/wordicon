@@ -2375,6 +2375,30 @@ def _check_plain_words():
             out.append(f"W: the record key {key} looks renamed — the record must keep the keys it was written with")
     if "Critique: ${escapeHtml(" not in ow:
         out.append("W: the map's verdict tag lost its plain name")
+    # the doors and the workup
+    for need in ("⤷ Explore parallels — things that run alongside this one",
+                 "⇄ Explore other languages — what other tongues keep, drop and add",
+                 "◈ Explore character patterns — the figure this concept implies",
+                 "'Explore this idea'", 'title="formerly Sprout"', 'title="formerly Refract"', 'title="formerly Archetype"',
+                 'id="deep-ask-title">Full workup</div>', "aria-disabled=\"true\"'}>Full workup</button>",
+                 'title="formerly Go deep">Full workup</button>', "From the record — a full workup",
+                 "label: 'parallels'", "label: 'other languages'", "label: 'character patterns'", "label: 'full workup'",
+                 "Exploring parallels from “", "Exploring other languages for “"):
+        if need not in pg:
+            out.append(f"W: the page lost the plain door {need!r}")
+    for gone in ("⤷ Sprout —", "⇄ Refract —", "◈ Archetype —", ">Go deep</button>", ">Go deep — full workup</button>",
+                 "Sprout failed:", "Refract failed:", "Archetype failed:", "From the record — a deep run"):
+        if gone in pg:
+            out.append(f"W: the mythic door {gone!r} is back on the page")
+    for need in ("<strong>Full workup</strong> (formerly Go deep)", "<strong>⤷ Explore parallels</strong> (formerly Sprout)",
+                 "<strong>⇄ Explore other languages</strong> (formerly Refract)",
+                 "<strong>◈ Explore character patterns</strong> (formerly Archetype)"):
+        if need not in law:
+            out.append(f"W: the constitution does not carry {need!r}")
+    # the modes the record and the routes are written in do not change
+    for key, least in (("'sprout'", 3), ("'refract'", 3), ("mode: 'archetype'", 1), ("'deep'", 3)):
+        if pg.count(key) < least:
+            out.append(f"W: the mode name {key} looks renamed on the page — modes are record keys and route names")
     return out
 
 
@@ -6114,14 +6138,14 @@ def main() -> int:
              "the privacy paragraph promises what providers control"),
             ("through a lane you explicitly invoke",
              "text-egress reads as model-only when review lanes can search"),
-            ("◈ Archetype", "the archetype stage"),
+            ("◈ Explore character patterns", "the character-patterns stage (Archetype until 2026-09-13)"),
             ("no limit on materials", "that the Bench material cap is gone"),
             ("concept, not the coin", "that the Bench's payoff moved from the coin to the "
              "concept — the redesign's whole point"),
             ("sometimes never", "that coinage is allowed to not happen at all"),
             ("named underneath it", "that unused Bench materials are reported"),
             ("keeping it anyway is now recorded", "that declining an alias leaves a trace"),
-            ("Sprout has never once come back empty",
+            ("Explore parallels has never once come back empty",
              "that sprout cannot report finding nothing"),
             ("Half the sprout reviews never searched",
              "how often a sprout review actually searched"),
@@ -6601,7 +6625,7 @@ console.log(JSON.stringify([lineageTag('recorded'), lineageTag('derived'), linea
     # notebook stage B: the shelf of what was SENT is labelled as that —
     # "Submitted passages" — because the writing itself now lives in the
     # notebook (My writing), and a submission record is not a document.
-    for _need in ("Rabbitholes", "Refractions", "Revisions", "Submitted passages"):
+    for _need in ("Parallels explored", "Other languages explored", "Revisions", "Submitted passages"):
         if _need not in _pg60:
             failures.append(f"60: the Library has no {_need!r} shelf")
     # 69 of the 106 lineage links in this corpus exist ONLY because the
@@ -14830,7 +14854,7 @@ console.log(out.join('\\n'));
     _o1 = _idx94.find("Meaning — what the idea is")
     _o2 = _idx94.find("${verdictHeadHtml(bff, extra)}")
     _o3 = _idx94.find("Your judgment on the CONCEPT")
-    _o4 = _idx94.find("Sprout — travel laterally")
+    _o4 = _idx94.find("Explore parallels — things that run alongside")
     _o5 = _idx94.find("Naming — the handle, not the concept")
     if not (-1 < _o1 < _o2 < _o3 < _o4 < _o5):
         _f94(f"the card hierarchy is out of the ruled order "
@@ -16971,7 +16995,7 @@ console.log(out.join('\\n'));
             _f103(f"the deep record does not reopen with its trial outcome, dissection, gesture and completion: {sorted(_dr)}")
         if "result.update(_write_deep_record(result, input_text))" not in _srv103:
             _f103("the job runner does not write the deep record")
-        if "if (d.mode === 'deep') {" not in _idx103 or "From the record — a deep run" not in _idx103:
+        if "if (d.mode === 'deep') {" not in _idx103 or "From the record — a full workup" not in _idx103:
             _f103("the page cannot reopen a deep run from its record")
         # the page: the band's door, the About epoch line and the visible action, the constitution's sentence
         _rows_js = _idx103[_idx103.index("function ruleRow("):_idx103.index("let rulingsExpanded")]

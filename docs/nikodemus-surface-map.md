@@ -74,10 +74,17 @@ are the roadmap, and they are honest.
 - footer: "The highlighted destination is not built yet; the others are real
   doors."
 
-**On a deep workup** — *Run all three on every component*: "not built —
+**On a full workup** — *Run all three on every component*: "not built —
 fanning three instruments across every component is its own machinery, and one
-of the three is sprout, which has never once in fifty-eight runs come back
-empty."
+of the three is Explore parallels (sprout), which has never once in fifty-eight
+runs come back empty."
+
+**Plain words (2026-09-13).** The doors on a candidate card are *Explore
+parallels* (sprout), *Explore other languages* (refract) and *Explore character
+patterns* (archetype), grouped under *Explore this idea*; the whole-passage run
+is *Full workup* (deep); a result's three layers are *Claims & sources*
+(bone), *Meaning* (flesh) and *Critique* (friction). The record's keys, the
+modes and the routes keep the old names.
 
 **In the Inquiry rail** — *ask my record*, *research outside*, *trial*,
 *comparison*, *synthesis*, each with its own why.

@@ -775,7 +775,7 @@
     <div id="develop-controls" hidden>
     <button class="go-btn" id="go-btn" onclick="runOperation(false)">Run it</button>
     <button class="go-btn" id="deep-btn" onclick="runOperation(true)"
-      style="background:var(--panel-2);color:var(--text);border:1px solid var(--border)">Go deep — full workup</button>
+      style="background:var(--panel-2);color:var(--text);border:1px solid var(--border)" title="formerly Go deep">Full workup</button>
     <!-- The gesture chooser (owner's ruling): a bare unexplained phrase
          gets a VISIBLE four-way choice — never an automatic guess about
          which gesture was meant. The Play lane is constitutionally
@@ -1180,7 +1180,7 @@ const STAGE_LABELS = {
   retrieving: 'Checking candidates against sources…',
   friction: 'Running the critique…',
   sprouting: 'Traveling laterally…',
-  refracting: 'Refracting through other languages…',
+  refracting: 'Exploring other languages…',
 };
 
 const OVERRIDE_MODES = {etymon: 'Take the word apart', forge: 'Forge', crack: 'Crack',
@@ -1348,16 +1348,16 @@ const MODE_STYLE = {
   play:       {v: '--mode-forge',   label: 'play'},
   crack:      {v: '--mode-forge',   label: 'crack'},
   decompose:  {v: '--mode-source',  label: 'decompose'},
-  deep:       {v: '--mode-source',  label: 'deep'},
+  deep:       {v: '--mode-source',  label: 'full workup'},
   crossbreed: {v: '--mode-sprout',  label: 'rabbithole'},
-  sprout:     {v: '--mode-sprout',  label: 'sprout'},
-  refract:    {v: '--mode-refract', label: 'refract'},
+  sprout:     {v: '--mode-sprout',  label: 'parallels'},
+  refract:    {v: '--mode-refract', label: 'other languages'},
   revise:     {v: '--mode-forge',   label: 'revise'},
   // Shares refract's green rather than claiming a fifth hue: the palette
   // note above says no fifth candidate cleared the colour-vision gates
   // against this background, and an archetype is the same shape of thing
   // as a refraction — a claim ABOUT a concept, not a step in its history.
-  archetype:  {v: '--mode-refract', label: 'archetype'},
+  archetype:  {v: '--mode-refract', label: 'character patterns'},
   etymon:     {v: '--mode-source',  label: 'word taken apart'},
   recheck:    {v: '--mode-forge',   label: 'your definition'},
 };
@@ -2162,9 +2162,9 @@ async function loadPastResult(traceId, shelf, label, restoring) {
     lastSubmission = null;
     area.innerHTML = `
       <div class="card" style="border-left:3px solid var(--accent, #888)">
-        <div class="section-label" style="margin-top:0">From the record — a deep run · ${escapeHtml(d.completion || (d.partial ? 'partial' : 'complete'))}</div>
+        <div class="section-label" style="margin-top:0">From the record — a full workup · ${escapeHtml(d.completion || (d.partial ? 'partial' : 'complete'))}</div>
         <p class="body">${escapeHtml(d.input_text || d.source_text || '')}</p>
-        <p class="body muted" style="font-size:13px">deep · ${escapeHtml(d.gesture || 'trial')} · ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}</p>
+        <p class="body muted" style="font-size:13px">full workup · ${escapeHtml(d.gesture || 'trial')} · ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}</p>
       </div>` + parseNoticeHtml(d) + buildDeepHtml(d);
     return;
   }
@@ -2684,10 +2684,10 @@ function expansionCard(d) {
       style="min-width:0;width:100%">Run all three on every component
       <span class="dest-sub">up to ${n} model calls, on ${groups.length} component${groups.length === 1 ? '' : 's'}</span>
       <span class="dest-status">not built — fanning three instruments across every component is its
-      own machinery, and one of the three is sprout, which has never once in fifty-eight runs come
+      own machinery, and one of the three is Explore parallels (sprout), which has never once in fifty-eight runs come
       back empty</span></button>
     <p class="body muted" style="font-size:12.5px;margin-top:8px">Each candidate below still carries
-      its own ⤷ Sprout, ⇄ Refract and archetype, one at a time, chosen.</p>
+      its own ⤷ Explore parallels, ⇄ Explore other languages and ◈ Explore character patterns, one at a time, chosen.</p>
   </div>`;
 }
 
@@ -2869,10 +2869,10 @@ function renderCandidateCard(cand, traceId, extra) {
         ? `<button class="judge-btn live" style="margin-top:6px;font-size:12.5px" onclick="startVerifyFromCard(${i})">✓ Verify — test the critique's own claims${D.key === 'verify-not-anchor' ? ', not the anchor' : ''}</button>` : ''}
       ${D.key === 'none'
         ? `<button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="openBenchFromCard('${escapeJs(bff.title)}', '${escapeJs(bff.concept_id || '')}')">⚒ Take it to the Bench — structure and names, not the anchor</button>` : ''}
-      <details class="case" style="margin-top:8px"><summary>${D.key === 'travel' ? 'Where you can travel from it' : 'The other doors — none of them change the rows above'}</summary>
-        <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startSproutFromCard(${i}, '${escapeJs(bff.title)}')">⤷ Sprout — travel laterally from this one</button>
-        <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startRefractFromCard(${i}, '${escapeJs(bff.title)}')">⇄ Refract — the same idea in other languages</button>
-        <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startArchetypeFromCard(${i}, '${escapeJs(bff.title)}')">◈ Archetype — the figure this concept implies</button>
+      <details class="case explore-idea" style="margin-top:8px"><summary>${D.key === 'travel' ? 'Explore this idea' : 'Explore this idea — none of these change the rows above'}</summary>
+        <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startSproutFromCard(${i}, '${escapeJs(bff.title)}')" title="formerly Sprout">⤷ Explore parallels — things that run alongside this one</button>
+        <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startRefractFromCard(${i}, '${escapeJs(bff.title)}')" title="formerly Refract">⇄ Explore other languages — what other tongues keep, drop and add</button>
+        <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startArchetypeFromCard(${i}, '${escapeJs(bff.title)}')" title="formerly Archetype">◈ Explore character patterns — the figure this concept implies</button>
         ${hasClaims && D.key !== 'verify' && D.key !== 'verify-not-anchor'
           ? `<button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startVerifyFromCard(${i})">✓ Verify — test the critique's own claims against live sources</button>` : ''}
         ${D.key === 'none' ? '' : `<button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="openBenchFromCard('${escapeJs(bff.title)}', '${escapeJs(bff.concept_id || '')}')">⚒ Take it to the Bench — refine its structure, or explore names</button>`}
@@ -3241,8 +3241,8 @@ function liveDoor(bff) {
       label: 'Nothing on this card repairs the warrant.',
       why: 'The anchor was chosen when your text was taken apart, and the check that ' +
            'placed it runs once, during the run. Revise re-forges the word and keeps the ' +
-           'meaning frozen; the Bench works on structure and names; Sprout, Refract and ' +
-           'Archetype travel away from this candidate and carry the problem with them. ' +
+           'meaning frozen; the Bench works on structure and names; Explore parallels, other ' +
+           'languages and character patterns travel away from this candidate and carry the problem with them. ' +
            'What changes this row is a different anchor, which means going back to the ' +
            'component and running it again.'};
   }
@@ -3256,7 +3256,7 @@ function liveDoor(bff) {
   return {key: 'travel',
     label: 'Nothing here is contested — the doors below travel.',
     why: 'No objection and no broken anchor is recorded, so there is nothing on this card ' +
-         'to repair. Sprout, Refract and Archetype go somewhere new from it; the Bench ' +
+         'to repair. Explore parallels, other languages and character patterns go somewhere new from it; the Bench ' +
          'works on its structure.'};
 }
 
@@ -3743,7 +3743,7 @@ function sproutFromSeed(key, hostAreaId) {
 async function startSproutInto(areaId, original, parentTrace, via) {
   const area = document.getElementById(areaId);
   if (!area) return;
-  area.innerHTML = `<div class="section-label">Sprouting from “${escapeHtml(original.title)}”</div>
+  area.innerHTML = `<div class="section-label">Exploring parallels from “${escapeHtml(original.title)}”</div>
     <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>traveling laterally — myth, literature, history, the recognizable…</p>`;
   try {
     const r = await fetch('/api/jobs', {
@@ -3782,9 +3782,9 @@ async function pollSprout(jobId, areaId) {
     area.innerHTML = buildSproutHtml(job.result || {}, areaId);
     loadHistory();
   } else if (job.status === 'failed') {
-    area.innerHTML = `<div class="error">Sprout failed: ${escapeHtml(job.error || 'unknown error')}</div>`;
+    area.innerHTML = `<div class="error">Explore parallels failed: ${escapeHtml(job.error || 'unknown error')}</div>`;
   } else {
-    area.innerHTML = `<div class="section-label">Sprouting</div>
+    area.innerHTML = `<div class="section-label">Exploring parallels</div>
       <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>${escapeHtml(job.progress || 'working…')}</p>${stageElapsedHtml(job)}`;
     setTimeout(() => pollSprout(jobId, areaId), 3500);
   }
@@ -3886,7 +3886,7 @@ function buildSproutHtml(res, areaId) {
       }).join(' ⤷ ')}${res.via ? ` <span style="opacity:0.75">(entered through “${escapeHtml(res.via)}”)</span>` : ''}</div>`
     : '';
   return `
-    <div class="section-label">Lateral threads${res.source_title ? ` — from “${escapeHtml(res.source_title)}”` : ''}</div>
+    <div class="section-label">Parallels${res.source_title ? ` — from “${escapeHtml(res.source_title)}”` : ''} — threads that run alongside it</div>
     ${trailHtml}
     ${inheritedHtml}
     ${summaryHtml}
@@ -3967,7 +3967,7 @@ function startRefractFromCard(i, title) {
 async function startRefractInto(areaId, original) {
   const area = document.getElementById(areaId);
   if (!area) return;
-  area.innerHTML = `<div class="section-label">Refracting “${escapeHtml(original.title)}”</div>
+  area.innerHTML = `<div class="section-label">Exploring other languages for “${escapeHtml(original.title)}”</div>
     <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>pushing the idea through other languages…</p>`;
   try {
     const r = await fetch('/api/jobs', {
@@ -4151,7 +4151,7 @@ async function pollArchetype(jobId, areaId) {
     area.innerHTML = buildArchetypeHtml(job.result || {});
     loadHistory();
   } else if (job.status === 'failed') {
-    area.innerHTML = `<div class="error">Archetype failed: ${escapeHtml(job.error || 'unknown error')}</div>`;
+    area.innerHTML = `<div class="error">Explore character patterns failed: ${escapeHtml(job.error || 'unknown error')}</div>`;
   } else {
     area.innerHTML = `<div class="section-label">Building the figure</div>
       <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>${escapeHtml(job.progress || 'working…')}</p>${stageElapsedHtml(job)}`;
@@ -4175,9 +4175,9 @@ async function pollRefract(jobId, areaId) {
     area.innerHTML = buildRefractHtml(job.result || {});
     loadHistory();
   } else if (job.status === 'failed') {
-    area.innerHTML = `<div class="error">Refract failed: ${escapeHtml(job.error || 'unknown error')}</div>`;
+    area.innerHTML = `<div class="error">Explore other languages failed: ${escapeHtml(job.error || 'unknown error')}</div>`;
   } else {
-    area.innerHTML = `<div class="section-label">Refracting</div>
+    area.innerHTML = `<div class="section-label">Exploring other languages</div>
       <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>${escapeHtml(job.progress || 'working…')}</p>${stageElapsedHtml(job)}`;
     setTimeout(() => pollRefract(jobId, areaId), 3500);
   }
@@ -4392,7 +4392,7 @@ async function showConceptHistory(i) {
       <div class="body muted" style="font-size:12.5px;border-left:3px solid var(--accent, #888);padding-left:10px;margin-top:6px">
         <em>Same concept, other word-forms you've judged:</em>
         <ul style="margin:4px 0 6px 18px;padding:0">${rows}</ul>
-        <span style="display:block;font-size:11px">This only shows word-forms linked through Revise or "Make it a word" from a shared card. It doesn't know about Sprout, Refract, or Verify runs on this concept, and it doesn't compare or reconcile differing verdicts across them — that's not built yet.</span>
+        <span style="display:block;font-size:11px">This only shows word-forms linked through Revise or "Make it a word" from a shared card. It doesn't know about Explore parallels, Explore other languages, or Verify runs on this concept, and it doesn't compare or reconcile differing verdicts across them — that's not built yet.</span>
       </div>`;
   } catch (e) {
     area.innerHTML = `<div class="error">Couldn't look up concept history.</div>`;
@@ -4994,7 +4994,7 @@ function renderWriteStyle() {
     `<button id="nb-door" onclick="toggleWriteStyle();nbOpenPanel('list')" title="every document, newest first; search titles and words">My writing</button>` +
     `<button onclick="toggleWriteStyle();nbNew()" title="a fresh page; this one is kept and checkpointed as it stands">New</button>` +
     `</div>` +
-    `<div class="lbl" style="margin-top:10px">Go deep</div><div class="row">` +
+    `<div class="lbl" style="margin-top:10px">Full workup</div><div class="row">` +
     `<button onclick="toggleWriteStyle();askDeep('paragraph')" title="the paragraph the caret is in — or your selection">This paragraph <span style="opacity:.6">${DEEP_CHORDS.paragraph.label}</span></button>` +
     `<button onclick="toggleWriteStyle();askDeep('draft')" title="everything in the room">The whole draft <span style="opacity:.6">${DEEP_CHORDS.draft.label}</span></button>` +
     `</div>` +
@@ -6240,7 +6240,7 @@ async function askDeep(kind) {
   const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
   const b = deepBudget();
   el.style.display = 'block';
-  el.innerHTML = `<div class="lbl" id="deep-ask-title">Go deep</div>
+  el.innerHTML = `<div class="lbl" id="deep-ask-title">Full workup</div>
     <p class="scope">on <strong>${escapeHtml(scope.what)}</strong> — ${words} word${words === 1 ? '' : 's'}</p>
     <p class="preview">${text ? '“' + escapeHtml(text.slice(0, 180)) + (text.length > 180 ? '…' : '') + '”'
                               : 'There is nothing there to send.'}</p>
@@ -6249,7 +6249,7 @@ async function askDeep(kind) {
     <p class="fact">It keeps running if you close the room or the tab. The answer opens beside
       your writing when it arrives.</p>
     <div class="row" style="margin-top:10px">
-      <button id="deep-ask-go"${text ? '' : ' disabled aria-disabled="true"'}>Go deep</button>
+      <button id="deep-ask-go"${text ? '' : ' disabled aria-disabled="true"'}>Full workup</button>
       <button onclick="closeDeepAsk()">Cancel · esc</button>
     </div>`;
   document.getElementById('deep-ask-go').onclick = () => startDeepFromRoom();
@@ -8139,8 +8139,8 @@ function renderLibrary(q) {
     ${observedHtml}${chipsHtml}${standingHtml}${hygieneHtml}${wordsHtml}
     <details style="margin-top:22px">
       <summary class="section-label" style="cursor:pointer;margin:0">Everything else it came from</summary>
-      ${sec('Rabbitholes — where a word led', rows(shelf.sprout), shelf.sprout.length)}
-      ${sec('Refractions — the same idea in other languages', rows(shelf.refract), shelf.refract.length)}
+      ${sec('Parallels explored — where a word led', rows(shelf.sprout), shelf.sprout.length)}
+      ${sec('Other languages explored — the same idea elsewhere', rows(shelf.refract), shelf.refract.length)}
       ${sec('Revisions — second and third passes', rows(shelf.revise), shelf.revise.length)}
       ${sec('First passes — forges, riffs, cracks', rows(shelf.root), shelf.root.length)}
       ${sec('Bench — words taken apart', benchHtml + orphanHtml, bench.length)}

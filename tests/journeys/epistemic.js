@@ -301,14 +301,16 @@ const SELF_REPORT = 'MODEL SELF-REPORT — UNVERIFIED';
   ok(door.heads.some(h => /Nothing on this card repairs the warrant/.test(h)),
      'a candidate with a broken warrant is told plainly that no door here repairs it: '
      + JSON.stringify(door.heads.slice(0, 2)));
-  ok(!/Sprout — travel laterally/.test(door.text),
+  ok(!/Explore parallels — things that run alongside/.test(door.text),
      'the doors that cannot change this card are not competing with the one that can');
   const opened = await page.evaluate(() => {
     [...document.querySelectorAll('#result-area details.case')].forEach(d => { d.open = true; });
     return document.getElementById('result-area').innerText;
   });
-  ok(/Sprout — travel laterally/.test(opened) && /Refract/.test(opened) && /Archetype/.test(opened),
+  ok(/Explore parallels — things that run alongside/.test(opened) && /Explore other languages/.test(opened) && /Explore character patterns/.test(opened),
      'and they are one press away, not removed');
+  ok(!/⤷ Sprout —|⇄ Refract —|◈ Archetype —/.test(opened),
+     'and the doors read as plain words on the card, not as the mythic names');
 
   // ---- 8. block 115: what the record counted ---------------------------
   // The panel is arithmetic over rows already on the shelf, so the only

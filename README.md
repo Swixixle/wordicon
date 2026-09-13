@@ -79,8 +79,8 @@ proves the pipeline rather than the prose.
 ## First use
 
 Type into the box on the home page: a feeling you have no word for, a passage
-you are arguing with, a paragraph of your own. Press Go Deep for a passage with
-several ideas in it, or Forge for a single one.
+you are arguing with, a paragraph of your own. Press Full workup for a passage with
+several ideas in it, or Run it for a single one.
 
 What comes back is a set of readings, each with its anchor in your text, a
 craft objection from the critic, and a check on whether the anchor actually
