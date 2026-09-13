@@ -2979,6 +2979,24 @@ def _check_source_delivery(server, paired):
             snap = _json.loads((cli.RESULTS_DIR / f"{res['trace_id']}.json").read_text(encoding="utf-8"))
             if snap["source"]["passage"] != sel or snap["source"]["passage_chars"] != len(sel):
                 out.append(f"SRC: {label}: the record did not keep the selection exactly")
+        # HIS WORDS MAY NOT BE SEARCHED. The reviewing call is the one with
+        # live web search, so giving it the passage widened what could leave
+        # the machine: a model free to search its input could put his own
+        # sentences into a query. The prompt says plainly that the terms may
+        # be searched and his text may not, and that clause is pinned here
+        # because a prompt edit could drop it in silence. This is an
+        # instruction to a model, not an enforcement — report 76 says so, and
+        # the owner may rule that the passage should not reach a searching
+        # call at all.
+        gw_clause = _Capture()
+        cli.run_refract({"title": "", "definition": "", "plain_gloss": "", "concept_id": ""},
+                        gw_clause, passage="  a private sentence of his own.\n", entry="selection")
+        rev = gw_clause.rev[0]
+        for need in ("THE OWNER'S OWN SOURCE", "do not put any of it into a web",
+                     "search for the TERMS under review, never for the", "owner's text",
+                     "These are HIS words"):
+            if need not in rev:
+                out.append(f"SRC: the reviewing prompt lost {need!r} — his passage reaches a searching call")
         # two sources, identical proposals: each reviewer gets its own
         revs = {}
         for tag in ("ZZALPHA", "ZZBETA"):

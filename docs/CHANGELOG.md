@@ -1,5 +1,21 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.32.3 — The clause that keeps his writing out of a search query is pinned
+
+v1.32.0 gave the reviewing call the owner's passage, and that call is the
+one with live web search — so what it may do with his words is now a
+security question, not only a quality one. The prompt tells it the terms
+under review may be searched and the owner's text may not. That clause is
+pinned in `_check_source_delivery`, captured from a real run rather than
+read out of the source, because a prompt edit could otherwise drop it in
+silence.
+
+It is an instruction to a model, not an enforcement. Stated plainly so the
+owner can rule otherwise: the alternative is to withhold search from the
+reviewing call whenever a passage is present, which would cost live
+verification exactly where a claim about a foreign term is most worth
+checking.
+
 ## v1.32.2 — A job id is reserved in the same breath it is minted
 
 The review's sixth finding, and the last of them.
