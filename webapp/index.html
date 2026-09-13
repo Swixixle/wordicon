@@ -385,6 +385,27 @@
     font-family: inherit; white-space: nowrap; }
   .write-style button.on { color: var(--write-bg); background: var(--write-ink);
     border-color: var(--write-ink); }
+  /* Stage C: the room's colours. A preset button wears its own pair as a
+     swatch, so the choice can be seen before it is made; the two pickers are
+     small and labelled; the contrast line says the number. Colour changes
+     are CSS custom properties on the root and nothing else — the textarea,
+     its selection, its scroll and its undo history are never touched. */
+  .write-style .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+    border: 1px solid rgba(127, 127, 127, 0.6); vertical-align: -1px; margin-right: 5px; }
+  .write-style label.pick { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px;
+    color: var(--write-panel-ink); }
+  .write-style input[type="color"] { width: 30px; height: 22px; padding: 0; border: 1px solid var(--write-faint);
+    border-radius: 5px; background: transparent; cursor: pointer; }
+  .write-style .contrast { font-size: 11.5px; color: var(--write-panel-ink); margin: 6px 0 0; }
+  .write-style .contrast.low { color: var(--write-panel-ink); font-weight: 600; border-left: 2px solid var(--write-panel-ink); padding-left: 8px; }
+  /* With colours forced by the system, the system's pair wins: the real text
+     shows in CanvasText on Canvas and the picture steps aside, because a
+     forced palette painted twice is one palette too many. */
+  @media (forced-colors: active) {
+    .compose, .compose textarea { background: Canvas; color: CanvasText; caret-color: CanvasText; }
+    .compose.inked textarea { color: CanvasText; }
+    .compose .ink { display: none; }
+  }
   /* ---- the workspace: the real page beside the writing room -----------
      The information pane is THE PAGE — the same header, shelf, cards,
      results and behaviour, fitted into half the window. Not a condensed
@@ -5208,14 +5229,28 @@ async function doExport(kind, how) {
 }
 
 // The piece in front of you, right now, without submitting it to anything.
+// Stage C: exports are called Download — Text and Markdown, plus PDF and the
+// share sheet — and the file is named from the document. The body goes
+// exactly as it is: no trim, no reformatting; leading spaces, tabs, blank
+// paragraphs and a trailing newline all survive the trip.
+function writingFileName(ext) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  let title = '';
+  try {
+    if (typeof NB !== 'undefined' && NB && NB.title_is_manual && NB.title) title = NB.title;
+    else if (typeof nbAutoTitle === 'function' && typeof nbBody === 'function') title = nbAutoTitle(nbBody()) || '';
+  } catch (e) { title = ''; }
+  const slug = String(title || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+  return `${slug || 'writing'}-${stamp}${ext}`;
+}
 function exportWriting(how) {
   const ta = document.getElementById('compose-text') || document.getElementById('input-text');
   const text = (ta && ta.value) || '';
   if (!text.trim()) return;
-  const stamp = new Date().toISOString().slice(0, 10);
-  const name = `writing-${stamp}.md`;
-  if (how === 'print') { printDoc(name, mdToPrintHtml(text)); return; }
+  if (how === 'print') { printDoc(writingFileName('.pdf'), mdToPrintHtml(text)); return; }
+  if (how === 'text') { saveBlob(new Blob([text], {type: 'text/plain'}), writingFileName('.txt')); return; }
   const blob = new Blob([text], {type: 'text/markdown'});
+  const name = writingFileName('.md');
   if (how === 'share') shareBlob(blob, name, 'Writing'); else saveBlob(blob, name);
 }
 
@@ -5244,15 +5279,125 @@ const WRITE_SIZES = [18, 20, 23, 27, 31, 36, 42];
 // unknown name simply falls back to the first. Measured in ch of the
 // writing font, which keeps the line the same number of characters however
 // large the type is.
+// Stage C (the notebook brief): "a centered default text measure around
+// 68ch for a new profile … Preserve the existing user's Focused 58ch / Wide
+// 96ch choice rather than silently resetting it." The new measure is FIRST,
+// so a profile with no stored view — or an unknown name — lands on it; a
+// stored focused or wide is found by name and kept.
 const WRITE_VIEWS = [
-  ['focused', 'Focused', '58ch', 'a comfortable measure'],
-  ['wide',    'Wide',    '96ch', 'uses more of the room'],
+  ['measure', 'Comfortable', '68ch', 'a centred measure — the default'],
+  ['focused', 'Focused',     '58ch', 'a shorter line'],
+  ['wide',    'Wide',        '96ch', 'uses more of the room'],
 ];
 function writeView() {
   return WRITE_VIEWS.find(v => v[0] === writeStyle.view) || WRITE_VIEWS[0];
 }
 const WRITE_KEY = 'wordicon.write.style.v1';
-let writeStyle = {face: 'sans', size: null, view: 'focused'};   // size null = the CSS clamp
+// ---- the room's colours (stage C) ------------------------------------------
+// The default is the room as it has always been — background #0f2350, text
+// and caret #ffd97d — and it stays the default. Four checked presets, two
+// pickers, and Reset to blue & yellow; nothing more. The pair is a display
+// preference kept on this device beside the face, the size and the view:
+// never document content, never a record event. Applying it sets custom
+// properties on the root and touches nothing else, so the draft, the
+// selection, the scroll and the undo history are preserved by construction.
+const WRITE_PALETTES = [
+  ['blue',  'Blue & yellow', '#0f2350', '#ffd97d'],
+  ['paper', 'Paper',         '#f4efe4', '#2a2622'],
+  ['dark',  'Dark',          '#121316', '#e8e4d8'],
+  ['sage',  'Sage',          '#1e2b25', '#dfe8d2'],
+];
+const WRITE_DEFAULT_BG = '#0f2350', WRITE_DEFAULT_INK = '#ffd97d';
+const WRITE_CONTRAST_FLOOR = 4.5;   // WCAG 2.1 AA for ordinary text
+let writeStyle = {face: 'sans', size: null, view: 'measure', bg: null, ink: null};   // size null = the CSS clamp; colours null = the default pair
+
+function hexOk(v) { return typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v); }
+function hexRgb(h) { return [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)); }
+function rgbHex(r, g, b) { return '#' + [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join(''); }
+function mixHex(a, b, t) { const A = hexRgb(a), B = hexRgb(b); return rgbHex(A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t); }
+// WCAG 2.1 relative luminance and contrast ratio, the published formulae.
+function relLum(h) {
+  const [r, g, b] = hexRgb(h).map(v => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function contrastRatio(a, b) { const x = relLum(a), y = relLum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+function writeColours() {
+  return {bg: hexOk(writeStyle.bg) ? writeStyle.bg.toLowerCase() : WRITE_DEFAULT_BG,
+          ink: hexOk(writeStyle.ink) ? writeStyle.ink.toLowerCase() : WRITE_DEFAULT_INK};
+}
+function writePalette() {
+  const c = writeColours();
+  const p = WRITE_PALETTES.find(x => x[2] === c.bg && x[3] === c.ink);
+  return p ? p[0] : 'custom';
+}
+// The room's other colours are derived from the pair so a custom pair gets
+// legible panels too: the faint line is the pair mixed, the panel is the
+// background nudged toward the opposite pole, and the panel's ink is pushed
+// toward the text colour until it clears the floor on that panel.
+function derivedColours(bg, ink) {
+  if (bg === WRITE_DEFAULT_BG && ink === WRITE_DEFAULT_INK) {
+    return {faint: '#6f86b8', panel: '#16305f', panelInk: '#b9c8e8'};   // the hand-tuned originals
+  }
+  const dark = relLum(bg) < 0.4;
+  const panel = mixHex(bg, dark ? '#ffffff' : '#000000', 0.07);
+  let t = 0.72, panelInk = mixHex(bg, ink, t);
+  while (contrastRatio(panel, panelInk) < WRITE_CONTRAST_FLOOR && t < 1) { t = Math.min(1, t + 0.07); panelInk = mixHex(bg, ink, t); }
+  // A pair so close that no mix of it clears the floor — the case the
+  // contrast hint exists for — must still leave the panel, the hint and the
+  // reset readable: the panel's ink falls back to whichever pole is farther
+  // from the panel, so the way back is never written in the unreadable pair.
+  if (contrastRatio(panel, panelInk) < WRITE_CONTRAST_FLOOR) {
+    panelInk = contrastRatio(panel, '#ffffff') >= contrastRatio(panel, '#000000') ? '#ffffff' : '#000000';
+  }
+  let faint = mixHex(bg, ink, 0.45);
+  if (contrastRatio(bg, faint) < 2) faint = mixHex(bg, panelInk, 0.5);
+  return {faint, panel, panelInk};
+}
+function applyWriteColours() {
+  const root = document.documentElement;
+  if (!root || !root.style) return;
+  const c = writeColours();
+  const d = derivedColours(c.bg, c.ink);
+  if (c.bg === WRITE_DEFAULT_BG && c.ink === WRITE_DEFAULT_INK) {
+    // the stylesheet's own values: nothing inline, so the default is the
+    // stylesheet and not a copy of it
+    for (const v of ['--write-bg', '--write-ink', '--write-faint', '--write-panel', '--write-panel-ink']) root.style.removeProperty(v);
+  } else {
+    root.style.setProperty('--write-bg', c.bg);
+    root.style.setProperty('--write-ink', c.ink);
+    root.style.setProperty('--write-faint', d.faint);
+    root.style.setProperty('--write-panel', d.panel);
+    root.style.setProperty('--write-panel-ink', d.panelInk);
+  }
+}
+function setWritePalette(key) {
+  const p = WRITE_PALETTES.find(x => x[0] === key);
+  if (!p) return;
+  setWriteColours(p[2], p[3]);
+}
+// Both pickers land here; `live` is a drag inside the picker, applied but
+// not yet written — the write happens on the picker's change.
+function setWriteColours(bg, ink, live) {
+  if (hexOk(bg)) writeStyle.bg = bg.toLowerCase();
+  if (hexOk(ink)) writeStyle.ink = ink.toLowerCase();
+  applyWriteColours();
+  if (!live) { saveWriteStyle(); renderWriteStyle(); }
+  else renderWriteContrast();
+}
+function resetWriteColours() { writeStyle.bg = null; writeStyle.ink = null; applyWriteColours(); saveWriteStyle(); renderWriteStyle(); }
+function writeContrastHtml() {
+  const c = writeColours();
+  const r = contrastRatio(c.bg, c.ink);
+  const low = r < WRITE_CONTRAST_FLOOR;
+  return `<div class="contrast${low ? ' low' : ''}" id="write-contrast" aria-live="polite">${
+    low ? `Hard to read: text on background is ${r.toFixed(1)}:1, under the ${WRITE_CONTRAST_FLOOR}:1 floor for ordinary text — <button onclick="resetWriteColours()" style="font-size:11.5px;padding:2px 7px">Reset to blue &amp; yellow</button>`
+        : `Contrast ${r.toFixed(1)}:1 (the floor for ordinary text is ${WRITE_CONTRAST_FLOOR}:1).`}</div>`;
+}
+function renderWriteContrast() {
+  const el = document.getElementById('write-contrast');
+  if (!el) return;
+  el.outerHTML = writeContrastHtml();
+}
 
 function loadWriteStyle() {
   try {
@@ -5265,8 +5410,11 @@ function loadWriteStyle() {
       // survived exactly until the next reload. Found while naming the
       // landing styles; the same one-line class of mistake as the rest.
       if (WRITE_VIEWS.some(v => v[0] === d.view)) writeStyle.view = d.view;
+      // stage C: the colour pair, kept only when both halves are colours
+      if (hexOk(d.bg) && hexOk(d.ink)) { writeStyle.bg = d.bg.toLowerCase(); writeStyle.ink = d.ink.toLowerCase(); }
     }
   } catch (e) { /* a preference that cannot be read is not an error */ }
+  applyWriteColours();
 }
 
 function saveWriteStyle() {
@@ -5313,6 +5461,17 @@ function renderWriteStyle() {
     WRITE_VIEWS.map(v => `<button class="${v[0] === writeView()[0] ? 'on' : ''}"
        title="${v[3]}" onclick="setWriteView('${v[0]}')">${v[1]}</button>`).join('') +
     `</div>` +
+    (() => { const c = writeColours(); const cur = writePalette(); return (
+    `<div class="lbl" style="margin-top:10px">Colours</div><div class="row">` +
+    WRITE_PALETTES.map(p => `<button class="${p[0] === cur ? 'on' : ''}" onclick="setWritePalette('${p[0]}')"
+       title="background ${p[2]}, text ${p[3]}"><span class="swatch" style="background:${p[2]};border-color:${p[3]}"></span>${p[1]}</button>`).join('') +
+    `</div><div class="row" style="margin-top:6px">` +
+    `<label class="pick">Background <input type="color" value="${c.bg}" aria-label="background colour"
+       oninput="setWriteColours(this.value, null, true)" onchange="setWriteColours(this.value, null)"></label>` +
+    `<label class="pick">Text <input type="color" value="${c.ink}" aria-label="text colour"
+       oninput="setWriteColours(null, this.value, true)" onchange="setWriteColours(null, this.value)"></label>` +
+    `<button onclick="resetWriteColours()" title="background #0f2350, text and caret #ffd97d — the room as it was">Reset to blue &amp; yellow</button>` +
+    `</div>` + writeContrastHtml()); })() +
     `<div class="lbl" style="margin-top:10px">Letters</div><div class="row">` +
     WRITE_LANDINGS.map(l => `<button class="${l[0] === landing ? 'on' : ''}"
        title="${l[2]}" onclick="setLanding('${l[0]}')">${l[1]}</button>`).join('') +
@@ -5356,12 +5515,14 @@ function toggleWriteSave() {
   el.style.display = open ? 'none' : 'block';
   if (open) return;
   for (const id of ['write-style', 'ws-more', 'nb-panel']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
-  el.innerHTML = `<div class="lbl">This piece</div><div class="row">
-      <button onclick="exportWriting('download')">download .md</button>
-      ${CAN_SHARE_FILES ? `<button onclick="exportWriting('share')">send to\u2026</button>` : ''}
-      <button onclick="exportWriting('print')">PDF</button>
+  el.innerHTML = `<div class="lbl">Download — this document</div><div class="row">
+      <button onclick="exportWriting('text')" title="the text exactly as it stands, as a .txt file">Text (.txt)</button>
+      <button onclick="exportWriting('download')" title="the same text as a .md file">Markdown (.md)</button>
+      <button onclick="exportWriting('print')" title="the browser's print dialog; Save as PDF is a real PDF">PDF</button>
+      ${CAN_SHARE_FILES ? `<button onclick="exportWriting('share')" title="the system share sheet: Files, Mail, Messages, AirDrop, Notes">Send to\u2026</button>` : ''}
     </div>
-    <div class="lbl" style="margin-top:10px">Everything</div><div class="row">
+    <div class="lbl" style="margin-top:6px;text-transform:none;letter-spacing:0">Downloading is one way to keep a copy; the document is already saved as you type.</div>
+    <div class="lbl" style="margin-top:10px">Download — everything</div><div class="row">
       <button onclick="doExport('writing','download')">all your writing</button>
       <button onclick="doExport('lexicon','download')">the lexicon</button>
     </div>

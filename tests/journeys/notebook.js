@@ -307,7 +307,8 @@ const TEXT = [
     'anything else in the bar is the revision-notes control, and only while notes exist: ' + JSON.stringify(barAll.map(b => b.t)));
   await page.evaluate(() => toggleWriteStyle()); await page.waitForTimeout(300);
   const aa = await page.evaluate(() => Array.from(document.querySelectorAll('#write-style .lbl')).map(l => l.textContent.trim()));
-  ok(aa.join('|') === 'Face|Size|View|Letters', 'Aa owns typography and layout only: ' + JSON.stringify(aa));
+  // stage C: the colours joined Aa — appearance is what Aa is for — and nothing else did
+  ok(aa.join('|') === 'Face|Size|View|Colours|Letters', 'Aa owns typography, layout and colours, and nothing else: ' + JSON.stringify(aa));
   await page.evaluate(() => toggleWriteStyle());
   const postsBeforeMenu = posts.length;
   await page.click('#ws-more-btn'); await page.waitForTimeout(300);
@@ -336,6 +337,89 @@ const TEXT = [
   await page.click('#ws-focus-exit'); await page.waitForTimeout(400);
   const unfocused = await page.evaluate(() => ({ cls: document.body.classList.contains('ws-focus'), head: getComputedStyle(document.getElementById('ws-head')).opacity, bar: getComputedStyle(document.getElementById('ws-bar')).opacity, exit: !document.getElementById('ws-focus-exit').hidden }));
   ok(!unfocused.cls && unfocused.head === '1' && unfocused.bar === '1' && !unfocused.exit, '☰ controls brings the header and the bar back');
+
+  // ---- stage C: the colours, in Aa ----------------------------------------
+  // The default is the room as it was; four presets, two pickers, the reset;
+  // a change is custom properties and nothing else — the draft, the
+  // selection, the scroll and the undo history stay exactly as they were.
+  await page.click('#compose-text');
+  await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.setSelectionRange(ta.value.length, ta.value.length); });
+  await page.keyboard.type(' zebra', { delay: 0 }); await page.waitForTimeout(300);
+  await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.setSelectionRange(3, 9); });
+  const colourBefore = await page.evaluate(() => { const ta = document.getElementById('compose-text'); return { v: ta.value, s: ta.selectionStart, e: ta.selectionEnd, top: ta.scrollTop,
+    bg: getComputedStyle(document.getElementById('compose')).backgroundColor, ink: getComputedStyle(ta).caretColor }; });
+  ok(colourBefore.bg === 'rgb(15, 35, 80)' && colourBefore.ink === 'rgb(255, 217, 125)', 'the room opens blue & yellow — background #0f2350, caret #ffd97d: ' + JSON.stringify([colourBefore.bg, colourBefore.ink]));
+  await page.evaluate(() => toggleWriteStyle()); await page.waitForTimeout(300);
+  const aaC = await page.evaluate(() => ({ text: document.getElementById('write-style').innerText.replace(/\s+/g, ' '),
+    presets: Array.from(document.querySelectorAll('#write-style button')).map(b => b.textContent.trim()).filter(t => ['Blue & yellow', 'Paper', 'Dark', 'Sage'].includes(t)),
+    pickers: document.querySelectorAll('#write-style input[type="color"]').length }));
+  ok(/Colours/i.test(aaC.text) && aaC.presets.length === 4 && aaC.pickers === 2 && /Background/.test(aaC.text) && /Text/.test(aaC.text) && /Reset to blue & yellow/.test(aaC.text),
+    'Aa holds Colours: the four presets, Background, Text and Reset to blue & yellow: ' + JSON.stringify(aaC.presets) + ' pickers ' + aaC.pickers);
+  ok(/Contrast 11\.2:1/.test(aaC.text), 'and says the pair\'s contrast: ' + (aaC.text.match(/Contrast [\d.]+:1/) || [''])[0]);
+  await page.evaluate(() => Array.from(document.querySelectorAll('#write-style button')).find(b => b.textContent.trim() === 'Paper').click());
+  await page.waitForTimeout(300);
+  const paperC = await page.evaluate(() => { const ta = document.getElementById('compose-text'); const rs = document.documentElement.style; return {
+    v: ta.value, s: ta.selectionStart, e: ta.selectionEnd, top: ta.scrollTop,
+    bgVar: rs.getPropertyValue('--write-bg').trim(), inkVar: rs.getPropertyValue('--write-ink').trim(),
+    bg: getComputedStyle(document.getElementById('compose')).backgroundColor, ink: getComputedStyle(ta).caretColor,
+    on: Array.from(document.querySelectorAll('#write-style button.on')).map(b => b.textContent.trim()),
+    stored: JSON.parse(localStorage.getItem('wordicon.write.style.v1') || '{}') }; });
+  ok(paperC.bgVar === '#f4efe4' && paperC.inkVar === '#2a2622' && paperC.bg === 'rgb(244, 239, 228)' && paperC.ink === 'rgb(42, 38, 34)',
+    'Paper recolours the room through custom properties: ' + JSON.stringify([paperC.bgVar, paperC.inkVar, paperC.bg, paperC.ink]));
+  ok(paperC.v === colourBefore.v && paperC.s === 3 && paperC.e === 9 && paperC.top === colourBefore.top,
+    'and the draft, the selection and the scroll are exactly as they were: ' + JSON.stringify([paperC.s, paperC.e]));
+  ok(paperC.on.includes('Paper'), 'the chosen preset reads as chosen');
+  ok(paperC.stored.bg === '#f4efe4' && paperC.stored.ink === '#2a2622' && paperC.stored.face && 'view' in paperC.stored,
+    'the pair is stored beside the face and the view, in the same record: ' + JSON.stringify(paperC.stored));
+  // a pair under the floor: a hint and the reset, in the panel, nothing blocked
+  await page.evaluate(() => setWriteColours('#777777', '#808080'));
+  await page.waitForTimeout(200);
+  const lowC = await page.evaluate(() => ({ text: document.getElementById('write-contrast').innerText.replace(/\s+/g, ' '), low: document.getElementById('write-contrast').classList.contains('low'),
+    reset: !!document.querySelector('#write-contrast button') }));
+  ok(lowC.low && /Hard to read: text on background is 1\.\d:1, under the 4\.5:1 floor/.test(lowC.text) && lowC.reset,
+    'a pair under 4.5:1 gets a hint that says the number and offers the reset: ' + lowC.text);
+  await page.click('#write-contrast button'); await page.waitForTimeout(300);
+  const resetC = await page.evaluate(() => { const ta = document.getElementById('compose-text'); const rs = document.documentElement.style; return {
+    bgVar: rs.getPropertyValue('--write-bg'), bg: getComputedStyle(document.getElementById('compose')).backgroundColor, ink: getComputedStyle(ta).caretColor,
+    v: ta.value, s: ta.selectionStart, e: ta.selectionEnd, stored: JSON.parse(localStorage.getItem('wordicon.write.style.v1') || '{}') }; });
+  ok(resetC.bgVar === '' && resetC.bg === 'rgb(15, 35, 80)' && resetC.ink === 'rgb(255, 217, 125)' && resetC.stored.bg === null,
+    'Reset to blue & yellow hands the colours back to the stylesheet — no inline copy of the default: ' + JSON.stringify([resetC.bg, resetC.ink, resetC.stored.bg]));
+  ok(resetC.v === colourBefore.v && resetC.s === 3 && resetC.e === 9, 'and touched nothing in the writing');
+  // undo still reaches the word typed before the colours changed
+  await page.evaluate(() => toggleWriteStyle());
+  await page.click('#compose-text');
+  await page.keyboard.press('ControlOrMeta+z'); await page.waitForTimeout(300);
+  const undoneC = await page.evaluate(() => document.getElementById('compose-text').value);
+  ok(!/ zebra$/.test(undoneC) && undoneC.length < colourBefore.v.length, 'undo after the colour changes still takes back the word typed before them');
+  // the pair survives a reload
+  await page.evaluate(() => setWritePalette('sage'));
+  await page.reload(); await page.waitForTimeout(1500);
+  await page.evaluate(() => openWorkspace('write')); await page.waitForTimeout(400);
+  const keptC = await page.evaluate(() => ({ bg: getComputedStyle(document.getElementById('compose')).backgroundColor, ink: getComputedStyle(document.getElementById('compose-text')).caretColor }));
+  ok(keptC.bg === 'rgb(30, 43, 37)' && keptC.ink === 'rgb(223, 232, 210)', 'the chosen colours are back after a reload: ' + JSON.stringify(keptC));
+  await page.evaluate(() => resetWriteColours());
+
+  // ---- stage C: Download, in words, and the body exactly --------------------
+  await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.value = '  two leading spaces\n\n\tone tab\nlast line\n'; ta.dispatchEvent(new Event('input')); });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { window.__dl = null; window.saveBlob = (blob, name) => { blob.text().then(t => { window.__dl = { name, text: t, type: blob.type }; }); }; });
+  await page.click('#ws-more-btn'); await page.waitForTimeout(200);
+  await page.evaluate(() => Array.from(document.querySelectorAll('#ws-more button')).find(b => b.textContent.trim() === 'Download').click());
+  await page.waitForTimeout(300);
+  const dlC = await page.evaluate(() => ({ shown: document.getElementById('write-save').style.display !== 'none', text: document.getElementById('write-save').innerText.replace(/\s+/g, ' ') }));
+  ok(dlC.shown && /Download — this document/i.test(dlC.text) && /Text \(\.txt\)/.test(dlC.text) && /Markdown \(\.md\)/.test(dlC.text) && /PDF/.test(dlC.text) && /Download — everything/i.test(dlC.text),
+    'the download panel says Download, with Text and Markdown, PDF, and everything: ' + dlC.text.slice(0, 160));
+  ok(!/This piece|download \.md/.test(dlC.text), 'and the old words are gone');
+  await page.evaluate(() => Array.from(document.querySelectorAll('#write-save button')).find(b => b.textContent.trim() === 'Text (.txt)').click());
+  await page.waitForTimeout(400);
+  const gotC = await page.evaluate(() => window.__dl);
+  ok(gotC && /\.txt$/.test(gotC.name) && gotC.type === 'text/plain' && gotC.text === '  two leading spaces\n\n\tone tab\nlast line\n',
+    'the Text download is the body exactly — leading spaces, a tab, a blank paragraph, the trailing newline: ' + JSON.stringify(gotC && [gotC.name, gotC.text]));
+  await page.evaluate(() => Array.from(document.querySelectorAll('#write-save button')).find(b => b.textContent.trim() === 'Markdown (.md)').click());
+  await page.waitForTimeout(400);
+  const gotMdC = await page.evaluate(() => window.__dl);
+  ok(gotMdC && /\.md$/.test(gotMdC.name) && gotMdC.text === '  two leading spaces\n\n\tone tab\nlast line\n', 'and so is the Markdown download: ' + (gotMdC && gotMdC.name));
+  await page.keyboard.press('Escape'); await page.waitForTimeout(200);
 
   // ---- the one-time migration of the session draft, once across two tabs ---
   const ctx3 = await browser.newContext(); await ctx3.addCookies([{ name: fs.readFileSync(path.join(DIR, 'cookie'), 'utf8').trim(), value: fs.readFileSync(path.join(DIR, 'token'), 'utf8').trim(), domain: '127.0.0.1', path: '/' }]);

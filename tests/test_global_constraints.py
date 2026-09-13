@@ -2608,6 +2608,114 @@ def _check_related_words(server, paired):
     return out
 
 
+def _check_stage_c():
+    """Stage C of the notebook brief (the owner's go-ahead, 2026-09-13):
+    "blue & yellow default + simple colours, Download wording, desktop
+    layout; preserve selection/caret/undo/saving." What must hold: the
+    default pair is exactly the room as it was (#0f2350 / #ffd97d) and the
+    default is the stylesheet, not an inline copy; four checked presets and
+    no gallery, each clearing 4.5:1 for ordinary text, with Background, Text
+    and Reset to blue & yellow; the pair lives in wordicon.write.style.v1
+    beside face, size and view, none of which is lost; a colour change sets
+    custom properties and touches neither the draft nor its selection; a
+    pair under the floor gets a hint and the reset, in the panel, not a
+    block; forced colours are respected; exports are called Download with
+    Text and Markdown, the body sent exactly as it stands; the centred 68ch
+    measure is the default for a new profile with Focused and Wide kept."""
+    out = []
+    root = _pathlib.Path(cli.__file__).resolve().parents[1]
+    pg = (root / "webapp" / "index.html").read_text(encoding="utf-8")
+    # the default pair, in the stylesheet and in the code, the same
+    if "--write-bg: #0f2350;" not in pg or "--write-ink: #ffd97d;" not in pg:
+        out.append("C: the stylesheet's default pair is not background #0f2350, text #ffd97d")
+    if "const WRITE_DEFAULT_BG = '#0f2350', WRITE_DEFAULT_INK = '#ffd97d';" not in pg:
+        out.append("C: the code's default pair drifted from the stylesheet's")
+    # the presets: four, checked here against the WCAG formula
+    m = _re.search(r"const WRITE_PALETTES = \[(.*?)\];", pg, _re.S)
+    rows = _re.findall(r"\['(\w+)',\s*'([^']+)',\s*'(#[0-9a-f]{6})',\s*'(#[0-9a-f]{6})'\]", m.group(1)) if m else []
+    if len(rows) != 4 or [r[0] for r in rows] != ["blue", "paper", "dark", "sage"]:
+        out.append(f"C: the presets are not exactly Blue & yellow, Paper, Dark, Sage ({[r[0] for r in rows]})")
+
+    def _lum(h):
+        def ch(v):
+            c = v / 255
+            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+        r, g, b = (int(h[i:i + 2], 16) for i in (1, 3, 5))
+        return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b)
+
+    def _cr(a, b):
+        x, y = _lum(a), _lum(b)
+        return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+    for key, name, bg, ink in rows:
+        if _cr(bg, ink) < 4.5:
+            out.append(f"C: preset {name!r} is {_cr(bg, ink):.2f}:1, under the 4.5:1 floor")
+    if rows and (rows[0][2], rows[0][3]) != ("#0f2350", "#ffd97d"):
+        out.append("C: the Blue & yellow preset is not the default pair")
+    # the panel: presets, two pickers, the reset — in Aa, where typography lives
+    aa = pg[pg.index("function renderWriteStyle()"):pg.index("function setWriteFace(key)")]
+    for need in ('<div class="lbl" style="margin-top:10px">Colours</div>', "setWritePalette('${p[0]}')",
+                 'type="color"', 'aria-label="background colour"', 'aria-label="text colour"',
+                 "Reset to blue &amp; yellow", "writeContrastHtml()"):
+        if need not in aa:
+            out.append(f"C: the Aa panel lost {need!r}")
+    if "WRITE_PALETTES.map" not in aa or "gallery" in aa.lower():
+        out.append("C: the colour choice is not the small preset row")
+    # the pair is a device preference beside the others, and nothing is lost
+    ld = pg[pg.index("function loadWriteStyle()"):pg.index("function saveWriteStyle()")]
+    for need in ("d.face", "d.size", "d.view", "hexOk(d.bg) && hexOk(d.ink)"):
+        if need not in ld:
+            out.append(f"C: loading the style no longer reads {need!r}")
+    if "const WRITE_KEY = 'wordicon.write.style.v1';" not in pg:
+        out.append("C: the style's storage key changed — every device's face, size and view would be lost")
+    # applying colours: custom properties only; the default is the stylesheet
+    ap = pg[pg.index("function applyWriteColours()"):pg.index("function setWritePalette(key)")]
+    for bad in ("ta.value", "setSelectionRange", "compose-text", "innerHTML", "fetch(", "/api/"):
+        if bad in ap:
+            out.append(f"C: applying colours touches more than custom properties ({bad})")
+    if "root.style.removeProperty(v)" not in ap or "root.style.setProperty('--write-bg', c.bg)" not in ap:
+        out.append("C: the default pair is an inline copy of the stylesheet, or a custom pair is not applied")
+    sc = pg[pg.index("function setWriteColours(bg, ink, live)"):pg.index("function resetWriteColours()")]
+    for bad in ("ta.value", "setSelectionRange", "fetch(", "/api/", "nbNoteEdit", "dispatchEvent"):
+        if bad in sc:
+            out.append(f"C: changing a colour touches the draft or the record ({bad})")
+    # the floor, the hint and the reset beside it
+    if "const WRITE_CONTRAST_FLOOR = 4.5;" not in pg:
+        out.append("C: the contrast floor is not 4.5:1")
+    ch = pg[pg.index("function writeContrastHtml()"):pg.index("function renderWriteContrast()")]
+    if "Hard to read:" not in ch or 'onclick="resetWriteColours()"' not in ch or "aria-live" not in ch:
+        out.append("C: a pair under the floor gets no hint, or no reset beside it")
+    # and the hint is readable whatever the pair: the panel's ink falls back to
+    # a pole when no mix of the pair clears the floor, and the hint is set in
+    # the panel's ink, never the pair's
+    dc = pg[pg.index("function derivedColours(bg, ink)"):pg.index("function applyWriteColours()")]
+    if "contrastRatio(panel, '#ffffff') >= contrastRatio(panel, '#000000') ? '#ffffff' : '#000000'" not in dc:
+        out.append("C: under an unreadable pair the panel — and the way back — is written in that pair")
+    if ".write-style .contrast.low { color: var(--write-panel-ink);" not in pg:
+        out.append("C: the contrast hint is set in the pair's own ink, which is the colour it is warning about")
+    # forced colours: the system's pair, and the picture steps aside
+    fc = _re.search(r"@media \(forced-colors: active\) \{(.*?)\n  \}", pg, _re.S)
+    if not fc or "CanvasText" not in fc.group(1) or ".compose .ink { display: none; }" not in fc.group(1):
+        out.append("C: forced colours are not respected in the room")
+    # Download: the words, Text and Markdown, the body exactly
+    dl = pg[pg.index("function toggleWriteSave()"):pg.index("function toggleWriteStyle()")]
+    for need in ("Download — this document", "Text (.txt)", "Markdown (.md)", ">PDF</button>", "Download — everything",
+                 "the document is already saved as you type"):
+        if need not in dl:
+            out.append(f"C: the download panel lost {need!r}")
+    for gone in ("This piece", "download .md"):
+        if gone in dl:
+            out.append(f"C: the download panel still says {gone!r}")
+    ex = pg[pg.index("function exportWriting(how)"):pg.index("// ---- the writing room ---")]
+    if "if (how === 'text') { saveBlob(new Blob([text], {type: 'text/plain'}), writingFileName('.txt')); return; }" not in ex:
+        out.append("C: there is no Text download")
+    for bad in (".trim()]", "text.trim()]", "normalize(", ".replace("):
+        if bad in ex:
+            out.append(f"C: the download reshapes the body ({bad})")
+    if "new Blob([text]" not in ex:
+        out.append("C: the download does not send the body as it stands")
+    return out
+
+
 def _check_reply_parse(server):
     """The Go deep parse repair (the owner's yes, 2026-09-13). Reproduces
     the 2026-09-09 failure — a one-line dissection reply with the passage's
@@ -3687,6 +3795,7 @@ def main() -> int:
     failures.extend(_check_reply_parse(server))
     failures.extend(_check_plain_words())
     failures.extend(_check_related_words(server, _paired))
+    failures.extend(_check_stage_c())
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key
@@ -19935,13 +20044,17 @@ console.log(out.join('\\n'));
             _fP1("the shared box does not take the writing font-size, so a measure in ch "
                  "counts characters of the wrong type")
 
-        # two views, stored as NAMES so a third can be added later, device-local
+        # the views, stored as NAMES so one could be added later — and one was:
+        # stage C's centred 68ch measure, first so a profile with no stored view
+        # lands on it, with the ruled Focused 58ch and Wide 96ch kept by name
         _views = _re.search(r"const WRITE_VIEWS = \[(.*?)\];", _idxP1, _re.S)
-        if not _views or _views.group(1).count("['") != 2:
-            _fP1("there are not exactly the two ruled views")
-        for _v in ("'focused'", "'Focused'", "'wide'", "'Wide'"):
+        if not _views or _views.group(1).count("['") != 3:
+            _fP1("there are not exactly the three views — the two ruled ones and stage C's centred measure")
+        for _v in ("'focused'", "'Focused'", "'58ch'", "'wide'", "'Wide'", "'96ch'", "'measure'", "'68ch'"):
             if not _views or _v not in _views.group(1):
-                _fP1(f"a ruled view is missing ({_v})")
+                _fP1(f"a view is missing ({_v})")
+        if _views and not _views.group(1).lstrip().startswith("['measure'"):
+            _fP1("the centred measure is not the first view, so a new profile would not land on it")
         if "return WRITE_VIEWS.find(v => v[0] === writeStyle.view) || WRITE_VIEWS[0];" not in _idxP1:
             _fP1("an unknown view name does not fall back — a third view added later would "
                  "break every device that had not been updated")

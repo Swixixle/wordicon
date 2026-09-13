@@ -1,5 +1,53 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.28.0 — Stage C: the room's colours, Download in words, the measure
+
+The rest of the notebook brief's quiet surface, on his go-ahead of 13
+September ("blue & yellow default + simple colours, Download wording,
+desktop layout; preserve selection/caret/undo/saving").
+
+**Colours, in Aa.** The default is the room as it has always been —
+background #0f2350, text and caret #ffd97d — and it stays the stylesheet's
+own: choosing it removes the inline properties rather than copying the
+values. Four checked presets (Blue & yellow, Paper, Dark, Sage — each 11:1
+or better for ordinary text, checked in the suite by the WCAG formula), a
+Background picker, a Text picker, and Reset to blue & yellow; no gallery,
+no new faces. The pair lives in `wordicon.write.style.v1` beside the face,
+the size and the view, none of which is lost; it is a display preference,
+never document content and never a record event. Applying it sets custom
+properties on the root and nothing else, so the draft, the selection, the
+scroll and the undo history are untouched by construction and measured
+untouched in WebKit. The room's other colours — the faint line, the panel,
+the panel's ink — are derived from the pair, the panel's ink pushed toward
+the text until it clears 4.5:1 on the panel; a pair so close that nothing
+clears it gets the panel's ink from whichever pole is farther, so the hint
+and the way back are readable in every case. A pair under 4.5:1 gets a
+hint in the panel that says the number and carries the reset; nothing is
+blocked. With colours forced by the system, the system's pair wins and the
+picture steps aside.
+
+**Download.** The export panel says what it does: Download — this document
+(Text .txt, Markdown .md, PDF, Send to…) and Download — everything (all
+your writing, the lexicon), with the line that downloading is one way to
+keep a copy and the document is already saved as you type. A file is named
+from the document's title. The body goes exactly as it stands — leading
+spaces, a tab, a blank paragraph, the trailing newline — measured on both
+downloads.
+
+**The measure.** A centred 68ch (Comfortable) is the default for a new
+profile; Focused 58ch and Wide 96ch are kept by name for anyone who chose
+them, and a stored choice is never reset. The rail the brief called
+provisional is not built: his layout ruling of the same day settled the
+room's furniture as the header, the four-button bar and ⋯.
+
+Pins: `_check_stage_c` (the default pair in the stylesheet and the code,
+the four presets and their contrast, the Aa panel's controls, the storage
+key and fields, custom properties only, the floor, the hint and its
+fallback, forced colours, the Download words, the Text download, the body
+as it stands); the views pin amended for the third measure. The notebook
+journey adds seventeen checks, named in run.sh. Constitution: the room
+clause amended. Surface map.
+
 ## v1.27.0 — Find related words
 
 His addition of 13 September, built on the Refract machinery rather than

@@ -189,6 +189,12 @@ done
 for need in "what was typed in the room is in the browser" "reopening the room brings back the selection he left" "the undo stack survived the close and reopen" "after a reload the words typed in the room are back on the page" "and the room reopens on the same words at the place he was" "one Escape inside the writing leaves the room open" "a second Escape within the window closes it" "from the bar one Escape closes the room" "with the type panel open, Escape closes the panel and leaves the room" "a paste that carries words beside a file, into the writing, is left to the browser as words" "a text drag inside the writing is the browser" "while a selection exists the real text shows itself and the picture steps aside" "what was typed is saved on this installation without any run" "and Saved is said only when the newest words are in the store" "with the server unreachable the room says the words are on this device" "a save whose reply was lost is retried with the same request id and lands once" "Keep mine as a new copy makes my text a durable document" "the old session draft became one document, once"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/notebook.log" || { echo "== notebook: missing check: $need"; status=1; }
 done
+# stage C: colours and Download. Named because each is a way the surface could
+# quietly change what it never may: the default pair, the draft under a
+# recolour, the undo chain, the body of a download.
+for need in "the room opens blue & yellow — background #0f2350, caret #ffd97d" "Aa holds Colours: the four presets, Background, Text and Reset to blue & yellow" "Paper recolours the room through custom properties" "and the draft, the selection and the scroll are exactly as they were" "a pair under 4.5:1 gets a hint that says the number and offers the reset" "Reset to blue & yellow hands the colours back to the stylesheet — no inline copy of the default" "undo after the colour changes still takes back the word typed before them" "the chosen colours are back after a reload" "the download panel says Download, with Text and Markdown, PDF, and everything" "the Text download is the body exactly — leading spaces, a tab, a blank paragraph, the trailing newline"; do
+  grep -qF "ok   $need" "$JOURNEY_OUT/notebook.log" || { echo "== notebook: missing check: $need"; status=1; }
+done
 # Find related words (2026-09-13). Named individually because each is a way
 # the panel could quietly become something else: a door that spends, an
 # English section that is not English, a gap read as absence, an old record

@@ -30,11 +30,16 @@ The writing room sits at `#compose` with a header and a bar (the owner's layout 
 first line greyed until then), **My writing**, **New**, and the quiet save state (Saving… · Saved ·
 time · Saved on this device · waiting to sync · Couldn't save · Another copy has changes). The bar,
 outside the room at the top right, is four static buttons: **Get feedback** (the readers — formerly
-the Readers door behind Aa), `Aa` (face, size, view, landing style — typography and layout only),
-`⋯` (sides, split, write, page · Download, Focus · Full workup: this paragraph / the whole draft ·
+the Readers door behind Aa), `Aa` (face, size, view, colours — four presets, Background, Text, Reset to blue & yellow — and landing style; appearance only),
+`⋯` (sides, split, write, page · Download — Text (.txt), Markdown (.md), PDF, Send to… for this
+document, and all your writing / the lexicon; the body goes exactly as it stands — Focus · Full workup:
+this paragraph / the whole draft · Find related words: your selection, or a meaning you type ·
 Dictate, on the page) and `done` (Escape twice, from inside the writing, does the same; from the bar,
 once). **↩ Revision notes · n** joins the bar only while notes exist. **Focus** (in ⋯) hides the
-header and the bar; one faint `☰ controls` stays and brings them back.
+header and the bar; one faint `☰ controls` stays and brings them back. The measure is a centred 68ch
+(**Comfortable**) for a new profile; **Focused** 58ch and **Wide** 96ch are kept for anyone who chose
+them. The colours are display preferences in `wordicon.write.style.v1` beside face, size and view;
+the default pair is #0f2350 / #ffd97d and stays the stylesheet's, not an inline copy.
 
 ---
 
