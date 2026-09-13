@@ -452,15 +452,69 @@ def seed_map():
     return ids
 
 
+def seed_related():
+    """Find related words (2026-09-13), through the real path: a full pass
+    on the anchored card the epistemic journey opens (so the card's door finds
+    a saved comparison BY ID), a second full pass under the same title on a
+    different concept id (found by title only — derived, and labelled so), a
+    follow-up asked by name, and one record in the shape the lane wrote
+    BEFORE this date — a real record with the fields that did not exist then
+    removed, never hand-authored — so the page's "Not checked" wording is
+    proved against the history it will actually meet."""
+    ids = {}
+    g = cli.MockGateway()
+    ep = json.loads((DIR / "epistemic.json").read_text()) if (DIR / "epistemic.json").exists() else seed_epistemic()
+    snap = json.loads((cli.RESULTS_DIR / f"{ep['groupOk']}.json").read_text())
+    bff = (snap["candidates"][0].get("bff") or {})
+    cand = {"title": bff.get("title", ""), "definition": (bff.get("flesh") or {}).get("definition", ""),
+            "plain_gloss": (bff.get("flesh") or {}).get("plain_gloss", ""), "concept_id": bff.get("concept_id", "")}
+    assert cand["title"] and cand["definition"] and cand["concept_id"], f"the anchored card has no title, meaning or id: {cand}"
+    ids["title"], ids["concept_id"], ids["meaning"] = cand["title"], cand["concept_id"], cand["definition"]
+    full = cli.run_refract(cand, g, entry="concept")
+    ids["full"] = full["trace_id"]
+    other = cli.run_refract({**cand, "concept_id": "concept_rwother0001"}, g, entry="concept")
+    ids["derived"] = other["trace_id"]
+    fu = cli.run_refract(cand, g, only_languages=["Japanese"])
+    ids["followup"] = fu["trace_id"]
+    sel = cli.run_refract({"title": "", "definition": "a skilled throw at a wake, enjoyed by everyone there"}, g,
+                          passage="He threw it once, cleanly, and the room laughed.", entry="selection")
+    ids["selection"] = sel["trace_id"]
+    # the legacy shape: what this lane wrote before 2026-09-13 — no English
+    # sections, no sections_asked, no Latin or Greek, the old gap wording
+    legacy = cli.run_refract({"title": "Lantern Debt", "definition": "a debt kept lit for nobody"}, g, entry="concept")
+    lp = cli.RESULTS_DIR / f"{legacy['trace_id']}.json"
+    d = json.loads(lp.read_text())
+    for k in ("sections_asked", "english_synonyms", "english_antonyms", "english_set_aside", "cultural_comparisons", "parse_notes"):
+        d.pop(k, None)
+    d["source"] = {k: d["source"].get(k, "") for k in ("title", "definition", "plain_gloss", "concept_id")}
+    d["refractions"] = [r for r in d["refractions"] if cli.canonical_language(r.get("language")) not in ("Latin", "Greek")]
+    for r in d["refractions"]:
+        for k in ("language_canonical", "pronunciation", "meaning", "period", "example"):
+            r.pop(k, None)
+    d["missing_languages"] = []
+    # the old summary began at the language count; the English counts did not exist
+    _i = d["summary"].find(" language(s)")
+    d["summary"] = d["summary"][d["summary"].rfind(" ", 0, _i) + 1:] if _i > 0 else d["summary"]
+    import re as _re
+    d["summary"] = _re.sub(r" · \d+ cultural comparison\(s\)", "", d["summary"])
+    lp.write_text(json.dumps(d, indent=2))
+    ids["legacy"] = legacy["trace_id"]
+    assert len({ids["full"], ids["derived"], ids["followup"], ids["selection"], ids["legacy"]}) == 5, "two related-words runs shared a trace id"
+    (DIR / "related.json").write_text(json.dumps(ids))
+    return ids
+
+
 if __name__ == "__main__":
     marker = STATE / ".seeded"
     if marker.exists():
         print(json.dumps({"entrance": "already seeded", "pre_wiring": seed_pre_wiring(),
                           "epistemic": seed_epistemic(), "partial": seed_partial(),
-                          "vault_states": seed_vault_states(), "map": seed_map()}))
+                          "vault_states": seed_vault_states(), "map": seed_map(),
+                          "related": seed_related()}))
     else:
         out = seed_entrance()
         marker.write_text("1")
         print(json.dumps({"entrance": out, "pre_wiring": seed_pre_wiring(),
                           "epistemic": seed_epistemic(), "partial": seed_partial(),
-                          "vault_states": seed_vault_states(), "map": seed_map()}))
+                          "vault_states": seed_vault_states(), "map": seed_map(),
+                          "related": seed_related()}))

@@ -1,5 +1,85 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.27.0 — Find related words
+
+His addition of 13 September, built on the Refract machinery rather than
+beside it: "Find related words, available beside a concept or selected
+writing." One word-comparison panel, one record (mode `refract`, the
+record's keys and the route unchanged), two model calls — one to find, one
+to review.
+
+**From the meaning, not the name.** The pass starts from a meaning — a
+concept on a card, a meaning he types, or the sense of a selected passage
+in the writing room — and needs no accepted concept and no title
+(`original.definition` is what the route requires now; a title is a handle
+the prompt is told not to match against). The one-line meaning is editable
+before anything is spent. A selection that is a word or a short phrase
+becomes the meaning line as it stands; a longer passage is context, sent
+with the meaning as the sense it was taken from.
+
+**The sections, in order.** English synonyms — close ones told apart from
+related ones that add or drop a part, with why it fits and what differs;
+English antonyms — an exact opposite told apart from a useful contrast,
+each saying which part of the meaning it opposes; both English throughout,
+and a word not written in Latin letters is set aside in view with its reason
+(the fixture offers one in Greek letters to prove it). Then Latin and Greek,
+each required and accounted for by name under any period name ("Ancient
+Greek", "Koine Greek", "Church Latin" — `canonical_language`), in the native
+script with romanization, pronunciation where the spelling hides it, the
+term's own plain meaning, and the period said rather than mixed. Then the
+other languages, Spanish still on every pass; then documented cultural
+comparisons with their limits, reviewed on the same two axes as the terms (a
+comparison the reviewer will not stake cannot hold); then the English
+fossil. An example the model writes is labelled written for this pass, never
+a quotation; "where one search would settle it" says it is not yet made.
+
+**Two statements, kept apart, neither proof of absence.** A language that
+came back empty reads "No close match found in this pass — an absence from
+recall, not proof the language lacks it." A section or language never asked
+reads "Not checked" — and a required language asked for and not returned is
+still reported as the stage not doing as told. A record from before this
+date carries no `sections_asked`; the page says which sections were not part
+of the tool then instead of showing them empty.
+
+**Before a pass is spent.** The card's door opens the panel, not the run:
+the meaning line, the comparisons already saved for that idea (matched by
+concept id — recorded — or by title, a reconstruction from a mutable name,
+labelled so; `GET /api/related/saved`), the lane and the two calls, and one
+button. Explore other languages opens the languages section of the same
+panel. In the room the door is behind ⋯ (the bar is still four buttons):
+the panel names the scope, the lane and the calls; Escape spends nothing and
+gives the selection back; Enter in the meaning line is the one press; the
+answer lands beside the draft by the room's own route, and the line speaks
+of related words, never of a workup.
+
+**A follow-up on one language** ("Ask another language") is its own record
+— those languages and nothing else, no English sections, the required-
+language rule not applied — rendered beneath, replacing nothing.
+
+**The record.** `english_synonyms`, `english_antonyms`, `english_set_aside`,
+`cultural_comparisons`, `sections_asked`, `source.entry`, `source.passage`
+(a selection's, with its length), `source.only_languages`, `parse_notes`;
+the receipt carries a parse repair as a warning like the other lanes. A pass
+with no name records no road — there is no box to tie one to — and its
+receipt names no candidate. The refract lane's trace id is minted from the
+precise clock and the pass's shape: a follow-up inside the same second as
+the full pass no longer shares its id and overwrites its snapshot (seen in
+the offline smoke test; the other lanes still mint by the second, as the
+Map Focus report recorded).
+
+Pins: `_check_related_words` (the prompt's sections and rules, the unnamed
+and follow-up forms, the run's record, the set-aside, the demotion, no road
+for an unnamed pass, the routes and the saved-comparison labels, the page's
+status words and doors, the law); pin 67 amended for Latin and Greek under
+period names; the route's `kind` joins its identity from a fixed
+vocabulary. Journey `related` (WebKit, 67 checks) on records the real path
+wrote: the card's door and the saved comparisons, one press and the edited
+meaning, every section and both status words, the Greek marked `lang="el"`,
+the follow-up beneath, the legacy record's "Not checked", the room's ⋯ door,
+the selection as meaning or as context, Escape, the run beside the draft
+with the draft untouched. Constitution: the Find related words clause and
+Explore other languages amended; surface map; machine map.
+
 ## v1.26.0 — The room's header and bar, by the owner's ruling
 
 His layout ruling (2026-09-13), quoted in the pins: "Put document title, My

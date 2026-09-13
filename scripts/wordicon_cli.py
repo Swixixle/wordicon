@@ -3321,10 +3321,61 @@ class MockGateway(Gateway):
                              "about witness.",
             })
         if prompt.startswith("You are the refraction stage"):
+            # A follow-up names its languages and wants nothing else; the
+            # fixture answers exactly those, so the offline path proves the
+            # narrow shape as well as the full one.
+            _m_only = re.search(r"exactly these languages and no others: ([^.\n]+)\.", prompt)
+            if _m_only:
+                return json.dumps({
+                    "english_synonyms": [], "english_antonyms": [], "cultural_comparisons": [],
+                    "refractions": [
+                        {"language": lang.strip(), "term": "", "romanization": "", "pronunciation": "",
+                         "literal": "", "meaning": "", "period": "", "example": "",
+                         "keeps": "No close term surfaces from recall in this pass.",
+                         "drops": "An absence in this pass, not proof the language lacks it.",
+                         "adds": "", "register": "", "check": "",
+                         "collision": "", "folk_alert": ""}
+                        for lang in _m_only.group(1).split(",") if lang.strip()],
+                    "english_fossil": "", "fossil_check": ""})
             return json.dumps({
+                # The English sections come first and stay English (the
+                # owner's rule). One entry is written in Greek letters on
+                # purpose: the code must set it aside, visibly, rather than
+                # show it as an English synonym.
+                "english_synonyms": [
+                    {"word": "anticipatory grief", "closeness": "close",
+                     "meaning": "mourning that begins before the loss is complete",
+                     "fits": "Carries the grief and the not-yet.",
+                     "differs": "", "register": "clinical, now everyday"},
+                    {"word": "liminal dread", "closeness": "related",
+                     "meaning": "unease specific to being between states",
+                     "fits": "Carries the threshold.",
+                     "differs": "Adds fear and drops the loss.", "register": "literary"},
+                    {"word": "κατήφεια", "closeness": "related",
+                     "meaning": "dejection", "fits": "", "differs": "", "register": ""},
+                ],
+                "english_antonyms": [
+                    {"word": "closure", "relation": "antonym",
+                     "opposes": "the unfinished, between-stages state",
+                     "meaning": "a sense of resolution after loss", "register": "everyday"},
+                    {"word": "homecoming", "relation": "contrast",
+                     "opposes": "only the threshold part — arrival rather than the doorway",
+                     "meaning": "a return to a settled place", "register": "everyday"},
+                ],
+                "cultural_comparisons": [
+                    {"name": "The liminal phase in rites of passage",
+                     "tradition": "Arnold van Gennep, Les rites de passage (1909); Victor Turner",
+                     "what": "The middle stage of a rite, between separation and reincorporation, in which the person belongs to neither state.",
+                     "connection": "Names the between-ness this meaning rests on, as a documented structure rather than a mood.",
+                     "limits": "It is about ritual structure, not about grief; the loss is not part of it.",
+                     "check": "van Gennep, Les rites de passage, ch. 1; Turner, The Ritual Process, ch. 3"},
+                ],
                 "refractions": [
                     {"language": "German", "term": "Schwellenangst",
-                     "romanization": "Schwellenangst", "literal": "threshold + anxiety",
+                     "romanization": "Schwellenangst", "pronunciation": "SHVEL-en-angst",
+                     "literal": "threshold + anxiety",
+                     "meaning": "dread at a doorway or a new beginning", "period": "",
+                     "example": "",
                      "keeps": "The dread felt at a boundary before crossing it.",
                      "drops": "The grief register — the German is fear-shaped, not loss-shaped.",
                      "adds": "A clinical bookstore-door usage: hesitation to enter unfamiliar spaces.",
@@ -3337,17 +3388,45 @@ class MockGateway(Gateway):
                     # language that found something, and one that honestly
                     # found nothing and said so rather than being dropped.
                     {"language": "Spanish", "term": "desasosiego",
-                     "romanization": "desasosiego", "literal": "un- + quiet",
+                     "romanization": "desasosiego", "pronunciation": "",
+                     "literal": "un- + quiet",
+                     "meaning": "a restless, settled disquiet", "period": "",
+                     "example": "",
                      "keeps": "A settled, chronic disquiet rather than an episode of it.",
                      "drops": "The threshold — the Spanish is not about a boundary.",
                      "adds": "Pessoa's Livro do Desassossego made it a literary register word.",
                      "register": "everyday and literary both",
                      "check": "DLE (RAE) entry for desasosiego",
                      "collision": "", "folk_alert": ""},
-                    {"language": "Italian", "term": "", "romanization": "", "literal": "",
+                    {"language": "Italian", "term": "", "romanization": "", "pronunciation": "",
+                     "literal": "", "meaning": "", "period": "", "example": "",
                      "keeps": "No single term surfaces from recall.",
                      "drops": "The gap suggests the concept is carved along English-specific lines.",
                      "adds": "", "register": "", "check": "",
+                     "collision": "", "folk_alert": ""},
+                    # Latin and Greek, the two the owner added: a term with
+                    # its period, and Greek under a PERIOD name, in Greek
+                    # letters — the shape the required-language check must
+                    # recognise as Greek.
+                    {"language": "Latin", "term": "limen", "romanization": "limen",
+                     "pronunciation": "LEE-men", "literal": "threshold, lintel",
+                     "meaning": "a threshold; by extension a beginning or a boundary",
+                     "period": "Classical Latin, everyday and poetic",
+                     "example": "An example sentence written for this pass, not a quotation.",
+                     "keeps": "The threshold itself.",
+                     "drops": "Everything felt on it — limen names the stone, not the grief.",
+                     "adds": "The root of liminal, so the English borrowing is the fossil of this term.",
+                     "register": "everyday", "check": "Lewis & Short, limen",
+                     "collision": "", "folk_alert": ""},
+                    {"language": "Ancient Greek", "term": "κατήφεια",
+                     "romanization": "katēpheia", "pronunciation": "kah-TAY-fay-ah",
+                     "literal": "a downcast look",
+                     "meaning": "dejection, the shame or grief that lowers the eyes",
+                     "period": "Ancient Greek, Homeric and Classical",
+                     "example": "",
+                     "keeps": "Grief that shows on the face before it is spoken.",
+                     "drops": "The threshold — no between-ness, only the lowered gaze.",
+                     "adds": "", "register": "literary", "check": "LSJ, κατήφεια",
                      "collision": "", "folk_alert": ""},
                 ],
                 "english_fossil": "The word 'nightmare' fossilizes the mare, the demon said to sit on sleepers' chests.",
@@ -3368,6 +3447,16 @@ class MockGateway(Gateway):
                     {"index": 2, "attestation": "uncertain", "verdict": "strained",
                      "carries_verdict": "",
                      "note": "A gap claim from recall failure is possible; verify."},
+                    {"index": 3, "attestation": "attested", "verdict": "holds",
+                     "carries_verdict": "",
+                     "note": "Textbook Latin; the fit claim is modest and fair."},
+                    {"index": 4, "attestation": "attested", "verdict": "strained",
+                     "carries_verdict": "",
+                     "note": "Real Homeric word; the equivalence does more work than the gloss allows."},
+                ],
+                "comparison_reviews": [
+                    {"index": 0, "attestation": "attested", "verdict": "holds",
+                     "note": "Van Gennep's tripartite scheme is standard; the limit stated is right."},
                 ],
                 "fossil_verdict": "holds",
                 "fossil_note": "Standard etymology; safe to repeat.",
@@ -8269,10 +8358,42 @@ def run_sprout(candidate: dict, gateway: Gateway,
 # the review pass is primed with the famous false classics BY NAME, and
 # every gloss ships recall-unverified.
 
+# The sections one pass of this stage is asked for. Recorded on the
+# snapshot as `sections_asked`, so that a section that is EMPTY (asked, and
+# nothing close was found) never renders like a section that was never
+# asked — the owner's rule for Find related words (2026-09-13): "No close
+# match found in this pass" and "Not checked" are two different things, and
+# neither means the language lacks the concept. A record written before the
+# English sections existed carries no `sections_asked` at all, and the page
+# reads that as "not checked", which is the truth about it.
+REFRACT_SECTIONS = ("english", "languages", "cultural")
+
+
 def build_refract_prompt(candidate: dict,
-                          known_neighbors: str | None = None) -> str:
+                          known_neighbors: str | None = None,
+                          passage: str | None = None,
+                          only_languages: "list[str] | None" = None) -> str:
     gloss = (candidate.get("plain_gloss") or "").strip()
     gloss_line = f"\nPlain gloss: {gloss}" if gloss else ""
+    title = (candidate.get("title") or "").strip()
+    # A working name is a handle, not the thing to match. The owner's rule:
+    # rank by the intended meaning, never by resemblance to the title — and
+    # the meaning may arrive with no name at all (a described idea, or the
+    # sense of a selected passage).
+    title_line = (f"Working name (a handle only — do not match words to it): {title}\n"
+                  if title else "Working name: none yet — the meaning below is the whole brief.\n")
+    passage_block = ""
+    if passage and passage.strip():
+        p = passage.strip()
+        if len(p) > 1500:
+            p = p[:1500] + " […]"
+        passage_block = f"""
+
+The passage this sense was taken from — context for WHICH sense is
+meant, not a second meaning to match and not text to comment on:
+<<<
+{p}
+>>>"""
     neighbors_block = ""
     if known_neighbors and known_neighbors.strip():
         neighbors_block = f"""
@@ -8284,13 +8405,110 @@ Do not re-offer any of these (or their translations) as discoveries. A
 refraction whose term only covers one of these neighbors is at best a
 partial match — say plainly which neighbor it collapses into and what
 of the concept's OWN mechanism it misses."""
+    if only_languages:
+        langs = ", ".join(str(x).strip() for x in only_languages if str(x).strip())
+        languages_block = f"""Refract it through exactly these languages and no others: {langs}.
+This is a follow-up the owner asked for by name; the usual required
+languages do not apply to it, and the English sections are not wanted —
+return "english_synonyms", "english_antonyms" and "cultural_comparisons"
+as EMPTY lists. If a named language has no close term, include it with
+term, romanization, literal and meaning left empty and let keeps/drops
+say what the absence suggests: an empty entry is the correct answer
+when it is the true one, and it is an absence in this pass, not proof
+the language has no such word."""
+    else:
+        languages_block = """Refract it through 5-8 languages. SPANISH IS ALWAYS ONE OF THEM, AND SO
+ARE LATIN AND GREEK.
+
+Spanish, Latin and Greek are not optional and not conditional on having
+something good to say. If one of them has no close term for this
+meaning, include it anyway with term, romanization, literal and meaning
+left empty and let keeps/drops describe the gap — a documented absence
+in the most widely spoken Romance language, or in the two classical
+lexicons English keeps borrowing from, is a finding, and a more useful
+one than a sixth language that merely had something available. Do not
+invent a term to satisfy this instruction; an empty one is the correct
+answer when it is the true one — and it is an absence IN THIS PASS, from
+recall, not proof that the language lacks the concept.
+
+For Greek, say which Greek: Ancient (Homeric, Attic), Koine or Modern —
+name the language as "Ancient Greek", "Koine Greek" or "Modern Greek",
+and do not mix periods inside one entry. For Latin, name the period and
+register in "period" (Classical, Late, Medieval, Ecclesiastical, Neo-
+Latin). A word that lives in one period is a different finding from a
+word that runs through all of them.
+
+Then choose the rest from genuinely different families: one Germanic,
+one Romance beyond Spanish (Italian first where it has something to
+say), one Slavic, one East Asian, and one from elsewhere (Semitic,
+Turkic, Indic, an African or indigenous language) when the meaning
+gives them something to say. Germanic and Romance are separate slots,
+not alternatives — reading them as interchangeable is how this stage
+returned German every time and Spanish never. Skip an optional language
+with nothing interesting to report; fewer strong refractions beat
+padding."""
+    english_block = "" if only_languages else """
+
+FIRST, the English sections — and they are English THROUGHOUT. A word
+from another language belongs in the language sections below, never
+here, however familiar it has become.
+
+"english_synonyms": 4-10 English words or short phrases that fit THIS
+meaning. For each:
+- word: the English word or phrase
+- closeness: "close" (names essentially this meaning) or "related" (adds
+  or drops an important part — and then say which part in "differs")
+- meaning: its own plain meaning, one clause
+- fits: one sentence — what of this meaning it carries
+- differs: one sentence — what it adds, drops or assumes that this
+  meaning does not; empty only for a close synonym with no daylight
+- register: where it lives ("everyday", "literary", "clinical",
+  "slang", "technical", "dated")
+Rank by fit to the intended meaning, not by how striking the word is and
+not by resemblance to the working name. Keep useful near matches, with
+their differences stated. A word that adds an assumption the meaning
+leaves open (deliberate deception where intention is unknown, say) may
+be a helpful contrast; mark it "related" and say what it assumes. Do
+not pad: fewer true fits beat a longer list.
+
+"english_antonyms": 0-6 English opposites. For each:
+- word: the English word or phrase
+- relation: "antonym" (a real opposite of the meaning) or "contrast"
+  (a useful opposite of ONE of its dimensions, not of the whole)
+- opposes: one clause — which part of the meaning this word opposes;
+  when a compound meaning has several dimensions, each antonym names
+  the one it works against
+- meaning: its own plain meaning
+- register: as above
+A useful contrast must be marked "contrast", never dressed as an exact
+antonym. A meaning with no real opposite gets an empty list, not a
+forced one.
+
+"cultural_comparisons": 0-4 specific documented things — a named
+tradition, practice, text, or a concept from a literary or philosophical
+tradition — that illuminate this meaning. For each:
+- name: what it is, in Latin letters (transliterate)
+- tradition: where it comes from — a named tradition, author, period or
+  text, specific enough to look up
+- what: one or two sentences — what the documented thing actually is
+- connection: one sentence — how it bears on this meaning
+- limits: one sentence — where the comparison stops, what it does not
+  carry
+- check: where ONE search would verify it
+A comparison attaches to a documented use, never to what a whole
+culture supposedly feels or values; a generalization about a people is
+not a comparison and does not belong here.
+
+THEN the language sections."""
     return f"""You are the refraction stage of a Wordicon operation — a comparative
-lexicographer handed ONE named concept coined in English. Your job is to
-push it through other languages and report what each lexicon does with
-it: what the nearest term keeps, what it drops, what baggage it adds,
-and — most importantly — whether any language ALREADY has one
-established word for the whole concept, the way German had schadenfreude
-long before English admitted it needed it.
+lexicographer handed ONE meaning to explore: a named concept, a described
+idea, or the sense of a passage, coined or found in English. Your job is to
+report what English and other lexicons hold near it — in English, the
+synonyms and opposites that fit this sense; in other languages, what the
+nearest term keeps, what it drops, what baggage it adds, and — most
+importantly — whether any language ALREADY has one established word for
+the whole meaning, the way German had schadenfreude long before English
+admitted it needed it.
 
 A discipline that governs everything below: languages do not possess
 unified worldviews. Every claim you make attaches to a particular
@@ -8300,60 +8518,67 @@ concept of". Grand claims about a culture's soul are the signature of
 this genre's misinformation; usage claims about specific words are the
 alternative.
 
-The concept:
-Title: {candidate.get('title', '')}
-Definition: {candidate.get('definition', '')}{gloss_line}{neighbors_block}
+Three relationships are kept apart here and must not be confused:
+overlap of MEANING (what this stage reports), TRANSLATION (one language's
+nearest term for another's), and shared ORIGIN (ancestry, which the
+word-origins stage handles). A shared root is not a shared meaning, and
+a translation is not a synonym.
 
-Refract it through 4-6 languages. SPANISH IS ALWAYS ONE OF THEM.
+The meaning:
+{title_line}Meaning: {candidate.get('definition', '')}{gloss_line}{passage_block}{neighbors_block}{english_block}
 
-Spanish is not optional and not conditional on having something good to
-say. If Spanish has no close term for this concept, include it anyway
-with term, romanization and literal left empty and let keeps/drops
-describe the gap — a documented absence in the most widely spoken
-Romance language is a finding, and a more useful one than a fourth
-language that merely had something available. Do not invent a Spanish
-term to satisfy this instruction; an empty one is the correct answer
-when it is the true one.
-
-Then choose the rest from genuinely different families: one Germanic,
-one Romance beyond Spanish (Italian first where it has something to
-say), one Slavic, one East Asian, and one from elsewhere (Semitic,
-Turkic, Indic, an African or indigenous language) when the concept
-gives them something to say. Germanic and Romance are separate slots,
-not alternatives — reading them as interchangeable is how this stage
-returned German every time and Spanish never. Skip a language with
-nothing interesting to report; fewer strong refractions beat padding.
+{languages_block}
 
 For each refraction:
-- language: the language's English name
-- term: the nearest existing term or short phrase, in its native script.
-  This field is the ONLY place non-Latin characters are allowed in your
+- language: the language's English name (for Greek, the period is part
+  of the name: "Ancient Greek", "Koine Greek", "Modern Greek")
+- term: the nearest existing term or short phrase, in its native script
+  and original spelling (Greek in Greek letters, with accents). This
+  field is the ONLY place non-Latin characters are allowed in your
   entire response. It must be a REAL term you recall, never a
   construction of your own — if the language has no close term, leave
-  term, romanization, and literal empty and let keeps/drops describe the
-  gap, because a genuine absence is a finding, not a failure.
+  term, romanization, literal and meaning empty and let keeps/drops
+  describe the gap, because a genuine absence is a finding, not a
+  failure — an absence in this pass, not proof the language has no word.
 - romanization: the term in Latin letters, readable aloud
+- pronunciation: a rough guide to saying it, where the spelling does not
+  make that obvious; empty string otherwise
 - literal: word-for-word English gloss of the term's parts
-- keeps: one plain sentence — what of the concept this term carries IN
+- meaning: the term's own plain English meaning as used, one clause —
+  not its parts, and not the meaning under exploration repeated back
+- period: for Latin and Greek, REQUIRED — the period and register the
+  term belongs to (e.g. "Classical Latin", "Late Latin, ecclesiastical",
+  "Ancient Greek, Attic", "Koine, New Testament", "Modern Greek"); for
+  other languages, the era or century when that matters, else empty
+- example: one short sentence using the term, written by you for this
+  pass, when it would help; empty string otherwise. It is an example,
+  never a quotation — do not write anything that could be mistaken for
+  a historical citation.
+- keeps: one plain sentence — what of the meaning this term carries IN
   ITS DOCUMENTED USAGE (not what its parts could poetically mean)
 - drops: one plain sentence — what it loses (or, for a gap, what the
-  absence suggests about the concept)
+  absence suggests about the meaning)
 - adds: one sentence — connotation or history the term brings that the
-  English concept lacks; empty string if none
+  English meaning lacks; empty string if none. A term that adds an
+  assumption the meaning leaves open is a useful contrast, and this is
+  where that is said.
 - register: where this term actually lives — e.g. "everyday",
   "literary", "archaic", "clinical", "religious/liturgical",
-  "regional (name the region)", "internet slang". A real word that
-  lives only in one register or region is a different finding than a
-  common word; say which this is.
+  "regional (name the region)", "internet slang", "insulting". A real
+  word that lives only in one register or region is a different finding
+  than a common word; say which this is. A literary, colloquial,
+  technical or insulting register is information, not a reason to
+  leave the word out.
 - check: where ONE search would verify this term exists with this
   meaning — a standard dictionary, corpus, or reference for that
-  language, named specifically enough to act on
+  language, named specifically enough to act on. Naming it is not
+  consulting it: nothing here is checked until the owner looks.
 - collision: if this language already has ONE established word or fixed
-  compound naming essentially the WHOLE concept, say so plainly here —
+  compound naming essentially the WHOLE meaning, say so plainly here —
   this is the cross-lingual redundancy catch, the single most valuable
   thing this stage can find; empty string otherwise. This field is for
   AFFIRMATIVE claims only: never write a negation ("no true collision")
-  into it — a term that merely LOOKS like the concept (shared morphemes,
+  into it — a term that merely LOOKS like the meaning (shared morphemes,
   a false friend of the coin's own title) belongs in folk_alert as a
   false-friend warning, with collision left empty
 - folk_alert: if this territory touches a famous viral language claim
@@ -8361,7 +8586,7 @@ For each refraction:
   that it is disputed; empty string otherwise
 
 Also write "english_fossil" at the top level: one or two sentences, if
-some ENGLISH word itself secretly contains this concept's history — the
+some ENGLISH word itself secretly contains this meaning's history — the
 way "nightmare" fossilizes the mare, the demon that sat on sleepers'
 chests — such that an English speaker uses the word daily without
 knowing it names this. Empty string if you'd be reaching. If you write
@@ -8372,24 +8597,36 @@ lane's besetting sin, so an unverifiable fossil is worse than none.
 Honesty rules, non-negotiable: everything here is recall, not
 retrieval. Never invent a foreign word; never present a folk etymology
 as fact; a term you are unsure of belongs at lower confidence in your
-phrasing, not dressed up. All prose fields (keeps, drops, adds,
-collision, folk_alert, english_fossil) are plain English, Latin
-alphabet only — the native script lives in "term" alone, always
-accompanied by its romanization.
+phrasing, not dressed up. Do not force an equivalent, an antonym or a
+comparison to fill a slot. All prose fields (keeps, drops, adds,
+meaning, collision, folk_alert, english_fossil, and every field of the
+English and cultural sections) are plain English, Latin alphabet only —
+the native script lives in "term" alone, always accompanied by its
+romanization.
 
 Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
-{{"refractions": [{{"language": "...", "term": "...", "romanization": "...",
-  "literal": "...", "keeps": "...", "drops": "...", "adds": "...",
+{{"english_synonyms": [{{"word": "...", "closeness": "close" or "related", "meaning": "...",
+  "fits": "...", "differs": "...", "register": "..."}}],
+ "english_antonyms": [{{"word": "...", "relation": "antonym" or "contrast", "opposes": "...",
+  "meaning": "...", "register": "..."}}],
+ "cultural_comparisons": [{{"name": "...", "tradition": "...", "what": "...",
+  "connection": "...", "limits": "...", "check": "..."}}],
+ "refractions": [{{"language": "...", "term": "...", "romanization": "...", "pronunciation": "...",
+  "literal": "...", "meaning": "...", "period": "...", "example": "...",
+  "keeps": "...", "drops": "...", "adds": "...",
   "register": "...", "check": "...", "collision": "...", "folk_alert": "..."}}],
  "english_fossil": "..." or "", "fossil_check": "..." or ""}}"""
 
 
 def build_refract_review_prompt(candidate: dict, refractions: list[dict],
-                                  english_fossil: str = "") -> str:
+                                  english_fossil: str = "",
+                                  cultural_comparisons: "list[dict] | None" = None) -> str:
     ref_block = "\n\n".join(
         f"Refraction {i}: {r.get('language', '')} — {r.get('romanization', '') or '(no term: gap claimed)'}\n"
         f"  literal: {r.get('literal', '')}\n"
-        f"  keeps: {r.get('keeps', '')}\n  drops: {r.get('drops', '')}\n"
+        + (f"  meaning: {r.get('meaning', '')}\n" if r.get('meaning') else "")
+        + (f"  period: {r.get('period', '')}\n" if r.get('period') else "")
+        + f"  keeps: {r.get('keeps', '')}\n  drops: {r.get('drops', '')}\n"
         f"  adds: {r.get('adds', '')}\n"
         f"  register: {r.get('register', '') or '(unstated)'}\n"
         f"  check: {r.get('check', '') or '(none named)'}\n"
@@ -8398,11 +8635,21 @@ def build_refract_review_prompt(candidate: dict, refractions: list[dict],
         for i, r in enumerate(refractions)
     )
     fossil_block = f"\n\nClaimed English fossil: {english_fossil}" if english_fossil else ""
+    comps = [c for c in (cultural_comparisons or []) if isinstance(c, dict)]
+    comp_block = ""
+    if comps:
+        comp_block = "\n\n" + "\n\n".join(
+            f"Comparison {i}: {c.get('name', '')} — {c.get('tradition', '') or '(no tradition named)'}\n"
+            f"  what: {c.get('what', '')}\n  connection: {c.get('connection', '')}\n"
+            f"  limits: {c.get('limits', '') or '(none stated)'}\n"
+            f"  check: {c.get('check', '') or '(none named)'}"
+            for i, c in enumerate(comps))
+    name = (candidate.get('title') or '').strip() or "an unnamed meaning"
     return f"""You are the refraction-review stage of a Wordicon operation: a skeptical
 multilingual lexicographer reviewing translation claims proposed for the
-concept "{candidate.get('title', '')}" ({candidate.get('definition', '')}).
+concept "{name}" ({candidate.get('definition', '')}).
 
-{ref_block}{fossil_block}
+{ref_block}{fossil_block}{comp_block}
 
 This genre — what English speakers don't know about other languages — is
 the most misinformation-dense territory in popular linguistics, and the
@@ -8461,6 +8708,7 @@ a term you cannot stake and point to cannot "hold", whatever its fit.
   Leave it empty when the term carries no such verdict, which is the
   ordinary case.
 {"For the claimed English fossil: folk etymology is this lane's besetting sin, so your DEFAULT is 'suspect' — award 'holds' only to textbook-canonical etymology you would stake real confidence on, and say where to verify it." if english_fossil else ""}
+{"For each numbered Comparison: the same two axes. attestation — does the named tradition, practice, text or concept exist as described, in the tradition named? verdict — is the stated connection to the meaning fair to what the thing documentedly is, or is it a generalization about a people dressed as a comparison? A comparison that attaches to no specific documented use cannot hold." if comps else ""}
 All advisory; nothing is hidden. Your own knowledge is recall too — when
 you contradict a refraction, say what you recall instead, labeled as
 recall.
@@ -8469,6 +8717,8 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
 {{"reviews": [{{"index": 0, "attestation": "attested" or "uncertain" or "likely-invented",
   "verdict": "holds" or "strained" or "suspect", "carries_verdict": "..." or "",
   "note": "..."}}],
+ "comparison_reviews": [{{"index": 0, "attestation": "attested" or "uncertain" or "likely-invented",
+  "verdict": "holds" or "strained" or "suspect", "note": "..."}}],
  "fossil_verdict": "holds" or "strained" or "suspect" or "", "fossil_note": "..." or ""}}{ENGLISH_PROSE_RULE}"""
 
 
@@ -8481,7 +8731,46 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
 # not one of them returned Spanish, the most widely spoken Romance language
 # on earth. An absence nobody is told about looks identical to a language
 # having nothing to offer.
-REFRACT_REQUIRED = ("Spanish",)
+#
+# Latin and Greek joined Spanish on 2026-09-13 (Find related words, the
+# owner's addition): "Latin and Greek must be visibly accounted for, not
+# silently skipped." The prompt asks for Greek BY PERIOD — Ancient, Koine,
+# Modern — so the names it returns are not the bare word, and a check that
+# compared bare names would report Greek missing on every honest reply.
+# The aliases below are what "came back" means for each required language.
+REFRACT_REQUIRED = ("Spanish", "Latin", "Greek")
+
+REFRACT_LANGUAGE_ALIASES = {
+    "Spanish": ("spanish", "castilian", "español", "castellano"),
+    "Latin": ("latin", "classical latin", "late latin", "medieval latin", "vulgar latin",
+              "ecclesiastical latin", "church latin", "old latin", "neo-latin", "new latin",
+              "renaissance latin", "scientific latin"),
+    "Greek": ("greek", "ancient greek", "classical greek", "attic greek", "homeric greek",
+              "koine greek", "koine", "hellenistic greek", "biblical greek", "byzantine greek",
+              "medieval greek", "modern greek", "demotic greek", "katharevousa"),
+}
+
+
+def canonical_language(name: str) -> str:
+    """The required language a returned language name counts for, or the
+    name itself, title-cased, when it is not one of them. "Ancient Greek"
+    and "Koine Greek" are Greek; "Latin American Spanish" is Spanish, not
+    Latin — Spanish is tested first for exactly that reason; "Church Latin"
+    is Latin. A name this cannot place is left as the model wrote it."""
+    n = (name or "").strip().lower()
+    if not n:
+        return ""
+    for canon in ("Spanish", "Latin", "Greek"):
+        aliases = REFRACT_LANGUAGE_ALIASES[canon]
+        if n in aliases:
+            return canon
+    if "spanish" in n or "castilian" in n:
+        return "Spanish"
+    if "greek" in n:
+        return "Greek"
+    if "latin" in n:
+        return "Latin"
+    return (name or "").strip()
 
 
 def missing_required_languages(refractions: list) -> list:
@@ -8491,9 +8780,10 @@ def missing_required_languages(refractions: list) -> list:
     real finding — Spanish has no close term — and is what the prompt asks
     for when that is true. A Spanish entry that is simply absent is the
     stage not doing as it was told, and the two must never render the same.
+    Greek counts as present under any of its period names.
     """
-    seen = {(r.get("language") or "").strip().lower() for r in (refractions or [])}
-    return [lang for lang in REFRACT_REQUIRED if lang.lower() not in seen]
+    seen = {canonical_language(r.get("language") or "") for r in (refractions or [])}
+    return [lang for lang in REFRACT_REQUIRED if lang not in seen]
 
 
 # ---- archetype: the figure a concept implies, under constraint ----------
@@ -9406,36 +9696,127 @@ def run_archetype(candidate: dict, gateway: Gateway,
             "summary": summary}
 
 
+_LATIN_WORD_RX = re.compile(r"^[A-Za-zÀ-ɏ][A-Za-zÀ-ɏ' \-’.]*$")
+
+
+def _english_items(items, kind: str) -> "tuple[list, list]":
+    """The English sections stay English throughout (the owner's rule).
+    What code can check is script: a word written in anything but Latin
+    letters is set aside — visibly, with its reason, never dropped in
+    silence — because it cannot be an English synonym or antonym whatever
+    the model called it. A foreign word in Latin letters passes this
+    check; the prompt forbids it and the page labels the whole section as
+    recall, and that limit is stated on the page rather than hidden."""
+    kept, aside = [], []
+    for it in items or []:
+        if not isinstance(it, dict):
+            continue
+        w = str(it.get("word") or "").strip()
+        if not w:
+            continue
+        it = {**it, "word": w}
+        if not _LATIN_WORD_RX.match(w):
+            aside.append({"section": kind, "word": w,
+                          "reason": "not written in Latin letters — it cannot be an English "
+                                    f"{'synonym' if kind == 'synonyms' else 'antonym'}, whatever it is"})
+            continue
+        kept.append(it)
+    return kept, aside
+
+
 def run_refract(candidate: dict, gateway: Gateway,
                  on_progress: "Callable[[str, str], None] | None" = None,
-                 known_neighbors: "str | None" = None) -> dict:
+                 known_neighbors: "str | None" = None,
+                 passage: "str | None" = None,
+                 entry: str = "concept",
+                 only_languages: "list[str] | None" = None) -> dict:
+    """One pass of Find related words / Explore other languages — the same
+    record either door opens (2026-09-13). `entry` says how the meaning
+    arrived: "concept" (a candidate with a title), "description" (a meaning
+    typed with no name), "selection" (the sense of a passage from the room,
+    passed as `passage` for context). `only_languages` is a follow-up the
+    owner asked for by name: those languages and nothing else, no English
+    sections, the required-language rule not applied."""
     def progress(stage: str, detail: str) -> None:
         if on_progress:
             on_progress(stage, detail)
 
     seed = load_seed_corpus()
-    title = candidate.get("title", "")
-    input_text = f"refract of '{title}': {candidate.get('definition', '')[:160]}"
-    trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
+    title = (candidate.get("title") or "").strip()
+    meaning = (candidate.get("definition") or "").strip()
+    if not meaning:
+        raise ValueError("there is no meaning to find related words for")
+    entry = entry if entry in ("concept", "description", "selection") else "concept"
+    only_languages = [str(x).strip() for x in (only_languages or []) if str(x).strip()][:6] or None
+    sections_asked = ["languages"] if only_languages else list(REFRACT_SECTIONS)
+    # The parent link the Library reads back out of this sentence (see
+    # server._PARENT_RX) needs the word and this exact shape; a meaning
+    # with no name has no parent word, and says what it is instead.
+    if title:
+        input_text = f"refract of '{title}': {meaning[:160]}"
+    else:
+        input_text = f"related words for: {meaning[:160]}"
+    # Minted from the precise clock and the pass's shape, not the second:
+    # a follow-up on the same word inside the same second as the full pass
+    # would otherwise share its id and overwrite its snapshot (seen in the
+    # offline smoke test; the other lanes still mint by the second).
+    trace_id = "trace_cli_" + hashlib.sha256(
+        (input_text + _now_precise() + json.dumps(only_languages or []) + entry).encode()).hexdigest()[:10]
     _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
+    _parse_mark = parse_notes_mark()
 
-    print(f"[{gateway.name}] refracting {title!r} through other lexicons...")
-    progress("refracting", f"Refracting {title!r} through other languages…")
+    label = repr(title) if title else "an unnamed meaning"
+    if only_languages:
+        print(f"[{gateway.name}] refracting {label} through {', '.join(only_languages)}...")
+        progress("refracting", f"Asking {', '.join(only_languages)} about {label}…")
+    else:
+        print(f"[{gateway.name}] finding related words for {label} — English, Latin, Greek and other lexicons...")
+        progress("refracting", f"Finding related words for {label} — English first, then other languages…")
     parsed = _extract_json(gateway.complete(
-        build_refract_prompt(candidate, known_neighbors=known_neighbors)))
-    refractions = parsed.get("refractions", [])
+        build_refract_prompt(candidate, known_neighbors=known_neighbors,
+                             passage=passage if entry == "selection" else None,
+                             only_languages=only_languages)))
+    refractions = [r for r in (parsed.get("refractions") or []) if isinstance(r, dict)]
     if not refractions:
-        raise RuntimeError("refract returned no refractions")
+        raise RuntimeError("the stage returned no language entries — a failure to run, not a finding")
+    for r in refractions:
+        # The stored language name is what the model wrote; the canonical
+        # name rides beside it so the page can find Latin and Greek under
+        # any period name without guessing.
+        r["language_canonical"] = canonical_language(r.get("language") or "")
     english_fossil = (parsed.get("english_fossil") or "").strip()
     fossil_check = (parsed.get("fossil_check") or "").strip()
+    synonyms, aside_s = _english_items(parsed.get("english_synonyms"), "synonyms")
+    antonyms, aside_a = _english_items(parsed.get("english_antonyms"), "antonyms")
+    english_set_aside = aside_s + aside_a
+    cultural = [c for c in (parsed.get("cultural_comparisons") or []) if isinstance(c, dict)
+                and str(c.get("name") or "").strip()]
+    if only_languages:
+        # Asked for none; if any came back they are not what was asked
+        # and are not shown as if they were.
+        synonyms, antonyms, cultural, english_set_aside = [], [], [], []
 
     print(f"[{gateway.name}] reviewing {len(refractions)} refraction(s) for invention and folk-linguistics...")
     progress("friction", f"The critique on {len(refractions)} refraction(s)…")
     review_raw, review_citations = gateway.complete_with_search(
-        build_refract_review_prompt(candidate, refractions, english_fossil))
+        build_refract_review_prompt(candidate, refractions, english_fossil,
+                                    cultural_comparisons=cultural))
     review_parsed = _extract_json(review_raw)
     by_index = {r.get("index"): r for r in review_parsed.get("reviews", [])
                 if isinstance(r, dict)}
+    comp_by_index = {r.get("index"): r for r in (review_parsed.get("comparison_reviews") or [])
+                     if isinstance(r, dict)}
+    for i, c in enumerate(cultural):
+        rev = comp_by_index.get(i, {})
+        c["attestation"] = str(rev.get("attestation") or "")
+        c["review_verdict"] = str(rev.get("verdict") or "")
+        c["review_note"] = str(rev.get("note") or "")
+        # The same demotion the refractions get: a comparison the reviewer
+        # will not stake cannot hold, however well it reads.
+        if c["review_verdict"] == "holds" and c["attestation"] != "attested":
+            c["review_verdict"] = "strained"
+            c["review_note"] = (c["review_note"] + " " if c["review_note"] else "") + \
+                "(Demoted from holds: attestation was not staked.)"
     for i, r in enumerate(refractions):
         rev = by_index.get(i, {})
         r["review_verdict"] = rev.get("verdict", "")
@@ -9473,7 +9854,8 @@ def run_refract(candidate: dict, gateway: Gateway,
         receipt_id=f"receipt_{trace_id}", trace_id=trace_id, operation="crossbreed",
         input_text=input_text, kernel_version=seed["kernel"]["kernel_version"],
         engine_version="cli-0.2.0", sources=[], derived_constraints_applied=[],
-        claims=[], candidates=[{"title": title}], rejections=[], warnings=[],
+        claims=[], candidates=[{"title": title}] if title else [], rejections=[],
+        warnings=parse_notes_since(_parse_mark),
         model_calls=[{"gateway": gateway.name, "is_external": gateway.is_external}],
         prompt_identities=prompt_identities_since(_pmark, gateway),
     )
@@ -9481,13 +9863,25 @@ def run_refract(candidate: dict, gateway: Gateway,
     schema_loader.validate("receipt.schema.json", private_receipt)
     persist_receipt(private_receipt)
 
-    missing_langs = missing_required_languages(refractions)
+    # A follow-up asked for named languages only; the required-language
+    # rule is about the full pass and does not apply to it.
+    missing_langs = [] if only_languages else missing_required_languages(refractions)
     n_collisions = sum(1 for r in refractions if (r.get("collision") or "").strip())
     n_invented = sum(1 for r in refractions if r.get("attestation") == "likely-invented")
-    summary = (f"{len(refractions)} language(s) · "
+    n_close = sum(1 for s in synonyms if s.get("closeness") == "close")
+    n_exact = sum(1 for a in antonyms if a.get("relation") == "antonym")
+    english_bit = ""
+    if "english" in sections_asked:
+        english_bit = (f"{len(synonyms)} English synonym(s) ({n_close} close, {len(synonyms) - n_close} related) · "
+                       f"{len(antonyms)} English opposite(s) ({n_exact} antonym(s), {len(antonyms) - n_exact} contrast(s)) · ")
+        if english_set_aside:
+            english_bit += f"{len(english_set_aside)} set aside from the English sections (not in Latin letters) · "
+    summary = (english_bit
+               + f"{len(refractions)} language(s) · "
                f"{sum(1 for r in refractions if r.get('review_verdict') == 'holds')} hold, "
                f"{sum(1 for r in refractions if r.get('review_verdict') == 'strained')} strained, "
                f"{sum(1 for r in refractions if r.get('review_verdict') == 'suspect')} suspect"
+               + (f" · {len(cultural)} cultural comparison(s)" if cultural else "")
                + (f" · {n_collisions} possible existing name(s) elsewhere" if n_collisions else "")
                + (f" · {n_invented} term(s) flagged likely-invented" if n_invented else "")
                + (f" · {', '.join(missing_langs)} was asked for and did not come back"
@@ -9495,63 +9889,94 @@ def run_refract(candidate: dict, gateway: Gateway,
                + " · all terms are recall, unverified — verify before you trust"
                + (_acquisition_phrase(review_citations) if review_citations else ""))
 
+    if synonyms or antonyms:
+        print(f"  ENGLISH: {', '.join(s['word'] + (' (related)' if s.get('closeness') != 'close' else '') for s in synonyms) or '(no synonyms found in this pass)'}")
+        print(f"  OPPOSITES: {', '.join(a['word'] + (' (contrast)' if a.get('relation') != 'antonym' else '') for a in antonyms) or '(none found in this pass)'}")
+    for it in english_set_aside:
+        print(f"  set aside from the English {it['section']}: {it['word']} — {it['reason']}")
     for r in refractions:
         mark = r.get("review_verdict", "?")
-        print(f"  [{mark}] {r.get('language', '')}: {r.get('romanization', '') or '(gap)'} — {r.get('keeps', '')}")
+        print(f"  [{mark}] {r.get('language', '')}: {r.get('romanization', '') or '(no close match found in this pass)'} — {r.get('keeps', '')}")
         if (r.get("collision") or "").strip():
             print(f"        possible existing name: {r['collision']}")
     if missing_langs:
         print(f"  ASKED FOR AND ABSENT: {', '.join(missing_langs)} — not the language having "
               f"nothing to say; the stage was told to include it either way.")
+    for c in cultural:
+        print(f"  [{c.get('review_verdict') or '?'}] comparison: {c.get('name', '')} — {c.get('tradition', '')}")
     if english_fossil:
         print(f"  hidden in English [{fossil_verdict or '?'}]: {english_fossil}")
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
+    passage_text = (passage or "").strip() if entry == "selection" else ""
+    snapshot = {
         "trace_id": trace_id, "mode": "refract", "input_text": input_text,
         "created_at": _now(), "source": {**{k: candidate.get(k, "") for k in
             ("title", "definition", "plain_gloss")},
-            "concept_id": candidate.get("concept_id", "") or ""},   # the identity the roads use (Map Focus)
+            "concept_id": candidate.get("concept_id", "") or "",   # the identity the roads use (Map Focus)
+            # how the meaning arrived, and — for a selection — the passage
+            # it was the sense of, so reopening keeps what the comparison
+            # was about (the owner's rule: the intended meaning is saved
+            # with the words found for it)
+            "entry": entry,
+            "passage": passage_text[:4000],
+            "passage_chars": len(passage_text),
+            "only_languages": only_languages or []},
+        "sections_asked": sections_asked,
+        "english_synonyms": synonyms, "english_antonyms": antonyms,
+        "english_set_aside": english_set_aside,
+        "cultural_comparisons": cultural,
         "refractions": refractions, "missing_languages": missing_langs,
         "english_fossil": english_fossil,
         "fossil_check": fossil_check,
         "fossil_verdict": fossil_verdict, "fossil_note": fossil_note,
         "summary": summary, "citations": review_citations,
+        "parse_notes": list(private_receipt.get("warnings") or []),
             # block 118: what the provider reported about the acquisition —
             # its own usage numbers, never ours, and "unknown" where it
             # reported nothing.
             "acquisition_usage": getattr(gateway, "last_acquisition", None),
-    }, indent=2))
+    }
+    (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps(snapshot, indent=2))
 
     # Write order (gate 0): roads last, citing a receipt that now exists.
     # Edge per refraction, verdict on the relationship: a real Chinese
     # term with a wrong equivalence claim is a real node with a bad
     # edge — the two failures are independent (that's the two-axis
-    # rule above) and the map keeps them apart the same way.
-    for r in refractions:
-        if (r.get("romanization") or r.get("term") or "").strip():
-            record_edge("translated_as",
+    # rule above) and the map keeps them apart the same way. A meaning
+    # with no name and no concept id has no box on the map to tie a road
+    # to, so an unnamed pass records no roads — the record itself is
+    # still whole.
+    if title or (candidate.get("concept_id") or ""):
+        for r in refractions:
+            if (r.get("romanization") or r.get("term") or "").strip():
+                record_edge("translated_as",
+                             node_concept(candidate.get("concept_id") or "", title),
+                             node_translation(r.get("language", ""),
+                                               r.get("romanization") or r.get("term") or ""),
+                             trace_id, verdict=r["review_verdict"],
+                             detail=f"attestation: {r['attestation'] or 'unstated'}",
+                             origin="model_proposed",
+                             producer=edge_producer("receipt", f"receipt_{trace_id}", stage="refract"))
+        if english_fossil:
+            record_edge("english_fossil",
                          node_concept(candidate.get("concept_id") or "", title),
-                         node_translation(r.get("language", ""),
-                                           r.get("romanization") or r.get("term") or ""),
-                         trace_id, verdict=r["review_verdict"],
-                         detail=f"attestation: {r['attestation'] or 'unstated'}",
+                         node_external(english_fossil[:60], "English etymology"),
+                         trace_id, verdict=fossil_verdict, detail=fossil_check[:200],
                          origin="model_proposed",
                          producer=edge_producer("receipt", f"receipt_{trace_id}", stage="refract"))
-    if english_fossil:
-        record_edge("english_fossil",
-                     node_concept(candidate.get("concept_id") or "", title),
-                     node_external(english_fossil[:60], "English etymology"),
-                     trace_id, verdict=fossil_verdict, detail=fossil_check[:200],
-                     origin="model_proposed",
-                     producer=edge_producer("receipt", f"receipt_{trace_id}", stage="refract"))
 
     return {"trace_id": trace_id, "mode": "refract",
             "source_title": title, "refractions": refractions,
+            "source": snapshot["source"], "sections_asked": sections_asked,
+            "english_synonyms": synonyms, "english_antonyms": antonyms,
+            "english_set_aside": english_set_aside,
+            "cultural_comparisons": cultural,
             "missing_languages": missing_langs,
             "english_fossil": english_fossil, "fossil_check": fossil_check,
             "fossil_verdict": fossil_verdict, "fossil_note": fossil_note,
             "citations": review_citations,
+            "parse_notes": list(private_receipt.get("warnings") or []),
             # block 118: what the provider reported about the acquisition —
             # its own usage numbers, never ours, and "unknown" where it
             # reported nothing.

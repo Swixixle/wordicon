@@ -2388,8 +2388,12 @@ def _check_plain_words():
                  "'Explore this idea'", 'title="formerly Sprout"', 'title="formerly Refract"', 'title="formerly Archetype"',
                  'id="deep-ask-title">Full workup</div>', "aria-disabled=\"true\"'}>Full workup</button>",
                  'title="formerly Go deep">Full workup</button>', "From the record — a full workup",
-                 "label: 'parallels'", "label: 'other languages'", "label: 'character patterns'", "label: 'full workup'",
-                 "Exploring parallels from “", "Exploring other languages for “"):
+                 "label: 'parallels'", "label: 'related words'", "label: 'character patterns'", "label: 'full workup'",
+                 "Exploring parallels from “", "Find related words${original.title ? ` for “",
+                 # Find related words (the owner's addition, 2026-09-13): first in Explore this idea,
+                 # and Explore other languages is the languages section of the same panel
+                 "≈ Find related words — English synonyms and opposites, then Latin, Greek and other languages",
+                 "startRefractFromCard(${i}, '${escapeJs(bff.title)}', 'languages')"):
         if need not in pg:
             out.append(f"W: the page lost the plain door {need!r}")
     for gone in ("⤷ Sprout —", "⇄ Refract —", "◈ Archetype —", ">Go deep</button>", ">Go deep — full workup</button>",
@@ -2405,6 +2409,202 @@ def _check_plain_words():
     for key, least in (("'sprout'", 3), ("'refract'", 3), ("mode: 'archetype'", 1), ("'deep'", 3)):
         if pg.count(key) < least:
             out.append(f"W: the mode name {key} looks renamed on the page — modes are record keys and route names")
+    return out
+
+
+def _check_related_words(server, paired):
+    """Find related words (the owner's addition, 2026-09-13), on the Refract
+    machinery. What must hold: the pass starts from a MEANING and needs no
+    title and no accepted concept; the English synonyms and opposites are
+    their own sections, kept apart from the languages, and stay English —
+    a word not in Latin letters is set aside visibly, never shown as English
+    and never dropped in silence; Latin and Greek are required, under any
+    period name, and the prompt asks for the period; a language that came
+    back empty and a language never asked are two different statements on
+    the page, and neither claims the language lacks the meaning; a record
+    from before this date renders "Not checked" where it has nothing, not
+    "nothing found"; a follow-up on named languages asks for those and
+    nothing else, applies no required-language rule, and is recorded as a
+    follow-up; an unnamed pass records no road (there is no box to tie it
+    to) and its receipt names no candidate; the saved comparisons for an
+    idea are found by id (recorded) or by title (derived, labelled); the
+    room reaches it through the ⋯ menu and a panel that says the cost and
+    spends nothing until pressed; the bar did not grow; the law carries it."""
+    out = []
+    import json as _json
+    root = _pathlib.Path(cli.__file__).resolve().parents[1]
+    pg = (root / "webapp" / "index.html").read_text(encoding="utf-8")
+    law = _canon_source()
+    src = _pathlib.Path(cli.__file__).read_text(encoding="utf-8")
+    # ---- the prompt ----------------------------------------------------
+    full = cli.build_refract_prompt({"title": "Threshold Grief", "definition": "the sadness of being between stages"})
+    for need in ('"english_synonyms"', '"english_antonyms"', '"cultural_comparisons"', "English THROUGHOUT",
+                 "Rank by fit to the intended meaning", "not by resemblance to the working name",
+                 '"closeness": "close" or "related"', '"relation": "antonym" or "contrast"',
+                 "never dressed as an exact\nantonym", "SO\nARE LATIN AND GREEK", '"period"', '"pronunciation"',
+                 "It is an example,\n  never a quotation", "Do not force an equivalent, an antonym or a\ncomparison to fill a slot",
+                 "an absence IN THIS PASS", "not proof that the language lacks the concept",
+                 "Three relationships are kept apart", "shared ORIGIN", "Working name (a handle only"):
+        if need not in full:
+            out.append(f"RW: the prompt lost {need!r}")
+    unnamed = cli.build_refract_prompt({"title": "", "definition": "a skilled throw at a wake"},
+                                       passage="He threw it, and the room laughed.")
+    if "Working name: none yet" not in unnamed or "The passage this sense was taken from" not in unnamed \
+            or "He threw it, and the room laughed." not in unnamed:
+        out.append("RW: a meaning with no name, from a passage, is not put to the model as such")
+    if "Working name (a handle only" in unnamed:
+        out.append("RW: an unnamed meaning is given a working-name line anyway")
+    only = cli.build_refract_prompt({"title": "T", "definition": "d"}, only_languages=["Japanese", "Finnish"])
+    if "exactly these languages and no others: Japanese, Finnish." not in only or "SPANISH IS ALWAYS" in only \
+            or '"english_synonyms"' not in only or "as EMPTY lists" not in only:
+        out.append("RW: a follow-up on named languages is not asked for as those languages and nothing else")
+    rev = cli.build_refract_review_prompt({"title": "T", "definition": "d"},
+                                          [{"language": "Latin", "romanization": "limen", "period": "Classical Latin"}],
+                                          cultural_comparisons=[{"name": "N", "tradition": "Tr", "what": "w", "connection": "c", "limits": "l", "check": "k"}])
+    if "Comparison 0: N — Tr" not in rev or '"comparison_reviews"' not in rev or "period: Classical Latin" not in rev:
+        out.append("RW: the review is not handed the comparisons and the periods")
+    # ---- the run -------------------------------------------------------
+    with _isolated_store("related_words") as store:
+        gw = cli.MockGateway()
+        rf = cli.run_refract({"title": "Threshold Grief", "definition": "the sadness of being between stages",
+                              "concept_id": "concept_rw_1"}, gw)
+        if rf.get("sections_asked") != ["english", "languages", "cultural"]:
+            out.append(f"RW: a full pass does not record the three sections it asked for ({rf.get('sections_asked')})")
+        syn = rf.get("english_synonyms") or []
+        if not syn or any(not cli._LATIN_WORD_RX.match(x["word"]) for x in syn):
+            out.append("RW: the English synonyms are not all in Latin letters")
+        aside = rf.get("english_set_aside") or []
+        if len(aside) != 1 or aside[0].get("section") != "synonyms" or "not written in Latin letters" not in aside[0].get("reason", ""):
+            out.append(f"RW: the Greek-lettered word offered as an English synonym was not set aside with its reason ({aside})")
+        if not (rf.get("english_antonyms") or []) or not any(a.get("relation") == "contrast" for a in rf["english_antonyms"]):
+            out.append("RW: the fixture's contrast antonym did not survive as a contrast")
+        comps = rf.get("cultural_comparisons") or []
+        if not comps or comps[0].get("review_verdict") not in ("holds", "strained", "suspect") or not comps[0].get("attestation"):
+            out.append("RW: the cultural comparison did not get the reviewer's two axes")
+        langs = {r.get("language_canonical") for r in rf["refractions"]}
+        if not {"Latin", "Greek", "Spanish"} <= langs:
+            out.append(f"RW: a full pass came back without Latin, Greek and Spanish ({sorted(langs)})")
+        if rf.get("missing_languages"):
+            out.append(f"RW: the fixture reports required languages missing ({rf['missing_languages']})")
+        greek = [r for r in rf["refractions"] if r.get("language_canonical") == "Greek"]
+        if not greek or not greek[0].get("period") or not greek[0].get("term"):
+            out.append("RW: the Greek entry lost its period or its native-script term")
+        if "English synonym(s)" not in rf.get("summary", "") or "set aside" not in rf.get("summary", ""):
+            out.append("RW: the summary does not count the English sections and the set-aside")
+        snap = _json.loads((cli.RESULTS_DIR / f"{rf['trace_id']}.json").read_text())
+        for k in ("sections_asked", "english_synonyms", "english_antonyms", "english_set_aside", "cultural_comparisons", "parse_notes"):
+            if k not in snap:
+                out.append(f"RW: the snapshot does not carry {k}")
+        if (snap.get("source") or {}).get("entry") != "concept":
+            out.append("RW: the snapshot does not say how the meaning arrived")
+        # a comparison the reviewer will not stake cannot hold
+        class _UnstakedComparison(cli.MockGateway):
+            def complete(self, prompt: str) -> str:
+                o = super().complete(prompt)
+                if prompt.startswith("You are the refraction-review stage"):
+                    d = _json.loads(o); d["comparison_reviews"][0]["attestation"] = "uncertain"; return _json.dumps(d)
+                return o
+        rf_u = cli.run_refract({"title": "T2", "definition": "d2"}, _UnstakedComparison())
+        c0 = (rf_u.get("cultural_comparisons") or [{}])[0]
+        if c0.get("review_verdict") != "strained" or "Demoted from holds" not in c0.get("review_note", ""):
+            out.append("RW: an unstaked comparison was allowed to hold")
+        # an unnamed pass from a selection: no title, no road, the passage kept
+        edges_before = cli.EDGES_LOG.read_text().count("\n") if cli.EDGES_LOG.exists() else 0
+        sel = cli.run_refract({"title": "", "definition": "a skilled throw at a wake, enjoyed by everyone"}, gw,
+                              passage="He threw it once, cleanly, and the room laughed.", entry="selection")
+        edges_after = cli.EDGES_LOG.read_text().count("\n") if cli.EDGES_LOG.exists() else 0
+        if edges_after != edges_before:
+            out.append(f"RW: an unnamed pass recorded {edges_after - edges_before} road(s) — there is no box to tie them to")
+        ssnap = _json.loads((cli.RESULTS_DIR / f"{sel['trace_id']}.json").read_text())
+        if (ssnap.get("source") or {}).get("entry") != "selection" or ssnap["source"].get("passage") != "He threw it once, cleanly, and the room laughed." \
+                or ssnap["source"].get("passage_chars") != 48:
+            out.append("RW: a selection pass does not keep the passage it was the sense of")
+        if not ssnap.get("input_text", "").startswith("related words for: "):
+            out.append(f"RW: an unnamed pass is written up as a refraction of a word ({ssnap.get('input_text')!r})")
+        rcpt = _json.loads((cli.RECEIPTS_DIR / f"receipt_{sel['trace_id']}.json").read_text())
+        if rcpt.get("candidates"):
+            out.append("RW: an unnamed pass invented a candidate on its receipt")
+        try:
+            cli.run_refract({"title": "T", "definition": "   "}, gw)
+            out.append("RW: a pass with no meaning ran")
+        except ValueError:
+            pass
+        # a follow-up: named languages, no English, no required-language rule, its own record
+        fu = cli.run_refract({"title": "Threshold Grief", "definition": "the sadness of being between stages",
+                              "concept_id": "concept_rw_1"}, gw, only_languages=["Japanese", "Finnish"])
+        if fu.get("sections_asked") != ["languages"] or fu.get("english_synonyms") or fu.get("cultural_comparisons") \
+                or [r.get("language") for r in fu["refractions"]] != ["Japanese", "Finnish"] or fu.get("missing_languages"):
+            out.append("RW: a follow-up did not come back as those languages and nothing else")
+        if fu["trace_id"] == rf["trace_id"]:
+            out.append("RW: a follow-up in the same second as the full pass shares its trace id and overwrites it")
+        fsnap = _json.loads((cli.RESULTS_DIR / f"{fu['trace_id']}.json").read_text())
+        if (fsnap.get("source") or {}).get("only_languages") != ["Japanese", "Finnish"]:
+            out.append("RW: the follow-up's record does not say which languages it was asked for")
+        # ---- the routes ------------------------------------------------
+        c = paired(server.app.test_client())
+        r = c.post("/api/jobs", json={"mode": "refract", "original": {"title": "X"}})
+        if r.status_code != 400 or "original.definition" not in (r.get_json() or {}).get("error", ""):
+            out.append("RW: a refract with no meaning is not refused for the right reason")
+        r = c.post("/api/jobs", json={"mode": "refract", "original": {"definition": "d"}, "entry": "bogus"})
+        if r.status_code != 400:
+            out.append("RW: a bad entry kind is not refused")
+        r = c.get("/api/related/saved?concept_id=concept_rw_1&title=Threshold%20Grief")
+        d = r.get_json() or {}
+        vias = sorted((it.get("via"), bool(it.get("only_languages"))) for it in d.get("items") or [])
+        if vias != [("recorded", False), ("recorded", True)]:
+            out.append(f"RW: the saved comparisons by id are wrong ({vias})")
+        r = c.get("/api/related/saved?title=threshold%20grief")
+        d = r.get_json() or {}
+        if not d.get("items") or any(it.get("via") != "derived" for it in d["items"]) or "derived" not in d.get("matched_by", ""):
+            out.append("RW: a title-only match is not labelled derived")
+        r = c.get("/api/related/saved")
+        if (r.get_json() or {}).get("items") != []:
+            out.append("RW: a search with no id and no title returns something")
+    # ---- the page ------------------------------------------------------
+    for need in ("≈ Find related words — English synonyms and opposites, then Latin, Greek and other languages",
+                 "No close match found in this pass — an absence from recall, not proof the language lacks it.",
+                 "Not checked — this comparison was made before the English ${noun} were part of the tool.",
+                 "was asked for and did not come back. That is the stage not doing as it was told, not ${c} having no word for this.",
+                 "was not asked for when this comparison was made.",
+                 "Set aside from the English sections, not shown as English:",
+                 "Everything here is recall — remembered, not looked up",
+                 "Where one search would settle it (not yet made):",
+                 "Example, written for this pass — not a quotation:",
+                 "a contrast, not an exact opposite", "related — adds or drops a part",
+                 "English synonyms — words that fit this meaning", "English antonyms — and what each one opposes",
+                 "'Greek — Ancient, Koine or Modern, said which'", "Ask another language",
+                 "function canonLang(name)", "function rwScrollTo(id, uid)",
+                 'onclick="toggleWsMore();askRelated()"', 'id="related-ask"', "function askRelated()",
+                 "if (relatedOpen()) { e.preventDefault(); closeRelated(); return; }",
+                 "A hosted lane sends the meaning line${sel ? ' and your selection' : ''} to the provider",
+                 "Saved comparisons for this idea — ", "this concept, by id", "same title — a reconstruction",
+                 "} else if (job.mode === 'refract') {", "From the record — related words and other languages"):
+        if need not in pg:
+            out.append(f"RW: the page lost {need!r}")
+    # the room's start path sends a COPY of the selection and touches nothing
+    start = pg[pg.index("async function startRelatedFromRoom()"):pg.index("\n}", pg.index("async function startRelatedFromRoom()"))]
+    for bad in ("ta.value", "setSelectionRange", "input-text"):
+        if bad in start:
+            out.append(f"RW: starting from the room touches the draft ({bad})")
+    if "kind: 'related'" not in start or "watchJob(d.job_id)" not in start:
+        out.append("RW: the room's pass does not ride the room's own route and watcher")
+    # the doors: Find related words first, and Explore other languages lands on the languages section
+    doors = pg[pg.index('<details class="case explore-idea"'):pg.index("</details>", pg.index('<details class="case explore-idea"'))]
+    _i_rw, _i_sp = doors.find("≈ Find related words"), doors.find("⤷ Explore parallels")
+    if _i_rw < 0 or _i_sp < 0 or _i_rw > _i_sp:
+        out.append("RW: Find related words is not the first door in Explore this idea")
+    if "startRefractFromCard(${i}, '${escapeJs(bff.title)}', 'languages')" not in doors:
+        out.append("RW: Explore other languages does not open the languages section of the same panel")
+    # ---- the law and the map -------------------------------------------
+    for need in ("<strong>≈ Find related words</strong>", "No close match found in this pass", "Not checked",
+                 "English throughout", "Latin and Greek", "by id", "a reconstruction"):
+        if need not in law:
+            out.append(f"RW: the constitution does not carry {need!r}")
+    smap = (root / "docs" / "nikodemus-surface-map.md").read_text(encoding="utf-8")
+    if "Find related words" not in smap:
+        out.append("RW: the surface map does not know Find related words")
+    if "REFRACT_REQUIRED = (\"Spanish\", \"Latin\", \"Greek\")" not in src:
+        out.append("RW: the required languages are not Spanish, Latin and Greek")
     return out
 
 
@@ -3486,6 +3686,7 @@ def main() -> int:
     failures.extend(_check_notebook_b(server, _paired))
     failures.extend(_check_reply_parse(server))
     failures.extend(_check_plain_words())
+    failures.extend(_check_related_words(server, _paired))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key
@@ -6631,7 +6832,8 @@ console.log(JSON.stringify([lineageTag('recorded'), lineageTag('derived'), linea
     # notebook stage B: the shelf of what was SENT is labelled as that —
     # "Submitted passages" — because the writing itself now lives in the
     # notebook (My writing), and a submission record is not a document.
-    for _need in ("Parallels explored", "Other languages explored", "Revisions", "Submitted passages"):
+    for _need in ("Parallels explored", "Related words explored — English, Latin, Greek and other languages",
+                  "Revisions", "Submitted passages"):
         if _need not in _pg60:
             failures.append(f"60: the Library has no {_need!r} shelf")
     # 69 of the 106 lineage links in this corpus exist ONLY because the
@@ -7418,8 +7620,21 @@ console.log(JSON.stringify({ok: true, nodes: INK.childNodes.length, len: TA.valu
                    _cli66.index("def build_refract_review_prompt(")]
     if "Spanish" not in cli.REFRACT_REQUIRED:
         failures.append("67: Spanish is not required of the refraction stage")
+    # Find related words (the owner's addition, 2026-09-13): "Latin and Greek
+    # must be visibly accounted for, not silently skipped." Required, and
+    # Greek is asked for BY PERIOD, so the check must know its period names.
+    for _lang67 in ("Latin", "Greek"):
+        if _lang67 not in cli.REFRACT_REQUIRED:
+            failures.append(f"67: {_lang67} is not required of the refraction stage")
     if "SPANISH IS ALWAYS ONE OF THEM" not in _rp67:
         failures.append("67: the prompt no longer asks for Spanish on every refraction")
+    if "SO\nARE LATIN AND GREEK" not in _rp67 and "SO ARE LATIN AND GREEK" not in _rp67.replace("\n", " "):
+        failures.append("67: the prompt no longer asks for Latin and Greek on every pass")
+    for _alias67, _canon67 in (("Ancient Greek", "Greek"), ("Koine Greek", "Greek"), ("Modern Greek", "Greek"),
+                               ("Church Latin", "Latin"), ("Latin American Spanish", "Spanish"),
+                               ("castellano", "Spanish"), ("Japanese", "Japanese")):
+        if cli.canonical_language(_alias67) != _canon67:
+            failures.append(f"67: {_alias67!r} is read as {cli.canonical_language(_alias67)!r}, not {_canon67!r}")
     if "Germanic or Romance" in _rp67:
         failures.append("67: the prompt still offers Germanic and Romance as alternatives — "
                         "the exact wording that returned German 28 times and Spanish never")
@@ -7427,19 +7642,23 @@ console.log(JSON.stringify({ok: true, nodes: INK.childNodes.length, len: TA.valu
         failures.append("67: the prompt does not say the family slots are separate, which is "
                         "the whole reason one of them was never filled")
     # Absent is not the same as empty, and the two must never render alike.
-    _present = [{"language": "Spanish", "term": "desasosiego"}, {"language": "German", "term": "x"}]
+    _present = [{"language": "Spanish", "term": "desasosiego"}, {"language": "German", "term": "x"},
+                {"language": "Latin", "term": "limen"}, {"language": "Koine Greek", "term": "x"}]
     _empty = [{"language": "Spanish", "term": "", "keeps": "no term surfaces"},
-              {"language": "German", "term": "x"}]
+              {"language": "German", "term": "x"}, {"language": "Latin", "term": ""},
+              {"language": "Ancient Greek", "term": ""}]
     _absent = [{"language": "German", "term": "x"}, {"language": "Japanese", "term": "y"}]
     if cli.missing_required_languages(_present):
         failures.append("67: a required language that came back is reported missing")
     if cli.missing_required_languages(_empty):
         failures.append("67: a required language that honestly came back EMPTY is reported "
                         "missing — a documented gap is a finding, not a failure to comply")
-    if cli.missing_required_languages(_absent) != ["Spanish"]:
+    if cli.missing_required_languages(_absent) != ["Spanish", "Latin", "Greek"]:
         failures.append("67: a required language that never came back is not reported")
+    if cli.missing_required_languages([{"language": "Spanish"}, {"language": "Latin"}]) != ["Greek"]:
+        failures.append("67: Greek absent is not reported as Greek absent")
     # Case and spacing are the model's to get wrong, not his to pay for.
-    if cli.missing_required_languages([{"language": " spanish "}]):
+    if cli.missing_required_languages([{"language": " spanish "}, {"language": "LATIN"}, {"language": "greek "}]):
         failures.append("67: a required language is reported missing over case or spacing")
     # It has to reach the screen, and say which of the two things it is.
     _pg67 = (_pathlib.Path(cli.__file__).parent.parent / "webapp" / "index.html").read_text(encoding="utf-8")
@@ -7750,12 +7969,13 @@ console.log(JSON.stringify({ok: true, nodes: INK.childNodes.length, len: TA.valu
     # renaming the instruction bullet left the field in the schema with
     # nothing telling the model what it means — and the check stayed green.
     _prompt71 = _cli66[_cli66.index("def build_refract_review_prompt("):]
-    if "- carries_verdict: a term that lands" not in _prompt71[:6000]:
+    _prompt71 = _prompt71[:_prompt71.index("\ndef ", 10)]   # the builder alone, however long it grows
+    if "- carries_verdict: a term that lands" not in _prompt71:
         failures.append("71: the review is never asked whether a term rules on what the "
                         "concept leaves open")
-    if '"carries_verdict": "..." or ""' not in _prompt71[:6000]:
+    if '"carries_verdict": "..." or ""' not in _prompt71:
         failures.append("71: the response shape has no place to put it")
-    if "CANNOT hold" not in _prompt71[:6000]:
+    if "CANNOT hold" not in _prompt71:
         failures.append("71: the prompt does not say a verdict-carrying term cannot hold")
     if "carries_verdict" not in _pg70 or "Real word, wrong ruling" not in _pg70:
         failures.append("71: a term that settles what the concept leaves open is demoted and "
@@ -19949,8 +20169,17 @@ console.log(out.join('\\n'));
                  "asked is the only thing allowed to decide where the answer goes")
         if "const here = document.body.classList.contains('ws-open') && !PLACE;" not in _arr:
             _fP2("the room is yanked into a split without checking he is still in it")
-        if "if (!here) { roomRun('your workup is ready', 'Open beside writing'); saveRun(); return; }" not in _arr:
+        if "if (!here) { roomRun(runWords().ready, 'Open beside writing'); saveRun(); return; }" not in _arr:
             _fP2("an answer that lands while he is away is dropped instead of waiting to be offered")
+        # The line's words come from one place, by the kind of run: a workup
+        # keeps its words exactly; a related-words pass has its own.
+        _rw = _idxP2[_idxP2.index("function runWords()"):_idxP2.index("function failureClass(err)")]
+        for _need in ("ready: 'your workup is ready'", "beside: 'the workup is beside your draft'",
+                      "failed: 'the workup failed — '",
+                      "lost: 'that workup cannot be resumed — the server no longer has it (it restarts between runs)'",
+                      "ready: 'the related words are ready'", "failed: 'finding related words failed — '"):
+            if _need not in _rw:
+                _fP2(f"the line's words lost {_need!r}")
         if "setWorkspaceMode('split')" not in _arr:
             _fP2("the answer never comes to sit beside the writing")
         if "ta.setSelectionRange(sel[0], sel[1])" not in _arr:
@@ -19969,7 +20198,10 @@ console.log(out.join('\\n'));
         # lines away in submitRun — which is where the sabotage battery duly
         # added the draft and walked through. Every assignment to RUN is found
         # and its keys are required to be exactly the five that are identity.
-        _allowed = {"job", "surface", "scope", "dest", "revealed"}
+        # `kind` joined the identity on 2026-09-13 (Find related words from the
+        # room): which of two things the line is waiting on, from a fixed
+        # vocabulary — never text. The vocabulary is pinned below.
+        _allowed = {"job", "surface", "scope", "dest", "revealed", "kind"}
         _assigns = [m for m in _re.finditer(r"\bRUN = \{", _idxP2)]
         if len(_assigns) < 2:
             _fP2("the run route is assigned in fewer places than it is written and cleared — "
@@ -19988,11 +20220,16 @@ console.log(out.join('\\n'));
                 _fP2(f"the stored route is missing part of its identity "
                      f"({sorted(_allowed - _keys)!r}) — it has to be enough to find the run "
                      "again after a reload, from any surface")
+            _kind = _re.search(r"kind:\s*([^,}]+)", _idxP2[i:j])
+            if _kind and not _re.fullmatch(r"'workup'|'related'|d\.kind === 'related' \? 'related' : 'workup'",
+                                           _kind.group(1).strip()):
+                _fP2(f"the route's kind is not from the fixed vocabulary ({_kind.group(1).strip()!r}) — "
+                     "it may name which of two things the room waits on, never carry text")
         # Two sites, and both matter: one while the run is being polled, one on
         # the way back in after a reload. Counting them is the difference
         # between pinning the behaviour and pinning that the words exist
         # somewhere — renaming one of the two used to walk straight through.
-        if _idxP2.count("roomRun('that workup cannot be resumed") != 2:
+        if _idxP2.count("roomRun(runWords().lost)") != 2:
             _fP2("a job the server has lost still leaves the room implying that something is "
                  "happening — it has to be said BOTH while polling and on the way back in after "
                  "a reload, and one of those two sites has gone")

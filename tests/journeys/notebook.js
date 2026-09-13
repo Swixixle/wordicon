@@ -296,9 +296,15 @@ const TEXT = [
   ok(escT.focus === 'compose-text' && escT.open, 'Escape in the title field goes back to the writing and leaves the room open: ' + JSON.stringify(escT));
 
   // ---- the bar, Aa and the ⋯ menu ------------------------------------------
-  const bar = await page.evaluate(() => Array.from(document.querySelectorAll('#ws-bar > button')).map(b => b.textContent.trim()));
+  // The four STATIC buttons. ↩ Revision notes joins after Get feedback only
+  // while notes exist (the carry journey's law), and earlier journeys in the
+  // same store leave notes behind, so it is counted apart, not as a fifth.
+  const barAll = await page.evaluate(() => Array.from(document.querySelectorAll('#ws-bar > button')).map(b => ({ id: b.id, t: b.textContent.trim() })));
+  const bar = barAll.filter(b => b.id !== 'carry-ctl').map(b => b.t);
   ok(bar.length === 4 && bar[0] === 'Get feedback' && bar[1] === 'Aa' && bar[2] === '⋯' && bar[3] === 'done',
     'the bar is four static buttons — Get feedback, Aa, ⋯, done: ' + JSON.stringify(bar));
+  ok(barAll.every(b => b.id === 'carry-ctl' ? /^↩ Revision notes · \d+$/.test(b.t) : true),
+    'anything else in the bar is the revision-notes control, and only while notes exist: ' + JSON.stringify(barAll.map(b => b.t)));
   await page.evaluate(() => toggleWriteStyle()); await page.waitForTimeout(300);
   const aa = await page.evaluate(() => Array.from(document.querySelectorAll('#write-style .lbl')).map(l => l.textContent.trim()));
   ok(aa.join('|') === 'Face|Size|View|Letters', 'Aa owns typography and layout only: ' + JSON.stringify(aa));
@@ -309,9 +315,9 @@ const TEXT = [
     labels: Array.from(document.querySelectorAll('#ws-more .lbl')).map(l => l.textContent.trim()),
     buttons: Array.from(document.querySelectorAll('#ws-more button')).map(b => b.textContent.replace(/\s+/g, ' ').trim()),
     expanded: document.getElementById('ws-more-btn').getAttribute('aria-expanded') }));
-  ok(menu.shown && menu.expanded === 'true' && menu.labels.join('|') === 'Layout|This document|Full workup|Dictate'
-     && ['⇄ sides', '⫞ split', '⤢ write', '☰ page', 'Download', 'Focus', 'On the page'].every(x => menu.buttons.includes(x)) && menu.buttons.some(x => /^This paragraph/.test(x)),
-    'the ⋯ menu holds sides, split, write, page, Download, Focus, Full workup and Dictate: ' + JSON.stringify(menu.buttons));
+  ok(menu.shown && menu.expanded === 'true' && menu.labels.join('|') === 'Layout|This document|Full workup|Find related words|Dictate'
+     && ['⇄ sides', '⫞ split', '⤢ write', '☰ page', 'Download', 'Focus', 'On the page', 'Your selection, or a meaning you type'].every(x => menu.buttons.includes(x)) && menu.buttons.some(x => /^This paragraph/.test(x)),
+    'the ⋯ menu holds sides, split, write, page, Download, Focus, Full workup, Find related words and Dictate: ' + JSON.stringify(menu.buttons));
   ok(posts.length === postsBeforeMenu, 'opening the menu spends nothing and posts nothing');
   await page.keyboard.press('Escape'); await page.waitForTimeout(200);
   const menuClosed = await page.evaluate(() => ({ shown: document.getElementById('ws-more').style.display !== 'none', open: document.body.classList.contains('ws-open') }));

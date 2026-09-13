@@ -85,12 +85,32 @@ fanning three instruments across every component is its own machinery, and one
 of the three is Explore parallels (sprout), which has never once in fifty-eight
 runs come back empty."
 
-**Plain words (2026-09-13).** The doors on a candidate card are *Explore
-parallels* (sprout), *Explore other languages* (refract) and *Explore character
-patterns* (archetype), grouped under *Explore this idea*; the whole-passage run
-is *Full workup* (deep); a result's three layers are *Claims & sources*
-(bone), *Meaning* (flesh) and *Critique* (friction). The record's keys, the
-modes and the routes keep the old names.
+**Plain words (2026-09-13).** The doors on a candidate card are *Find related
+words* (refract), *Explore parallels* (sprout), *Explore other languages*
+(refract — the languages section of the same word-comparison panel) and
+*Explore character patterns* (archetype), grouped under *Explore this idea*;
+the whole-passage run is *Full workup* (deep); a result's three layers are
+*Claims & sources* (bone), *Meaning* (flesh) and *Critique* (friction). The
+record's keys, the modes and the routes keep the old names.
+
+**Find related words (2026-09-13).** One panel, one record (mode `refract`):
+English synonyms (close / related), English antonyms (antonym / contrast, each
+saying what it opposes), Latin, Greek (by period, in Greek letters), other
+languages (Spanish on every pass), cultural comparisons, the English fossil.
+Entry: a card's door (the meaning line editable, the saved comparisons for the
+idea shown first — by id, or by title and labelled a reconstruction; one press
+spends two model calls), or the writing room's ⋯ menu → *Find related words*
+(the selection is the sense; a word or short phrase becomes the meaning line, a
+longer passage is context and the sense is typed; the panel says the lane and
+the two calls; Escape spends nothing; the answer lands beside the draft). A
+follow-up on one named language (*Ask another language*) is its own record,
+rendered beneath. Status words: *No close match found in this pass* (asked,
+empty) and *Not checked* (not asked, or asked and not returned); a record from
+before this date says which sections were not part of the tool then. The
+route: `POST /api/jobs` mode `refract` with `original.definition` required,
+`original.title` optional, `entry` (concept / description / selection),
+`passage`, `only_languages`; `GET /api/related/saved?concept_id=&title=` lists
+the saved comparisons with `via: recorded | derived`.
 
 **In the Inquiry rail** — *ask my record*, *research outside*, *trial*,
 *comparison*, *synthesis*, each with its own why.
@@ -110,12 +130,13 @@ the part editor.
 
 ## 4. Where a model call can start
 
-Fifteen routes reach a model. **Two of them tell you first.**
+Fifteen routes reach a model. **Three of them tell you first.**
 
 | Disclosed before firing | Where |
 |---|---|
 | `/api/inquiry/<iid>/read` | `readCost()` — one model call, lane, model |
 | `/api/jobs` **mode `deep` only** | `askDeep()` — lane, model, "N + about M per idea" |
+| `/api/jobs` **mode `refract`** (2026-09-13) | the word-comparison panel on a card, or `askRelated()` in the room — lane, model, "Model calls: 2" |
 
 | Fires with no lane, model or price | Started by |
 |---|---|

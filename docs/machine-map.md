@@ -97,6 +97,19 @@ a reply that parsed only after its unescaped inner quotes were escaped (the one 
 `_extract_json` makes, counted and noted on the run's receipt as a warning), and a reply
 that did not parse at all (the failure names the file, and no longer quotes the reply) —
 each whole, as it came, 0600, under the Vault like every receipt.
+`run_refract` is Find related words / Explore other languages (2026-09-13): one pass,
+two model calls, one record of mode `refract` — `english_synonyms`, `english_antonyms`,
+`english_set_aside` (a word not in Latin letters, kept with its reason, never shown as
+English), `cultural_comparisons` (reviewed on the same two axes as the terms), the
+`refractions` with `language_canonical`, `period`, `pronunciation`, `meaning`, `example`,
+`sections_asked` (a section asked and empty is not a section never asked; a record from
+before this date has none), `source.entry` (concept / description / selection),
+`source.passage` for a selection, `source.only_languages` for a follow-up.
+`REFRACT_REQUIRED` is Spanish, Latin and Greek, under any period name
+(`canonical_language`); a pass with no title records no road, because there is no box
+to tie one to; its trace id is minted from the precise clock and the pass's shape, not
+the second. `GET /api/related/saved` lists an idea's saved comparisons — by id
+(`recorded`) or by title (`derived`) — reads only.
 `scripts/map_focus.py` is Map · focus: the served projection behind one place's ring —
 exact-identity issuer derivation (`edge_specs_from_snapshot`, `SnapshotIndex`,
 `derive_issuer`), provenance resolution, the ring with its burden, facets, groups and

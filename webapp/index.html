@@ -325,6 +325,15 @@
     margin: 0 0 8px; max-height: 4.6em; overflow: hidden; }
   #moira-ask .fact { color: var(--write-panel-ink); font-size: 11.5px; line-height: 1.45; margin: 3px 0; }
   #moira-ask .fact b { color: var(--write-ink); font-weight: 600; }
+  /* Find related words from the writing (2026-09-13): the same quiet furniture. */
+  #related-ask { width: min(380px, calc(100vw - 32px)); max-height: calc(100vh - 90px); overflow: auto; }
+  #related-ask .scope { color: var(--write-ink); font-size: 13px; margin: 0 0 6px; }
+  #related-ask .preview { color: var(--write-panel-ink); font-size: 12px; line-height: 1.4;
+    margin: 0 0 8px; max-height: 4.6em; overflow: hidden; }
+  #related-ask .fact { color: var(--write-panel-ink); font-size: 11.5px; line-height: 1.45; margin: 3px 0; }
+  #related-ask .fact b { color: var(--write-ink); font-weight: 600; }
+  #related-ask input.note { color: var(--write-ink); background: transparent; border: 1px solid var(--write-faint);
+    border-radius: 7px; padding: 5px 8px; font: inherit; font-size: 13px; margin: 2px 0 6px; }
   #moira-ask .tabs { display: flex; gap: 4px; margin: 0 0 8px; flex-wrap: wrap; }
   #moira-ask .tabs button.on { color: var(--write-bg); background: var(--write-ink); }
   #moira-ask .nb { border-top: 1px solid var(--write-faint); padding: 6px 0; font-size: 12px;
@@ -1083,6 +1092,13 @@
        the room. -->
   <div id="moira-ask" class="write-style" style="display:none" role="dialog"
        aria-modal="false" aria-labelledby="moira-ask-title"></div>
+  <!-- Find related words from the writing (2026-09-13): the same quiet
+       panel. The selection — a word, a phrase, a passage — is the sense to
+       explore; the meaning line is editable so the sense can be corrected
+       here; the cost and the lane are said; one press starts it; escape
+       spends nothing. The answer lands beside the draft. -->
+  <div id="related-ask" class="write-style" style="display:none" role="dialog"
+       aria-modal="false" aria-labelledby="related-ask-title"></div>
   <!-- and while it runs: one line, low, that never takes the caret -->
   <div id="room-run" class="room-run" hidden aria-live="polite"></div>
 <!-- The header (the owner's layout ruling, 2026-09-13): the document's
@@ -1391,7 +1407,7 @@ const MODE_STYLE = {
   deep:       {v: '--mode-source',  label: 'full workup'},
   crossbreed: {v: '--mode-sprout',  label: 'rabbithole'},
   sprout:     {v: '--mode-sprout',  label: 'parallels'},
-  refract:    {v: '--mode-refract', label: 'other languages'},
+  refract:    {v: '--mode-refract', label: 'related words'},
   revise:     {v: '--mode-forge',   label: 'revise'},
   // Shares refract's green rather than claiming a fifth hue: the palette
   // note above says no fifth candidate cleared the colour-vision gates
@@ -1979,7 +1995,7 @@ async function submitRun(submitMode, text, fromArtifact, gesture, route) {
            surface: (route && route.surface) || 'home',
            scope: (route && route.scope) || '',
            dest: (route && route.dest) || 'work',
-           revealed: false};
+           revealed: false, kind: 'workup'};
     saveRun();
     watchJob(d.job_id);
   } catch (e) {
@@ -2048,7 +2064,7 @@ async function watchJob(jobId) {
         // forever. A job the server cannot find is a fact, and the room says
         // it instead of continuing to imply that something is happening.
         if (RUN.job === jobId) {
-          roomRun('that workup cannot be resumed — the server no longer has it (it restarts between runs)');
+          roomRun(runWords().lost);
           clearRun();
         }
         return;
@@ -2078,6 +2094,10 @@ async function watchJob(jobId) {
       if (job.mode === 'etymon') {
         document.getElementById('result-area').innerHTML = header + buildEtymonHtml(result);
         appendRetryCard();
+      } else if (job.mode === 'refract') {
+        // Find related words asked from the room: the word-comparison
+        // panel lands beside the draft like a workup does.
+        document.getElementById('result-area').innerHTML = header + parseNoticeHtml(result) + buildRefractHtml(result);
       } else if (job.mode === 'deep') {
         if (!result.groups || result.groups.length === 0) {
           document.getElementById('result-area').innerHTML = `<div class="card"><p class="body muted">The workup came back empty — try rephrasing.</p></div>`;
@@ -2111,7 +2131,7 @@ async function watchJob(jobId) {
       if (RUN.job === jobId) {
         // The real failure class, not a euphemism and not a pointer at a page
         // he may not be looking at.
-        roomRun('the workup failed — ' + failureClass(job.error));
+        roomRun(runWords().failed + failureClass(job.error));
         clearRun();
       }
       return;
@@ -2183,10 +2203,10 @@ async function loadPastResult(traceId, shelf, label, restoring) {
     lastSubmission = null;
     area.innerHTML = `
       <div class="card" style="border-left:3px solid var(--accent, #888)">
-        <div class="section-label" style="margin-top:0">From the record — through other languages</div>
+        <div class="section-label" style="margin-top:0">From the record — related words and other languages</div>
         <p class="body">${escapeHtml(d.input_text || '')}</p>
-        <p class="body muted" style="font-size:13px">refract · ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}</p>
-      </div>` +
+        <p class="body muted" style="font-size:13px">related words · ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}</p>
+      </div>` + parseNoticeHtml(d) +
       buildRefractHtml({...d, source_title: (d.source && d.source.title) || ''});
     return;
   }
@@ -2910,8 +2930,9 @@ function renderCandidateCard(cand, traceId, extra) {
       ${D.key === 'none'
         ? `<button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="openBenchFromCard('${escapeJs(bff.title)}', '${escapeJs(bff.concept_id || '')}')">⚒ Take it to the Bench — structure and names, not the anchor</button>` : ''}
       <details class="case explore-idea" style="margin-top:8px"><summary>${D.key === 'travel' ? 'Explore this idea' : 'Explore this idea — none of these change the rows above'}</summary>
+        <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startRefractFromCard(${i}, '${escapeJs(bff.title)}', 'synonyms')" title="the word-comparison panel: English first, then Latin, Greek and other languages; opens with the meaning editable and the saved comparisons, spends nothing until you press Find">≈ Find related words — English synonyms and opposites, then Latin, Greek and other languages</button>
         <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startSproutFromCard(${i}, '${escapeJs(bff.title)}')" title="formerly Sprout">⤷ Explore parallels — things that run alongside this one</button>
-        <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startRefractFromCard(${i}, '${escapeJs(bff.title)}')" title="formerly Refract">⇄ Explore other languages — what other tongues keep, drop and add</button>
+        <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startRefractFromCard(${i}, '${escapeJs(bff.title)}', 'languages')" title="formerly Refract">⇄ Explore other languages — what other tongues keep, drop and add</button>
         <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startArchetypeFromCard(${i}, '${escapeJs(bff.title)}')" title="formerly Archetype">◈ Explore character patterns — the figure this concept implies</button>
         ${hasClaims && D.key !== 'verify' && D.key !== 'verify-not-anchor'
           ? `<button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startVerifyFromCard(${i})">✓ Verify — test the critique's own claims against live sources</button>` : ''}
@@ -3990,37 +4011,125 @@ async function pollRetry(jobId, rid) {
 // by story; refract travels by word — what each lexicon keeps, drops,
 // adds, and whether some language already NAMES the whole concept. All
 // recall, unverified, reviewed for folk-linguistics contamination.
-function startRefractFromCard(i, title) {
+// Both doors on a card — Find related words and Explore other languages —
+// open the same word-comparison panel; the second lands on its languages
+// section. Nothing is spent by opening it: the panel shows the meaning
+// (editable, one line — the sense can be corrected here without a form),
+// the comparisons already saved for this idea, the cost, and one button.
+function startRefractFromCard(i, title, focus) {
   const data = cardData[i] || {};
   const flesh = (data.bff && data.bff.flesh) || {};
   const friction = (data.bff && data.bff.friction) || {};
   const area = document.getElementById(`refract-area-${i}`);
   if (!area) return;
-  startRefractInto(`refract-area-${i}`,
+  openRelatedPanel(`refract-area-${i}`,
     {title: title || (data.bff && data.bff.title) || '',
      definition: flesh.definition || '',
      plain_gloss: flesh.plain_gloss || '',
      concept_id: (data.bff && data.bff.concept_id) || '',
-     known_neighbors: friction.redundancy_note || ''});
+     known_neighbors: friction.redundancy_note || '',
+     entry: 'concept'}, focus || 'synonyms');
 }
 
-async function startRefractInto(areaId, original) {
+const RELATED_PENDING = {};   // areaId → the meaning being asked about, while the panel is open
+function relatedCostLine(lane) {
+  return `Model calls: <b>2</b> — one to find (English first, then Latin, Greek and other languages), one to review the foreign terms and comparisons. `
+    + (lane ? `Lane: <b>${escapeHtml(lane.lane)}</b>${lane.model ? ' · model <b>' + escapeHtml(lane.model) + '</b>' : ''}. ` : '')
+    + `Everything it returns is recall, labelled so.`;
+}
+async function openRelatedPanel(areaId, original, focus) {
   const area = document.getElementById(areaId);
   if (!area) return;
-  area.innerHTML = `<div class="section-label">Exploring other languages for “${escapeHtml(original.title)}”</div>
-    <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>pushing the idea through other languages…</p>`;
+  RELATED_PENDING[areaId] = {...original, focus: focus || 'synonyms'};
+  const meaning = (original.definition || original.plain_gloss || '').trim();
+  const id = areaId.replace(/[^a-z0-9_-]/gi, '');
+  area.innerHTML = `
+    <div class="card" style="border-left:3px solid var(--accent, #888)">
+      <div class="section-label" style="margin-top:0">Find related words${original.title ? ` for “${escapeHtml(original.title)}”` : ''}</div>
+      <p class="body muted" style="font-size:12.5px;margin:0 0 4px">The meaning to match — correct it here if the sense is off; the title is only a handle:</p>
+      <input class="note" id="rw-meaning-${id}" value="${escapeHtml(meaning)}" aria-label="the meaning to find related words for" maxlength="1500" style="width:100%">
+      <div id="rw-saved-${id}"><p class="body muted" style="font-size:12.5px"><span class="spinner"></span>looking for saved comparisons…</p></div>
+      <p class="fact" id="rw-cost-${id}" style="font-size:12.5px">${relatedCostLine(null)}</p>
+      <div class="row" style="margin-top:8px">
+        <button class="judge-btn live" id="rw-go-${id}" onclick="startRelatedFromPanel('${escapeJs(areaId)}')">Find related words — 2 model calls</button>
+        <button class="judge-btn" onclick="closeRelatedPanel('${escapeJs(areaId)}')">Cancel</button>
+      </div>
+    </div>`;
+  // the saved comparisons and the lane, after the panel is on screen — the
+  // panel does not wait on either
+  try {
+    const q = new URLSearchParams({concept_id: original.concept_id || '', title: original.title || ''});
+    const r = await fetch('/api/related/saved?' + q.toString());
+    const d = await r.json();
+    const box = document.getElementById(`rw-saved-${id}`);
+    if (box) box.innerHTML = relatedSavedHtml(d, original);
+  } catch (e) {
+    const box = document.getElementById(`rw-saved-${id}`);
+    if (box) box.innerHTML = `<p class="body muted" style="font-size:12.5px">Saved comparisons could not be read from the server.</p>`;
+  }
+  try {
+    const lane = await deepLane();
+    const c = document.getElementById(`rw-cost-${id}`);
+    if (c) c.innerHTML = relatedCostLine(lane);
+  } catch (e) { /* the cost line keeps its call count */ }
+}
+function relatedSavedHtml(d, original) {
+  const items = (d && d.items) || [];
+  if (!(original.concept_id || original.title)) return '';
+  if (!items.length) return `<p class="body muted" style="font-size:12.5px">No saved comparison for this idea yet${d && d.matched_by ? ` (looked by ${escapeHtml(d.matched_by)})` : ''}.</p>`;
+  return `<p class="body" style="font-size:12.5px;margin:6px 0 2px"><strong>Saved comparisons for this idea — ${items.length}</strong> <span class="muted">(matched by ${escapeHtml(d.matched_by || '')})</span></p>`
+    + items.map(it => {
+        const what = it.only_languages && it.only_languages.length ? `asked by name: ${it.only_languages.join(', ')}`
+          : `${it.n_synonyms} synonym${it.n_synonyms === 1 ? '' : 's'} · ${it.n_antonyms} opposite${it.n_antonyms === 1 ? '' : 's'} · ${it.n_languages} language${it.n_languages === 1 ? '' : 's'}`
+            + ((it.sections_asked || []).length ? '' : ' · before the English sections existed');
+        return `<div class="history-item" style="cursor:pointer" onclick="loadPastResult('${escapeJs(it.trace_id)}','related-saved','${escapeJs(it.title || it.meaning || '')}')">
+          <div class="history-title" style="font-size:13px">${it.created_at ? new Date(it.created_at).toLocaleString() : ''} <span class="decision-tag ${it.via === 'recorded' ? 'accepted' : 'revised'}" style="text-transform:none;letter-spacing:0">${it.via === 'recorded' ? 'this concept, by id' : 'same title — a reconstruction'}</span></div>
+          <div class="history-meta" style="font-size:12px">${escapeHtml(what)} · tap to open</div>
+        </div>`;
+      }).join('');
+}
+function closeRelatedPanel(areaId) {
+  const area = document.getElementById(areaId);
+  if (area) area.innerHTML = '';
+  delete RELATED_PENDING[areaId];
+}
+function startRelatedFromPanel(areaId) {
+  const p = RELATED_PENDING[areaId];
+  if (!p) return;
+  const id = areaId.replace(/[^a-z0-9_-]/gi, '');
+  const input = document.getElementById(`rw-meaning-${id}`);
+  const meaning = (input ? input.value : p.definition || '').trim();
+  if (!meaning) { if (input) input.focus(); return; }
+  delete RELATED_PENDING[areaId];
+  startRefractInto(areaId, {...p, definition: meaning}, p.focus);
+}
+
+async function startRefractInto(areaId, original, focus) {
+  const area = document.getElementById(areaId);
+  if (!area) return;
+  const only = (original.only_languages || []).filter(Boolean);
+  const label = original.title ? `for “${escapeHtml(original.title)}”` : 'for the meaning you gave';
+  area.innerHTML = only.length
+    ? `<div class="section-label">Asking ${only.map(escapeHtml).join(', ')} ${label}</div>
+       <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>one language, by name…</p>`
+    : `<div class="section-label">Finding related words ${label}</div>
+       <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>English first, then Latin, Greek and other languages…</p>`;
   try {
     const r = await fetch('/api/jobs', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({mode: 'refract',
-        original: {title: original.title, definition: original.definition,
+        original: {title: original.title || '', definition: original.definition,
                    plain_gloss: original.plain_gloss || '',
                    concept_id: original.concept_id || ''},
-        known_neighbors: original.known_neighbors || ''}),
+        known_neighbors: original.known_neighbors || '',
+        entry: original.entry || 'concept',
+        passage: original.entry === 'selection' ? (original.passage || '') : '',
+        only_languages: only,
+        provenance: original.entry === 'selection' ? 'typed' : 'door'}),
     });
     const d = await r.json();
     if (d.error) { area.innerHTML = `<div class="error">${escapeHtml(d.error)}</div>`; return; }
-    pollRefract(d.job_id, areaId);
+    pollRefract(d.job_id, areaId, focus);
   } catch (e) {
     area.innerHTML = `<div class="error">Couldn't reach the server.</div>`;
   }
@@ -4199,27 +4308,30 @@ async function pollArchetype(jobId, areaId) {
   }
 }
 
-async function pollRefract(jobId, areaId) {
+async function pollRefract(jobId, areaId, focus) {
   const area = document.getElementById(areaId);
   if (!area) return;
   let job;
   try {
     const r = await fetch(`/api/jobs/${jobId}`);
-    if (!r.ok) { area.innerHTML = `<div class="error">Lost track of the refract job — the server may have restarted. Its result will still appear in the Library if it finished.</div>`; return; }
+    if (!r.ok) { area.innerHTML = `<div class="error">Lost track of the related-words job — the server may have restarted. Its result will still appear in the Library if it finished.</div>`; return; }
     job = await r.json();
   } catch (e) {
-    setTimeout(() => pollRefract(jobId, areaId), 4000);
+    setTimeout(() => pollRefract(jobId, areaId, focus), 4000);
     return;
   }
   if (job.status === 'complete') {
-    area.innerHTML = buildRefractHtml(job.result || {});
+    const result = job.result || {};
+    area.innerHTML = parseNoticeHtml(result) + buildRefractHtml(result);
     loadHistory();
+    // Explore other languages lands on its own section of the same panel
+    if (focus && focus !== 'synonyms' && result.trace_id) rwScrollTo(focus, String(result.trace_id));
   } else if (job.status === 'failed') {
-    area.innerHTML = `<div class="error">Explore other languages failed: ${escapeHtml(job.error || 'unknown error')}</div>`;
+    area.innerHTML = `<div class="error">Find related words failed: ${escapeHtml(job.error || 'unknown error')}</div>`;
   } else {
-    area.innerHTML = `<div class="section-label">Exploring other languages</div>
+    area.innerHTML = `<div class="section-label">Finding related words</div>
       <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>${escapeHtml(job.progress || 'working…')}</p>${stageElapsedHtml(job)}`;
-    setTimeout(() => pollRefract(jobId, areaId), 3500);
+    setTimeout(() => pollRefract(jobId, areaId, focus), 3500);
   }
 }
 
@@ -4262,8 +4374,111 @@ function verdictTagHtml(v) {
     : v === 'suspect' ? `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">suspect — verify before trusting</span>` : '';
 }
 
-function buildRefractHtml(res) {
+// ---- the word-comparison panel (Find related words / Explore other
+// languages, 2026-09-13). One record, one panel: English synonyms, English
+// opposites, Latin, Greek, other languages, cultural comparisons, and the
+// English fossil. Every section states its own status: what was found,
+// "No close match found in this pass" (asked, nothing close), or "Not
+// checked" (never asked in this pass, or asked for and not returned) — and
+// none of those is proof the language lacks the meaning. A comparison made
+// before the English sections existed says so rather than looking empty.
+const RELATED_SRC = {};   // trace id → the meaning a panel was made for, for follow-ups
+function canonLang(name) {
+  const n = String(name || '').trim().toLowerCase();
+  if (!n) return '';
+  if (/spanish|castilian|castellano|español/.test(n)) return 'Spanish';
+  if (/greek|koine|katharevousa/.test(n)) return 'Greek';
+  if (/latin/.test(n)) return 'Latin';
+  return String(name || '').trim();
+}
+function rwStatusHtml(text, kind) {
+  const color = kind === 'absent' ? 'var(--bad)' : 'var(--muted)';
+  return `<p class="body muted" style="font-style:italic;margin:4px 0 6px;border-left:2px solid ${color};padding-left:9px">${escapeHtml(text)}</p>`;
+}
+function rwTermCard(r, nCitations) {
+  const hasTerm = (r.term || r.romanization || '').trim().length > 0;
+  const attTag = r.attestation === 'likely-invented'
+    ? `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">possibly invented</span>`
+    : r.attestation === 'uncertain'
+      ? `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">attestation uncertain</span>` : '';
+  // A real, attested, well-glossed term that answers a question the
+  // concept refuses to answer. Shown as its own tag rather than folded
+  // into the note, because it is a third and independent way for a
+  // refraction to fail and reads nothing like the other two.
+  const verdictTag = (r.carries_verdict || '').trim()
+    ? `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">settles what the concept leaves open</span>` : '';
+  const termHtml = hasTerm
+    ? `<p class="body" style="font-size:18px;margin:4px 0 2px"><span${(r.language_canonical || canonLang(r.language)) === 'Greek' ? ' lang="el"' : ''}>${escapeHtml(r.term || r.romanization)}</span>
+         ${r.romanization && r.term && r.romanization !== r.term ? `<span class="muted" style="font-size:14px;font-style:italic"> ${escapeHtml(r.romanization)}</span>` : ''}
+         ${(r.pronunciation || '').trim() ? `<span class="muted" style="font-size:12.5px"> · said ${escapeHtml(r.pronunciation)}</span>` : ''}</p>
+       ${(r.meaning || '').trim() ? `<p class="body" style="font-size:13.5px;margin:0 0 2px">${escapeHtml(r.meaning)}</p>` : ''}
+       ${r.literal ? `<p class="body muted" style="font-size:12.5px;margin:0">literally “${escapeHtml(r.literal)}”</p>` : ''}
+       ${(r.period || r.register) ? `<p class="body muted" style="font-size:12px;margin:0">${[r.period, r.register].filter(x => (x || '').trim()).map(escapeHtml).join(' · ')}</p>` : ''}`
+    : rwStatusHtml('No close match found in this pass — an absence from recall, not proof the language lacks it.', 'gap');
+  return `
+    <div class="card">
+      <div class="result-title" style="font-size:15px">${escapeHtml(r.language || '')} ${verdictTagHtml(r.review_verdict)} ${attTag} ${verdictTag}</div>
+      ${(r.carries_verdict || '').trim() ? `<p class="body" style="font-size:12.5px;color:var(--rule-reworked);margin:2px 0 4px">This term ${escapeHtml(r.carries_verdict)} — a judgment your concept does not make. Real word, wrong ruling.</p>` : ''}
+      ${termHtml}
+      ${r.keeps ? `<p class="body" style="font-size:13.5px"><em>Why it fits:</em> ${escapeHtml(r.keeps)}</p>` : ''}
+      ${r.drops ? `<p class="body" style="font-size:13.5px"><em>What differs:</em> ${escapeHtml(r.drops)}</p>` : ''}
+      ${(r.example || '').trim() ? `<p class="body muted" style="font-size:12.5px"><em>Example, written for this pass — not a quotation:</em> ${escapeHtml(r.example)}</p>` : ''}
+      ${(r.collision || '').trim() ? `<p class="body" style="border-left:3px solid var(--accent, #888);padding-left:10px;font-size:13.5px"><strong>May already be named here:</strong> ${escapeHtml(r.collision)} <span class="muted">— if it checks out, that's a strong reason to prefer the existing word; your coin can still win by cutting a narrower distinction, or by being the better word. Your call.</span></p>` : ''}
+      ${(r.folk_alert || '').trim() ? `<p class="body muted" style="font-size:12.5px">⚠ ${escapeHtml(r.folk_alert)}</p>` : ''}
+      ${(r.check || '').trim() ? `<p class="body muted" style="font-size:12.5px"><em>Where one search would settle it (not yet made):</em> ${escapeHtml(r.check)}</p>` : ''}
+      ${(r.adds || r.review_note) ? `<details style="margin-top:4px"><summary style="cursor:pointer;color:var(--muted);font-size:12px">more</summary>
+        ${r.adds ? `<p class="body muted" style="font-size:12.5px;margin-top:6px"><em>What it brings:</em> ${escapeHtml(r.adds)}</p>` : ''}
+        ${reviewerProseHtml(r.review_note, nCitations)}
+      </details>` : ''}
+    </div>`;
+}
+function rwEnglishCard(it, kind) {
+  const isSyn = kind === 'synonyms';
+  const tag = isSyn
+    ? (it.closeness === 'close'
+        ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0">close</span>`
+        : `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">related — adds or drops a part</span>`)
+    : (it.relation === 'antonym'
+        ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0">antonym</span>`
+        : `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">a contrast, not an exact opposite</span>`);
+  return `
+    <div class="card">
+      <div class="result-title" style="font-size:15px">${escapeHtml(it.word || '')} ${tag}</div>
+      ${(it.meaning || '').trim() ? `<p class="body" style="font-size:13.5px;margin:2px 0">${escapeHtml(it.meaning)}</p>` : ''}
+      ${isSyn && (it.fits || '').trim() ? `<p class="body" style="font-size:13.5px"><em>Why it fits:</em> ${escapeHtml(it.fits)}</p>` : ''}
+      ${isSyn && (it.differs || '').trim() ? `<p class="body" style="font-size:13.5px"><em>What differs:</em> ${escapeHtml(it.differs)}</p>` : ''}
+      ${!isSyn && (it.opposes || '').trim() ? `<p class="body" style="font-size:13.5px"><em>What it opposes:</em> ${escapeHtml(it.opposes)}</p>` : ''}
+      ${(it.register || '').trim() ? `<p class="body muted" style="font-size:12px;margin:0">${escapeHtml(it.register)}</p>` : ''}
+    </div>`;
+}
+function rwComparisonCard(c, nCitations) {
+  const attTag = c.attestation === 'likely-invented'
+    ? `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">possibly invented</span>`
+    : c.attestation === 'uncertain'
+      ? `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">attestation uncertain</span>` : '';
+  return `
+    <div class="card">
+      <div class="result-title" style="font-size:15px">${escapeHtml(c.name || '')} ${verdictTagHtml(c.review_verdict)} ${attTag}</div>
+      ${(c.tradition || '').trim() ? `<p class="body muted" style="font-size:12.5px;margin:0 0 4px">${escapeHtml(c.tradition)}</p>` : ''}
+      ${(c.what || '').trim() ? `<p class="body" style="font-size:13.5px">${escapeHtml(c.what)}</p>` : ''}
+      ${(c.connection || '').trim() ? `<p class="body" style="font-size:13.5px"><em>The connection:</em> ${escapeHtml(c.connection)}</p>` : ''}
+      ${(c.limits || '').trim() ? `<p class="body" style="font-size:13.5px"><em>Where it stops:</em> ${escapeHtml(c.limits)}</p>` : ''}
+      ${(c.check || '').trim() ? `<p class="body muted" style="font-size:12.5px"><em>Where one search would settle it (not yet made):</em> ${escapeHtml(c.check)}</p>` : ''}
+      ${c.review_note ? `<details style="margin-top:4px"><summary style="cursor:pointer;color:var(--muted);font-size:12px">more</summary>${reviewerProseHtml(c.review_note, nCitations)}</details>` : ''}
+    </div>`;
+}
+
+function buildRefractHtml(res, opts) {
+  opts = opts || {};
   const refs = res.refractions || [];
+  const src = res.source || {};
+  const asked = Array.isArray(res.sections_asked) ? res.sections_asked : null;   // null: a record from before the sections existed
+  const followUp = !!((src.only_languages || []).length) || (asked && asked.length === 1 && asked[0] === 'languages');
+  const nCit = (res.citations || []).length;
+  const uid = String(res.trace_id || ('rw' + Date.now()));
+  RELATED_SRC[uid] = {title: src.title || res.source_title || '', definition: src.definition || '',
+                      plain_gloss: src.plain_gloss || '', concept_id: src.concept_id || '',
+                      entry: src.entry || 'concept', passage: src.passage || ''};
   const summaryHtml = res.summary
     ? `<div class="muted" style="font-size:13px;margin:6px 0 10px">${escapeHtml(res.summary)}</div>` : '';
   // A language that was asked for and did not come back is the stage failing
@@ -4273,11 +4488,11 @@ function buildRefractHtml(res) {
   const missingHtml = (res.missing_languages || []).length
     ? `<div class="card" style="border-left:3px solid var(--bad)">
          <p class="body" style="margin:0"><strong>${res.missing_languages.map(escapeHtml).join(', ')}</strong>
-         ${res.missing_languages.length === 1 ? 'was' : 'were'} asked for on every refraction and did not come back.
+         ${res.missing_languages.length === 1 ? 'was' : 'were'} asked for on every pass and did not come back.
          That is not ${res.missing_languages.length === 1 ? 'that language' : 'those languages'} having no term —
          the stage is told to include ${res.missing_languages.length === 1 ? 'it' : 'them'} empty when there is no
          term, because a documented gap is a finding. This is the stage not doing as it was told, and the run
-         below is missing a slot it should have had.</p>
+         below is missing a slot it should have had; it reads “Not checked” there.</p>
        </div>` : '';
   const fossilHtml = res.english_fossil
     ? `<div class="card" style="border-left:3px solid var(--accent, #888)">
@@ -4286,47 +4501,111 @@ function buildRefractHtml(res) {
          ${res.fossil_check ? `<p class="body muted" style="font-size:12.5px"><em>Check it:</em> ${escapeHtml(res.fossil_check)}</p>` : ''}
          ${res.fossil_note ? `<p class="body muted" style="font-size:12.5px"><em>Reviewer:</em> ${escapeHtml(res.fossil_note)}</p>` : ''}
        </div>` : '';
-  const refCards = refs.map(r => {
-    const hasTerm = (r.term || r.romanization || '').trim().length > 0;
-    const attTag = r.attestation === 'likely-invented'
-      ? `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">possibly invented</span>`
-      : r.attestation === 'uncertain'
-        ? `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">attestation uncertain</span>` : '';
-    // A real, attested, well-glossed term that answers a question the
-    // concept refuses to answer. Shown as its own tag rather than folded
-    // into the note, because it is a third and independent way for a
-    // refraction to fail and reads nothing like the other two.
-    const verdictTag = (r.carries_verdict || '').trim()
-      ? `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">settles what the concept leaves open</span>` : '';
-    const termHtml = hasTerm
-      ? `<p class="body" style="font-size:18px;margin:4px 0 2px">${escapeHtml(r.term || r.romanization)}
-           ${r.romanization && r.term && r.romanization !== r.term ? `<span class="muted" style="font-size:14px;font-style:italic"> ${escapeHtml(r.romanization)}</span>` : ''}
-           ${r.literal ? `<span class="muted" style="font-size:13px"> — “${escapeHtml(r.literal)}”</span>` : ''}</p>
-         ${r.register ? `<p class="body muted" style="font-size:12px;margin:0">${escapeHtml(r.register)}</p>` : ''}`
-      : `<p class="body muted" style="font-style:italic;margin:4px 0 2px">no close word — a gap, and the gap is the finding</p>`;
+
+  // A follow-up on named languages: the language cards and nothing else,
+  // under the languages it was asked for.
+  if (followUp) {
+    const names = (src.only_languages || []).length ? src.only_languages : refs.map(r => r.language);
     return `
-      <div class="card">
-        <div class="result-title" style="font-size:15px">${escapeHtml(r.language || '')} ${verdictTagHtml(r.review_verdict)} ${attTag} ${verdictTag}</div>
-        ${(r.carries_verdict || '').trim() ? `<p class="body" style="font-size:12.5px;color:var(--rule-reworked);margin:2px 0 4px">This term ${escapeHtml(r.carries_verdict)} — a judgment your concept does not make. Real word, wrong ruling.</p>` : ''}
-        ${termHtml}
-        ${r.keeps ? `<p class="body" style="font-size:13.5px">${escapeHtml(r.keeps)}</p>` : ''}
-        ${(r.collision || '').trim() ? `<p class="body" style="border-left:3px solid var(--accent, #888);padding-left:10px;font-size:13.5px"><strong>May already be named here:</strong> ${escapeHtml(r.collision)} <span class="muted">— if it checks out, that's a strong reason to prefer the existing word; your coin can still win by cutting a narrower distinction, or by being the better word. Your call.</span></p>` : ''}
-        ${(r.folk_alert || '').trim() ? `<p class="body muted" style="font-size:12.5px">⚠ ${escapeHtml(r.folk_alert)}</p>` : ''}
-        ${(r.check || '').trim() ? `<p class="body muted" style="font-size:12.5px"><em>Check it:</em> ${escapeHtml(r.check)}</p>` : ''}
-        ${(r.drops || r.adds || r.review_note) ? `<details style="margin-top:4px"><summary style="cursor:pointer;color:var(--muted);font-size:12px">more</summary>
-          ${r.drops ? `<p class="body muted" style="font-size:12.5px;margin-top:6px"><em>What it loses:</em> ${escapeHtml(r.drops)}</p>` : ''}
-          ${r.adds ? `<p class="body muted" style="font-size:12.5px"><em>What it brings:</em> ${escapeHtml(r.adds)}</p>` : ''}
-          ${reviewerProseHtml(r.review_note, (res.citations || []).length)}
-        </details>` : ''}
-      </div>`;
-  }).join('');
+      <div class="section-label">Asked by name — ${names.map(escapeHtml).join(', ')}${src.title ? ` — for “${escapeHtml(src.title)}”` : ''}</div>
+      ${summaryHtml}
+      ${citationsHtml(res.citations)}
+      ${refs.map(r => rwTermCard(r, nCit)).join('') || rwStatusHtml('Nothing came back for the languages named.', 'absent')}`;
+  }
+
+  const sec = (id, label, bodyHtml) =>
+    `<div class="section-label" id="rw-sec-${id}-${escapeHtml(uid)}" style="margin-top:16px">${label}</div>${bodyHtml}`;
+  // English sections. Their status is a statement about THIS pass.
+  const englishStatus = (list, noun) => {
+    if (asked === null) return rwStatusHtml(`Not checked — this comparison was made before the English ${noun} were part of the tool.`, 'absent');
+    if (!asked.includes('english')) return rwStatusHtml(`Not asked in this pass.`, 'absent');
+    if (!list.length) return rwStatusHtml(`No close match found in this pass — nothing close came back from recall; that is not proof there is none.`, 'gap');
+    return '';
+  };
+  const syns = res.english_synonyms || [], ants = res.english_antonyms || [];
+  const aside = res.english_set_aside || [];
+  const asideHtml = aside.length ? `<p class="body muted" style="font-size:12.5px;border-left:2px solid var(--bad);padding-left:9px">Set aside from the English sections, not shown as English: ${aside.map(a => `${escapeHtml(a.word)} — ${escapeHtml(a.reason)}`).join('; ')}.</p>` : '';
+  const synHtml = englishStatus(syns, 'synonyms') + syns.map(s => rwEnglishCard(s, 'synonyms')).join('') + asideHtml;
+  const antHtml = englishStatus(ants, 'opposites') + ants.map(a => rwEnglishCard(a, 'antonyms')).join('');
+  // Latin and Greek have their own sections and are accounted for by name.
+  const byCanon = c => refs.filter(r => (r.language_canonical || canonLang(r.language)) === c);
+  const classical = (c) => {
+    const rows = byCanon(c);
+    if (rows.length) return rows.map(r => rwTermCard(r, nCit)).join('');
+    if ((res.missing_languages || []).some(m => canonLang(m) === c))
+      return rwStatusHtml(`Not checked — ${c} was asked for and did not come back. That is the stage not doing as it was told, not ${c} having no word for this.`, 'absent');
+    if (asked === null) return rwStatusHtml(`Not checked — ${c} was not asked for when this comparison was made.`, 'absent');
+    return rwStatusHtml(`Not checked in this pass.`, 'absent');
+  };
+  // The other languages, Spanish first, then as they came.
+  const others = refs.filter(r => !['Latin', 'Greek'].includes(r.language_canonical || canonLang(r.language)));
+  others.sort((a, b) => ((b.language_canonical || canonLang(b.language)) === 'Spanish') - ((a.language_canonical || canonLang(a.language)) === 'Spanish'));
+  const othersHtml = others.length ? others.map(r => rwTermCard(r, nCit)).join('')
+    : rwStatusHtml('No other languages came back in this pass.', 'absent');
+  const comps = res.cultural_comparisons || [];
+  const compStatus = asked === null ? rwStatusHtml('Not checked — this comparison was made before cultural comparisons were part of the tool.', 'absent')
+    : !asked.includes('cultural') ? rwStatusHtml('Not asked in this pass.', 'absent')
+    : !comps.length ? rwStatusHtml('None offered in this pass — not proof there is nothing to compare.', 'gap') : '';
+  const compHtml = compStatus + comps.map(c => rwComparisonCard(c, nCit)).join('');
+  const entryLine = src.entry === 'selection'
+    ? `from a selection in your writing${src.passage_chars ? ` (${src.passage_chars} characters)` : ''}`
+    : src.entry === 'description' ? 'from a meaning you described' : '';
+  const meaningHtml = (src.definition || '').trim()
+    ? `<div class="card" style="border-left:3px solid var(--accent, #888)">
+         <p class="body" style="margin:0"><strong>The meaning explored:</strong> ${escapeHtml(src.definition)}</p>
+         ${(src.plain_gloss || '').trim() ? `<p class="body muted" style="font-size:12.5px;margin:2px 0 0">${escapeHtml(src.plain_gloss)}</p>` : ''}
+         ${entryLine ? `<p class="body muted" style="font-size:12px;margin:2px 0 0">${escapeHtml(entryLine)}</p>` : ''}
+       </div>` : '';
+  const nav = [['synonyms', 'English synonyms'], ['antonyms', 'English antonyms'], ['latin', 'Latin'], ['greek', 'Greek'],
+               ['languages', 'Other languages'], ['cultural', 'Cultural comparisons']]
+    .map(([id, l]) => `<a href="#rw-sec-${id}-${escapeHtml(uid)}" onclick="event.preventDefault();rwScrollTo('${escapeJs(id)}','${escapeJs(uid)}')" style="margin-right:10px;font-size:12.5px">${l}</a>`).join('');
+  const followHtml = (src.definition || '').trim() ? `
+    <div class="card" id="rw-follow-card-${escapeHtml(uid)}" style="margin-top:12px">
+      <div class="section-label" style="margin-top:0">Ask another language</div>
+      <p class="body muted" style="font-size:12.5px">A follow-up on one language you name, added beneath these results — nothing above is replaced. Two model calls: one to find, one to review.</p>
+      <div class="row">
+        <input class="note" id="rw-lang-${escapeHtml(uid)}" placeholder="e.g. Japanese, Finnish, Yoruba" aria-label="a language to ask" style="max-width:20em" onkeydown="if(event.key==='Enter'){event.preventDefault();relatedFollowUp('${escapeJs(uid)}')}">
+        <button class="judge-btn" style="font-size:12.5px" onclick="relatedFollowUp('${escapeJs(uid)}')">Ask it — 2 model calls</button>
+      </div>
+      <div id="rw-follow-${escapeHtml(uid)}"></div>
+    </div>` : '';
   return `
-    <div class="section-label">Through other languages${res.source_title ? ` — “${escapeHtml(res.source_title)}”` : ''}</div>
+    <div class="section-label" id="rw-top-${escapeHtml(uid)}">Related words${src.title || res.source_title ? ` — “${escapeHtml(src.title || res.source_title)}”` : ''}</div>
     ${summaryHtml}
+    <p class="body muted" style="font-size:12.5px;margin:0 0 8px">Everything here is recall — remembered, not looked up — unless the review's search results below say otherwise. “Where one search would settle it” names a place to look; naming it is not looking.</p>
+    <div style="margin:0 0 6px">${nav}</div>
+    ${meaningHtml}
     ${missingHtml}
     ${citationsHtml(res.citations)}
+    ${sec('synonyms', 'English synonyms — words that fit this meaning', synHtml)}
+    ${sec('antonyms', 'English antonyms — and what each one opposes', antHtml)}
+    ${sec('latin', 'Latin', classical('Latin'))}
+    ${sec('greek', 'Greek — Ancient, Koine or Modern, said which', classical('Greek'))}
+    ${sec('languages', 'Other languages — what each keeps, drops and adds', othersHtml)}
+    ${sec('cultural', 'Cultural comparisons — documented uses, with their limits', compHtml)}
     ${fossilHtml}
-    ${refCards}`;
+    ${followHtml}`;
+}
+
+function rwScrollTo(id, uid) {
+  const el = document.getElementById(`rw-sec-${id}-${uid}`);
+  if (el && el.scrollIntoView) el.scrollIntoView({block: 'start', behavior: 'smooth'});
+}
+
+// A follow-up on a language the owner names: the same meaning, that
+// language only, appended beneath the panel it was asked from.
+async function relatedFollowUp(uid) {
+  const src = RELATED_SRC[uid];
+  const input = document.getElementById(`rw-lang-${uid}`);
+  const holder = document.getElementById(`rw-follow-${uid}`);
+  if (!src || !input || !holder) return;
+  const lang = (input.value || '').trim().slice(0, 40);
+  if (!lang) { input.focus(); return; }
+  const area = document.createElement('div');
+  area.id = `rw-follow-${uid}-${Date.now()}`;
+  holder.appendChild(area);
+  input.value = '';
+  startRefractInto(area.id, {...src, only_languages: [lang]});
 }
 
 // Verify: on-demand, fires as many times as the owner clicks it, checking
@@ -5290,9 +5569,114 @@ function renderWsMore() {
     `<button onclick="toggleWsMore();askDeep('paragraph')" title="the paragraph the caret is in — or your selection">This paragraph <span style="opacity:.6">${DEEP_CHORDS.paragraph.label}</span></button>` +
     `<button onclick="toggleWsMore();askDeep('draft')" title="everything in the room">The whole draft <span style="opacity:.6">${DEEP_CHORDS.draft.label}</span></button>` +
     `</div>` +
+    `<div class="lbl" style="margin-top:10px">Find related words</div><div class="row">` +
+    `<button onclick="toggleWsMore();askRelated()" title="English synonyms and opposites, then Latin, Greek and other languages — for your selection, or a meaning you type; it asks before it spends">Your selection, or a meaning you type</button>` +
+    `</div>` +
     `<div class="lbl" style="margin-top:10px">Dictate</div><div class="row">` +
     `<button onclick="toggleWsMore();dictateFromRoom()" title="the Speak instrument is on the page: what it hears lands in the page's box, for you to review">On the page</button>` +
     `</div>`;
+}
+
+// ---- Find related words, from the writing (2026-09-13) --------------------
+// The selection is the sense to explore: a word or a short phrase becomes
+// the meaning line as it stands; a longer passage is context, and the
+// meaning line starts empty for him to say the sense in one line. Nothing
+// is spent by opening the panel; one press starts the pass; escape spends
+// nothing; the answer lands beside the draft through the same route a
+// workup takes, and the draft, the caret and the undo history are never
+// touched.
+let RELATED_ASK = null;
+function relatedOpen() { const el = document.getElementById('related-ask'); return !!el && el.style.display !== 'none'; }
+function askRelated() {
+  const el = document.getElementById('related-ask');
+  const ta = document.getElementById('compose-text');
+  if (!el || !ta) return;
+  for (const id of ['write-style', 'write-save', 'deep-ask', 'ws-more', 'nb-panel', 'moira-ask']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
+  if (typeof DEEP_ASK !== 'undefined') DEEP_ASK = null;
+  if (typeof MOIRA_ASK !== 'undefined') MOIRA_ASK = null;
+  const sel = ta.selectionStart !== ta.selectionEnd ? ta.value.slice(ta.selectionStart, ta.selectionEnd).trim() : '';
+  const short = sel && sel.length <= 80 && sel.indexOf('\n') < 0;
+  RELATED_ASK = {selection: sel, meaning: short ? sel : '', entry: sel ? 'selection' : 'description'};
+  el.style.display = 'block';
+  renderRelatedAsk();
+}
+function renderRelatedAsk() {
+  const el = document.getElementById('related-ask');
+  if (!el || !RELATED_ASK) return;
+  const sel = RELATED_ASK.selection || '';
+  const words = sel ? sel.split(/\s+/).filter(Boolean).length : 0;
+  el.innerHTML = `<div class="row" style="justify-content:space-between;align-items:center">
+      <div class="lbl" id="related-ask-title" style="margin:0">Find related words</div>
+      <button class="compose-exit" onclick="closeRelated()" aria-label="close">× esc</button></div>
+    ${sel
+      ? `<p class="scope" style="margin-top:8px">from <strong>your selection</strong> — ${words} word${words === 1 ? '' : 's'}</p>
+         <p class="preview">“${escapeHtml(sel.slice(0, 180))}${sel.length > 180 ? '…' : ''}”</p>`
+      : `<p class="scope" style="margin-top:8px">nothing is selected — <strong>describe the meaning</strong> in one line below, or select a word or a passage first</p>`}
+    <p class="fact">The meaning to match, one line${sel && !RELATED_ASK.meaning ? ' — the passage above is context for which sense you mean; say the sense here' : ' — correct it if the sense is off'}:</p>
+    <input class="note" id="related-meaning" aria-label="the meaning to find related words for" maxlength="1500" style="width:100%"
+           value="${escapeHtml(RELATED_ASK.meaning || '')}" placeholder="e.g. the sadness of being between stages"
+           oninput="RELATED_ASK.meaning = this.value; relatedGoState()" onkeydown="if (event.key === 'Enter') { event.preventDefault(); startRelatedFromRoom(); }">
+    <p class="fact" id="related-lane">Lane: <b>checking…</b></p>
+    <p class="fact">Model calls: <b>2</b> — one to find (English synonyms and opposites first, then Latin, Greek and other languages), one to review the foreign terms and comparisons. A hosted lane sends the meaning line${sel ? ' and your selection' : ''} to the provider. Everything that comes back is recall, labelled so.</p>
+    <p class="fact">It keeps running if you close the room or the tab. The answer opens beside your writing when it arrives; the draft, the caret and the undo history are not touched.</p>
+    <div class="row" style="margin-top:10px">
+      <button id="related-go" onclick="startRelatedFromRoom()">Find related words</button>
+      <button onclick="closeRelated()">Cancel · esc</button>
+    </div>`;
+  relatedGoState();
+  const inp = document.getElementById('related-meaning');
+  const go = document.getElementById('related-go');
+  if (inp && !(RELATED_ASK.meaning || '').trim()) inp.focus({preventScroll: true});
+  else if (go) go.focus({preventScroll: true});
+  deepLane().then(lane => {
+    const laneEl = document.getElementById('related-lane');
+    if (laneEl && RELATED_ASK) {
+      laneEl.innerHTML = 'Lane: <b>' + escapeHtml(lane.lane) + '</b>'
+        + (lane.model ? ' · model <b>' + escapeHtml(lane.model) + '</b>' : (lane.ok ? ' · no model of its own' : ''));
+    }
+  });
+}
+function relatedGoState() {
+  const go = document.getElementById('related-go');
+  if (!go || !RELATED_ASK) return;
+  const ok = !!(RELATED_ASK.meaning || '').trim();
+  go.disabled = !ok;
+  if (ok) go.removeAttribute('aria-disabled'); else go.setAttribute('aria-disabled', 'true');
+}
+function closeRelated() {
+  const el = document.getElementById('related-ask');
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+  RELATED_ASK = null;
+  const ta = document.getElementById('compose-text');
+  if (ta && document.body.classList.contains('ws-open')) ta.focus({preventScroll: true});
+}
+async function startRelatedFromRoom() {
+  const ask = RELATED_ASK;
+  if (!ask) return;
+  const meaning = (ask.meaning || '').trim();
+  if (!meaning) { const inp = document.getElementById('related-meaning'); if (inp) inp.focus(); return; }
+  closeRelated();
+  roomRun('submitted · waiting for a turn');
+  // A COPY of the selection goes; the draft is not touched, not copied into
+  // the intake box, not moved.
+  try {
+    const r = await fetch('/api/jobs', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({mode: 'refract',
+        original: {title: '', definition: meaning, plain_gloss: '', concept_id: ''},
+        entry: ask.entry, passage: ask.entry === 'selection' ? ask.selection : '',
+        only_languages: [], provenance: 'typed'}),
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) { roomRun('finding related words could not start — ' + failureClass(d.error)); return; }
+    localStorage.setItem(ACTIVE_JOB_KEY, d.job_id);
+    saveSession({job: d.job_id, shown: '', label: ''});
+    RUN = {job: d.job_id, surface: 'room', scope: ask.entry, dest: 'beside', revealed: false, kind: 'related'};
+    saveRun();
+    watchJob(d.job_id);
+  } catch (e) {
+    roomRun('finding related words could not start — the server could not be reached');
+  }
 }
 function toggleWsMore() {
   const el = document.getElementById('ws-more');
@@ -6252,7 +6636,7 @@ let DEEP_ASK = null;      // the scope currently being asked about
 // character of the draft is stored: the server's job record holds the
 // content, and this is only the thread back to it.
 const ROOM_RUN_KEY = 'nikodemus.run.route.v1';
-let RUN = {job: '', surface: '', scope: '', dest: '', revealed: false};
+let RUN = {job: '', surface: '', scope: '', dest: '', revealed: false, kind: 'workup'};
 let WATCHING = '';        // the job the poll loop currently has in hand
 
 function saveRun() {
@@ -6268,12 +6652,23 @@ function loadRun() {
     const d = JSON.parse(raw);
     if (d && d.job) RUN = {job: String(d.job), surface: String(d.surface || ''),
                            scope: String(d.scope || ''), dest: String(d.dest || ''),
-                           revealed: !!d.revealed};
+                           revealed: !!d.revealed, kind: d.kind === 'related' ? 'related' : 'workup'};
   } catch (e) { /* an unreadable route is no route */ }
 }
 function clearRun() {
-  RUN = {job: '', surface: '', scope: '', dest: '', revealed: false};
+  RUN = {job: '', surface: '', scope: '', dest: '', revealed: false, kind: 'workup'};
   saveRun();
+}
+// The line's words for the run the room is waiting on. A full workup and a
+// related-words pass are different things and the line says which.
+function runWords() {
+  return RUN.kind === 'related'
+    ? {ready: 'the related words are ready', beside: 'the related words are beside your draft',
+       failed: 'finding related words failed — ',
+       lost: 'those related words cannot be resumed — the server no longer has them (it restarts between runs)'}
+    : {ready: 'your workup is ready', beside: 'the workup is beside your draft',
+       failed: 'the workup failed — ',
+       lost: 'that workup cannot be resumed — the server no longer has it (it restarts between runs)'};
 }
 
 // The failure classes the room can name without pretending to know more than
@@ -6341,6 +6736,7 @@ async function askDeep(kind) {
   const el = document.getElementById('deep-ask');
   const scope = deepScope(kind);
   if (!el || !scope) return;
+  if (typeof closeRelated === 'function' && typeof relatedOpen === 'function' && relatedOpen()) closeRelated();   // one question at a time
   const text = (scope.text || '').trim();
   DEEP_ASK = {...scope, text};
   const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
@@ -6457,11 +6853,11 @@ function runArrived(jobId) {
   const here = document.body.classList.contains('ws-open') && !PLACE;
   if (here && WS_MODE === 'split') {   // already beside him: nothing to move
     RUN.revealed = true;
-    roomRun('the workup is beside your draft');
+    roomRun(runWords().beside);
     clearRun();
     return;
   }
-  if (!here) { roomRun('your workup is ready', 'Open beside writing'); saveRun(); return; }
+  if (!here) { roomRun(runWords().ready, 'Open beside writing'); saveRun(); return; }
   revealRun();
 }
 
@@ -6487,7 +6883,7 @@ function checkPendingRun() {
   if (!RUN.job || RUN.revealed) return;
   if (RUN.surface !== 'room') return;
   if (WATCHING === RUN.job) return;      // still running: the poll will call arrival
-  roomRun('your workup is ready', 'Open beside writing');
+  roomRun(runWords().ready, 'Open beside writing');
 }
 
 // On load: the route survived, so find out what became of the job. The
@@ -6500,7 +6896,7 @@ async function resumeRun() {
   try {
     const r = await fetch(`/api/jobs/${RUN.job}`);
     if (!r.ok) {
-      roomRun('that workup cannot be resumed — the server no longer has it (it restarts between runs)');
+      roomRun(runWords().lost);
       clearRun();
       return;
     }
@@ -6508,7 +6904,7 @@ async function resumeRun() {
   } catch (e) {
     return;                              // offline for a moment: the route keeps
   }
-  if (job.status === 'failed') { roomRun('the workup failed — ' + failureClass(job.error)); clearRun(); return; }
+  if (job.status === 'failed') { roomRun(runWords().failed + failureClass(job.error)); clearRun(); return; }
   if (job.status === 'complete') { runArrived(RUN.job); return; }
   if (WATCHING !== RUN.job) watchJob(RUN.job);
   roomRunProgress(job);
@@ -6562,6 +6958,7 @@ document.addEventListener('keydown', e => {
   // room out from under an unanswered question would be the wrong order.
   if (DEEP_ASK) { e.preventDefault(); closeDeepAsk(); return; }
   if (moiraOpen()) { e.preventDefault(); closeMoira(); return; }
+  if (relatedOpen()) { e.preventDefault(); closeRelated(); return; }
   // Notebook stage A: the innermost thing closes first — the type panel, the
   // revision notes, the download choices — and from inside the writing it
   // takes a second Escape to close the room itself (roomKeydown counts).
@@ -6632,8 +7029,8 @@ async function moiraConfig(force) {
 function askReaders(kind) {
   const el = document.getElementById('moira-ask');
   if (!el) return;
-  for (const id of ['write-style', 'write-save', 'deep-ask', 'ws-more', 'nb-panel']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
-  DEEP_ASK = null;
+  for (const id of ['write-style', 'write-save', 'deep-ask', 'ws-more', 'nb-panel', 'related-ask']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
+  DEEP_ASK = null; RELATED_ASK = null;
   el.style.display = 'block';
   if (kind === 'readings') { MOIRA_TAB = 'readings'; MOIRA_ASK = null; }
   else { MOIRA_TAB = 'read'; MOIRA_ASK = deepScope(kind === 'draft' ? 'draft' : 'paragraph'); if (MOIRA_ASK) MOIRA_ASK.text = (MOIRA_ASK.text || '').trim(); }
@@ -8247,7 +8644,7 @@ function renderLibrary(q) {
     <details style="margin-top:22px">
       <summary class="section-label" style="cursor:pointer;margin:0">Everything else it came from</summary>
       ${sec('Parallels explored — where a word led', rows(shelf.sprout), shelf.sprout.length)}
-      ${sec('Other languages explored — the same idea elsewhere', rows(shelf.refract), shelf.refract.length)}
+      ${sec('Related words explored — English, Latin, Greek and other languages', rows(shelf.refract), shelf.refract.length)}
       ${sec('Revisions — second and third passes', rows(shelf.revise), shelf.revise.length)}
       ${sec('First passes — forges, riffs, cracks', rows(shelf.root), shelf.root.length)}
       ${sec('Bench — words taken apart', benchHtml + orphanHtml, bench.length)}

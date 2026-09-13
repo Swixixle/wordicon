@@ -708,8 +708,12 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
             with JOBS_LOCK:
                 original = JOBS[job_id].get("original") or {}
                 known_neighbors = JOBS[job_id].get("known_neighbors")
+                related_entry = JOBS[job_id].get("related_entry") or {}
             result = cli.run_refract(original, gateway, on_progress=on_progress,
-                                      known_neighbors=known_neighbors)
+                                      known_neighbors=known_neighbors,
+                                      passage=related_entry.get("passage"),
+                                      entry=related_entry.get("entry") or "concept",
+                                      only_languages=related_entry.get("only_languages") or None)
             result["gateway"] = gateway.name
         elif mode == "archetype":
             with JOBS_LOCK:
@@ -3276,6 +3280,7 @@ def api_create_job():
     wordify = False
     parent_trace_id, via, parent_door_id = None, None, None
     known_neighbors = None
+    related_entry = None
     retry_anchor, retry_stance, retry_match_text = None, None, None
     verify_candidate = None
     if mode == "sprout":
@@ -3300,13 +3305,29 @@ def api_create_job():
                     "concept_id": str(original.get("concept_id") or "")[:64]}
         input_text = f"sprout: {original['title']}"
     elif mode == "refract":
+        # Find related words / Explore other languages (2026-09-13): the
+        # meaning is what is required. A title is a handle and may be
+        # absent — a described idea, or the sense of a selected passage,
+        # is a whole brief without one. `entry` records how the meaning
+        # arrived; `passage` is context for a selection and nothing else;
+        # `only_languages` is a follow-up the owner asked for by name.
         original = data.get("original") or {}
-        if not original.get("title") or not original.get("definition"):
-            return jsonify({"error": "refract requires original.title and original.definition"}), 400
+        if not str(original.get("definition") or "").strip():
+            return jsonify({"error": "refract requires original.definition — the meaning to find "
+                                     "related words for; a title is optional"}), 400
         known_neighbors = str(data.get("known_neighbors") or "")[:800] or None
-        original = {**original,
+        entry = str(data.get("entry") or "concept")
+        if entry not in ("concept", "description", "selection"):
+            return jsonify({"error": "entry must be 'concept', 'description' or 'selection'"}), 400
+        passage = str(data.get("passage") or "")[:4000] or None
+        only_languages = [str(x)[:40] for x in (data.get("only_languages") or []) if str(x).strip()][:6]
+        original = {"title": str(original.get("title") or "")[:200],
+                    "definition": str(original.get("definition") or "")[:1500],
+                    "plain_gloss": str(original.get("plain_gloss") or "")[:800],
                     "concept_id": str(original.get("concept_id") or "")[:64]}
-        input_text = f"refract: {original['title']}"
+        related_entry = {"entry": entry, "passage": passage, "only_languages": only_languages}
+        input_text = (f"refract: {original['title']}" if original["title"]
+                      else f"related words: {original['definition'][:120]}")
     elif mode == "recheck":
         original = data.get("original") or {}
         if not original.get("title") or not original.get("definition"):
@@ -3406,7 +3427,8 @@ def api_create_job():
             "owner_note": owner_note, "prior_friction": prior_friction,
             "wordify": wordify, "parent_trace_id": parent_trace_id, "via": via,
             "parent_door_id": parent_door_id,
-            "known_neighbors": known_neighbors, "verify_candidate": verify_candidate,
+            "known_neighbors": known_neighbors, "related_entry": related_entry,
+            "verify_candidate": verify_candidate,
             "retry_anchor": retry_anchor, "retry_stance": retry_stance,
             "retry_match_text": retry_match_text,
             "avoid_titles": avoid_titles, "prior_attempts": prior_attempts,
@@ -4236,6 +4258,59 @@ def api_result(trace_id):
                 decisions[j["candidate_text"]] = {"decision": j["decision"], "reason": j.get("reason")}
     snapshot["judgments"] = decisions
     return jsonify(snapshot)
+
+
+@app.route("/api/related/saved")
+def api_related_saved():
+    """The saved word comparisons for one idea, so a door can show what
+    already exists before anything is spent (Find related words,
+    2026-09-13: "existing search results can show saved comparisons
+    immediately"). Matched by concept id when the record carries one —
+    `via: recorded` — and otherwise by title, case-folded, which is a
+    reconstruction from a mutable name and is labelled `via: derived`; the
+    two are never presented as equal. Read-only; a scan of the results
+    store, the same one the Library makes."""
+    concept_id = (request.args.get("concept_id") or "").strip()[:64]
+    title = (request.args.get("title") or "").strip().lower()[:200]
+    items = []
+    if not (concept_id or title) or not cli.RESULTS_DIR.exists():
+        return jsonify({"items": items, "matched_by": "nothing — no id and no title were given"})
+    for path in cli.RESULTS_DIR.glob("*.json"):
+        try:
+            snap = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        if snap.get("mode") != "refract":
+            continue
+        src = snap.get("source") or {}
+        via = ""
+        if concept_id and (src.get("concept_id") or "") == concept_id:
+            via = "recorded"
+        elif title and (src.get("title") or "").strip().lower() == title:
+            via = "derived"
+        if not via:
+            continue
+        refs = snap.get("refractions") or []
+        asked = snap.get("sections_asked")
+        items.append({
+            "trace_id": snap.get("trace_id") or path.stem,
+            "created_at": snap.get("created_at") or "",
+            "via": via,
+            "title": src.get("title") or "",
+            "meaning": (src.get("definition") or "")[:200],
+            "entry": src.get("entry") or "concept",
+            "only_languages": src.get("only_languages") or [],
+            "sections_asked": asked if isinstance(asked, list) else [],
+            "n_synonyms": len(snap.get("english_synonyms") or []),
+            "n_antonyms": len(snap.get("english_antonyms") or []),
+            "n_languages": len(refs),
+            "languages": [r.get("language") or "" for r in refs if isinstance(r, dict)][:12],
+        })
+    items.sort(key=lambda d: d.get("created_at") or "", reverse=True)
+    matched_by = ("concept id; title as a fallback, marked derived" if (concept_id and title)
+                  else "concept id" if concept_id
+                  else "title — a reconstruction from a mutable name; every row is marked derived")
+    return jsonify({"items": items[:20], "matched_by": matched_by})
 
 
 @app.route("/api/concept/<concept_id>")
