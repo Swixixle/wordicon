@@ -1,5 +1,39 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.22.0 — Reading quality, the first two corrections
+
+The owner's yes (2026-09-13) on two of the reading-quality findings; the
+rest of that correction stays on the build list. Prompt template
+identities on receipts change by themselves (`template_sha` is a hash of
+the builder's source), so a run made after this is distinguishable from
+one made before it.
+
+**The generation stage is no longer told to pad.** `build_generation_prompt`
+said "At least one weak or redundant candidate is fine and expected — a
+later adversarial pass is supposed to have something real to reject". It
+now says "Do not pad the set: nothing downstream needs a weak or redundant
+candidate to reject, and a reading that only repeats another or invents a
+cause in order to differ is worse than its absence." The count (2–3) is
+unchanged; whether one reading may stand alone is part of the wider
+correction, not decided here.
+
+**The counter-reading rule names its form, not a scene.** `run_decompose`'s
+stance block carried the example "(e.g. 'A counter-reading of the widened
+interval: ...')", and that phrase reached a real result verbatim. The rule
+now reads: "its definition must OPEN by declaring itself a counter-reading
+— the words 'A counter-reading of' followed by the reading of the source
+it argues against, named in the source's own terms — before making that
+move." The ability is untouched: Friction still credits a self-declared
+counter-reading and never flags it as contradicting its anchor (the
+existing pin), and the hard self-label rule is still required in every
+branch forge prompt.
+
+Pins: the generation prompt must not contain "weak or redundant candidate
+is fine" or "something real to reject" and must contain the do-not-pad
+sentence; no branch forge prompt may contain "widened interval" and every
+run must ask a counter-reading to name what it argues against. Checked
+against the old text: all four fire.
+
 ## v1.21.0 — Notebook stage B: saved documents
 
 The second stage of the writing-notebook repair: the document store the

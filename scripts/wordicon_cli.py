@@ -4314,9 +4314,10 @@ the title used naturally in a sentence a person might actually say or
 write — not a definition in disguise, a sentence with the word doing work
 in it.
 
-Produce 2-3 candidates. At least one weak or redundant candidate is fine and
-expected — a later adversarial pass is supposed to have something real to
-reject. You have not been shown any source material to cite — that is
+Produce 2-3 candidates. Do not pad the set: nothing downstream needs a
+weak or redundant candidate to reject, and a reading that only repeats
+another or invents a cause in order to differ is worse than its absence.
+You have not been shown any source material to cite — that is
 deliberate. Generate the strongest candidates for the task on their own
 terms; a separate later stage checks them against admitted sources, and it
 does that blind to how you'd feel about the result.
@@ -7299,8 +7300,9 @@ def run_decompose(text: str, gateway: Gateway, interactive: bool = True,
                              "condemns — but self-labeling is a hard rule, not a "
                              "courtesy: if a candidate's central move reads against "
                              "this stance, its definition must OPEN by declaring "
-                             "itself a counter-reading (e.g. 'A counter-reading of "
-                             "the widened interval: ...') before making that move. "
+                             "itself a counter-reading — the words 'A counter-reading of' "
+                             "followed by the reading of the source it argues against, "
+                             "named in the source's own terms — before making that move. "
                              "An unlabeled counter-reading is presented with an "
                              "authority it has not earned — the declaration costs a "
                              "candidate nothing and loses no force. Candidates that "

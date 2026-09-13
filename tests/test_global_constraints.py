@@ -3222,6 +3222,15 @@ def main() -> int:
     gen = cli.build_generation_prompt(cli.load_seed_corpus(), "forge", "some task")
     if "speakable, readable English" not in gen:
         failures.append("generation prompt missing English-title craft rule")
+    # 4e (2026-09-13, the owner's yes on the reading-quality correction): the
+    # generation stage is no longer told that a weak or redundant candidate is
+    # expected so the critic has something to reject. Padding the set was
+    # extra work handed to the owner in service of the pipeline.
+    for bad in ("weak or redundant candidate is fine", "something real to reject"):
+        if bad in gen:
+            failures.append(f"generation prompt still asks for a weak candidate ({bad!r})")
+    if "Do not pad the set" not in gen or "worse than its absence" not in gen:
+        failures.append("generation prompt lost the do-not-pad sentence")
 
     # 4d. within-run title accumulation: the second branch's generation
     # prompt must carry a title coined in the first branch (the mock coins
@@ -3570,6 +3579,14 @@ def main() -> int:
     if not any("self-labeling is a hard rule" in p and "must OPEN by declaring" in p
                for p in gen_prompts3):
         failures.append("branch forge prompts missing the hard self-label rule")
+    # 14c (2026-09-13): the self-label rule names its FORM, not a scene. The
+    # stock example "A counter-reading of the widened interval" leaked into a
+    # real result verbatim; production instructions carry no scene-specific
+    # wording, and a counter-reading names what it argues against.
+    if any("widened interval" in p for p in gen_prompts3):
+        failures.append("branch forge prompts still carry the stock counter-reading example")
+    if not any("named in the source's own terms" in p for p in gen_prompts3):
+        failures.append("branch forge prompts no longer ask a counter-reading to name what it argues against")
     if "counter-reading, not self-declared" not in adv_stanced:
         failures.append("adversarial prompt missing the not-self-declared check")
     if "credit that rather than re-litigating" not in adv_stanced:
