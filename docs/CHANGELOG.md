@@ -1,5 +1,55 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.32.0 — The reviewer is shown the owner's own source
+
+The independent review of report 75 found six defects in the follow-up.
+This is the first three: the reviewing stage had never been shown the
+passage it was judging fit against; the exact selection was not exact once
+it left the browser; and a pass made from a selection alone lost the
+language follow-up.
+
+**The source reaches both calls.** `run_refract` handed the passage only to
+the producing stage. The reviewing stage — the one that decides whether a
+proposed word holds, is strained or is suspect for THIS meaning — was given
+the proposals and the sentence "the sense of a passage the owner selected,
+as written", and never the passage. It was being asked how well words fit a
+source it could not see, and a source that never arrived cannot support a
+positive judgment about fit to it. `build_refract_review_prompt` now takes
+the passage and reproduces it under its own heading, marked as the owner's
+words rather than the producing stage's account of them, with the narrowing
+(where there is one) still the stated meaning. Because this is the call
+with live search, the prompt says plainly that the terms may be searched
+and the owner's text may not.
+
+**Exact, or refused, at every entrance.** `build_refract_prompt` stripped
+the selection's outer whitespace, and cut it to 1,500 characters whenever a
+narrowing was typed — silently, while the page promised it went exactly as
+selected. The route sliced at 4,000 and queued the short version. Neither
+trims now: `REFRACT_PASSAGE_MAX` is a refusal, enforced in `run_refract`
+(before the id is minted, the record written or a call made) and in the
+`/api/jobs` route (before a job exists), each naming both counts. The
+record keeps the selection whole. The page counts code points
+(`passageLen`), which is what the server's `len()` counts — it had been
+counting UTF-16 units, so an emoji cost two in the browser and one on the
+server and the two limits disagreed at the boundary.
+
+**Ask another language survives a selection.** The follow-up door was
+rendered only where a meaning had been typed, so it vanished from exactly
+the pass Use selected passage had just made ordinary. It is offered
+wherever there is a source — a stated meaning or a kept passage — and says
+which it will ask about. The follow-up sends that record's own passage,
+exactly, and is still appended beneath without replacing anything.
+
+Proven in `_check_source_delivery`: both outgoing prompts captured from
+real runs carry the selection byte-for-byte, with a narrowing and without,
+with content past character 1,500; two runs whose proposals are identical
+each receive their own passage; tabs, blank lines and non-BMP characters
+survive; the CLI raises and the route answers 400 with no call made and no
+job created, while a selection exactly at the cap is accepted, emoji
+included. Journey `related` 93 → 96 checks: the door is there on a
+passage-only pass, it sends that record's own passage exactly, and what was
+already on the page survives it.
+
 ## v1.31.1 — Compare says what was reviewed; the concurrent runs are reopened
 
 Corrections found while writing report 75, none a new feature.

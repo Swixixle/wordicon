@@ -2920,6 +2920,154 @@ def _check_run_identity(server, paired):
     return out
 
 
+def _check_source_delivery(server, paired):
+    """The six defects the independent review found in the follow-up
+    (2026-09-14), each proven by behaviour rather than by a substring.
+
+    1. BOTH outgoing prompts carry the owner's exact selection. Until today
+       only the producing stage was shown it, so the reviewing stage was
+       asked how well proposed words fit a source it had never seen — and a
+       source that never arrived cannot support a positive judgment about
+       fit to it. Proven with a narrowing and without, with real content
+       past character 1,500, and with two runs whose proposed terms are
+       identical: each review must receive its own passage.
+    2. Exact, or refused — at every entrance. The CLI raises and the route
+       answers 400 BEFORE a model call is made or a job exists; what is
+       accepted is kept byte-for-byte, leading whitespace and non-BMP
+       characters included; the browser counts in the same unit the server
+       counts (code points, not UTF-16 pairs).
+    3. A pass made from a selection alone still offers Ask another language.
+    """
+    out = []
+    import threading as _th
+
+    class _Capture(cli.MockGateway):
+        def __init__(self):
+            self.gen, self.rev = [], []
+        def complete(self, prompt):
+            self.gen.append(prompt)
+            return super().complete(prompt)
+        def complete_with_search(self, prompt):
+            self.rev.append(prompt)
+            return super().complete_with_search(prompt)
+
+    with _isolated_store("source_delivery") as _store:
+        # content that only a whole passage carries: HEAD at the front, MID
+        # past 1,500, TAIL at the very end, and the exact outer whitespace
+        mid_at = 1500
+        body = ("ZZHEAD " + ("the room laughed and nobody said so. " * 45)
+                + " ZZMID " + ("and the door stayed open. " * 40) + " ZZTAIL")
+        sel = "  \n" + body + "  \n"
+        if sel.index("ZZMID") <= mid_at:
+            out.append(f"SRC: the case is too short to prove anything — ZZMID sits at {sel.index('ZZMID')}")
+        for label, cand in (("a passage alone",
+                             {"title": "", "definition": "", "plain_gloss": "", "concept_id": ""}),
+                            ("a passage with a narrowing",
+                             {"title": "", "definition": "being between stages", "plain_gloss": "", "concept_id": ""})):
+            gw = _Capture()
+            res = cli.run_refract(cand, gw, passage=sel, entry="selection")
+            # the mock's search path delegates to complete(), so gen[0] is the
+            # producing prompt and rev[0] is the reviewing one
+            if not gw.gen or len(gw.rev) != 1:
+                out.append(f"SRC: {label}: expected a producing and a reviewing call, got {len(gw.gen)}/{len(gw.rev)}")
+                continue
+            for who, prompt in (("the producing call", gw.gen[0]), ("the reviewing call", gw.rev[0])):
+                if sel not in prompt:
+                    missing = [m for m in ("ZZHEAD", "ZZMID", "ZZTAIL") if m not in prompt]
+                    out.append(f"SRC: {label}: {who} did not carry the selection exactly"
+                               + (f" (missing {', '.join(missing)})" if missing else " (whitespace changed)"))
+            snap = _json.loads((cli.RESULTS_DIR / f"{res['trace_id']}.json").read_text(encoding="utf-8"))
+            if snap["source"]["passage"] != sel or snap["source"]["passage_chars"] != len(sel):
+                out.append(f"SRC: {label}: the record did not keep the selection exactly")
+        # two sources, identical proposals: each reviewer gets its own
+        revs = {}
+        for tag in ("ZZALPHA", "ZZBETA"):
+            gw = _Capture()
+            cli.run_refract({"title": "", "definition": "", "plain_gloss": "", "concept_id": ""},
+                            gw, passage=f"  {tag} the door stood open.\n", entry="selection")
+            revs[tag] = gw.rev[0]
+        for tag, other in (("ZZALPHA", "ZZBETA"), ("ZZBETA", "ZZALPHA")):
+            if tag not in revs[tag]:
+                out.append(f"SRC: the review of {tag} was not shown {tag}'s own passage")
+            if other in revs[tag]:
+                out.append(f"SRC: the review of {tag} carried {other}'s passage as well")
+        if revs["ZZALPHA"] == revs["ZZBETA"]:
+            out.append("SRC: two runs on different passages sent the reviewer the same prompt")
+        # non-BMP and whitespace survive a pass, exactly
+        odd = " \t🜂 threshold\n\nstill here 🙂 "
+        gw = _Capture()
+        res = cli.run_refract({"title": "", "definition": "", "plain_gloss": "", "concept_id": ""},
+                              gw, passage=odd, entry="selection")
+        snap = _json.loads((cli.RESULTS_DIR / f"{res['trace_id']}.json").read_text(encoding="utf-8"))
+        if snap["source"]["passage"] != odd:
+            out.append("SRC: a selection with tabs, blank lines and non-BMP characters did not survive exactly")
+        if odd not in gw.rev[0]:
+            out.append("SRC: the reviewing call did not carry the non-BMP selection")
+        # --- refused at the CLI, before anything is spent ------------------
+        before = len(list(cli.RESULTS_DIR.glob("*.json")))
+        gw = _Capture()
+        try:
+            cli.run_refract({"title": "", "definition": "", "plain_gloss": "", "concept_id": ""},
+                            gw, passage="x" * (cli.REFRACT_PASSAGE_MAX + 1), entry="selection")
+            out.append("SRC: the CLI accepted a selection over the cap")
+        except ValueError as e:
+            if str(cli.REFRACT_PASSAGE_MAX) not in str(e) or str(cli.REFRACT_PASSAGE_MAX + 1) not in str(e):
+                out.append(f"SRC: the CLI's refusal does not say both counts ({e})")
+        if gw.gen or gw.rev:
+            out.append("SRC: a call was made before the over-length selection was refused")
+        if len(list(cli.RESULTS_DIR.glob("*.json"))) != before:
+            out.append("SRC: a record was written for a refused selection")
+        # exactly at the cap is accepted
+        gw = _Capture()
+        try:
+            cli.run_refract({"title": "", "definition": "", "plain_gloss": "", "concept_id": ""},
+                            gw, passage="y" * cli.REFRACT_PASSAGE_MAX, entry="selection")
+        except ValueError as e:
+            out.append(f"SRC: a selection exactly at the cap was refused ({e})")
+        # --- refused at the route, before a job exists ---------------------
+        c = paired(server.app.test_client())
+        n_jobs = len(server.JOBS)
+        over = "z" * (cli.REFRACT_PASSAGE_MAX + 1)
+        r = c.post("/api/jobs", json={"mode": "refract", "original": {}, "entry": "selection", "passage": over})
+        if r.status_code != 400 or str(cli.REFRACT_PASSAGE_MAX + 1) not in (r.get_json() or {}).get("error", ""):
+            out.append(f"SRC: the route did not refuse an over-length selection with its count ({r.status_code} {r.get_json()})")
+        if len(server.JOBS) != n_jobs:
+            out.append("SRC: a job was created for a selection the route refused")
+        # one unit on both sides: an emoji is one, not two
+        pg = (_pathlib.Path(cli.__file__).resolve().parents[1] / "webapp" / "index.html").read_text(encoding="utf-8")
+        if "function passageLen(s) { return [...String(s || '')].length; }" not in pg:
+            out.append("SRC: the page does not count the selection in code points")
+        for bad in ("RELATED_ASK.selection.length > RELATED_PASSAGE_MAX",
+                    "ask.selection.length > RELATED_PASSAGE_MAX"):
+            if bad in pg:
+                out.append(f"SRC: the page still measures the selection in UTF-16 units ({bad})")
+        emoji_at_cap = "e" * (cli.REFRACT_PASSAGE_MAX - 1) + "\U0001F600"
+        if len(emoji_at_cap) != cli.REFRACT_PASSAGE_MAX:
+            out.append("SRC: the case does not actually test a non-BMP boundary")
+        r = c.post("/api/jobs", json={"mode": "refract", "original": {}, "entry": "selection",
+                                      "passage": emoji_at_cap})
+        if r.status_code != 200:
+            out.append(f"SRC: a selection of exactly {cli.REFRACT_PASSAGE_MAX} code points ending in an emoji "
+                       f"was refused by the route ({r.status_code} {r.get_json()})")
+        # --- 3. the follow-up survives a passage-only pass -----------------
+        if "const followSrc = (src.definition || '').trim() || (src.passage || '').trim();" not in pg:
+            out.append("SRC: Ask another language is still offered only where a meaning was typed")
+        gw = _Capture()
+        fu = cli.run_refract({"title": "", "definition": "", "plain_gloss": "", "concept_id": ""},
+                             gw, passage="  ZZFOLLOW the door stood open.\n", entry="selection",
+                             only_languages=["Japanese"])
+        fsnap = _json.loads((cli.RESULTS_DIR / f"{fu['trace_id']}.json").read_text(encoding="utf-8"))
+        if fsnap["source"]["passage"] != "  ZZFOLLOW the door stood open.\n":
+            out.append("SRC: a follow-up from a passage-only pass did not keep the passage it asked about")
+        if "ZZFOLLOW" not in gw.gen[0] or "ZZFOLLOW" not in gw.rev[0]:
+            out.append("SRC: a follow-up from a passage-only pass did not send the passage to both calls")
+        r = c.post("/api/jobs", json={"mode": "refract", "original": {}, "entry": "selection",
+                                      "passage": "  a selected passage\n", "only_languages": ["Finnish"]})
+        if r.status_code != 200:
+            out.append(f"SRC: the route refuses a follow-up from a selection alone ({r.status_code} {r.get_json()})")
+    return out
+
+
 def _check_stage_c():
     """Stage C of the notebook brief (the owner's go-ahead, 2026-09-13):
     "blue & yellow default + simple colours, Download wording, desktop
@@ -4111,6 +4259,7 @@ def main() -> int:
     failures.extend(_check_related_words(server, _paired))
     failures.extend(_check_stage_c())
     failures.extend(_check_run_identity(server, _paired))
+    failures.extend(_check_source_delivery(server, _paired))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key

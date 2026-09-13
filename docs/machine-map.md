@@ -104,7 +104,12 @@ English), `cultural_comparisons` (reviewed on the same two axes as the terms), t
 `refractions` with `language_canonical`, `period`, `pronunciation`, `meaning`, `example`,
 `sections_asked` (a section asked and empty is not a section never asked; a record from
 before this date has none), `source.entry` (concept / description / selection),
-`source.passage` for a selection, `source.only_languages` for a follow-up.
+`source.passage` for a selection, `source.only_languages` for a follow-up. The selection
+goes to BOTH calls exactly as selected (2026-09-14) — the reviewing stage judges fit
+against the owner's own words, marked as his, and is told the terms may be searched and
+his text may not; `REFRACT_PASSAGE_MAX` (4,000 code points, the unit the page's
+`passageLen` counts too) is a refusal at `run_refract` and at the route, before an id is
+minted or a job exists, never a silent cut.
 `REFRACT_REQUIRED` is Spanish, Latin and Ancient Greek (`canonical_language` places
 Attic/Homeric as Ancient, Koine/Hellenistic as Koine, Demotic as Modern, and a bare
 "Greek" nowhere — `unplaced_greek`); the reviewer judges each English item

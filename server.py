@@ -3325,7 +3325,17 @@ def api_create_job():
         entry = str(data.get("entry") or "concept")
         if entry not in ("concept", "description", "selection"):
             return jsonify({"error": "entry must be 'concept', 'description' or 'selection'"}), 400
-        passage = str(data.get("passage") or "")[:4000] or None
+        # Exact or refused (2026-09-14). This used to slice at 4,000 and
+        # queue the shortened text, so a selection one character over was
+        # silently shortened while the page promised it went exactly as
+        # selected. The count is in code points, the same unit the page
+        # counts, and the refusal comes before a job exists or a call is made.
+        passage = str(data.get("passage") or "")
+        if len(passage) > cli.REFRACT_PASSAGE_MAX:
+            return jsonify({"error": f"the selection is {len(passage)} characters and the most this "
+                                     f"pass will take is {cli.REFRACT_PASSAGE_MAX} — select less; it goes "
+                                     f"exactly as selected or not at all"}), 400
+        passage = passage or None
         # Use selected passage (2026-09-13): a selection is a whole brief on
         # its own; the meaning line is a narrowing, not a requirement.
         if not str(original.get("definition") or "").strip() and not (entry == "selection" and passage and passage.strip()):

@@ -8581,6 +8581,15 @@ def run_sprout(candidate: dict, gateway: Gateway,
 # reads that as "not checked", which is the truth about it.
 REFRACT_SECTIONS = ("english", "languages", "cultural")
 
+# The longest selection a related-words pass will take, in CODE POINTS —
+# the same count Python's len() and the page's [...s].length both give, so
+# the browser refuses exactly what the server refuses (2026-09-14: the page
+# had been counting UTF-16 units, which made an emoji cost two and the two
+# limits disagree). It is a refusal, never a cut: over-length input is
+# rejected at every entry point before anything is spent, because the
+# selection goes exactly as selected or it does not go.
+REFRACT_PASSAGE_MAX = 4000
+
 
 def build_refract_prompt(candidate: dict,
                           known_neighbors: str | None = None,
@@ -8598,13 +8607,14 @@ def build_refract_prompt(candidate: dict,
     meaning_text = (candidate.get("definition") or "").strip()
     passage_block = ""
     if passage and passage.strip():
-        p = passage.strip()
-        # as context beside a stated meaning the passage is cut at 1,500
-        # characters; as the meaning itself it goes whole, up to the route's
-        # cap of 4,000 — the owner's rule: the exact selection, or nothing
-        cap = 1500 if meaning_text else 4000
-        if len(p) > cap:
-            p = p[:cap] + " […]"
+        # The selection goes EXACTLY as it was selected — leading space, line
+        # breaks and all — whether or not a narrowing was typed (2026-09-14).
+        # Nothing is trimmed or cut here: this builder takes what it is given,
+        # and over-length input is refused at the entry points (run_refract,
+        # the /api/jobs route) before a call is made. The cut this replaced
+        # shortened a narrowed pass to 1,500 characters in silence, so the
+        # stage was matching words to something the owner had not written.
+        p = passage
         if meaning_text:
             passage_block = f"""
 
@@ -8866,7 +8876,8 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
 def build_refract_review_prompt(candidate: dict, refractions: list[dict],
                                   english_fossil: str = "",
                                   cultural_comparisons: "list[dict] | None" = None,
-                                  english_items: "list[dict] | None" = None) -> str:
+                                  english_items: "list[dict] | None" = None,
+                                  passage: str = "") -> str:
     ref_block = "\n\n".join(
         f"Refraction {i}: {r.get('language', '')} — {r.get('romanization', '') or '(no term: gap claimed)'}\n"
         f"  literal: {r.get('literal', '')}\n"
@@ -8891,7 +8902,27 @@ def build_refract_review_prompt(candidate: dict, refractions: list[dict],
             f"  check: {c.get('check', '') or '(none named)'}"
             for i, c in enumerate(comps))
     name = (candidate.get('title') or '').strip() or "an unnamed meaning"
-    meaning_line = (candidate.get('definition') or '').strip() or "the sense of a passage the owner selected, as written"
+    stated_meaning = (candidate.get('definition') or '').strip()
+    # The owner's own source, exactly as he selected it, goes to THIS call
+    # too (2026-09-14). Until today only the producing stage saw it, so this
+    # stage was asked whether proposed words fit a source it had never been
+    # shown — and a missing source cannot support a positive judgment about
+    # fit to that source. His words are marked as his, apart from the
+    # producing stage's interpretation of them, and this call is the one
+    # with live search, so it is told plainly what may not be searched.
+    src = passage or ""
+    src_block = ""
+    if src.strip():
+        src_block = ("\n\nTHE OWNER'S OWN SOURCE — the passage he selected, exactly as he\n"
+                     + ("selected it, and the passage the stated meaning above was taken from.\n"
+                        if stated_meaning else
+                        "selected it. He gave no narrower statement, so this passage IS the\nmeaning the proposals below claim to fit.\n")
+                     + "These are HIS words, not the producing stage's account of them: judge\n"
+                       "each proposal's fit against what is actually here. Do not rewrite it,\n"
+                       "do not comment on its quality, and do not put any of it into a web\n"
+                       "search query — search for the TERMS under review, never for the\n"
+                       "owner's text.\n<<<\n" + src + "\n>>>")
+    meaning_line = stated_meaning or "the sense of the passage reproduced below, as he selected it"
     eng = [e for e in (english_items or []) if isinstance(e, dict) and str(e.get("word") or "").strip()]
     eng_block = ""
     if eng:
@@ -8902,7 +8933,7 @@ def build_refract_review_prompt(candidate: dict, refractions: list[dict],
             for i, e in enumerate(eng))
     return f"""You are the refraction-review stage of a Wordicon operation: a skeptical
 multilingual lexicographer reviewing translation claims proposed for the
-concept "{name}" ({meaning_line}).
+concept "{name}" ({meaning_line}).{src_block}
 
 {ref_block}{fossil_block}{comp_block}{eng_block}
 
@@ -10065,6 +10096,12 @@ def run_refract(candidate: dict, gateway: Gateway,
     passage_text = (passage or "") if (entry == "selection" and (passage or "").strip()) else ""
     if not meaning and not passage_text:
         raise ValueError("there is no meaning to find related words for — give a meaning, or select a passage")
+    # Exact or refused, and refused HERE — before the id is minted, before
+    # the record exists, before a single call is made. This is the CLI's own
+    # boundary; the route has the same one (2026-09-14).
+    if len(passage_text) > REFRACT_PASSAGE_MAX:
+        raise ValueError(f"the selection is {len(passage_text)} characters and the most this pass will "
+                         f"take is {REFRACT_PASSAGE_MAX} — select less; it goes exactly as selected or not at all")
     only_languages = [str(x).strip() for x in (only_languages or []) if str(x).strip()][:6] or None
     sections_asked = ["languages"] if only_languages else list(REFRACT_SECTIONS)
     # The parent link the Library reads back out of this sentence (see
@@ -10089,7 +10126,7 @@ def run_refract(candidate: dict, gateway: Gateway,
         progress("refracting", f"Finding related words for {label} — English first, then other languages…")
     parsed = _extract_json(gateway.complete(
         build_refract_prompt(candidate, known_neighbors=known_neighbors,
-                             passage=passage if entry == "selection" else None,
+                             passage=passage_text or None,
                              only_languages=only_languages)))
     refractions = [r for r in (parsed.get("refractions") or []) if isinstance(r, dict)]
     if not refractions:
@@ -10118,7 +10155,8 @@ def run_refract(candidate: dict, gateway: Gateway,
     review_raw, review_citations = gateway.complete_with_search(
         build_refract_review_prompt(candidate, refractions, english_fossil,
                                     cultural_comparisons=cultural,
-                                    english_items=english_for_review))
+                                    english_items=english_for_review,
+                                    passage=passage_text))
     review_parsed = _extract_json(review_raw)
     if english_for_review:
         synonyms, antonyms, aside_r = _apply_english_reviews(
@@ -10250,7 +10288,9 @@ def run_refract(candidate: dict, gateway: Gateway,
             # was about (the owner's rule: the intended meaning is saved
             # with the words found for it)
             "entry": entry,
-            "passage": passage_text[:4000],
+            # whole: the record keeps what was sent, and what was sent is
+            # bounded by the refusal above, so there is nothing left to cut
+            "passage": passage_text,
             "passage_chars": len(passage_text),
             "only_languages": only_languages or []},
         "sections_asked": sections_asked,

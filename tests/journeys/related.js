@@ -331,6 +331,23 @@ const DRAFT = [
   ok(/ws-split/.test(roomAfter.mode), 'the answer split the room when it arrived: ' + roomAfter.mode);
   ok(/Related words/i.test(roomAfter.result) && /The passage explored, as selected — no narrower meaning was given:/.test(roomAfter.result) && /He threw it once, cleanly/.test(roomAfter.result) && /from a selection in your writing/.test(roomAfter.result),
      'the panel is beside the writing and shows the passage as the sense explored: ' + roomAfter.result.slice(0, 200));
+  // the follow-up door survives a pass made from a selection alone
+  const selUid = SELONLY.trace_id;
+  const followCard = await page.evaluate(u => { const el = document.getElementById(`rw-follow-card-${u}`);
+    return el ? el.innerText.replace(/\s+/g, ' ') : ''; }, selUid);
+  ok(/Ask another language/i.test(followCard) && /the same passage, sent exactly as you selected it/i.test(followCard),
+     'a pass made from a selection alone still offers Ask another language, about that passage: ' + followCard.slice(0, 140));
+  served = FOLLOW;
+  await page.fill(`#rw-lang-${selUid}`, 'Japanese');
+  await page.click(`#rw-follow-card-${selUid} button:has-text("Ask it")`); await page.waitForTimeout(600);
+  const bFollow = bodies[bodies.length - 1] || {};
+  const selPassage = (SELONLY.source || {}).passage;
+  ok(bFollow.entry === 'selection' && bFollow.passage === selPassage && (bFollow.only_languages || [])[0] === 'Japanese' && (bFollow.original || {}).definition === '',
+     'and asking it sends that record\'s own passage, exactly, with the language named: ' + JSON.stringify({ e: bFollow.entry, exact: bFollow.passage === selPassage, l: (bFollow.only_languages || [])[0] }));
+  await page.waitForTimeout(8500);
+  const afterFollow = await page.evaluate(() => document.getElementById('result-area').innerText.replace(/\s+/g, ' '));
+  ok(/He threw it once, cleanly/.test(afterFollow) && /limen/.test(afterFollow) && /Asked by name/i.test(afterFollow),
+     'the follow-up is added beneath and the earlier results survive: ' + afterFollow.slice(-140));
   // narrowing: a meaning typed beside a selection goes as the meaning, the selection still exactly
   await page.evaluate(([a, b]) => { const ta = document.getElementById('compose-text'); ta.focus(); ta.setSelectionRange(a, b); }, [p2start, DRAFT.length]);
   await page.evaluate(() => askRelated()); await page.waitForTimeout(400);
@@ -338,9 +355,10 @@ const DRAFT = [
   const narrowedBtn = await page.evaluate(() => document.getElementById('related-go').textContent.trim());
   ok(narrowedBtn === 'Find related words — narrowed', 'with a narrowing typed the button says so: ' + JSON.stringify(narrowedBtn));
   served = SEL;
+  const nBeforeNarrow = bodies.length;
   await page.keyboard.press('Enter'); await page.waitForTimeout(500);
-  const b5 = bodies[4] || {};
-  ok(bodies.length === 5 && (b5.original || {}).definition === 'staying true to a place you have left' && b5.passage === DRAFT.slice(p2start) && b5.entry === 'selection',
+  const b5 = bodies[bodies.length - 1] || {};
+  ok(bodies.length === nBeforeNarrow + 1 && (b5.original || {}).definition === 'staying true to a place you have left' && b5.passage === DRAFT.slice(p2start) && b5.entry === 'selection',
      'a narrowing goes as the meaning and the selection still goes exactly: ' + JSON.stringify({ d: (b5.original || {}).definition, p: (b5.passage || '').slice(0, 20) }));
   await page.waitForTimeout(8500);
   ok(roomAfter.line === '' || /related words/.test(roomAfter.line), 'the line speaks of related words, not of a workup: ' + JSON.stringify(roomAfter.line));

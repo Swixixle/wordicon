@@ -4647,10 +4647,16 @@ function buildRefractHtml(res, opts) {
   const nav = [['synonyms', 'English synonyms'], ['antonyms', 'English antonyms'], ['latin', 'Latin'], ['greek', 'Ancient Greek'],
                ['greek-later', 'Koine & Modern Greek'], ['languages', 'Other languages'], ['cultural', 'Cultural comparisons']]
     .map(([id, l]) => `<a href="#rw-sec-${id}-${escapeHtml(uid)}" onclick="event.preventDefault();rwScrollTo('${escapeJs(id)}','${escapeJs(uid)}')" style="margin-right:10px;font-size:12.5px">${l}</a>`).join('');
-  const followHtml = (src.definition || '').trim() ? `
+  // The follow-up asks one named language about the SAME source. A pass made
+  // from a selection alone has no meaning line, and until today that was read
+  // as having no source at all, so the door vanished from exactly the pass the
+  // Use-selected-passage work had just made ordinary (2026-09-14). Either a
+  // stated meaning or a kept passage is a source to ask about.
+  const followSrc = (src.definition || '').trim() || (src.passage || '').trim();
+  const followHtml = followSrc ? `
     <div class="card" id="rw-follow-card-${escapeHtml(uid)}" style="margin-top:12px">
       <div class="section-label" style="margin-top:0">Ask another language</div>
-      <p class="body muted" style="font-size:12.5px">A follow-up on one language you name, added beneath these results — nothing above is replaced. Two model calls: one to find, one to review.</p>
+      <p class="body muted" style="font-size:12.5px">A follow-up on one language you name, about ${(src.definition || '').trim() ? 'the same meaning' : 'the same passage, sent exactly as you selected it'} — added beneath these results, nothing above is replaced. Two model calls: one to find, one to review.</p>
       <div class="row">
         <input class="note" id="rw-lang-${escapeHtml(uid)}" placeholder="e.g. Japanese, Finnish, Yoruba" aria-label="a language to ask" style="max-width:20em" onkeydown="if(event.key==='Enter'){event.preventDefault();relatedFollowUp('${escapeJs(uid)}')}">
         <button class="judge-btn" style="font-size:12.5px" onclick="relatedFollowUp('${escapeJs(uid)}')">Ask it — 2 model calls</button>
@@ -5991,12 +5997,17 @@ function renderRelatedAsk() {
   });
 }
 const RELATED_PASSAGE_MAX = 4000;   // the route's cap; a selection goes exactly or not at all
+// Counted in CODE POINTS, which is what the server's len() counts. A string's
+// .length counts UTF-16 units, so an emoji cost two there and one on the
+// server, and the page could refuse a selection the route would have taken —
+// or pass one it would have refused. One unit, both sides (2026-09-14).
+function passageLen(s) { return [...String(s || '')].length; }
 function relatedGoState() {
   const go = document.getElementById('related-go');
   if (!go || !RELATED_ASK) return;
   const hasSel = !!(RELATED_ASK.selection || '').trim();
   const narrowed = !!(RELATED_ASK.meaning || '').trim();
-  const tooLong = hasSel && RELATED_ASK.selection.length > RELATED_PASSAGE_MAX;
+  const tooLong = hasSel && passageLen(RELATED_ASK.selection) > RELATED_PASSAGE_MAX;
   const ok = (hasSel || narrowed) && !tooLong;
   go.disabled = !ok;
   if (ok) go.removeAttribute('aria-disabled'); else go.setAttribute('aria-disabled', 'true');
@@ -6017,7 +6028,7 @@ async function startRelatedFromRoom() {
   const meaning = (ask.meaning || '').trim();
   const hasSel = !!(ask.selection || '').trim();
   if (!meaning && !hasSel) { const inp = document.getElementById('related-meaning'); if (inp) inp.focus(); return; }
-  if (hasSel && ask.selection.length > RELATED_PASSAGE_MAX) return;   // it goes exactly, or not at all
+  if (hasSel && passageLen(ask.selection) > RELATED_PASSAGE_MAX) return;   // it goes exactly, or not at all
   closeRelated();
   roomRun('submitted · waiting for a turn');
   // A COPY of the selection goes; the draft is not touched, not copied into
