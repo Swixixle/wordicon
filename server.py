@@ -4402,6 +4402,45 @@ def api_related_unsave():
     return jsonify({"removed": rec})
 
 
+@app.route("/api/related/word_sources", methods=["POST"])
+def api_related_word_sources():
+    """Check sources (2026-09-14): one word, looked up on its own, with a
+    live search — the other half of his ruling that split reviewing his
+    writing from searching for words.
+
+    THIS ROUTE TAKES THREE FIELDS AND READS NOTHING ELSE. It is deliberately
+    not given a trace_id: a route handed a record id could reach into that
+    record for the passage, the meaning or the reviewer's prose, and then the
+    separation would rest on this function's restraint rather than on what it
+    was given. It gets the word, the language and the period the page is
+    already showing, each bounded, and builds its prompt from those.
+
+    It spends one model call, so the page discloses that before it is
+    pressed. Nothing is recorded: like verify, this is an on-demand check the
+    owner may run as often as he likes, and it writes no receipt, no snapshot
+    and no road. It can support that a word exists or how it is used; it
+    cannot say the word fits his meaning, and it never moves a verdict."""
+    data = request.get_json(force=True) or {}
+    for bad in ("trace_id", "passage", "definition", "meaning", "item", "section", "index"):
+        if bad in data:
+            return jsonify({"error": f"this lookup takes only word, language and period — "
+                                     f"{bad!r} is not one of them and would widen what it sees"}), 400
+    word = str(data.get("word") or "").strip()
+    if not word:
+        return jsonify({"error": "a word is required"}), 400
+    if len(word) > cli.WORD_SOURCES_MAX:
+        return jsonify({"error": f"that is {len(word)} characters; a word for this lookup is "
+                                 f"{cli.WORD_SOURCES_MAX} at most"}), 400
+    language = str(data.get("language") or "").strip()[:cli.WORD_SOURCES_MAX]
+    period = str(data.get("period") or "").strip()[:cli.WORD_SOURCES_MAX]
+    try:
+        out = cli.run_word_sources(word, language, period, server_gateway())
+    except Exception as e:   # noqa: BLE001
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 502
+    return jsonify(out)
+
+
 @app.route("/api/concept/<concept_id>")
 def api_concept(concept_id):
     """Every judgment recorded against one concept_id — the visibility half

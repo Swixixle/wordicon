@@ -124,8 +124,10 @@ may be empty only when `entry` is `selection` and `passage` is given),
 `passage` (4,000 code points at most — over that is refused with the count, never cut),
 `only_languages`; `GET /api/related/saved?concept_id=&title=` lists
 the saved comparisons with `via: recorded | derived`. On every result: *Explore
-this word* (the same panel, prefilled; Find is the only spend), *Compare with my
-idea* (your meaning beside the word's, from the record; absent fields say *not
+this word* (the same panel, prefilled; Find is the only spend), *Check sources*
+(`POST /api/related/word_sources` — one call with live search, disclosed before it is
+pressed, given the word, its language and its period and nothing else; ephemeral, and it
+cannot move a verdict), *Compare with my idea* (your meaning beside the word's, from the record; absent fields say *not
 analysed in this pass*; an English item says what the reviewer judged of it and
 that its fit is recall), *Save* (`POST /api/related/save` → one append to
 `local_state/saved_words.jsonl`; *Saved — remove* appends a removal; the Library's

@@ -2967,6 +2967,7 @@ class MockGateway(Gateway):
         text = self.complete(prompt)
         if prompt.startswith("You are the sprout-review stage") or \
            prompt.startswith("You are the refraction-review stage") or \
+           prompt.startswith("You are a lexicographic source check") or \
            prompt.startswith("You are the verify stage"):
             # One row of each state the record can hold, so the offline
             # path exercises all three rather than only the quoted one.
@@ -3003,6 +3004,31 @@ class MockGateway(Gateway):
         # JSON-shape substrings — those substrings moved around when
         # generation and Bone-attachment split into separate calls, and
         # matching the stage's own declared identity is more robust anyway.
+        if prompt.startswith("You are a lexicographic source check"):
+            # Deterministic, and keyed to the word so a test can prove that
+            # the word on screen is the word that went. The fixture also
+            # exercises the "found nothing" branch, because a lookup that
+            # can only succeed proves nothing about absence.
+            _w = re.search(r"^Word: (.*)$", prompt, re.M)
+            _word = (_w.group(1) if _w else "").strip()
+            if _word == "stenochoria_absent":
+                return json.dumps({
+                    "existence": "not found", "existence_note":
+                        "No dictionary or lexicon in this lookup carries this spelling. That is an "
+                        "absence in this lookup, not proof the word does not exist.",
+                    "usage_note": "", "sources": [], "from_recall": ""})
+            return json.dumps({
+                "existence": "found",
+                "existence_note": f"Lewis & Short carries {_word} as a Latin noun; "
+                                  "the Oxford Latin Dictionary gives the same headword.",
+                "usage_note": "Everyday and poetic; the physical threshold of a door, and by "
+                              "extension a beginning or a boundary. Current throughout the "
+                              "classical period.",
+                "sources": [{"name": "Lewis & Short, A Latin Dictionary",
+                             "says": f"{_word} is attested as a noun of the fourth declension."},
+                            {"name": "Oxford Latin Dictionary",
+                             "says": "Gives the threshold sense first and the figurative sense second."}],
+                "from_recall": ""})
         if prompt.startswith("You are the Keeper"):
             # Deterministic Keeper narration: cites the first real manifest
             # id when one exists, narrates the empty room honestly when
@@ -4184,6 +4210,7 @@ PROMPT_STAGE_BUILDERS = {
     "route_analysis": "build_route_analysis_prompt", "support": "build_support_prompt",
     "bench_build": "build_bench_build_prompt", "dissect": "build_dissect_prompt",
     "attack": "build_attack_prompt", "readings": "build_readings_prompt",
+    "word_sources": "build_word_sources_prompt",
 }
 _PROMPT_LEDGER = threading.local()
 
@@ -8609,6 +8636,22 @@ REFRACT_SECTIONS = ("english", "languages", "cultural")
 # selection goes exactly as selected or it does not go.
 REFRACT_PASSAGE_MAX = 4000
 
+# The same limit, the same unit, and the same reason, for the meaning line
+# and the plain gloss — the other two places his own prose enters a pass
+# (2026-09-14). It had been 1,500, applied as a silent slice at the route
+# and as a maxlength on a single-line input, so a meaning longer than that
+# was shortened without a word and a meaning with line breaks lost them to
+# the input's own sanitiser. Nothing is shortened now: over the limit is
+# refused, with both counts, before anything is spent. A stored concept
+# longer than this stays exactly as it is on the shelf; the pass takes a
+# shorter meaning given for that comparison, recorded as a narrowing.
+# Which review actually ran. The comparison reviewer is the stage that is
+# shown his passage and his meaning, so it runs with NO search tool
+# (his ruling, 2026-09-14): separation rather than an instruction a model
+# may or may not follow. It still reaches his chosen model provider — this
+# is not local execution and must never be described as local.
+REVIEW_TOOL_FREE = "tool_free"
+
 
 def build_refract_prompt(candidate: dict,
                           known_neighbors: str | None = None,
@@ -8937,10 +8980,10 @@ def build_refract_review_prompt(candidate: dict, refractions: list[dict],
                         if stated_meaning else
                         "selected it. He gave no narrower statement, so this passage IS the\nmeaning the proposals below claim to fit.\n")
                      + "These are HIS words, not the producing stage's account of them: judge\n"
-                       "each proposal's fit against what is actually here. Do not rewrite it,\n"
-                       "do not comment on its quality, and do not put any of it into a web\n"
-                       "search query — search for the TERMS under review, never for the\n"
-                       "owner's text.\n<<<\n" + src + "\n>>>")
+                       "each proposal's fit against what is actually here. Do not rewrite it\n"
+                       "and do not comment on its quality. Nothing on this call can leave the\n"
+                       "conversation: there is no search tool here, which is why his writing\n"
+                       "can be shown to you at all.\n<<<\n" + src + "\n>>>")
     meaning_line = stated_meaning or "the sense of the passage reproduced below, as he selected it"
     eng = [e for e in (english_items or []) if isinstance(e, dict) and str(e.get("word") or "").strip()]
     eng_block = ""
@@ -8974,14 +9017,14 @@ of aloha and namaste. Specifically check:
 - Is a claimed GAP real, or just recall failing to surface a term?
 {"- Is the claimed English fossil real etymology or a just-so story?" if english_fossil else ""}
 
-When you have live web search available, use it before staking
-attestation on any term you are not fully certain exists in that
-language with roughly the claimed meaning — search a dictionary or
-reference source rather than relying only on recall, especially for
-anything resembling this genre's famous false classics. Say plainly
-in each note whether the term was checked live or is offered from
-recall only. When search is not available, keep working from recall
-exactly as before and say so.
+You have NO search tool on this call, by the owner's ruling of
+14 September 2026: this is the stage that reads his own writing, and his
+writing does not go to a stage that could put it into a query. So
+everything you say here is recall, and you should say so — mark each
+attestation as recall and name, in "check", the dictionary or reference
+where one search would settle it. Naming a place to look is not looking,
+and the owner has a separate, deliberate control that looks up one word
+on its own.
 
 Judge each refraction on TWO SEPARATE AXES — do not collapse them,
 because they fail independently: a real word can be a bad fit, and an
@@ -10171,11 +10214,20 @@ def run_refract(candidate: dict, gateway: Gateway,
     progress("friction", f"The critique on {len(refractions)} refraction(s)…")
     english_for_review = ([{**x, "section": "synonyms"} for x in synonyms]
                           + [{**x, "section": "antonyms"} for x in antonyms])
-    review_raw, review_citations = gateway.complete_with_search(
+    # TOOL-FREE, by his ruling of 14 September 2026. This is the stage that
+    # is shown his own passage and his own meaning, so it is the stage that
+    # gets no search tool: complete(), not complete_with_search(). It still
+    # goes to his chosen model provider — this is separation, not locality,
+    # and nothing here should be described as local. Live lookup did not
+    # disappear; it moved to Check sources, a deliberate control on one word
+    # that is given the word, its language and its period and nothing else.
+    review_raw = gateway.complete(
         build_refract_review_prompt(candidate, refractions, english_fossil,
                                     cultural_comparisons=cultural,
                                     english_items=english_for_review,
                                     passage=passage_text))
+    review_citations = []          # a tool-free call consulted nothing
+    review_mode = REVIEW_TOOL_FREE
     review_parsed = _extract_json(review_raw)
     if english_for_review:
         synonyms, antonyms, aside_r = _apply_english_reviews(
@@ -10276,6 +10328,9 @@ def run_refract(candidate: dict, gateway: Gateway,
                + (f" · {len(unplaced)} Greek entry(ies) came back without a period and count for no Greek slot"
                   if unplaced else "")
                + " · all terms are recall, unverified — verify before you trust"
+               + (" · the review ran with no search tool, so its judgements are recall too — "
+                  "Check sources on a word looks that one word up"
+                  if review_mode == REVIEW_TOOL_FREE else "")
                + (_acquisition_phrase(review_citations) if review_citations else ""))
 
     if synonyms or antonyms:
@@ -10321,11 +10376,18 @@ def run_refract(candidate: dict, gateway: Gateway,
         "fossil_check": fossil_check,
         "fossil_verdict": fossil_verdict, "fossil_note": fossil_note,
         "summary": summary, "citations": review_citations,
+        # WHICH REVIEW ACTUALLY RAN. "tool_free" means the reviewing call had
+        # no search tool, so every word of it is recall. A record written
+        # before this field existed was reviewed with search available and
+        # carries no review_mode, which is the truth about it.
+        "review_mode": review_mode,
         "parse_notes": list(private_receipt.get("warnings") or []),
             # block 118: what the provider reported about the acquisition —
-            # its own usage numbers, never ours, and "unknown" where it
-            # reported nothing.
-            "acquisition_usage": getattr(gateway, "last_acquisition", None),
+            # its own usage numbers, never ours. A tool-free review acquired
+            # nothing, so this is None rather than whatever an earlier search
+            # on the same gateway left behind: a record may not inherit
+            # another call's acquisition.
+            "acquisition_usage": None if review_mode == REVIEW_TOOL_FREE else getattr(gateway, "last_acquisition", None),
     }
     write_run_snapshot(trace_id, snapshot, indent=2)
 
@@ -10365,12 +10427,12 @@ def run_refract(candidate: dict, gateway: Gateway,
             "missing_languages": missing_langs,
             "english_fossil": english_fossil, "fossil_check": fossil_check,
             "fossil_verdict": fossil_verdict, "fossil_note": fossil_note,
-            "citations": review_citations,
+            "citations": review_citations, "review_mode": review_mode,
             "parse_notes": list(private_receipt.get("warnings") or []),
             # block 118: what the provider reported about the acquisition —
-            # its own usage numbers, never ours, and "unknown" where it
-            # reported nothing.
-            "acquisition_usage": getattr(gateway, "last_acquisition", None),
+            # its own usage numbers, never ours. A tool-free review acquired
+            # nothing and inherits nothing.
+            "acquisition_usage": snapshot["acquisition_usage"],
             "summary": summary, "receipt_id": private_receipt["receipt_id"]}
 
 
@@ -10389,6 +10451,121 @@ def run_refract(candidate: dict, gateway: Gateway,
 # factual/attributional claim inside the literary judgment). This is the
 # search-backed check decompose/deep Friction never gets automatically —
 # on demand here instead of forced onto every run.
+
+# ---- Check sources: one word, looked up on its own ----------------------
+#
+# His ruling of 14 September 2026 split one act into two. The comparison
+# reviewer reads his writing and therefore gets no search tool; this lane
+# searches and therefore never sees his writing. What goes out is built
+# HERE, field by field, from three values the page already displays — the
+# word, its language, its period — and nothing else: not his passage, not
+# his meaning, not his notes, not the producing stage's explanation of the
+# word, not the rest of the record. The caller hands over three strings,
+# not the result object, so there is nothing else for this to leak even by
+# accident.
+#
+# What this CANNOT claim: that the queries the provider issues are exactly
+# these words. The provider composes and runs its own searches from the
+# prompt; controlling the query text exactly would mean building the query
+# and submitting it directly, which this does not do. So the honest
+# statement is that the LOOKUP IS GIVEN only the word, its language and its
+# period — not that the search engine sees only those.
+WORD_SOURCES_MAX = 200
+
+
+def build_word_sources_prompt(word: str, language: str, period: str) -> str:
+    """Built from exactly three fields, all of them already on screen."""
+    w = (word or "").strip()[:WORD_SOURCES_MAX]
+    lang = (language or "").strip()[:WORD_SOURCES_MAX]
+    per = (period or "").strip()[:WORD_SOURCES_MAX]
+    return f"""You are a lexicographic source check. One word, on its own.
+
+Word: {w}
+Language: {lang or "(not stated)"}
+Period: {per or "(not stated)"}
+
+You have not been told what this word was proposed for, and you must not
+guess: no context, no purpose and no surrounding text is available to you,
+which is deliberate. Do not invent one, do not ask for one, and do not say
+anything about how well the word suits any unstated purpose.
+
+Look for reference sources — dictionaries, lexicons, corpora, grammars,
+scholarly references — that establish two things separately:
+- EXISTENCE: does this word exist in that language (and period, where one
+  is stated), spelled or transliterated roughly this way?
+- USAGE: what do those sources say it means and where it is used —
+  register, era, whether it is current, archaic, technical or literary.
+
+Report only what a source says, with the source named. Where you did not
+find a source, say so plainly: an absence here is an absence in this
+lookup, not proof the word does not exist. Do not fill a gap from recall
+without marking it as recall.
+
+Respond with ONLY a JSON object of this exact shape, no prose outside it:
+{{"existence": "found" or "not found" or "uncertain",
+ "existence_note": "one or two sentences, naming the source(s) or saying none was found",
+ "usage_note": "what the sources say about meaning and register, or '' if none was found",
+ "sources": [{{"name": "the reference", "says": "the one thing it establishes"}}],
+ "from_recall": "anything you are adding from memory rather than a source, or ''"}}{ENGLISH_PROSE_RULE}"""
+
+
+def run_word_sources(word: str, language: str = "", period: str = "",
+                     gateway: "Gateway | None" = None) -> dict:
+    """One search-enabled call about one word. Ephemeral by design, like
+    verify: no receipt, no snapshot, no edge. It answers whether sources
+    say the word exists and how it is used — never whether it fits his
+    meaning, which is a judgment this lane is deliberately unequipped to
+    make because it was never shown the meaning."""
+    if gateway is None:
+        raise ValueError("a gateway is required")
+    w = (word or "").strip()
+    if not w:
+        raise ValueError("there is no word to look up")
+    lang = (language or "").strip()
+    per = (period or "").strip()
+    print(f"[{gateway.name}] checking sources for {w!r}"
+          + (f" ({lang})" if lang else "") + "...")
+    # This lane writes no receipt, so it drains its own prompt-ledger entry
+    # rather than leaving it for the next run that does write one to sweep up
+    # as if it were its own. The identity is returned instead, where the
+    # caller can see which template actually ran.
+    _pmark = prompt_ledger_mark()
+    raw, citations = gateway.complete_with_search(
+        build_word_sources_prompt(w, lang, per))
+    _identities = prompt_identities_since(_pmark, gateway)
+    parsed = _extract_json(raw)
+    existence = str(parsed.get("existence") or "uncertain").strip().lower()
+    if existence not in ("found", "not found", "uncertain"):
+        existence = "uncertain"
+    sources = [{"name": str(x.get("name") or "")[:200], "says": str(x.get("says") or "")[:600]}
+               for x in (parsed.get("sources") or []) if isinstance(x, dict)
+               and str(x.get("name") or "").strip()]
+    out = {
+        "mode": "word_sources",
+        "word": w, "language": lang, "period": per,
+        "existence": existence,
+        "existence_note": str(parsed.get("existence_note") or "")[:1200],
+        "usage_note": str(parsed.get("usage_note") or "")[:1200],
+        "sources": sources,
+        "from_recall": str(parsed.get("from_recall") or "")[:1200],
+        "citations": citations,
+        "prompt_identities": _identities,
+        "acquisition_usage": getattr(gateway, "last_acquisition", None),
+        # Said on the record, not only in the interface: this lane cannot
+        # move a fit verdict, because fit is about a meaning it never saw.
+        "note": ("This lookup was given the word, its language and its period and nothing else — "
+                 "not the meaning it was found for. A source can support that the word exists or "
+                 "how it is used; it cannot say the word fits your writing, and it does not change "
+                 "the comparison's verdict."),
+    }
+    out["summary"] = (f"{w}" + (f" · {lang}" if lang else "")
+                      + f" · existence: {existence}"
+                      + (f" · {len(sources)} source(s) named" if sources else " · no source named")
+                      + (f" · {len(citations)} search result(s) came back" if citations else "")
+                      + " · this says nothing about fit")
+    print(f"  [{existence}] {out['existence_note'][:120]}")
+    return out
+
 
 def build_verify_prompt(candidate: dict) -> str:
     title = candidate.get("title", "")

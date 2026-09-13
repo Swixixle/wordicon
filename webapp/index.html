@@ -4063,7 +4063,7 @@ const RELATED_PENDING = {};   // areaId → the meaning being asked about, while
 function relatedCostLine(lane) {
   return `Model calls: <b>2</b> — one to find (English first, then Latin, Greek and other languages), one to review the foreign terms and comparisons. `
     + (lane ? `Lane: <b>${escapeHtml(lane.lane)}</b>${lane.model ? ' · model <b>' + escapeHtml(lane.model) + '</b>' : ''}. ` : '')
-    + `Everything it returns is recall, labelled so.`;
+    + `The review runs with no search tool — it is shown your meaning, so it cannot search — and everything it returns is recall, labelled so. Check sources on a single word is the lookup.`;
 }
 async function openRelatedPanel(areaId, original, focus) {
   const area = document.getElementById(areaId);
@@ -4448,6 +4448,7 @@ function rwActionsHtml(uid, section, index) {
       <button class="judge-btn" style="font-size:11.5px;padding:2px 7px" onclick="rwExplore('${escapeJs(uid)}','${escapeJs(section)}',${Number(index)})" title="the word-comparison panel with this word, its language and its sense filled in; nothing runs until you press Find">Explore this word</button>
       <button class="judge-btn" style="font-size:11.5px;padding:2px 7px" onclick="rwCompare('${escapeJs(uid)}','${escapeJs(section)}',${Number(index)})" title="your meaning beside this word's, from what this pass already found — no model call">Compare with my idea</button>
       <button class="judge-btn" style="font-size:11.5px;padding:2px 7px" id="rw-save-${escapeHtml(uid)}-${escapeHtml(section)}-${Number(index)}" onclick="rwSaveToggle('${escapeJs(uid)}','${escapeJs(section)}',${Number(index)})" title="keep this result with its run, language, intended meaning and review; accepts no concept, changes no writing">${saved ? 'Saved — remove' : 'Save'}</button>
+      <button class="judge-btn" style="font-size:11.5px;padding:2px 7px" onclick="rwCheckSources('${escapeJs(uid)}','${escapeJs(section)}',${Number(index)})" title="look this one word up in reference sources — one model call with web search, which it will tell you before it spends; it is given only the word, its language and its period">Check sources</button>
     </div>
     <div id="rw-act-${escapeHtml(uid)}-${escapeHtml(section)}-${Number(index)}"></div>`;
 }
@@ -4673,7 +4674,7 @@ function buildRefractHtml(res, opts) {
   return `
     <div class="section-label" id="rw-top-${escapeHtml(uid)}">Related words${src.title || res.source_title ? ` — “${escapeHtml(src.title || res.source_title)}”` : ''}</div>
     ${summaryHtml}
-    <p class="body muted" style="font-size:12.5px;margin:0 0 8px">Everything here is recall — remembered, not looked up — unless the review's search results below say otherwise. “Where one search would settle it” names a place to look; naming it is not looking.</p>
+    <p class="body muted" style="font-size:12.5px;margin:0 0 8px">Everything here is recall — remembered, not looked up. The review that judged these terms ran with <b>no search tool</b>, deliberately: it is the stage that is shown your writing, so it is the stage that cannot search. “Where one search would settle it” names a place to look; naming it is not looking. <b>Check sources</b> on any word is the lookup, and it is given that word, its language and its period and nothing else.</p>
     <div style="margin:0 0 6px">${nav}</div>
     ${meaningHtml}
     ${missingHtml}
@@ -4815,6 +4816,79 @@ async function rwSaveToggle(uid, section, index) {
     if (typeof refreshLibraryIfOpen === 'function') refreshLibraryIfOpen();
   } catch (e) { if (b) b.textContent = savedId ? 'could not remove' : 'could not save'; }
   finally { RW_SAVE_INFLIGHT.delete(flight); if (b) b.disabled = false; }
+}
+// ---- Check sources: one word, looked up on its own ------------------------
+// His ruling of 14 September 2026 split one act in two. The comparison
+// reviewer reads his writing and gets no search tool; this looks things up
+// and never sees his writing. The request is built here from three values
+// this card is already showing — the word, its language, its period — and
+// the whole result object is deliberately NOT sent, so there is nothing
+// else for it to carry. It spends, so it says so and waits.
+function rwSourcesFields(section, it) {
+  const w = rwWordOf(section, it);
+  // built field by field on purpose: no spread of the item, no extra keys
+  return {word: w.word || '', language: w.language || '',
+          period: (section === 'languages' ? (it.period || '') : '')};
+}
+function rwCheckSources(uid, section, index) {
+  const it = rwItem(uid, section, index);
+  const holder = document.getElementById(`rw-act-${uid}-${section}-${index}`);
+  if (!it || !holder) return;
+  if (holder.querySelector('.rw-sources')) { holder.innerHTML = ''; return; }   // a second press closes it
+  const f = rwSourcesFields(section, it);
+  if (!f.word.trim()) {
+    holder.innerHTML = `<div class="card rw-sources"><p class="body muted" style="font-size:12.5px">There is no term on this card to look up — this entry recorded a gap, not a word.</p></div>`;
+    return;
+  }
+  const key = `${uid}-${section}-${index}`;
+  holder.innerHTML = `
+    <div class="card rw-sources" style="margin-top:6px;border-left:3px solid var(--accent, #888)">
+      <div class="section-label" style="margin-top:0">Check sources — ${escapeHtml(f.word)}</div>
+      <p class="body" style="font-size:13px;margin:2px 0">What goes out: the word <b>${escapeHtml(f.word)}</b>${f.language ? `, the language <b>${escapeHtml(f.language)}</b>` : ''}${f.period ? `, the period <b>${escapeHtml(f.period)}</b>` : ''} — and nothing else. Not your passage, not your meaning, not your notes, not what this pass wrote about the word.</p>
+      <p class="fact" style="font-size:12.5px">Model calls: <b>1</b>, with web search — this one spends. It can say whether sources carry the word and how they say it is used; it cannot say the word fits your writing, and it will not change the verdict above.</p>
+      <p class="body muted" style="font-size:12px;margin:2px 0">The search itself is run by the model provider, which composes its own queries from that prompt. What is controlled here is what the lookup is given, not the exact words of the query it issues.</p>
+      <div class="row" style="margin-top:6px">
+        <button class="judge-btn live" id="rw-src-go-${escapeHtml(key)}" onclick="rwRunSources('${escapeJs(uid)}','${escapeJs(section)}',${Number(index)})">Look it up — 1 model call</button>
+        <button class="judge-btn" onclick="rwCheckSources('${escapeJs(uid)}','${escapeJs(section)}',${Number(index)})">Cancel</button>
+      </div>
+      <div id="rw-src-out-${escapeHtml(key)}"></div>
+    </div>`;
+  const go = document.getElementById(`rw-src-go-${key}`);
+  if (go) go.focus({preventScroll: true});
+}
+async function rwRunSources(uid, section, index) {
+  const it = rwItem(uid, section, index);
+  const key = `${uid}-${section}-${index}`;
+  const out = document.getElementById(`rw-src-out-${key}`);
+  const go = document.getElementById(`rw-src-go-${key}`);
+  if (!it || !out) return;
+  if (go) { go.disabled = true; go.textContent = 'Looking…'; }
+  out.innerHTML = `<p class="body muted" style="font-size:13px"><span class="spinner"></span>one word, in reference sources…</p>`;
+  try {
+    const r = await fetch('/api/related/word_sources', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(rwSourcesFields(section, it)),
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) { out.innerHTML = `<div class="error">${escapeHtml(d.error || 'The lookup could not run.')}</div>`; if (go) { go.disabled = false; go.textContent = 'Look it up — 1 model call'; } return; }
+    const tag = d.existence === 'found'
+      ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0">sources carry it</span>`
+      : d.existence === 'not found'
+        ? `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">no source found in this lookup</span>`
+        : `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">uncertain</span>`;
+    out.innerHTML = `
+      <div class="section-label" style="margin-top:10px">What the sources say ${tag}</div>
+      ${(d.existence_note || '').trim() ? `<p class="body" style="font-size:13.5px">${escapeHtml(d.existence_note)}</p>` : ''}
+      ${(d.usage_note || '').trim() ? `<p class="body" style="font-size:13.5px"><em>Usage:</em> ${escapeHtml(d.usage_note)}</p>` : ''}
+      ${(d.sources || []).length ? `<ul class="body" style="font-size:13px;margin:4px 0 0;padding-left:18px">${(d.sources || []).map(x => `<li><b>${escapeHtml(x.name)}</b> — ${escapeHtml(x.says)}</li>`).join('')}</ul>` : ''}
+      ${(d.from_recall || '').trim() ? `<p class="body muted" style="font-size:12.5px"><em>From recall, not from a source:</em> ${escapeHtml(d.from_recall)}</p>` : ''}
+      <p class="body muted" style="font-size:12px;border-left:2px solid var(--rule-reworked, #888);padding-left:9px;margin-top:6px">${escapeHtml(d.note || '')} The verdict on this card is unchanged.</p>
+      ${citationsHtml(d.citations)}`;
+    if (go) { go.disabled = false; go.textContent = 'Look it up again — 1 model call'; }
+  } catch (e) {
+    out.innerHTML = `<div class="error">Couldn't reach the server.</div>`;
+    if (go) { go.disabled = false; go.textContent = 'Look it up — 1 model call'; }
+  }
 }
 // ---- finding 5: the shelf lands on the word, not merely on its run --------
 // The bookmark keeps the run, the section and the index, so reopening it can
@@ -6015,7 +6089,7 @@ function renderRelatedAsk() {
            value="${escapeHtml(RELATED_ASK.meaning || '')}" placeholder="${hasSel ? 'optional — the sense you mean' : 'e.g. the sadness of being between stages'}"
            oninput="RELATED_ASK.meaning = this.value; relatedGoState()" onkeydown="if (event.key === 'Enter') { event.preventDefault(); startRelatedFromRoom(); }">
     <p class="fact" id="related-lane">Lane: <b>checking…</b></p>
-    <p class="fact">Model calls: <b>2</b> — one to find (English synonyms and opposites first, then Latin, Greek and other languages), one to review the foreign terms and comparisons. A hosted lane sends the meaning line${sel ? ' and your selection' : ''} to the provider. Everything that comes back is recall, labelled so.</p>
+    <p class="fact">Model calls: <b>2</b> — one to find (English synonyms and opposites first, then Latin, Greek and other languages), one to review the foreign terms and comparisons. A hosted lane sends the meaning line${sel ? ' and your selection' : ''} to the provider. Neither call has a web-search tool: the reviewing call is the one shown your writing, so it is the one that cannot search. Everything that comes back is recall, labelled so — <b>Check sources</b> on a single word is the lookup, and it is given only that word, its language and its period.</p>
     <p class="fact">It keeps running if you close the room or the tab. The answer opens beside your writing when it arrives; the draft, the caret and the undo history are not touched.</p>
     <div class="row" style="margin-top:10px">
       <button id="related-go" onclick="startRelatedFromRoom()">Find related words</button>

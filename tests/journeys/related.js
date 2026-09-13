@@ -97,6 +97,8 @@ const DRAFT = [
   ok(panel.meaning === IDS.meaning, 'the meaning line is prefilled from the card and editable: ' + JSON.stringify(panel.meaning));
   ok(/Model calls: 2/.test(panel.text) && /Lane: probe-lane · model probe-model-1/.test(panel.text),
      'the panel says the cost and the lane before anything is pressed: ' + panel.text.slice(0, 200));
+  ok(/review runs with no search tool/i.test(panel.text) && /Check sources on a single word is the lookup/i.test(panel.text),
+     'and it says the review cannot search, and where the lookup lives instead: ' + panel.text.slice(0, 240));
   // the seeded full pass and follow-up by id, the same-title pass by title,
   // and the map seed's two refracts — the offline forge names every
   // candidate the same, so they match by title too
@@ -169,8 +171,8 @@ const DRAFT = [
   ok(latinIdx >= 0, 'the Latin card is addressable by its index in the record: ' + latinIdx);
   const uid = await page.evaluate(() => Object.keys(RELATED_ITEMS)[0]);
   const actions = await page.evaluate(([u, i]) => [...document.querySelectorAll(`#rw-save-${u}-languages-${i}`)[0].parentElement.querySelectorAll('button')].map(b => b.textContent.trim()), [uid, latinIdx]);
-  ok(JSON.stringify(actions) === JSON.stringify(['Explore this word', 'Compare with my idea', 'Save']),
-     'every result carries Explore this word, Compare with my idea and Save: ' + JSON.stringify(actions));
+  ok(JSON.stringify(actions) === JSON.stringify(['Explore this word', 'Compare with my idea', 'Save', 'Check sources']),
+     'every result carries Explore this word, Compare with my idea, Save and Check sources: ' + JSON.stringify(actions));
   // Compare with my idea: from the record, no call, missing analysis named
   await page.evaluate(([u, i]) => rwCompare(u, 'languages', i), [uid, latinIdx]); await page.waitForTimeout(200);
   const cmp = await page.evaluate(([u, i]) => document.getElementById(`rw-act-${u}-languages-${i}`).innerText.replace(/\s+/g, ' '), [uid, latinIdx]);
@@ -255,6 +257,50 @@ const DRAFT = [
   await page.click('#result-area details.explore-idea button:has-text("Find related words")'); await page.waitForTimeout(900);
   served = FULL;
   await page.click('[id^="refract-area-"] button:has-text("Find related words — 2 model calls")'); await page.waitForTimeout(8500);
+
+  // ---- 2c. Check sources: it searches, so it never sees the writing ------
+  const srcReqs = [];
+  await page.route('**/api/related/word_sources', r => {
+    let b = {}; try { b = JSON.parse(r.request().postData() || '{}'); } catch (e) {}
+    srcReqs.push(b);
+    return r.fulfill({ json: { mode: 'word_sources', word: b.word, language: b.language, period: b.period,
+      existence: 'found', existence_note: 'Lewis & Short carries it as a Latin noun.',
+      usage_note: 'Everyday and poetic; the threshold of a door.',
+      sources: [{ name: 'Lewis & Short', says: 'attested as a noun' }], from_recall: '',
+      citations: [{ url: 'https://example.org/ls', title: 'Lewis & Short' }],
+      note: 'This lookup was given the word, its language and its period and nothing else — not the meaning it was found for. A source can support that the word exists or how it is used; it cannot say the word fits your writing, and it does not change the comparison\u2019s verdict.',
+      summary: 'limen · Latin · existence: found · this says nothing about fit' } });
+  });
+  const verdictBefore = await page.evaluate(([u, i]) => {
+    const h = document.getElementById(`rw-act-${u}-languages-${i}`);
+    return h.closest('.card').innerText.replace(/\s+/g, ' ');
+  }, [uid, latinIdx]);
+  const postsBeforeSrc = posts.length;
+  await page.evaluate(([u, i]) => rwCheckSources(u, 'languages', i), [uid, latinIdx]); await page.waitForTimeout(300);
+  const srcPanel = await page.evaluate(([u, i]) => document.getElementById(`rw-act-${u}-languages-${i}`).innerText.replace(/\s+/g, ' '), [uid, latinIdx]);
+  ok(srcReqs.length === 0 && posts.length === postsBeforeSrc, 'Check sources sends nothing until it is pressed: ' + srcReqs.length);
+  ok(/Model calls: 1, with web search/.test(srcPanel) && /this one spends/.test(srcPanel),
+     'it says what it costs before it spends: ' + srcPanel.slice(0, 180));
+  ok(/What goes out: the word limen, the language Latin/.test(srcPanel) && /Not your passage, not your meaning/.test(srcPanel),
+     'and it says exactly what leaves: ' + srcPanel.slice(0, 220));
+  ok(/composes its own queries/.test(srcPanel), 'and it does not claim the query itself is controlled');
+  await page.click(`#rw-src-go-${uid}-languages-${latinIdx}`); await page.waitForTimeout(700);
+  ok(srcReqs.length === 1, 'pressing it made exactly one lookup: ' + srcReqs.length);
+  ok(JSON.stringify(Object.keys(srcReqs[0] || {}).sort()) === JSON.stringify(['language', 'period', 'word']),
+     'and the request carries only the word, its language and its period: ' + JSON.stringify(Object.keys(srcReqs[0] || {})));
+  ok(srcReqs[0].word === 'limen' && srcReqs[0].language === 'Latin' && /Classical/.test(srcReqs[0].period || ''),
+     'built from what the card shows: ' + JSON.stringify(srcReqs[0]));
+  const srcAfter = await page.evaluate(([u, i]) => {
+    const h = document.getElementById(`rw-act-${u}-languages-${i}`);
+    return { out: h.innerText.replace(/\s+/g, ' '), card: h.closest('.card').innerText.replace(/\s+/g, ' ') };
+  }, [uid, latinIdx]);
+  ok(/sources carry it/.test(srcAfter.out) && /Lewis & Short/.test(srcAfter.out),
+     'the sources come back and are named: ' + srcAfter.out.slice(0, 200));
+  ok(/cannot say the word fits your writing/.test(srcAfter.out) && /verdict on this card is unchanged/.test(srcAfter.out),
+     'and it says plainly that it cannot speak to fit');
+  ok(/holds/.test(verdictBefore) && /holds/.test(srcAfter.card) && !/strained/.test(srcAfter.card.split('Check sources')[0]),
+     'the card\u2019s own verdict is untouched by the lookup');
+  await page.evaluate(([u, i]) => rwCheckSources(u, 'languages', i), [uid, latinIdx]); await page.waitForTimeout(200);
 
   // ---- 3. the follow-up: one language, appended, nothing replaced --------
   served = FOLLOW;

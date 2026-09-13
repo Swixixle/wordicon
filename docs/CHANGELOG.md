@@ -1,5 +1,56 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.33.0 — Reviewing his writing and searching for words are two acts
+
+His ruling of 14 September 2026, on the question report 76 left open:
+"keep passage-aware review and live word lookup, but separate them."
+v1.32.0 had sent his passage to the reviewing call and told that call, in
+its prompt, not to put his text into a search query. An instruction is not
+a separation. This is the separation.
+
+**The comparison reviewer has no search tool.** `run_refract`'s review call
+goes through the tool-free `complete()`, not `complete_with_search()`. It
+receives his whole passage and his whole meaning, and there is no tool on
+the request for a model to search them with — including a passage that
+tells the model to search it, which the suite exercises. The prompt no
+longer asks for a search it will not be given; it says it has none, that
+everything it returns is recall, and that `check` should name where one
+search would settle it. This still goes to his chosen model provider: it is
+separation, not locality, and nothing in the code or the interface calls it
+local.
+
+**Live lookup moved to Check sources, on one word.** A fourth control on
+every result. It discloses first — one model call, with web search, and
+exactly what leaves: the word, its language, its period — and waits to be
+pressed. The request is built field by field from those three values, and
+the route refuses a body carrying `trace_id`, `passage`, `definition`,
+`meaning`, `item`, `section` or `index`, so the separation does not rest on
+this function's restraint. It is ephemeral, like verify: no receipt, no
+snapshot, no road. It reports existence and usage with the sources named,
+says where it found nothing, marks anything it adds from recall — and says,
+on the record and on the page, that it cannot speak to whether the word
+fits his writing. It never moves a verdict.
+
+What it does **not** claim: that the provider's search queries are exactly
+those three fields. The provider composes and runs its own searches from
+the prompt; controlling the query text would mean building and submitting
+the query directly, which this does not do. The page says so.
+
+**The record says which review ran.** `review_mode` is `tool_free`;
+`citations` is empty because nothing was consulted; and `acquisition_usage`
+is `None` rather than whatever an earlier search on the same gateway left
+behind — a record may not inherit another call's acquisition. The summary
+and the panel say the review ran without a search tool, so the copy no
+longer implies a lookup that did not happen. The ordinary comparison is
+still two model calls.
+
+Pins: `_check_source_delivery` now proves the separation by behaviour —
+zero search-enabled calls on a comparison run, the passage present in the
+reviewing prompt, the injection case, the mode and the non-inheritance, and
+the lookup's prompt carrying none of his writing. Block 118's pin follows
+the acquisition to where searches actually happen. The live-search pin
+inverts rather than disappearing. Journey `related` 101 → 112 checks.
+
 ## v1.32.3 — The clause that keeps his writing out of a search query is pinned
 
 v1.32.0 gave the reviewing call the owner's passage, and that call is the
