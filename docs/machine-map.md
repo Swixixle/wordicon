@@ -131,7 +131,10 @@ receipt through `write_run_snapshot` / `persist_receipt`, which create exclusive
 raise `RunRecordCollision` (a RuntimeError, so the writers that tolerate a disk error
 cannot swallow it) rather than overwrite — a job that hits it is marked failed and that
 run's result is lost with it; the record that was there stands. Job ids are minted the
-same way against the live job table. The shape of an id is unchanged and nothing in the
+same way against the live job table and RESERVED as they are minted (2026-09-14):
+`_new_job_id` claims the row before it releases the lock, so two callers cannot pass the
+check on one id and have the second replace the first's job; `_release_job_id` gives a
+reservation back and never drops a real job; the job listings skip reservations. The shape of an id is unchanged and nothing in the
 store is renamed.
 `scripts/map_focus.py` is Map · focus: the served projection behind one place's ring —
 exact-identity issuer derivation (`edge_specs_from_snapshot`, `SnapshotIndex`,

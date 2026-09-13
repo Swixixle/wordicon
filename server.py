@@ -489,16 +489,34 @@ def _now_iso() -> str:
 
 
 def _new_job_id() -> str:
-    """A job id no job in this process holds: the clock, the thread and eight
-    random bytes, re-minted while taken (2026-09-13: a job may never land
-    on another job's record in silence — the same rule as the run ids)."""
+    """A job id no job in this process holds, RESERVED in the same breath it
+    is minted: the clock, the thread and eight random bytes, re-minted while
+    taken, and the table row claimed before the lock is released (2026-09-13;
+    the reservation added 2026-09-14).
+
+    Checking under the lock and then returning was not enough. Two callers
+    could pass the check on one id before either wrote its job, and the
+    second assignment replaced the first caller's job in silence — the same
+    defect as a snapshot overwrite, one table down. The claim is a
+    placeholder the caller overwrites with its own job; nothing else can take
+    the id in between. A caller that mints an id and cannot use it must give
+    it back with _release_job_id."""
     for _ in range(64):
         jid = "job_" + hashlib.sha256(
             f"{time.time()}{threading.get_ident()}{os.urandom(8).hex()}".encode()).hexdigest()[:12]
         with JOBS_LOCK:
             if jid not in JOBS:
+                JOBS[jid] = {"id": jid, "status": "reserved", "created_at": _now_iso()}
                 return jid
     raise RuntimeError("could not mint an unused job id in 64 attempts")
+
+
+def _release_job_id(job_id: str) -> None:
+    """Hand a reservation back. Only ever drops a row still marked
+    'reserved' — a real job is never removed by this."""
+    with JOBS_LOCK:
+        if (JOBS.get(job_id) or {}).get("status") == "reserved":
+            del JOBS[job_id]
 
 
 def _update_job(job_id: str, **fields) -> None:
@@ -3495,7 +3513,10 @@ def api_get_job(job_id):
 @app.route("/api/jobs")
 def api_list_jobs():
     with JOBS_LOCK:
-        jobs = sorted(JOBS.values(), key=lambda j: j["created_at"], reverse=True)[:20]
+        # a reservation is an id being held for the caller that is about to
+        # write its job into it — it is not a job, and is not listed as one
+        jobs = sorted((j for j in JOBS.values() if j.get("status") != "reserved"),
+                      key=lambda j: j["created_at"], reverse=True)[:20]
         return jsonify({"jobs": [
             {k: v for k, v in j.items() if k != "result"} for j in jobs
         ]})
@@ -3516,7 +3537,8 @@ def api_inflight():
     unread the whole time the interface was telling him his work was gone.
     """
     with JOBS_LOCK:
-        jobs = sorted(JOBS.values(), key=lambda j: j.get("created_at") or "",
+        jobs = sorted((j for j in JOBS.values() if j.get("status") != "reserved"),
+                      key=lambda j: j.get("created_at") or "",
                       reverse=True)[:20]
         live = [{
             "job_id": j.get("id", ""), "mode": j.get("mode", ""),

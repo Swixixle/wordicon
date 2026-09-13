@@ -3147,6 +3147,99 @@ def _check_saved_words_repeat(server, paired):
     return out
 
 
+def _check_job_reservation(server):
+    """A job id is reserved in the same breath it is minted (the review's
+    finding 6, 2026-09-14).
+
+    Checking the table under the lock and then returning was not enough: two
+    callers could pass the check on one id before either wrote its job, and
+    the second assignment replaced the first caller's job in silence — the
+    same defect as a snapshot overwrite, one table down. Proven by forcing
+    the collision rather than waiting for it: with the clock frozen and the
+    random bytes constant the same candidate id comes up twice, and the
+    allocator must retry to a different one, leave the existing job exactly
+    as it was, and — when nothing free can be minted at all — fail out loud
+    rather than reuse. Then twelve concurrent callers, on real entropy, must
+    get twelve ids, each already held when it is handed back."""
+    out = []
+    import threading as _th
+    real_urandom = server.os.urandom
+    real_time = server.time.time
+    made = []
+    try:
+        # Frozen clock and constant bytes, so the SAME candidate id comes up
+        # twice on this thread: that is the collision the old allocator lost
+        # a job to, and it is forced here rather than waited for.
+        server.time.time = lambda: 1757000000.0
+        server.os.urandom = lambda n: b"\x00" * n
+        first = server._new_job_id()
+        made.append(first)
+        if first not in server.JOBS or server.JOBS[first].get("status") != "reserved":
+            out.append("SRC: a minted job id is not held — another caller can still take it")
+        with server.JOBS_LOCK:
+            server.JOBS[first] = {"id": first, "status": "queued", "mine": True,
+                                  "created_at": server._now_iso()}
+        seq = {"n": 0}
+        def _stepping(n):
+            seq["n"] += 1
+            return (b"\x00" * n) if seq["n"] == 1 else real_urandom(n)
+        server.os.urandom = _stepping
+        second = server._new_job_id()
+        made.append(second)
+        if seq["n"] < 2:
+            out.append("SRC: the collision was not forced — the allocator never reached its second attempt")
+        if second == first:
+            out.append("SRC: a second caller was handed a job id another job already holds")
+        if not server.JOBS.get(first, {}).get("mine"):
+            out.append("SRC: a second allocation replaced an existing job")
+        # and when nothing free can be minted at all it fails out loud
+        server.os.urandom = lambda n: b"\x00" * n
+        try:
+            server._new_job_id()
+            out.append("SRC: an id already taken was handed out")
+        except RuntimeError:
+            pass
+        if not server.JOBS.get(first, {}).get("mine"):
+            out.append("SRC: the failed allocation disturbed the job it collided with")
+        # concurrent callers, real entropy: every id distinct, and every one
+        # already held by the caller the moment it is returned
+        server.os.urandom = real_urandom
+        server.time.time = real_time
+        ids, errs2 = [], []
+        def _alloc():
+            try:
+                jid = server._new_job_id()
+                ids.append((jid, jid in server.JOBS))
+            except Exception as e:   # noqa: BLE001
+                errs2.append(repr(e))
+        ts = [_th.Thread(target=_alloc) for _ in range(12)]
+        for t in ts: t.start()
+        for t in ts: t.join()
+        made.extend(j for j, _ in ids)
+        if errs2:
+            out.append(f"SRC: a concurrent allocation failed ({errs2[0][:120]})")
+        if len({j for j, _ in ids}) != 12:
+            out.append(f"SRC: twelve concurrent allocations produced {len({j for j, _ in ids})} distinct ids")
+        if not all(held_now for _, held_now in ids):
+            out.append("SRC: a concurrent allocation returned an id it had not reserved")
+        # a reservation can be handed back; a real job never is
+        spare = server._new_job_id()
+        made.append(spare)
+        server._release_job_id(spare)
+        if spare in server.JOBS:
+            out.append("SRC: a released reservation is still held")
+        server._release_job_id(first)
+        if not server.JOBS.get(first, {}).get("mine"):
+            out.append("SRC: releasing dropped a real job, not a reservation")
+    finally:
+        server.os.urandom = real_urandom
+        server.time.time = real_time
+        with server.JOBS_LOCK:
+            for j in made:
+                server.JOBS.pop(j, None)
+    return out
+
+
 def _check_stage_c():
     """Stage C of the notebook brief (the owner's go-ahead, 2026-09-13):
     "blue & yellow default + simple colours, Download wording, desktop
@@ -4340,6 +4433,7 @@ def main() -> int:
     failures.extend(_check_run_identity(server, _paired))
     failures.extend(_check_source_delivery(server, _paired))
     failures.extend(_check_saved_words_repeat(server, _paired))
+    failures.extend(_check_job_reservation(server))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key

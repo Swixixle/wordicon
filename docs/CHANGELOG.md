@@ -1,5 +1,34 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.32.2 — A job id is reserved in the same breath it is minted
+
+The review's sixth finding, and the last of them.
+
+v1.29.0 gave `_new_job_id` a check against the live job table, under the
+table's lock. That was not enough. The check and the insertion were two
+separate acquisitions of the lock, so two callers could both pass the check
+on one id before either wrote its job, and the second assignment then
+replaced the first caller's job in silence — the same defect as a snapshot
+overwrite, one table down. A forced-collision run of the real allocator, two
+concurrent callers, produced one id twice and left one job of the two.
+
+The mint now claims the row it just found free, before releasing the lock: a
+placeholder the caller overwrites with its own job, so nothing else can take
+the id in between. `_release_job_id` hands a reservation back for a caller
+that mints an id and cannot use it, and refuses to drop anything that is not
+still marked reserved. The two job listings skip reservations, because a
+reservation is an id being held, not a job. Ids keep their shape and nothing
+persisted changes; a collision is still retried, and still fails out loud
+when nothing free can be minted in sixty-four attempts.
+
+`_check_job_reservation` forces the collision rather than waiting for it:
+with the clock frozen and the random bytes constant the same candidate comes
+up twice, and the allocator must reach its second attempt, return a
+different id, and leave the existing job exactly as it was; with no free id
+available at all it must raise rather than reuse, and leave the job it
+collided with untouched. Then twelve concurrent callers on real entropy must
+get twelve ids, each already held the moment it is handed back.
+
 ## v1.32.1 — One bookmark per result, and it knows where it lives
 
 The review's fourth and fifth findings.
