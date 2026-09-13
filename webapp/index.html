@@ -260,6 +260,29 @@
   .compose textarea::selection { background: var(--write-ink); color: var(--write-bg); }
   .compose-bar { position: fixed; top: calc(env(safe-area-inset-top, 0) + 14px); right: 16px;
     display: flex; gap: 8px; z-index: 61; }
+  /* The header: title, My writing, New, save state — one quiet line at the
+     top left, in the room's colours, clear of the writing column. */
+  .compose-head { position: absolute; top: calc(env(safe-area-inset-top, 0) + 14px); left: 16px;
+    display: flex; gap: 8px; align-items: center; z-index: 61;
+    max-width: calc(100% - 32px); }
+  body.ws-split .compose-head { max-width: calc(100% - 32px); }
+  body.ws-write .compose-head { max-width: calc(100% - 340px); }
+  .nb-title { background: transparent; border: 1px solid transparent; border-radius: 8px;
+    color: var(--write-ink); font-family: inherit; font-size: 13.5px; padding: 5px 8px;
+    min-width: 8em; width: min(34ch, 40vw); opacity: 0.85; }
+  .nb-title::placeholder { color: var(--write-faint); }
+  .nb-title:hover, .nb-title:focus { border-color: var(--write-faint); opacity: 1; outline: none; }
+  .compose-head .nb-status { margin-left: 4px; }
+  #ws-more .row button, #ws-more .lbl { font-family: inherit; }
+  #ws-focus-exit { position: fixed; top: calc(env(safe-area-inset-top, 0) + 14px); right: 16px; z-index: 63; opacity: 0.28; }
+  #ws-focus-exit:hover, #ws-focus-exit:focus { opacity: 1; }
+  /* Focus: the controls step out of sight; the writing does not move. */
+  body.ws-focus #ws-head, body.ws-focus #ws-bar { opacity: 0; pointer-events: none; }
+  body.ws-focus #ws-head:focus-within, body.ws-focus #ws-bar:focus-within { opacity: 1; pointer-events: auto; }
+  @media (max-width: 820px) {
+    .compose-head { max-width: calc(100vw - 32px); top: auto; bottom: calc(env(safe-area-inset-bottom, 0) + 12px); }
+    .nb-title { width: min(22ch, 46vw); }
+  }
   .compose-exit { background: transparent; border: 1px solid var(--write-faint);
     color: var(--write-faint); border-radius: 8px; padding: 5px 11px; font-size: 12.5px;
     font-family: inherit; opacity: 0.55; transition: opacity 160ms ease; }
@@ -1062,23 +1085,40 @@
        aria-modal="false" aria-labelledby="moira-ask-title"></div>
   <!-- and while it runs: one line, low, that never takes the caret -->
   <div id="room-run" class="room-run" hidden aria-live="polite"></div>
+<!-- The header (the owner's layout ruling, 2026-09-13): the document's
+     title, My writing, New and the save state, in one compact line. It
+     belongs to the document, so it is in the room's colours and leaves with
+     the room; in page mode it is off screen with the writing. -->
+  <div id="ws-head" class="compose-head ws-write-only" role="group" aria-label="this document">
+    <input id="nb-title" class="nb-title" type="text" placeholder="Untitled" aria-label="document title"
+           autocomplete="off" spellcheck="false" oninput="nbTitleTyped(this.value)" onkeydown="nbTitleKey(event)">
+    <button class="compose-exit" id="nb-door" onclick="nbOpenPanel('list')" title="every document, newest first; search titles and words">My writing</button>
+    <button class="compose-exit" onclick="nbNew()" title="a fresh page; this one is kept and checkpointed as it stands">New</button>
+    <span id="nb-status" class="nb-status" aria-live="polite" style="display:none"></span>
+  </div>
 </div>
 
 
 <!-- The workspace controls. Outside the room ON PURPOSE: in page-full-screen
      mode the room is off screen, and the way back to the split must not
      leave with it. -->
+<!-- The bar (the same ruling): Get feedback stays visible and outside Aa;
+     Revision notes joins it when there are any; Aa owns typography and
+     layout; the less frequent commands — sides, split, write, page,
+     download, full workup, dictate, focus — sit behind ⋯. Four static
+     buttons, and a new capability does not get a fifth: Find related
+     words lives in Explore this idea and the selection tools. -->
 <div id="ws-bar" class="compose-bar">
-  <span id="nb-status" class="nb-status" aria-live="polite" style="display:none"></span>
+  <button class="compose-exit" id="moira-door" onclick="askReaders('paragraph')" title="three readers on this paragraph, your selection or the whole draft — formerly Readers">Get feedback</button>
   <button class="compose-exit ws-write-only" onclick="toggleWriteStyle()" aria-label="change the type">Aa</button>
-  <button class="compose-exit" onclick="swapSides()" title="swap which side the writing is on">⇄ sides</button>
-  <button class="compose-exit" id="ws-split-btn" onclick="setWorkspaceMode('split')">⫞ split</button>
-  <button class="compose-exit" id="ws-write-btn" onclick="setWorkspaceMode('write')">⤢ write</button>
-  <button class="compose-exit" id="ws-info-btn" onclick="setWorkspaceMode('info')">☰ page</button>
-  <button class="compose-exit ws-write-only" onclick="toggleWriteSave()" aria-label="save this">⤓ save</button>
+  <button class="compose-exit" id="ws-more-btn" onclick="toggleWsMore()" aria-haspopup="true" aria-controls="ws-more" aria-expanded="false" title="sides, split, write, page, download, full workup, dictate, focus">⋯</button>
   <button class="compose-exit" onclick="closeWorkspace()" title="Escape twice, from the writing, does the same">done</button>
 </div>
 <div id="ws-divider" aria-hidden="true"></div>
+<div id="ws-more" class="write-style" style="display:none" role="menu" aria-label="more"></div>
+<!-- Focus: the header and the bar step out of sight; this one small thing
+     stays, so the way back is never a secret. -->
+<button id="ws-focus-exit" class="compose-exit" onclick="toggleFocus()" hidden title="show the controls again">☰ controls</button>
 
 
 
@@ -4990,19 +5030,6 @@ function renderWriteStyle() {
        <button onclick="nudgeWriteSize(1)" aria-label="larger">+</button>
        ${cur ? `<button onclick="resetWriteSize()">reset</button>` : ''}
      </div>` +
-    `<div class="lbl" style="margin-top:10px">My writing — saved as you write, on this ${escapeHtml(brand())}</div><div class="row">` +
-    `<button id="nb-door" onclick="toggleWriteStyle();nbOpenPanel('list')" title="every document, newest first; search titles and words">My writing</button>` +
-    `<button onclick="toggleWriteStyle();nbNew()" title="a fresh page; this one is kept and checkpointed as it stands">New</button>` +
-    `</div>` +
-    `<div class="lbl" style="margin-top:10px">Full workup</div><div class="row">` +
-    `<button onclick="toggleWriteStyle();askDeep('paragraph')" title="the paragraph the caret is in — or your selection">This paragraph <span style="opacity:.6">${DEEP_CHORDS.paragraph.label}</span></button>` +
-    `<button onclick="toggleWriteStyle();askDeep('draft')" title="everything in the room">The whole draft <span style="opacity:.6">${DEEP_CHORDS.draft.label}</span></button>` +
-    `</div>` +
-    `<div class="lbl" style="margin-top:10px">${escapeHtml(moiraName())} — three readers, each on its own call</div><div class="row">` +
-    `<button id="moira-door" onclick="toggleWriteStyle();askReaders('paragraph')" title="the paragraph the caret is in — or your selection">This paragraph</button>` +
-    `<button onclick="toggleWriteStyle();askReaders('draft')" title="everything in the room">The whole draft</button>` +
-    `<button onclick="toggleWriteStyle();askReaders('readings')" title="reopen an earlier reading, the notebook, or the faculty settings">Readings · notebook · settings</button>` +
-    `</div>` +
     `<div class="lbl" style="margin-top:10px">View</div><div class="row">` +
     WRITE_VIEWS.map(v => `<button class="${v[0] === writeView()[0] ? 'on' : ''}"
        title="${v[3]}" onclick="setWriteView('${v[0]}')">${v[1]}</button>`).join('') +
@@ -5049,8 +5076,7 @@ function toggleWriteSave() {
   const open = el.style.display !== 'none';
   el.style.display = open ? 'none' : 'block';
   if (open) return;
-  const st = document.getElementById('write-style');
-  if (st) st.style.display = 'none';
+  for (const id of ['write-style', 'ws-more', 'nb-panel']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
   el.innerHTML = `<div class="lbl">This piece</div><div class="row">
       <button onclick="exportWriting('download')">download .md</button>
       ${CAN_SHARE_FILES ? `<button onclick="exportWriting('share')">send to\u2026</button>` : ''}
@@ -5072,10 +5098,7 @@ function toggleWriteStyle() {
   const open = el.style.display !== 'none';
   el.style.display = open ? 'none' : 'block';
   if (!open) {
-    const sv = document.getElementById('write-save');
-    if (sv) sv.style.display = 'none';
-    const nbp = document.getElementById('nb-panel');
-    if (nbp) nbp.style.display = 'none';
+    for (const id of ['write-save', 'nb-panel', 'ws-more']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
     renderWriteStyle();
   }
 }
@@ -5240,6 +5263,88 @@ function inkUpdate() {
   inkScroll();
 }
 
+// ---- the ⋯ menu, focus, and the title (the owner's layout ruling, 2026-09-13)
+//
+// "Group less frequent commands into a compact menu while retaining
+// dictation, full/split view, side swap and downloads. Preserve a quiet
+// focus view with an obvious way to restore controls." The menu is one more
+// quiet panel in the corner — the same furniture as Aa — and it runs nothing:
+// every row is a door to something that already asks before it spends.
+function renderWsMore() {
+  const el = document.getElementById('ws-more');
+  if (!el || el.style.display === 'none') return;
+  const mode = document.body.classList.contains('ws-split') ? 'split' : (document.body.classList.contains('ws-info') ? 'info' : 'write');
+  const on = m => (m === mode ? ' class="on"' : '');
+  el.innerHTML =
+    `<div class="lbl">Layout</div><div class="row">` +
+    `<button onclick="toggleWsMore();swapSides()" title="swap which side the writing is on">⇄ sides</button>` +
+    `<button id="ws-split-btn"${on('split')} onclick="toggleWsMore();setWorkspaceMode('split')">⫞ split</button>` +
+    `<button id="ws-write-btn"${on('write')} onclick="toggleWsMore();setWorkspaceMode('write')">⤢ write</button>` +
+    `<button id="ws-info-btn"${on('info')} onclick="toggleWsMore();setWorkspaceMode('info')">☰ page</button>` +
+    `</div>` +
+    `<div class="lbl" style="margin-top:10px">This document</div><div class="row">` +
+    `<button onclick="toggleWsMore();toggleWriteSave()" title="text, Markdown, PDF, or everything you have written">Download</button>` +
+    `<button onclick="toggleWsMore();toggleFocus()" title="the header and the bar step out of sight; ☰ controls brings them back">Focus</button>` +
+    `</div>` +
+    `<div class="lbl" style="margin-top:10px">Full workup</div><div class="row">` +
+    `<button onclick="toggleWsMore();askDeep('paragraph')" title="the paragraph the caret is in — or your selection">This paragraph <span style="opacity:.6">${DEEP_CHORDS.paragraph.label}</span></button>` +
+    `<button onclick="toggleWsMore();askDeep('draft')" title="everything in the room">The whole draft <span style="opacity:.6">${DEEP_CHORDS.draft.label}</span></button>` +
+    `</div>` +
+    `<div class="lbl" style="margin-top:10px">Dictate</div><div class="row">` +
+    `<button onclick="toggleWsMore();dictateFromRoom()" title="the Speak instrument is on the page: what it hears lands in the page's box, for you to review">On the page</button>` +
+    `</div>`;
+}
+function toggleWsMore() {
+  const el = document.getElementById('ws-more');
+  if (!el) return;
+  const open = el.style.display !== 'none';
+  el.style.display = open ? 'none' : 'block';
+  const b = document.getElementById('ws-more-btn');
+  if (b) b.setAttribute('aria-expanded', String(!open));
+  if (open) return;
+  for (const id of ['write-style', 'write-save', 'nb-panel']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
+  renderWsMore();
+}
+// Focus is a class on the body and nothing else: the header and the bar go
+// out of sight, the writing does not move, and one faint control stays.
+function toggleFocus() {
+  const on = document.body.classList.toggle('ws-focus');
+  const x = document.getElementById('ws-focus-exit');
+  if (x) x.hidden = !on;
+  const ta = document.getElementById('compose-text');
+  if (ta && document.body.classList.contains('ws-open') && !document.body.classList.contains('ws-info')) ta.focus({preventScroll: true});
+}
+// Dictation lives on the page (block 106): open the page and put the
+// instrument in reach. Nothing is recorded by this press.
+function dictateFromRoom() {
+  setWorkspaceMode('info');
+  const b = document.getElementById('speak-btn');
+  if (b) { try { b.scrollIntoView({block: 'center'}); } catch (e) {} b.focus({preventScroll: true}); }
+}
+// The title: yours when you type one, the first line until then. Typing a
+// title is an edit of the document — it saves like a keystroke — and never
+// touches the body; clearing it hands the title back to the first line.
+function nbTitleTyped(v) {
+  if (typeof NB === 'undefined') return;
+  NB.title = String(v || '').slice(0, 200);
+  NB.title_is_manual = !!NB.title.trim();
+  if (typeof nbNoteEdit === 'function') nbNoteEdit();
+}
+function nbTitleKey(e) {
+  if (e.key === 'Enter' || e.key === 'Escape') {
+    e.preventDefault(); e.stopPropagation();
+    const ta = document.getElementById('compose-text');
+    if (ta) ta.focus({preventScroll: true});
+  }
+}
+function nbRenderHead() {
+  const inp = document.getElementById('nb-title');
+  if (!inp || typeof NB === 'undefined') return;
+  const auto = (typeof nbAutoTitle === 'function' && typeof nbBody === 'function') ? nbAutoTitle(nbBody()) : '';
+  inp.placeholder = auto || 'Untitled';
+  if (document.activeElement !== inp) inp.value = NB.title_is_manual ? NB.title : '';
+}
+
 // ---- Carry Back (block 123) ---------------------------------------------
 //
 // The bridge from a workup to the writing room, and only a bridge. The
@@ -5295,11 +5400,11 @@ async function carryBack(traceId, kind, ref, excerpt, standing, btn) {
                             excerpt: String(excerpt), standing: standing || {}})});
     const d = await r.json();
     if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status));
-    if (btn) { btn.textContent = '↩ carried'; }
+    if (btn) { btn.textContent = '↩ added to revision notes'; }
     await loadCarries();
     carryReturnLine();
   } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = '↩ carry back'; }
+    if (btn) { btn.disabled = false; btn.textContent = '↩ Add to revision notes'; }
     pageNote('Could not carry that back: ' + escapeHtml(String(e)));
   }
 }
@@ -5319,7 +5424,7 @@ function carryBtn(traceId, kind, ref, excerpt, standing) {
   // route directly). The readers' journey clicks; it found this.
   const payload = escapeHtml(JSON.stringify({t: traceId, k: kind, r: ref || {}, e: String(excerpt || ''), s: standing || {}})).replace(/"/g, '&quot;');
   return `<button class="carry-btn" type="button" data-carry="${payload}" onclick="carryFromBtn(this)"
-            title="keep this beside the draft while revising — it decides nothing">↩ carry back</button>`;
+            title="keep this beside the draft while revising — it decides nothing">↩ Add to revision notes</button>`;
 }
 function carryFromBtn(btn) {
   let p;
@@ -5350,7 +5455,8 @@ function renderCarryControl() {
     b.id = 'carry-ctl'; b.className = 'compose-exit';
     b.setAttribute('aria-controls', 'carry-tray');
     b.onclick = toggleCarryTray;
-    bar.insertBefore(b, bar.firstChild);
+    const after = document.getElementById('moira-door');
+    if (after && after.parentElement === bar) bar.insertBefore(b, after.nextSibling); else bar.insertBefore(b, bar.firstChild);
   }
   b.textContent = `↩ Revision notes · ${n}`;
   b.setAttribute('aria-expanded', String(document.getElementById('carry-tray')?.style.display === 'block'));
@@ -5370,7 +5476,7 @@ function carryReturnLine() {
     el.style.borderLeft = '3px solid var(--accent, #888)';
     area.insertBefore(el, area.firstChild);
   }
-  el.innerHTML = `<p class="body" style="margin:0"><strong>Revision notes · ${CARRIES.length}</strong> carried back so far.
+  el.innerHTML = `<p class="body" style="margin:0"><strong>Revision notes · ${CARRIES.length}</strong> added so far.
     <a onclick="openCompose();openCarryTray()">Back into the room with them</a> — the draft is untouched; they sit beside it.</p>`;
 }
 
@@ -6465,7 +6571,7 @@ document.addEventListener('keydown', e => {
   if (document.body.classList.contains('ws-open')) { e.preventDefault(); closeWorkspace(); }
 });
 function closeInnermostRoomPanel() {
-  for (const id of ['nb-panel', 'write-style', 'write-save', 'carry-tray']) {
+  for (const id of ['ws-more', 'nb-panel', 'write-style', 'write-save', 'carry-tray']) {
     const el = document.getElementById(id);
     if (el && el.style.display !== 'none' && el.style.display !== '') { el.style.display = 'none'; return true; }
   }
@@ -6526,7 +6632,7 @@ async function moiraConfig(force) {
 function askReaders(kind) {
   const el = document.getElementById('moira-ask');
   if (!el) return;
-  for (const id of ['write-style', 'write-save', 'deep-ask']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
+  for (const id of ['write-style', 'write-save', 'deep-ask', 'ws-more', 'nb-panel']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
   DEEP_ASK = null;
   el.style.display = 'block';
   if (kind === 'readings') { MOIRA_TAB = 'readings'; MOIRA_ASK = null; }
@@ -7092,7 +7198,7 @@ function nbNoteEdit() {
   if (!NB.id) { nbAdopt(nbNewId(), 'room'); }
   NB.seq += 1;
   if (!nbNoteEdit._raf && typeof requestAnimationFrame === 'function') {
-    nbNoteEdit._raf = requestAnimationFrame(() => { nbNoteEdit._raf = 0; nbRecord(); });
+    nbNoteEdit._raf = requestAnimationFrame(() => { nbNoteEdit._raf = 0; nbRecord(); if (typeof nbRenderHead === 'function') nbRenderHead(); });
   } else if (typeof requestAnimationFrame !== 'function') nbRecord();
   if (NB.conflict) { nbRenderStatus(); return; }        // a conflict stops automatic saving until he chooses
   const now = Date.now();
@@ -7205,6 +7311,7 @@ function nbRenderStatus() {
   if (NB.status === 'conflict') extra = ` <button class="nb-act" onclick="nbOpenPanel('conflict')">Review</button>`;
   el.innerHTML = text ? `<span class="nb-word" title="${escapeHtml(NB.serverError || '')}">${escapeHtml(text)}</span>${extra}` : '';
   el.style.display = text ? 'flex' : 'none';
+  if (typeof nbRenderHead === 'function') nbRenderHead();
 }
 
 // ---- opening, new, the list --------------------------------------------------
@@ -7290,7 +7397,7 @@ function nbOpenPanel(mode) {
   if (!el) return;
   NB_PANEL = mode || '';
   if (!NB_PANEL) { el.style.display = 'none'; el.innerHTML = ''; return; }
-  for (const id of ['write-style', 'write-save']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
+  for (const id of ['write-style', 'write-save', 'ws-more']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
   el.style.display = 'block';
   if (NB_PANEL === 'conflict') { nbRenderConflict(el); return; }
   nbRenderList(el, '');

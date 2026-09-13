@@ -64,17 +64,20 @@ async function waitFor(page, fn, ms) {
   // ---- the control opens a question, and spends nothing ---------------
   const before = posts.length;
   await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.focus(); ta.setSelectionRange(120, 120); ta.dataset.moiraProbe = 'live-1'; });
-  // the door is in the panel behind Aa, beside Go deep — the bar did not grow
-  const bar = await page.evaluate(() => document.querySelectorAll('#ws-bar > button:not(#carry-ctl)').length);
-  ok(bar === 7, "the room's bar did not grow a button for the readers: " + bar);
-  await page.evaluate(() => toggleWriteStyle()); await page.waitForTimeout(400);
-  const door = await page.evaluate(() => { const b = document.getElementById('moira-door'); return { there: !!b, label: b ? b.parentElement.previousElementSibling.textContent : '' }; });
-  ok(door.there && /^Readers — three readers/.test(door.label), 'with no Phase 0 ruling recorded the door behind Aa claims no faculty name: ' + door.label);
+  // 2026-09-13, the owner's layout ruling: the door is a plain button in the
+  // room's bar, outside Aa — Get feedback — and the bar is four static
+  // buttons (Get feedback, Aa, ⋯, done), never a cockpit
+  const bar = await page.evaluate(() => Array.from(document.querySelectorAll('#ws-bar > button:not(#carry-ctl)')).map(b => b.textContent.trim()));
+  ok(bar.length === 4 && bar[0] === 'Get feedback' && bar[bar.length - 1] === 'done', "the room's bar is four static buttons with Get feedback first: " + JSON.stringify(bar));
+  const door = await page.evaluate(() => { const b = document.getElementById('moira-door'); return { there: !!b, inBar: !!(b && b.closest('#ws-bar')), inAa: !!(b && b.closest('#write-style')), label: b ? b.textContent.trim() : '' }; });
+  ok(door.there && door.inBar && !door.inAa && door.label === 'Get feedback', 'Get feedback is visibly in the bar, outside Aa: ' + JSON.stringify(door));
   await page.click('#moira-door'); await page.waitForTimeout(900);
   const asked = await page.evaluate(() => {
     const el = document.getElementById('moira-ask');
-    return { shown: el.style.display !== 'none', text: el.textContent.replace(/\s+/g, ' ') };
+    return { shown: el.style.display !== 'none', text: el.textContent.replace(/\s+/g, ' '),
+             title: (document.getElementById('moira-ask-title') || {}).textContent || '' };
   });
+  ok(/^Readers$/.test(asked.title.trim()), 'with no Phase 0 ruling recorded the panel claims no faculty name — it is headed Readers: ' + JSON.stringify(asked.title));
   ok(asked.shown, "the readers' control opens a question rather than starting a reading");
   ok(posts.length === before, 'and it has spent nothing: ' + JSON.stringify(posts.slice(before)));
   ok(/Clotho — reads for what is alive/.test(asked.text) && /Lachesis — reads for what can bear weight/.test(asked.text)

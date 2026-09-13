@@ -258,6 +258,79 @@ const TEXT = [
   const ck2 = await page.evaluate(async id => { const r = await fetch('/api/notebook/documents/' + id + '/checkpoints'); return (await r.json()).checkpoints.map(c => c.reason); }, kept.id);
   ok(/^Saved · /.test(cs) && ck2.includes('save'), 'Cmd-S flushes the save at once and takes an explicit checkpoint: ' + JSON.stringify([cs, ck2]));
 
+  // ---- the header: title, My writing, New, the save state (2026-09-13) --
+  // The owner's layout ruling: "Put document title, My writing, New and
+  // save status in a compact header. Keep Get feedback visibly outside Aa.
+  // Aa owns typography and layout controls. Group less frequent commands
+  // into a compact menu … Preserve a quiet focus view with an obvious way
+  // to restore controls."
+  const head = await page.evaluate(() => {
+    const h = document.getElementById('ws-head'), t = document.getElementById('nb-title');
+    return { inRoom: !!(h && h.closest('#compose')), items: h ? Array.from(h.querySelectorAll('button')).map(b => b.textContent.trim()) : [],
+             statusInHead: !!(h && h.querySelector('#nb-status')), placeholder: t ? t.placeholder : null, value: t ? t.value : null,
+             firstLine: document.getElementById('compose-text').value.split('\n').find(l => l.trim()) || '' };
+  });
+  ok(head.inRoom && head.items.join('|') === 'My writing|New' && head.statusInHead,
+    'the header sits in the room with the title, My writing, New and the save state: ' + JSON.stringify(head.items));
+  ok(head.value === '' && head.placeholder && head.placeholder === head.firstLine.slice(0, head.placeholder.length) && head.placeholder.length > 8,
+    'until he names it the title field shows the first line, greyed, and holds no value of its own: ' + JSON.stringify(head.placeholder));
+  const draftBefore = await page.evaluate(() => { const ta = document.getElementById('compose-text'); return { v: ta.value, s: ta.selectionStart, e: ta.selectionEnd }; });
+  await page.click('#nb-title'); await page.keyboard.type('Kept title', { delay: 0 });
+  const st6 = await settled();
+  const titled = await serverDoc(kept.id);
+  ok(/^Saved · /.test(st6) && titled.title === 'Kept title' && titled.title_is_manual === true && titled.display_title === 'Kept title',
+    'a typed title saves as his, by name, without a run: ' + JSON.stringify([titled.title, titled.title_is_manual, titled.display_title]));
+  const draftAfter = await page.evaluate(() => { const ta = document.getElementById('compose-text'); return { v: ta.value, s: ta.selectionStart, e: ta.selectionEnd }; });
+  ok(draftAfter.v === draftBefore.v && titled.body === draftBefore.v, 'and naming it did not touch a character of the writing');
+  await page.evaluate(() => nbOpenPanel('list')); await page.waitForTimeout(900);
+  const list3 = await page.evaluate(() => Array.from(document.querySelectorAll('#nb-list .nb-row a b')).map(b => b.textContent));
+  ok(list3[0] === 'Kept title', 'My writing lists it under the name he gave it: ' + JSON.stringify(list3[0]));
+  await page.evaluate(() => nbOpenPanel(''));
+  await page.click('#nb-title'); await page.keyboard.press('ControlOrMeta+a'); await page.keyboard.press('Backspace');
+  const st7 = await settled();
+  const untitled = await serverDoc(kept.id);
+  ok(/^Saved · /.test(st7) && untitled.title_is_manual === false && untitled.display_title === head.placeholder,
+    'clearing the title hands it back to the first line: ' + JSON.stringify([untitled.title_is_manual, untitled.display_title]));
+  await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+  const escT = await page.evaluate(() => ({ focus: document.activeElement ? document.activeElement.id : '', open: document.body.classList.contains('ws-open') }));
+  ok(escT.focus === 'compose-text' && escT.open, 'Escape in the title field goes back to the writing and leaves the room open: ' + JSON.stringify(escT));
+
+  // ---- the bar, Aa and the ⋯ menu ------------------------------------------
+  const bar = await page.evaluate(() => Array.from(document.querySelectorAll('#ws-bar > button')).map(b => b.textContent.trim()));
+  ok(bar.length === 4 && bar[0] === 'Get feedback' && bar[1] === 'Aa' && bar[2] === '⋯' && bar[3] === 'done',
+    'the bar is four static buttons — Get feedback, Aa, ⋯, done: ' + JSON.stringify(bar));
+  await page.evaluate(() => toggleWriteStyle()); await page.waitForTimeout(300);
+  const aa = await page.evaluate(() => Array.from(document.querySelectorAll('#write-style .lbl')).map(l => l.textContent.trim()));
+  ok(aa.join('|') === 'Face|Size|View|Letters', 'Aa owns typography and layout only: ' + JSON.stringify(aa));
+  await page.evaluate(() => toggleWriteStyle());
+  const postsBeforeMenu = posts.length;
+  await page.click('#ws-more-btn'); await page.waitForTimeout(300);
+  const menu = await page.evaluate(() => ({ shown: document.getElementById('ws-more').style.display !== 'none',
+    labels: Array.from(document.querySelectorAll('#ws-more .lbl')).map(l => l.textContent.trim()),
+    buttons: Array.from(document.querySelectorAll('#ws-more button')).map(b => b.textContent.replace(/\s+/g, ' ').trim()),
+    expanded: document.getElementById('ws-more-btn').getAttribute('aria-expanded') }));
+  ok(menu.shown && menu.expanded === 'true' && menu.labels.join('|') === 'Layout|This document|Full workup|Dictate'
+     && ['⇄ sides', '⫞ split', '⤢ write', '☰ page', 'Download', 'Focus', 'On the page'].every(x => menu.buttons.includes(x)) && menu.buttons.some(x => /^This paragraph/.test(x)),
+    'the ⋯ menu holds sides, split, write, page, Download, Focus, Full workup and Dictate: ' + JSON.stringify(menu.buttons));
+  ok(posts.length === postsBeforeMenu, 'opening the menu spends nothing and posts nothing');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+  const menuClosed = await page.evaluate(() => ({ shown: document.getElementById('ws-more').style.display !== 'none', open: document.body.classList.contains('ws-open') }));
+  ok(!menuClosed.shown && menuClosed.open, 'Escape closes the menu first and leaves the room');
+
+  // ---- focus: the controls step aside, and one thing stays to bring them back
+  await page.click('#ws-more-btn'); await page.waitForTimeout(200);
+  await page.evaluate(() => Array.from(document.querySelectorAll('#ws-more button')).find(b => b.textContent.trim() === 'Focus').click());
+  await page.waitForTimeout(400);
+  const focused = await page.evaluate(() => ({ cls: document.body.classList.contains('ws-focus'),
+    head: getComputedStyle(document.getElementById('ws-head')).opacity, bar: getComputedStyle(document.getElementById('ws-bar')).opacity,
+    exit: !document.getElementById('ws-focus-exit').hidden, exitText: document.getElementById('ws-focus-exit').textContent.trim(),
+    v: document.getElementById('compose-text').value, focus: document.activeElement ? document.activeElement.id : '' }));
+  ok(focused.cls && focused.head === '0' && focused.bar === '0' && focused.exit && focused.exitText === '☰ controls' && focused.v === draftBefore.v && focused.focus === 'compose-text',
+    'Focus hides the header and the bar, keeps ☰ controls in sight, and touches neither the writing nor the caret: ' + JSON.stringify([focused.head, focused.bar, focused.exitText]));
+  await page.click('#ws-focus-exit'); await page.waitForTimeout(400);
+  const unfocused = await page.evaluate(() => ({ cls: document.body.classList.contains('ws-focus'), head: getComputedStyle(document.getElementById('ws-head')).opacity, bar: getComputedStyle(document.getElementById('ws-bar')).opacity, exit: !document.getElementById('ws-focus-exit').hidden }));
+  ok(!unfocused.cls && unfocused.head === '1' && unfocused.bar === '1' && !unfocused.exit, '☰ controls brings the header and the bar back');
+
   // ---- the one-time migration of the session draft, once across two tabs ---
   const ctx3 = await browser.newContext(); await ctx3.addCookies([{ name: fs.readFileSync(path.join(DIR, 'cookie'), 'utf8').trim(), value: fs.readFileSync(path.join(DIR, 'token'), 'utf8').trim(), domain: '127.0.0.1', path: '/' }]);
   await ctx3.addInitScript(() => { if (!localStorage.getItem('nikodemus.notebook.migrated.v1') && !localStorage.getItem('nikodemus.notebook.doc.v1') && !localStorage.getItem('wordicon.session.v1'))

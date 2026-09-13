@@ -1,5 +1,53 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.26.0 — The room's header and bar, by the owner's ruling
+
+His layout ruling (2026-09-13), quoted in the pins: "Put document title, My
+writing, New and save status in a compact header. Keep Get feedback visibly
+outside Aa. Put Revision notes with the writing tools, and Add to revision
+notes beside the observations it acts on. Aa owns typography and layout
+controls. Group less frequent commands into a compact menu while retaining
+dictation, full/split view, side swap and downloads. Preserve a quiet focus
+view with an obvious way to restore controls. Do not append every new
+capability to the existing seven-button bar."
+
+**The header** (`#ws-head`, inside the room, top left): the title field —
+the first line greyed until he types a title; a typed title saves like a
+keystroke (`title_is_manual`), never touches the body, and clearing it
+hands the title back to the first line; Enter or Escape in it returns to
+the writing — then **My writing**, **New**, and the save state, moved here
+from the bar.
+
+**The bar** (`#ws-bar`, outside the room as before): four static buttons —
+**Get feedback** (the readers' door, formerly behind Aa, labelled in plain
+words; the panel it opens is still headed Readers pending the naming gate),
+**Aa** (Face, Size, View, Letters and nothing else), **⋯** and **done**.
+**↩ Revision notes · n** joins the bar after Get feedback only while notes
+exist (the carry journey's law stands). **⋯** is one more quiet panel:
+Layout (⇄ sides, ⫞ split, ⤢ write, ☰ page), This document (Download —
+the existing export panel; Focus), Full workup (this paragraph / the whole
+draft, with their chords), Dictate (on the page — the Speak instrument is
+the page's; the press opens the page and puts it in reach, recording
+nothing). Escape closes the menu before anything else.
+
+**Focus** is a class on the body: the header and the bar step out of sight
+(they return while anything inside them has focus), the writing does not
+move, and one faint **☰ controls** stays to bring them back.
+
+**Add to revision notes.** The carry button beside every observation now
+reads "↩ Add to revision notes" ("↩ added to revision notes" once it has);
+the return line under a result says "added so far". Records are unchanged.
+
+Pins: the bar is four static buttons, named; the readers' door is in the
+bar and not in Aa; the four layout controls are real buttons behind ⋯; the
+workup is still a button, not a chord alone. Journeys: the notebook journey
+adds fourteen checks (the header's members, the greyed first line, a typed
+title saved and listed, clearing it, Escape from the title, the four-button
+bar, Aa's four labels, the menu's members and that opening it spends
+nothing, Escape closing it first, Focus hiding and ☰ controls restoring,
+the writing untouched throughout); the readers' journey opens the door from
+the bar.
+
 ## v1.25.0 — Plain words, second pass: the doors and the workup
 
 - **Sprout → Explore parallels**, **Refract → Explore other languages**,

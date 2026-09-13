@@ -2192,8 +2192,14 @@ def _check_moira():
             out.append("125: the readers' code does not post the reading through the disclosed route")
     if 'id="moira-ask" class="write-style"' not in idx:
         out.append("125: the readers' panel is not one of the room's quiet panels")
-    if 'id="moira-door"' not in idx or "askReaders(" not in idx[idx.find("function renderWriteStyle()"):idx.find("function setWriteFace(")]:
-        out.append("125: the readers' door is not in the panel behind Aa, where the room's doors live")
+    # 2026-09-13, the owner's layout ruling: "Keep Get feedback visibly
+    # outside Aa." The door is a static button in the room's bar, labelled
+    # in plain words, and it still opens the question rather than a reading.
+    _bar125 = idx[idx.index('<div id="ws-bar"'):idx.index('<div id="ws-divider"')]
+    if 'id="moira-door"' not in _bar125 or 'onclick="askReaders(\'paragraph\')"' not in _bar125 or ">Get feedback</button>" not in _bar125:
+        out.append("125: the readers' door (Get feedback) is not a plain button in the room's bar, outside Aa")
+    if 'id="moira-door"' in idx[idx.find("function renderWriteStyle()"):idx.find("function setWriteFace(")]:
+        out.append("125: the readers' door is back inside the Aa panel — Aa owns typography and layout only")
 
     # -- carry: a reader's observation carries as one reader's advisory observation, from the record
     carry = importlib.import_module("carry")
@@ -8874,10 +8880,12 @@ console.log(JSON.stringify({
             ("body.ws-split .compose { top: 0; bottom: 50%",
              "the split has no stacked layout for a narrow screen"),
             ('onclick="openWorkspace(\'split\')"', "there is no way into the split from the page"),
-            ('onclick="swapSides()"', "there is no swap control"),
-            ('onclick="setWorkspaceMode(\'split\')"', "no control returns to the split"),
-            ('onclick="setWorkspaceMode(\'write\')"', "no control expands the writing"),
-            ('onclick="setWorkspaceMode(\'info\')"', "no control expands the page"),
+            # 2026-09-13: these four moved behind the ⋯ menu (the owner's
+            # layout ruling); still one press each, still real controls
+            ('onclick="toggleWsMore();swapSides()"', "there is no swap control"),
+            ('onclick="toggleWsMore();setWorkspaceMode(\'split\')"', "no control returns to the split"),
+            ('onclick="toggleWsMore();setWorkspaceMode(\'write\')"', "no control expands the writing"),
+            ('onclick="toggleWsMore();setWorkspaceMode(\'info\')"', "no control expands the page"),
             ("wordicon.workspace.v1", "the chosen side and divider position are not remembered"),
             ("(pageScroller() || window).scrollTo", "new results still scroll the window, "
              "which goes nowhere once the page scrolls inside its pane")):
@@ -19727,10 +19735,18 @@ console.log(out.join('\\n'));
             _fP1("the view is not remembered on this device")
         # no new permanent chrome: the choice lives in the panel that already
         # existed behind Aa, and the room's control bar is unchanged
+        # 2026-09-13, the owner's layout ruling, quoted: "Group less frequent
+        # commands into a compact menu while retaining dictation, full/split
+        # view, side swap and downloads … Do not append every new capability
+        # to the existing seven-button bar." The bar is four static buttons —
+        # Get feedback, Aa, ⋯, done — and the view still lives behind Aa.
         _bar = _idxP1[_idxP1.index('<div id="ws-bar"'):_idxP1.index('<div id="ws-divider"')]
-        if _bar.count("<button") != 7:
-            _fP1(f"the room's bar changed size ({_bar.count('<button')} buttons) — the view "
-                 "belongs in the panel behind Aa, not on a permanent toolbar")
+        if _bar.count("<button") != 4:
+            _fP1(f"the room's bar changed size ({_bar.count('<button')} buttons) — four static buttons by the "
+                 "owner's ruling: Get feedback, Aa, ⋯, done; the view belongs behind Aa, the rest behind ⋯")
+        for _need in (">Get feedback</button>", ">Aa</button>", 'id="ws-more-btn"', ">done</button>"):
+            if _need not in _bar:
+                _fP1(f"the room's bar lost {_need!r}")
         if '<div class="lbl" style="margin-top:10px">View</div>' not in _idxP1:
             _fP1("the View choice is not in the panel that already existed")
 
@@ -20004,14 +20020,16 @@ console.log(out.join('\\n'));
                 _fP2(f"the expansion can fire ({_bad})")
 
         # ---- a door that is not only a chord ------------------------------
-        if "onclick=\"toggleWriteStyle();askDeep('paragraph')\"" not in _idxP2 \
-                or "onclick=\"toggleWriteStyle();askDeep('draft')\"" not in _idxP2:
+        # the door moved from the Aa panel to the ⋯ menu (2026-09-13): still a
+        # button, still one press, still not a chord alone
+        if "onclick=\"toggleWsMore();askDeep('paragraph')\"" not in _idxP2 \
+                or "onclick=\"toggleWsMore();askDeep('draft')\"" not in _idxP2:
             _fP2("the workup is reachable only by a chord — a capability behind a keystroke alone "
                  "is a capability most people never have")
         _bar2 = _idxP2[_idxP2.index('<div id="ws-bar"'):_idxP2.index('<div id="ws-divider"')]
-        if _bar2.count("<button") != 7:
-            _fP2(f"the room's bar grew to {_bar2.count('<button')} buttons — the room is paper "
-                 "first and does not become a cockpit")
+        if _bar2.count("<button") != 4:
+            _fP2(f"the room's bar grew to {_bar2.count('<button')} buttons — four by the owner's ruling; "
+                 "the room is paper first and does not become a cockpit")
 
         # ---- the lane the panel names comes from the server ---------------
         # block 111 phase 2 factored the lane into a helper and added the

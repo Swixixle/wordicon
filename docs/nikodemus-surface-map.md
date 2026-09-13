@@ -25,10 +25,16 @@ page:
 | **Library** | Documents · Open questions · Media · Sources | four disclosures |
 | **The Keeper · About** | the constitution and the proof | no nav link — `#system` or scroll |
 
-The writing room sits at `#compose` with its own bar: a quiet save state (Saving… · Saved · time ·
-Saved on this device · waiting to sync · Couldn't save · Another copy has changes), then `Aa` (face, size, view,
-landing style, **My writing** and **New** — the documents behind the room, saved as you write), `⇄ sides`, `⫞ split`, `⤢ write`, `☰ page`, `⤓ save` (download),
-`done` (Escape twice, from inside the writing, does the same; from the bar, once).
+The writing room sits at `#compose` with a header and a bar (the owner's layout ruling,
+2026-09-13). The header, inside the room at its top left: the document's **title** (typed, or the
+first line greyed until then), **My writing**, **New**, and the quiet save state (Saving… · Saved ·
+time · Saved on this device · waiting to sync · Couldn't save · Another copy has changes). The bar,
+outside the room at the top right, is four static buttons: **Get feedback** (the readers — formerly
+the Readers door behind Aa), `Aa` (face, size, view, landing style — typography and layout only),
+`⋯` (sides, split, write, page · Download, Focus · Full workup: this paragraph / the whole draft ·
+Dictate, on the page) and `done` (Escape twice, from inside the writing, does the same; from the bar,
+once). **↩ Revision notes · n** joins the bar only while notes exist. **Focus** (in ⋯) hides the
+header and the bar; one faint `☰ controls` stays and brings them back.
 
 ---
 
@@ -133,7 +139,7 @@ the provider-side web search that sprout, etymon, refract and verify trigger.
 |---|---|---|
 | `⌘⇧P` | writing room | workup on the whole draft |
 | `⌘⇧⏎` | writing room | workup on this paragraph |
-| `Esc` | writing room | closes the innermost panel (readers, ask, type, notes, download); inside the writing a second press within 1.5 s closes the room; from the bar one press does |
+| `Esc` | writing room | closes the innermost panel (readers, ask, type, ⋯ menu, notes, download, My writing); inside the writing a second press within 1.5 s closes the room; from the bar one press does; in the title field it returns to the writing |
 | `⌘S` / `Ctrl-S` | writing room | saves the document now and takes a checkpoint — never the browser's Save Page |
 | `Tab` / `⇧Tab` | writing room | indent / outdent, one undo step |
 | `Esc` then `Tab` | writing room | leaves the field instead of indenting |
