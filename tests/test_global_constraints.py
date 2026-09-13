@@ -3206,12 +3206,26 @@ def _check_meaning_kept_whole(server, paired):
         if end_at <= 1500:
             out.append(f"MEAN: the ending marker sits at {end_at}, inside the old cut — it proves nothing")
 
-        def _meaning_survived(where, prompts, snap):
+        def _meaning_survived(where, prompts, snap, both=True):
+            """His ruling names three places: both prompts and the saved
+            record. EACH is checked on its own — an `any` over the prompts
+            let a whole meaning in the reviewing call mask a cut one in the
+            producing call, which is exactly the defect being repaired, one
+            stage over. (Found by sabotage: cutting the producing builder
+            alone left this silent.)"""
             bad = []
-            if not any(long_meaning in pr for pr in prompts):
-                missing = [m for m in ("ZZOPEN", "ZZEND", "🜂") if not any(m in pr for pr in prompts)]
-                bad.append(f"MEAN: {where}: no outgoing prompt carried the meaning exactly"
-                           + (f" (missing {', '.join(missing)})" if missing else " (whitespace or line breaks changed)"))
+            stages = [("the producing call", "You are the refraction stage")]
+            if both:
+                stages.append(("the reviewing call", "You are the refraction-review stage"))
+            for what, opening in stages:
+                mine = [pr for pr in prompts if pr.startswith(opening)]
+                if not mine:
+                    bad.append(f"MEAN: {where}: {what} was never made")
+                    continue
+                if not all(long_meaning in pr for pr in mine):
+                    missing = [m for m in ("ZZOPEN", "ZZEND", "🜂") if not all(m in pr for pr in mine)]
+                    bad.append(f"MEAN: {where}: {what} did not carry the meaning exactly"
+                               + (f" (missing {', '.join(missing)})" if missing else " (whitespace or line breaks changed)"))
             if snap["source"]["definition"] != long_meaning:
                 bad.append(f"MEAN: {where}: the record did not keep the meaning exactly")
             return bad
@@ -3222,10 +3236,6 @@ def _check_meaning_kept_whole(server, paired):
                               "plain_gloss": "", "concept_id": "concept_meaning_whole"}, gw)
         s1 = _json.loads((cli.RESULTS_DIR / f"{r1['trace_id']}.json").read_text(encoding="utf-8"))
         out.extend(_meaning_survived("a stored concept", gw.calls, s1))
-        # both stages, not only the producing one
-        if not any(pr.startswith("You are the refraction-review stage") and long_meaning in pr
-                   for pr in gw.calls):
-            out.append("MEAN: a stored concept: the reviewing call did not receive the whole meaning")
         # the run's label is one line, and it is the ONLY place that squeezes
         if "\n" in (s1.get("input_text") or ""):
             out.append("MEAN: the run's label carries raw line breaks into the record's own sentence")
