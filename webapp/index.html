@@ -4606,7 +4606,13 @@ function buildRefractHtml(res, opts) {
          <p class="body" style="margin:0"><strong>The meaning explored:</strong> ${escapeHtml(src.definition)}</p>
          ${(src.plain_gloss || '').trim() ? `<p class="body muted" style="font-size:12.5px;margin:2px 0 0">${escapeHtml(src.plain_gloss)}</p>` : ''}
          ${entryLine ? `<p class="body muted" style="font-size:12px;margin:2px 0 0">${escapeHtml(entryLine)}</p>` : ''}
-       </div>` : '';
+       </div>`
+    : (src.passage || '').trim()
+      ? `<div class="card" style="border-left:3px solid var(--accent, #888)">
+           <p class="body" style="margin:0"><strong>The passage explored, as selected — no narrower meaning was given:</strong></p>
+           <p class="body" style="font-size:13.5px;white-space:pre-wrap;margin:4px 0 0">${escapeHtml(src.passage.slice(0, 600))}${src.passage.length > 600 ? '…' : ''}</p>
+           ${entryLine ? `<p class="body muted" style="font-size:12px;margin:2px 0 0">${escapeHtml(entryLine)}</p>` : ''}
+         </div>` : '';
   const nav = [['synonyms', 'English synonyms'], ['antonyms', 'English antonyms'], ['latin', 'Latin'], ['greek', 'Greek'],
                ['languages', 'Other languages'], ['cultural', 'Cultural comparisons']]
     .map(([id, l]) => `<a href="#rw-sec-${id}-${escapeHtml(uid)}" onclick="event.preventDefault();rwScrollTo('${escapeJs(id)}','${escapeJs(uid)}')" style="margin-right:10px;font-size:12.5px">${l}</a>`).join('');
@@ -4697,7 +4703,9 @@ function rwCompare(uid, section, index) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         <div>
           <div class="result-title" style="font-size:14px">Your meaning${src.title ? ` — “${escapeHtml(src.title)}”` : ''}</div>
-          <p class="body" style="font-size:13.5px">${cell(src.definition) === na ? '<span class="muted" style="font-style:italic">no meaning line was given — the passage was the sense</span>' : escapeHtml(src.definition)}</p>
+          <p class="body" style="font-size:13.5px">${(src.definition || '').trim() ? escapeHtml(src.definition)
+            : (src.passage || '').trim() ? `<span class="muted" style="font-style:italic">no narrower meaning was given — the passage, as selected, was the sense:</span><br>${escapeHtml(src.passage.slice(0, 300))}${src.passage.length > 300 ? '…' : ''}`
+            : na}</p>
           ${(src.plain_gloss || '').trim() ? `<p class="body muted" style="font-size:12.5px">${escapeHtml(src.plain_gloss)}</p>` : ''}
         </div>
         <div>
@@ -5891,9 +5899,12 @@ function askRelated() {
   for (const id of ['write-style', 'write-save', 'deep-ask', 'ws-more', 'nb-panel', 'moira-ask']) { const o = document.getElementById(id); if (o) o.style.display = 'none'; }
   if (typeof DEEP_ASK !== 'undefined') DEEP_ASK = null;
   if (typeof MOIRA_ASK !== 'undefined') MOIRA_ASK = null;
-  const sel = ta.selectionStart !== ta.selectionEnd ? ta.value.slice(ta.selectionStart, ta.selectionEnd).trim() : '';
-  const short = sel && sel.length <= 80 && sel.indexOf('\n') < 0;
-  RELATED_ASK = {selection: sel, meaning: short ? sel : '', entry: sel ? 'selection' : 'description'};
+  // The selection goes exactly as it is — untrimmed, unrewritten. A word
+  // or a short phrase is also put on the meaning line as it stands; a
+  // longer passage is the brief on its own, and the line is a narrowing.
+  const sel = ta.selectionStart !== ta.selectionEnd ? ta.value.slice(ta.selectionStart, ta.selectionEnd) : '';
+  const short = sel.trim() && sel.trim().length <= 80 && sel.indexOf('\n') < 0;
+  RELATED_ASK = {selection: sel, meaning: short ? sel.trim() : '', entry: sel.trim() ? 'selection' : 'description'};
   el.style.display = 'block';
   renderRelatedAsk();
 }
@@ -5901,17 +5912,18 @@ function renderRelatedAsk() {
   const el = document.getElementById('related-ask');
   if (!el || !RELATED_ASK) return;
   const sel = RELATED_ASK.selection || '';
-  const words = sel ? sel.split(/\s+/).filter(Boolean).length : 0;
+  const hasSel = !!sel.trim();
+  const words = hasSel ? sel.trim().split(/\s+/).filter(Boolean).length : 0;
   el.innerHTML = `<div class="row" style="justify-content:space-between;align-items:center">
       <div class="lbl" id="related-ask-title" style="margin:0">Find related words</div>
       <button class="compose-exit" onclick="closeRelated()" aria-label="close">× esc</button></div>
-    ${sel
-      ? `<p class="scope" style="margin-top:8px">from <strong>your selection</strong> — ${words} word${words === 1 ? '' : 's'}</p>
+    ${hasSel
+      ? `<p class="scope" style="margin-top:8px">from <strong>your selection</strong> — ${words} word${words === 1 ? '' : 's'}, ${sel.length} character${sel.length === 1 ? '' : 's'}, sent exactly as selected</p>
          <p class="preview">“${escapeHtml(sel.slice(0, 180))}${sel.length > 180 ? '…' : ''}”</p>`
       : `<p class="scope" style="margin-top:8px">nothing is selected — <strong>describe the meaning</strong> in one line below, or select a word or a passage first</p>`}
-    <p class="fact">The meaning to match, one line${sel && !RELATED_ASK.meaning ? ' — the passage above is context for which sense you mean; say the sense here' : ' — correct it if the sense is off'}:</p>
-    <input class="note" id="related-meaning" aria-label="the meaning to find related words for" maxlength="1500" style="width:100%"
-           value="${escapeHtml(RELATED_ASK.meaning || '')}" placeholder="e.g. the sadness of being between stages"
+    <p class="fact">${hasSel ? 'Narrow the meaning — <b>optional</b>: leave this empty to use the selected passage as it stands, or say the sense you mean if the passage holds several' : 'The meaning to match, one line'}:</p>
+    <input class="note" id="related-meaning" aria-label="${hasSel ? 'narrow the meaning, optional' : 'the meaning to find related words for'}" maxlength="1500" style="width:100%"
+           value="${escapeHtml(RELATED_ASK.meaning || '')}" placeholder="${hasSel ? 'optional — the sense you mean' : 'e.g. the sadness of being between stages'}"
            oninput="RELATED_ASK.meaning = this.value; relatedGoState()" onkeydown="if (event.key === 'Enter') { event.preventDefault(); startRelatedFromRoom(); }">
     <p class="fact" id="related-lane">Lane: <b>checking…</b></p>
     <p class="fact">Model calls: <b>2</b> — one to find (English synonyms and opposites first, then Latin, Greek and other languages), one to review the foreign terms and comparisons. A hosted lane sends the meaning line${sel ? ' and your selection' : ''} to the provider. Everything that comes back is recall, labelled so.</p>
@@ -5923,7 +5935,9 @@ function renderRelatedAsk() {
   relatedGoState();
   const inp = document.getElementById('related-meaning');
   const go = document.getElementById('related-go');
-  if (inp && !(RELATED_ASK.meaning || '').trim()) inp.focus({preventScroll: true});
+  // with a passage selected the one press is ready; without one the line needs the sense first
+  if (hasSel && go) go.focus({preventScroll: true});
+  else if (inp && !(RELATED_ASK.meaning || '').trim()) inp.focus({preventScroll: true});
   else if (go) go.focus({preventScroll: true});
   deepLane().then(lane => {
     const laneEl = document.getElementById('related-lane');
@@ -5933,12 +5947,19 @@ function renderRelatedAsk() {
     }
   });
 }
+const RELATED_PASSAGE_MAX = 4000;   // the route's cap; a selection goes exactly or not at all
 function relatedGoState() {
   const go = document.getElementById('related-go');
   if (!go || !RELATED_ASK) return;
-  const ok = !!(RELATED_ASK.meaning || '').trim();
+  const hasSel = !!(RELATED_ASK.selection || '').trim();
+  const narrowed = !!(RELATED_ASK.meaning || '').trim();
+  const tooLong = hasSel && RELATED_ASK.selection.length > RELATED_PASSAGE_MAX;
+  const ok = (hasSel || narrowed) && !tooLong;
   go.disabled = !ok;
   if (ok) go.removeAttribute('aria-disabled'); else go.setAttribute('aria-disabled', 'true');
+  // the button says what will go: the passage as selected, or the passage narrowed, or the meaning alone
+  go.textContent = tooLong ? `Select less — ${RELATED_PASSAGE_MAX} characters at most`
+    : hasSel && !narrowed ? 'Use selected passage' : (hasSel ? 'Find related words — narrowed' : 'Find related words');
 }
 function closeRelated() {
   const el = document.getElementById('related-ask');
@@ -5951,7 +5972,9 @@ async function startRelatedFromRoom() {
   const ask = RELATED_ASK;
   if (!ask) return;
   const meaning = (ask.meaning || '').trim();
-  if (!meaning) { const inp = document.getElementById('related-meaning'); if (inp) inp.focus(); return; }
+  const hasSel = !!(ask.selection || '').trim();
+  if (!meaning && !hasSel) { const inp = document.getElementById('related-meaning'); if (inp) inp.focus(); return; }
+  if (hasSel && ask.selection.length > RELATED_PASSAGE_MAX) return;   // it goes exactly, or not at all
   closeRelated();
   roomRun('submitted · waiting for a turn');
   // A COPY of the selection goes; the draft is not touched, not copied into
@@ -8791,7 +8814,7 @@ function renderLibrary(q) {
   const saved = savedAll.filter(w => hit(w.word) || hit(w.language) || hit(w.intended_meaning) || hit(w.intended_title));
   const savedHtml = saved.length ? saved.map(w => `<div class="history-item">
       <div class="history-title" style="font-size:13.5px">${escapeHtml(w.word)} <span class="muted" style="font-weight:400;font-size:12px">· ${escapeHtml(w.language || '')}${(w.review || {}).verdict ? ' · ' + escapeHtml(w.review.verdict) : ''}</span></div>
-      <div class="history-meta" style="font-size:12.5px">for “${escapeHtml((w.intended_meaning || '').slice(0, 160))}”${w.intended_title ? ` (${escapeHtml(w.intended_title)})` : ''}</div>
+      <div class="history-meta" style="font-size:12.5px">${(w.intended_meaning || '').trim() ? `for “${escapeHtml(w.intended_meaning.slice(0, 160))}”` : (w.intended_passage || '').trim() ? `for the passage “${escapeHtml(w.intended_passage.slice(0, 160))}${w.intended_passage.length > 160 ? '…' : ''}”` : 'for a meaning this record did not keep'}${w.intended_title ? ` (${escapeHtml(w.intended_title)})` : ''}</div>
       <div class="history-meta" style="font-size:12px">${w.at ? new Date(w.at).toLocaleString() : ''} · ${escapeHtml(w.section)} · ${escapeHtml((w.source || {}).entry || 'concept')}</div>
       <div style="margin-top:4px">
         <button class="judge-btn" style="font-size:11px;padding:2px 6px" onclick="loadPastResult('${escapeJs(w.trace_id)}','library-saved','${escapeJs(w.word)}')">open the comparison it came from</button>

@@ -105,9 +105,11 @@ languages (Spanish on every pass), cultural comparisons, the English fossil.
 Entry: a card's door (the meaning line editable, the saved comparisons for the
 idea shown first — by id, or by title and labelled a reconstruction; one press
 spends two model calls), or the writing room's ⋯ menu → *Find related words*
-(the selection is the sense; a word or short phrase becomes the meaning line, a
-longer passage is context and the sense is typed; the panel says the lane and
-the two calls; Escape spends nothing; the answer lands beside the draft). A
+(the selection is the brief, sent exactly as selected — *Use selected passage*;
+a word or short phrase is also put on the meaning line as it stands; the line is
+an optional narrowing; a selection over 4,000 characters is refused, not cut;
+the panel says the lane and the two calls; Escape spends nothing; the answer
+lands beside the draft). A
 follow-up on one named language (*Ask another language*) is its own record,
 rendered beneath. Status words: *No close match found in this pass* (asked,
 empty) and *Not checked* (not asked, or asked and not returned); a record from

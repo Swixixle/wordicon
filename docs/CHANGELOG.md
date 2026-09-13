@@ -1,5 +1,36 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.30.1 — Use selected passage
+
+His order of 13 September, third of four: "Let me work directly from a
+selected passage… Give me 'Use selected passage' and an optional way to
+narrow the meaning. Preserve the exact selection; don't require me to
+explain it again before proceeding."
+
+In the room's Find related words panel a selection is now a whole brief:
+with a passage selected the button reads **Use selected passage**, it is
+live and focused at once, and the meaning line is *Narrow the meaning —
+optional* (a word or short phrase is still put on the line as it stands;
+with a narrowing typed the button reads *Find related words — narrowed*).
+The selection goes exactly as selected — leading space, line breaks and
+all — and is kept exactly on the record (`source.passage`, with
+`source.definition` empty); a selection longer than the route's 4,000
+characters is refused with the count, never cut. The prompt takes the
+passage itself as the meaning to match ("take the passage itself as the
+meaning to match, and do not comment on the passage or rewrite it"), up to
+the cap, and the reviewer is told the meaning is the sense of a selected
+passage; a narrowing beside a passage is put as meaning plus context, as
+before. The record reopens as "The passage explored, as selected — no
+narrower meaning was given", Compare with my idea shows the passage on
+your side, and a saved word from such a pass keeps the passage it was
+found for (`intended_passage`).
+
+The journey check that required a typed meaning before Find became live is
+replaced by the new discipline; the fixtures seed a passage-only pass
+through the real path. Pins in `_check_related_words`: the exact selection
+and empty meaning on the record, the input line, the prompt's two forms,
+the two refusals, the route accepting a selection alone, the page's words.
+
 ## v1.30.0 — Three actions on every related word, none of which spends
 
 His order of 13 September, second of four, with the three meanings he

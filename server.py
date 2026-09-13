@@ -3321,14 +3321,16 @@ def api_create_job():
         # arrived; `passage` is context for a selection and nothing else;
         # `only_languages` is a follow-up the owner asked for by name.
         original = data.get("original") or {}
-        if not str(original.get("definition") or "").strip():
-            return jsonify({"error": "refract requires original.definition — the meaning to find "
-                                     "related words for; a title is optional"}), 400
         known_neighbors = str(data.get("known_neighbors") or "")[:800] or None
         entry = str(data.get("entry") or "concept")
         if entry not in ("concept", "description", "selection"):
             return jsonify({"error": "entry must be 'concept', 'description' or 'selection'"}), 400
         passage = str(data.get("passage") or "")[:4000] or None
+        # Use selected passage (2026-09-13): a selection is a whole brief on
+        # its own; the meaning line is a narrowing, not a requirement.
+        if not str(original.get("definition") or "").strip() and not (entry == "selection" and passage and passage.strip()):
+            return jsonify({"error": "refract requires original.definition — the meaning to find "
+                                     "related words for — or a selected passage; a title is optional"}), 400
         only_languages = [str(x)[:40] for x in (data.get("only_languages") or []) if str(x).strip()][:6]
         original = {"title": str(original.get("title") or "")[:200],
                     "definition": str(original.get("definition") or "")[:1500],

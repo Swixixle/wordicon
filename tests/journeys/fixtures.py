@@ -479,6 +479,10 @@ def seed_related():
     sel = cli.run_refract({"title": "", "definition": "a skilled throw at a wake, enjoyed by everyone there"}, g,
                           passage="He threw it once, cleanly, and the room laughed.", entry="selection")
     ids["selection"] = sel["trace_id"]
+    # Use selected passage: the selection is the whole brief, no narrower meaning
+    sel_only = cli.run_refract({"title": "", "definition": ""}, g,
+                               passage="  He threw it once, cleanly, and the room laughed.\nNobody said so.", entry="selection")
+    ids["selection_only"] = sel_only["trace_id"]
     # the legacy shape: what this lane wrote before 2026-09-13 — no English
     # sections, no sections_asked, no Latin or Greek, the old gap wording
     # its own invented title: the map fixture's legacy place is "Lantern Debt"
@@ -501,7 +505,7 @@ def seed_related():
     d["summary"] = _re.sub(r" · \d+ cultural comparison\(s\)", "", d["summary"])
     lp.write_text(json.dumps(d, indent=2))
     ids["legacy"] = legacy["trace_id"]
-    assert len({ids["full"], ids["derived"], ids["followup"], ids["selection"], ids["legacy"]}) == 5, "two related-words runs shared a trace id"
+    assert len({ids["full"], ids["derived"], ids["followup"], ids["selection"], ids["selection_only"], ids["legacy"]}) == 6, "two related-words runs shared a trace id"
     (DIR / "related.json").write_text(json.dumps(ids))
     return ids
 

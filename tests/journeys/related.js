@@ -44,7 +44,9 @@ const DRAFT = [
   // the real seeded records, fetched once, become the job fixtures
   const cookieHeader = fs.readFileSync(path.join(DIR, 'cookie'), 'utf8').trim() + '=' + fs.readFileSync(path.join(DIR, 'token'), 'utf8').trim();
   const rec = async t => { const r = await fetch(BASE + '/api/result/' + t, { headers: { Cookie: cookieHeader } }); return r.json(); };
-  const FULL = await rec(IDS.full), FOLLOW = await rec(IDS.followup), SEL = await rec(IDS.selection), LEGACY = await rec(IDS.legacy);
+  const FULL = await rec(IDS.full), FOLLOW = await rec(IDS.followup), SEL = await rec(IDS.selection), SELONLY = await rec(IDS.selection_only), LEGACY = await rec(IDS.legacy);
+  ok(SELONLY.mode === 'refract' && (SELONLY.source || {}).entry === 'selection' && (SELONLY.source || {}).definition === '' && /^  He threw it once/.test((SELONLY.source || {}).passage || ''),
+     'the seeded passage-only pass kept the exact selection, leading spaces and all, and no meaning line: ' + JSON.stringify((SELONLY.source || {}).passage));
   ok(FULL.mode === 'refract' && Array.isArray(FULL.sections_asked) && FULL.sections_asked.length === 3,
      'the seeded full pass is a real refract record that asked for all three sections: ' + JSON.stringify(FULL.sections_asked));
   ok(LEGACY.sections_asked === undefined && !LEGACY.english_synonyms,
@@ -281,26 +283,27 @@ const DRAFT = [
   ok(posts.length === b3, 'cancelling spent nothing');
   ok(esc.focus === 'compose-text' && esc.s === 4 && esc.e === 13, 'and the selection is exactly as it was: ' + JSON.stringify(esc));
 
-  // ---- 6. a long selection is context; the sense is typed; one press ------
-  const p2start = DRAFT.indexOf('Escape and belonging');
+  // ---- 6. Use selected passage: the selection is the brief; narrowing is optional
+  // The selection is taken with the line break before it, because it goes exactly.
+  const p2start = DRAFT.indexOf('Escape and belonging') - 1;
   await page.evaluate(([a, b]) => { const ta = document.getElementById('compose-text'); ta.focus(); ta.setSelectionRange(a, b); }, [p2start, DRAFT.length]);
   await page.evaluate(() => askRelated()); await page.waitForTimeout(500);
   const ask2 = await page.evaluate(() => ({ meaning: document.getElementById('related-meaning').value,
     text: document.getElementById('related-ask').innerText.replace(/\s+/g, ' '),
-    goDisabled: document.getElementById('related-go').disabled, focus: document.activeElement ? document.activeElement.id : '' }));
-  ok(ask2.meaning === '' && ask2.goDisabled === true && ask2.focus === 'related-meaning',
-     'a passage is context, the meaning line starts empty, Find waits for it, the caret is in the line: ' + JSON.stringify({ m: ask2.meaning, d: ask2.goDisabled, f: ask2.focus }));
-  ok(/the passage above is context for which sense you mean/.test(ask2.text), 'and the panel says so');
+    goDisabled: document.getElementById('related-go').disabled, goText: document.getElementById('related-go').textContent.trim(),
+    focus: document.activeElement ? document.activeElement.id : '' }));
+  ok(ask2.meaning === '' && ask2.goDisabled === false && ask2.goText === 'Use selected passage' && ask2.focus === 'related-go',
+     'a selected passage is enough: the meaning line is empty and optional, and Use selected passage is live and focused: ' + JSON.stringify({ m: ask2.meaning, d: ask2.goDisabled, t: ask2.goText, f: ask2.focus }));
+  ok(/Narrow the meaning — optional/.test(ask2.text) && /sent exactly as selected/.test(ask2.text), 'and the panel says the line is a narrowing and the selection goes exactly');
   const roomBefore = await page.evaluate(() => { const ta = document.getElementById('compose-text'); return { v: ta.value, s: ta.selectionStart, e: ta.selectionEnd }; });
-  await page.type('#related-meaning', 'staying true to a place you have left');
-  served = SEL;
-  await page.keyboard.press('Enter'); await page.waitForTimeout(500);
+  served = SELONLY;
+  await page.click('#related-go'); await page.waitForTimeout(500);
   const b4 = bodies[3] || {};
-  ok(bodies.length === 4, 'Enter in the meaning line is the one press, and it started exactly one run: ' + bodies.length);
+  ok(bodies.length === 4, 'Use selected passage is the one press, and it started exactly one run: ' + bodies.length);
   ok(b4.mode === 'refract' && b4.entry === 'selection' && (b4.original || {}).title === '' && (b4.original || {}).concept_id === '',
      'the run needs no title and no accepted concept: ' + JSON.stringify({ entry: b4.entry, title: (b4.original || {}).title }));
-  ok((b4.original || {}).definition === 'staying true to a place you have left', 'the meaning that went is the typed sense');
-  ok(b4.passage === DRAFT.slice(p2start), 'the selection went as the passage, for context, exactly');
+  ok((b4.original || {}).definition === '', 'no meaning was demanded — nothing had to be explained again');
+  ok(b4.passage === DRAFT.slice(p2start) && /^\nEscape/.test(b4.passage), 'the selection went as the passage exactly, the line break before it and all: ' + JSON.stringify((b4.passage || '').slice(0, 12)));
   const line = await page.evaluate(() => { const l = document.getElementById('room-run'); return l.hidden ? '' : l.textContent; });
   ok(/submitted · waiting for a turn/.test(line), 'the room says submitted: ' + JSON.stringify(line));
   await page.waitForTimeout(8500);
@@ -309,8 +312,20 @@ const DRAFT = [
     line: (document.getElementById('room-run').hidden ? '' : document.getElementById('room-run').textContent) }; });
   ok(roomAfter.v === roomBefore.v, 'the draft is untouched by the run');
   ok(/ws-split/.test(roomAfter.mode), 'the answer split the room when it arrived: ' + roomAfter.mode);
-  ok(/Related words/i.test(roomAfter.result) && /The meaning explored: a skilled throw at a wake/.test(roomAfter.result) && /from a selection in your writing/.test(roomAfter.result),
-     'the panel is beside the writing and says the meaning and that it came from a selection: ' + roomAfter.result.slice(0, 200));
+  ok(/Related words/i.test(roomAfter.result) && /The passage explored, as selected — no narrower meaning was given:/.test(roomAfter.result) && /He threw it once, cleanly/.test(roomAfter.result) && /from a selection in your writing/.test(roomAfter.result),
+     'the panel is beside the writing and shows the passage as the sense explored: ' + roomAfter.result.slice(0, 200));
+  // narrowing: a meaning typed beside a selection goes as the meaning, the selection still exactly
+  await page.evaluate(([a, b]) => { const ta = document.getElementById('compose-text'); ta.focus(); ta.setSelectionRange(a, b); }, [p2start, DRAFT.length]);
+  await page.evaluate(() => askRelated()); await page.waitForTimeout(400);
+  await page.type('#related-meaning', 'staying true to a place you have left');
+  const narrowedBtn = await page.evaluate(() => document.getElementById('related-go').textContent.trim());
+  ok(narrowedBtn === 'Find related words — narrowed', 'with a narrowing typed the button says so: ' + JSON.stringify(narrowedBtn));
+  served = SEL;
+  await page.keyboard.press('Enter'); await page.waitForTimeout(500);
+  const b5 = bodies[4] || {};
+  ok(bodies.length === 5 && (b5.original || {}).definition === 'staying true to a place you have left' && b5.passage === DRAFT.slice(p2start) && b5.entry === 'selection',
+     'a narrowing goes as the meaning and the selection still goes exactly: ' + JSON.stringify({ d: (b5.original || {}).definition, p: (b5.passage || '').slice(0, 20) }));
+  await page.waitForTimeout(8500);
   ok(roomAfter.line === '' || /related words/.test(roomAfter.line), 'the line speaks of related words, not of a workup: ' + JSON.stringify(roomAfter.line));
   ok(!/workup/.test(roomAfter.line), 'and never calls it a workup');
 

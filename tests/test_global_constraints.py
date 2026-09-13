@@ -2539,6 +2539,30 @@ def _check_related_words(server, paired):
             out.append("RW: a pass with no meaning ran")
         except ValueError:
             pass
+        # Use selected passage (his order, 2026-09-13): a selection is a whole
+        # brief; the meaning line is a narrowing; the selection goes exactly
+        exact = "  He threw it once, cleanly, and the room laughed.\nNobody said so."
+        so = cli.run_refract({"title": "", "definition": ""}, gw, passage=exact, entry="selection")
+        so_snap = _json.loads((cli.RESULTS_DIR / f"{so['trace_id']}.json").read_text())
+        if so_snap["source"].get("passage") != exact or so_snap["source"].get("definition") != "" or so_snap["source"].get("passage_chars") != len(exact):
+            out.append("RW: a passage-only pass did not keep the exact selection with no meaning line")
+        if not so_snap.get("input_text", "").startswith("related words for the passage: He threw"):
+            out.append(f"RW: a passage-only pass is written up wrongly ({so_snap.get('input_text')!r})")
+        so_prompt = cli.build_refract_prompt({"title": "", "definition": ""}, passage=exact)
+        if "The passage, exactly as selected:" not in so_prompt or "take the passage itself as the meaning to match" not in so_prompt \
+                or "not comment on the passage or rewrite it" not in so_prompt:
+            out.append("RW: the prompt does not take a selected passage as the meaning itself")
+        if "The passage this sense was taken from" in so_prompt:
+            out.append("RW: a passage-only pass is put to the model as context for a meaning that was never given")
+        narrowed = cli.build_refract_prompt({"title": "", "definition": "the sense I mean"}, passage=exact)
+        if "The passage this sense was taken from" not in narrowed or "Meaning: the sense I mean" not in narrowed:
+            out.append("RW: a narrowed meaning beside a passage is not put as meaning plus context")
+        for bad_kw in ({"passage": "   ", "entry": "selection"}, {"passage": exact, "entry": "description"}):
+            try:
+                cli.run_refract({"title": "", "definition": ""}, gw, **bad_kw)
+                out.append(f"RW: a pass with neither a meaning nor a usable selection ran ({bad_kw['entry']})")
+            except ValueError:
+                pass
         # a follow-up: named languages, no English, no required-language rule, its own record
         fu = cli.run_refract({"title": "Threshold Grief", "definition": "the sadness of being between stages",
                               "concept_id": "concept_rw_1"}, gw, only_languages=["Japanese", "Finnish"])
@@ -2628,6 +2652,12 @@ def _check_related_words(server, paired):
         r = c.post("/api/jobs", json={"mode": "refract", "original": {"definition": "d"}, "entry": "bogus"})
         if r.status_code != 400:
             out.append("RW: a bad entry kind is not refused")
+        r = c.post("/api/jobs", json={"mode": "refract", "original": {}, "entry": "selection", "passage": "  a selected passage\n"})
+        if r.status_code != 200 or not (r.get_json() or {}).get("job_id"):
+            out.append(f"RW: a selected passage alone is refused at the route ({r.status_code} {r.get_json()})")
+        r = c.post("/api/jobs", json={"mode": "refract", "original": {}, "entry": "description", "passage": "a passage"})
+        if r.status_code != 400:
+            out.append("RW: a description entry with no meaning is accepted at the route")
         r = c.get("/api/related/saved?concept_id=concept_rw_1&title=Threshold%20Grief")
         d = r.get_json() or {}
         vias = sorted((it.get("via"), bool(it.get("only_languages"))) for it in d.get("items") or [])
@@ -2641,7 +2671,9 @@ def _check_related_words(server, paired):
         if (r.get_json() or {}).get("items") != []:
             out.append("RW: a search with no id and no title returns something")
     # ---- the page ------------------------------------------------------
-    for need in ("≈ Find related words — English synonyms and opposites, then Latin, Greek and other languages",
+    for need in ("'Use selected passage'", "Narrow the meaning — <b>optional</b>", "const RELATED_PASSAGE_MAX = 4000;",
+                 "The passage explored, as selected — no narrower meaning was given:", "sent exactly as selected",
+                 "≈ Find related words — English synonyms and opposites, then Latin, Greek and other languages",
                  "No close match found in this pass — an absence from recall, not proof the language lacks it.",
                  "Not checked — this comparison was made before the English ${noun} were part of the tool.",
                  "was asked for and did not come back. That is the stage not doing as it was told, not ${c} having no word for this.",

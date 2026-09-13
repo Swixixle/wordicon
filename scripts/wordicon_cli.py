@@ -5250,6 +5250,7 @@ def save_word(trace_id: str, section: str, index: int) -> dict:
         # the meaning the pass was made for, kept with the word so a reopen
         # says what the comparison meant
         "intended_meaning": str(src.get("definition") or ""),
+        "intended_passage": str(src.get("passage") or "")[:300],
         "intended_title": str(src.get("title") or ""),
         "source": {"title": src.get("title") or "", "concept_id": src.get("concept_id") or "",
                    "entry": src.get("entry") or "concept", "passage_chars": src.get("passage_chars") or 0},
@@ -8562,15 +8563,34 @@ def build_refract_prompt(candidate: dict,
     # sense of a selected passage).
     title_line = (f"Working name (a handle only — do not match words to it): {title}\n"
                   if title else "Working name: none yet — the meaning below is the whole brief.\n")
+    meaning_text = (candidate.get("definition") or "").strip()
     passage_block = ""
     if passage and passage.strip():
         p = passage.strip()
-        if len(p) > 1500:
-            p = p[:1500] + " […]"
-        passage_block = f"""
+        # as context beside a stated meaning the passage is cut at 1,500
+        # characters; as the meaning itself it goes whole, up to the route's
+        # cap of 4,000 — the owner's rule: the exact selection, or nothing
+        cap = 1500 if meaning_text else 4000
+        if len(p) > cap:
+            p = p[:cap] + " […]"
+        if meaning_text:
+            passage_block = f"""
 
 The passage this sense was taken from — context for WHICH sense is
 meant, not a second meaning to match and not text to comment on:
+<<<
+{p}
+>>>"""
+        else:
+            # Use selected passage (2026-09-13): the owner selected a passage
+            # and gave no narrower statement — the passage, as written, IS the
+            # meaning to match; nothing is to be explained back to him first.
+            meaning_text = ("the sense of the passage below, as written — no narrower statement "
+                            "was given; take the passage itself as the meaning to match, and do "
+                            "not comment on the passage or rewrite it")
+            passage_block = f"""
+
+The passage, exactly as selected:
 <<<
 {p}
 >>>"""
@@ -8705,7 +8725,7 @@ word-origins stage handles). A shared root is not a shared meaning, and
 a translation is not a synonym.
 
 The meaning:
-{title_line}Meaning: {candidate.get('definition', '')}{gloss_line}{passage_block}{neighbors_block}{english_block}
+{title_line}Meaning: {meaning_text}{gloss_line}{passage_block}{neighbors_block}{english_block}
 
 {languages_block}
 
@@ -8825,9 +8845,10 @@ def build_refract_review_prompt(candidate: dict, refractions: list[dict],
             f"  check: {c.get('check', '') or '(none named)'}"
             for i, c in enumerate(comps))
     name = (candidate.get('title') or '').strip() or "an unnamed meaning"
+    meaning_line = (candidate.get('definition') or '').strip() or "the sense of a passage the owner selected, as written"
     return f"""You are the refraction-review stage of a Wordicon operation: a skeptical
 multilingual lexicographer reviewing translation claims proposed for the
-concept "{name}" ({candidate.get('definition', '')}).
+concept "{name}" ({meaning_line}).
 
 {ref_block}{fossil_block}{comp_block}
 
@@ -9924,9 +9945,12 @@ def run_refract(candidate: dict, gateway: Gateway,
     seed = load_seed_corpus()
     title = (candidate.get("title") or "").strip()
     meaning = (candidate.get("definition") or "").strip()
-    if not meaning:
-        raise ValueError("there is no meaning to find related words for")
     entry = entry if entry in ("concept", "description", "selection") else "concept"
+    # the selection is kept exactly as it came — leading space, line breaks
+    # and all; only the emptiness test strips
+    passage_text = (passage or "") if (entry == "selection" and (passage or "").strip()) else ""
+    if not meaning and not passage_text:
+        raise ValueError("there is no meaning to find related words for — give a meaning, or select a passage")
     only_languages = [str(x).strip() for x in (only_languages or []) if str(x).strip()][:6] or None
     sections_asked = ["languages"] if only_languages else list(REFRACT_SECTIONS)
     # The parent link the Library reads back out of this sentence (see
@@ -9934,13 +9958,15 @@ def run_refract(candidate: dict, gateway: Gateway,
     # with no name has no parent word, and says what it is instead.
     if title:
         input_text = f"refract of '{title}': {meaning[:160]}"
-    else:
+    elif meaning:
         input_text = f"related words for: {meaning[:160]}"
+    else:
+        input_text = f"related words for the passage: {passage_text.strip()[:160]}"
     trace_id = mint_trace_id(input_text)
     _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
     _parse_mark = parse_notes_mark()
 
-    label = repr(title) if title else "an unnamed meaning"
+    label = repr(title) if title else ("a selected passage" if not meaning else "an unnamed meaning")
     if only_languages:
         print(f"[{gateway.name}] refracting {label} through {', '.join(only_languages)}...")
         progress("refracting", f"Asking {', '.join(only_languages)} about {label}…")
@@ -10083,7 +10109,6 @@ def run_refract(candidate: dict, gateway: Gateway,
         print(f"  hidden in English [{fossil_verdict or '?'}]: {english_fossil}")
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    passage_text = (passage or "").strip() if entry == "selection" else ""
     snapshot = {
         "trace_id": trace_id, "mode": "refract", "input_text": input_text,
         "created_at": _now(), "source": {**{k: candidate.get(k, "") for k in
