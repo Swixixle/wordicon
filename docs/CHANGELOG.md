@@ -1,5 +1,62 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.31.0 — English by adoption; Ancient Greek required, Koine and Modern apart
+
+His order of 13 September, fourth of four: "Keep English synonyms and
+antonyms in English, with their contextual fit explained. Latin-script
+spelling alone does not establish that a word is English; preserve
+legitimate English loanwords. Require Latin and Ancient Greek coverage,
+with periods clearly identified; label Koine and Modern Greek separately.
+Preserve Spanish and useful additional languages. Keep 'No close match
+found in this pass' distinct from 'Not checked.'"
+
+**English by adoption.** The generation prompt says what English means —
+its own words and the loanwords English dictionaries carry (ennui, angst,
+karma, schadenfreude, café), never a foreign word in Latin letters English
+has not adopted — and each English item now carries `english_status`
+(english / loanword) and `loan_from`. The review call is handed every
+English item and answers `english_reviews`: yes, loanword (with the
+source language), or no. A "no" is set aside from the English sections
+with the reviewer's note as the reason, marked as the reviewer's
+judgement from recall (`by: reviewer`), beside the script check's
+set-asides (`by: script`); a loanword is kept and marked "English
+loanword from …"; an item the reviewer did not answer says it was not
+reviewed. The summary counts loanwords kept and the two kinds of
+set-aside. The fixture offers *ennui* (kept, French) and *desasosiego*
+(set aside — Spanish, not adopted) beside the Greek-lettered word the
+code already set aside.
+
+**Ancient Greek required; Koine and Modern labelled apart.**
+`REFRACT_REQUIRED` is Spanish, Latin and Ancient Greek. `canonical_language`
+places Attic, Homeric, Ionic, Doric as Ancient Greek; Koine, Hellenistic,
+Biblical as Koine Greek; Modern, Demotic, Katharevousa as Modern Greek;
+and a bare "Greek" nowhere — it satisfies no slot, is recorded as "Greek
+(period not stated)", is reported in the summary and shown on the page
+under its own heading with the reason. The prompt asks for "Ancient
+Greek" by name with the period in the period line, and for Koine and
+Modern as separate entries only where they hold a term that differs from
+the Ancient one, never an entry that says only "Greek". The page's
+sections: Latin; Ancient Greek — required, with its period said (with the
+"Not checked" / "asked for and did not come back" statuses as before,
+plus the note when a bare Greek entry came back instead); Koine and
+Modern Greek — labelled apart (each under its own name, or "None offered
+in this pass — not proof there is none"; a record from before today says
+they were not asked for); Greek — period not stated, when any; the other
+languages. The Ancient term is marked `lang="grc"`, Koine and Modern
+`lang="el"`. "No close match found in this pass" and "Not checked" are
+unchanged and still apart.
+
+Pins: pin 67 (the required set, the aliases by period, a bare "Greek"
+placed nowhere, Koine or Modern not standing in for Ancient, the prompt
+forbidding a bare Greek); `_check_related_words` (the prompt's English
+rules, the reviewer's English block, the loanword kept and the refusal
+set aside with its reason, the Modern entry beside the Ancient, a bare
+Greek from the model failing the requirement and being reported). Journey
+`related` 86 → 92 checks (eight added, two reworded): the two Greek
+sections apart, the Modern entry not folded into the Ancient one, the
+loanword tag, the reviewer's set-aside with its reason and the word gone
+from the synonym cards, the script check marked as such, `grc` and `el`.
+
 ## v1.30.1 — Use selected passage
 
 His order of 13 September, third of four: "Let me work directly from a

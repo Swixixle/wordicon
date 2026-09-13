@@ -105,9 +105,12 @@ English), `cultural_comparisons` (reviewed on the same two axes as the terms), t
 `sections_asked` (a section asked and empty is not a section never asked; a record from
 before this date has none), `source.entry` (concept / description / selection),
 `source.passage` for a selection, `source.only_languages` for a follow-up.
-`REFRACT_REQUIRED` is Spanish, Latin and Greek, under any period name
-(`canonical_language`); a pass with no title records no road, because there is no box
-to tie one to. `GET /api/related/saved` lists an idea's saved comparisons — by id
+`REFRACT_REQUIRED` is Spanish, Latin and Ancient Greek (`canonical_language` places
+Attic/Homeric as Ancient, Koine/Hellenistic as Koine, Demotic as Modern, and a bare
+"Greek" nowhere — `unplaced_greek`); the reviewer judges each English item
+(`english_reviews`: yes / loanword / no — `_apply_english_reviews` keeps loanwords
+marked and sets a "no" aside with the note, `english_set_aside[].by` = script | reviewer);
+a pass with no title records no road, because there is no box to tie one to. `GET /api/related/saved` lists an idea's saved comparisons — by id
 (`recorded`) or by title (`derived`) — reads only.
 `local_state/saved_words.jsonl` is the words he kept from related-words passes
 (`save_word` / `unsave_word` / `list_saved_words`): append-only, a removal is a second

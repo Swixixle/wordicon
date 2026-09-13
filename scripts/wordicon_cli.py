@@ -3353,6 +3353,15 @@ class MockGateway(Gateway):
                      "differs": "Adds fear and drops the loss.", "register": "literary"},
                     {"word": "κατήφεια", "closeness": "related",
                      "meaning": "dejection", "fits": "", "differs": "", "register": ""},
+                    # A loanword English carries, and a Spanish word in Latin
+                    # letters that English has not adopted: the reviewer
+                    # keeps the first as a loanword and sets the second aside.
+                    {"word": "ennui", "english_status": "loanword", "loan_from": "French", "closeness": "related",
+                     "meaning": "listless dissatisfaction from lack of interest",
+                     "fits": "Carries the flatness of the between.", "differs": "Drops the grief and the threshold both.",
+                     "register": "literary"},
+                    {"word": "desasosiego", "english_status": "english", "loan_from": "", "closeness": "related",
+                     "meaning": "unease", "fits": "Carries the disquiet.", "differs": "", "register": ""},
                 ],
                 "english_antonyms": [
                     {"word": "closure", "relation": "antonym",
@@ -3428,6 +3437,15 @@ class MockGateway(Gateway):
                      "drops": "The threshold — no between-ness, only the lowered gaze.",
                      "adds": "", "register": "literary", "check": "LSJ, κατήφεια",
                      "collision": "", "folk_alert": ""},
+                    # Modern Greek as its own entry, never folded into the Ancient one
+                    {"language": "Modern Greek", "term": "στενοχώρια",
+                     "romanization": "stenochōria", "pronunciation": "steh-no-kho-REE-ah",
+                     "literal": "narrow-space", "meaning": "distress, being hemmed in; sorrow",
+                     "period": "Modern Greek, everyday", "example": "",
+                     "keeps": "The pressed, hemmed-in feeling of the between.",
+                     "drops": "The loss; it is discomfort more than grief.",
+                     "adds": "", "register": "everyday", "check": "Triantafyllidis dictionary, στενοχώρια",
+                     "collision": "", "folk_alert": ""},
                 ],
                 "english_fossil": "The word 'nightmare' fossilizes the mare, the demon said to sit on sleepers' chests.",
                 "fossil_check": "OED or etymonline entry for 'nightmare'",
@@ -3453,6 +3471,19 @@ class MockGateway(Gateway):
                     {"index": 4, "attestation": "attested", "verdict": "strained",
                      "carries_verdict": "",
                      "note": "Real Homeric word; the equivalence does more work than the gloss allows."},
+                    {"index": 5, "attestation": "attested", "verdict": "strained",
+                     "carries_verdict": "",
+                     "note": "Common Modern Greek; distress more than grief."},
+                ],
+                # the English items as the reviewer saw them: the four synonyms
+                # left after the script check, then the two opposites
+                "english_reviews": [
+                    {"index": 0, "is_english": "yes", "note": ""},
+                    {"index": 1, "is_english": "yes", "note": ""},
+                    {"index": 2, "is_english": "loanword", "note": "French, adopted into English by the 18th century; carried by English dictionaries."},
+                    {"index": 3, "is_english": "no", "note": "Spanish; English has not adopted it — it belongs in the Spanish entry."},
+                    {"index": 4, "is_english": "yes", "note": ""},
+                    {"index": 5, "is_english": "yes", "note": ""},
                 ],
                 "comparison_reviews": [
                     {"index": 0, "attestation": "attested", "verdict": "holds",
@@ -8618,10 +8649,10 @@ when it is the true one, and it is an absence in this pass, not proof
 the language has no such word."""
     else:
         languages_block = """Refract it through 5-8 languages. SPANISH IS ALWAYS ONE OF THEM, AND SO
-ARE LATIN AND GREEK.
+ARE LATIN AND ANCIENT GREEK.
 
-Spanish, Latin and Greek are not optional and not conditional on having
-something good to say. If one of them has no close term for this
+Spanish, Latin and Ancient Greek are not optional and not conditional on
+having something good to say. If one of them has no close term for this
 meaning, include it anyway with term, romanization, literal and meaning
 left empty and let keeps/drops describe the gap — a documented absence
 in the most widely spoken Romance language, or in the two classical
@@ -8631,12 +8662,14 @@ invent a term to satisfy this instruction; an empty one is the correct
 answer when it is the true one — and it is an absence IN THIS PASS, from
 recall, not proof that the language lacks the concept.
 
-For Greek, say which Greek: Ancient (Homeric, Attic), Koine or Modern —
-name the language as "Ancient Greek", "Koine Greek" or "Modern Greek",
-and do not mix periods inside one entry. For Latin, name the period and
-register in "period" (Classical, Late, Medieval, Ecclesiastical, Neo-
-Latin). A word that lives in one period is a different finding from a
-word that runs through all of them.
+For Greek, the period is part of the name and an entry is never just
+"Greek": the required entry is "Ancient Greek" (say Homeric, Attic,
+Ionic in "period"); add "Koine Greek" and "Modern Greek" as SEPARATE
+entries when they hold a term that differs from the Ancient one, each
+with its own period line, and never fold two periods into one entry. For
+Latin, name the period and register in "period" (Classical, Late,
+Medieval, Ecclesiastical, Neo-Latin). A word that lives in one period is
+a different finding from a word that runs through all of them.
 
 Then choose the rest from genuinely different families: one Germanic,
 one Romance beyond Spanish (Italian first where it has something to
@@ -8649,13 +8682,20 @@ with nothing interesting to report; fewer strong refractions beat
 padding."""
     english_block = "" if only_languages else """
 
-FIRST, the English sections — and they are English THROUGHOUT. A word
-from another language belongs in the language sections below, never
-here, however familiar it has become.
+FIRST, the English sections — and they are English THROUGHOUT. English
+means a word English dictionaries carry as English: its own words, and
+the loanwords English has adopted (ennui, angst, karma, schadenfreude,
+café) — and a loanword is marked as one. Latin letters alone do not make
+a word English: a foreign word English has not adopted (a Spanish or
+German word you would gloss for an English reader) belongs in the
+language sections below, never here, however familiar it looks.
 
 "english_synonyms": 4-10 English words or short phrases that fit THIS
 meaning. For each:
 - word: the English word or phrase
+- english_status: "english" or "loanword" (adopted from another
+  language — name the language in "loan_from")
+- loan_from: the language a loanword came from; empty otherwise
 - closeness: "close" (names essentially this meaning) or "related" (adds
   or drops an important part — and then say which part in "differs")
 - meaning: its own plain meaning, one clause
@@ -8673,6 +8713,7 @@ not pad: fewer true fits beat a longer list.
 
 "english_antonyms": 0-6 English opposites. For each:
 - word: the English word or phrase
+- english_status: "english" or "loanword"; loan_from: as above
 - relation: "antonym" (a real opposite of the meaning) or "contrast"
   (a useful opposite of ONE of its dimensions, not of the whole)
 - opposes: one clause — which part of the meaning this word opposes;
@@ -8731,7 +8772,8 @@ The meaning:
 
 For each refraction:
 - language: the language's English name (for Greek, the period is part
-  of the name: "Ancient Greek", "Koine Greek", "Modern Greek")
+  of the name — "Ancient Greek", "Koine Greek" or "Modern Greek", never
+  "Greek" alone)
 - term: the nearest existing term or short phrase, in its native script
   and original spelling (Greek in Greek letters, with accents). This
   field is the ONLY place non-Latin characters are allowed in your
@@ -8805,9 +8847,11 @@ the native script lives in "term" alone, always accompanied by its
 romanization.
 
 Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
-{{"english_synonyms": [{{"word": "...", "closeness": "close" or "related", "meaning": "...",
+{{"english_synonyms": [{{"word": "...", "english_status": "english" or "loanword", "loan_from": "..." or "",
+  "closeness": "close" or "related", "meaning": "...",
   "fits": "...", "differs": "...", "register": "..."}}],
- "english_antonyms": [{{"word": "...", "relation": "antonym" or "contrast", "opposes": "...",
+ "english_antonyms": [{{"word": "...", "english_status": "english" or "loanword", "loan_from": "..." or "",
+  "relation": "antonym" or "contrast", "opposes": "...",
   "meaning": "...", "register": "..."}}],
  "cultural_comparisons": [{{"name": "...", "tradition": "...", "what": "...",
   "connection": "...", "limits": "...", "check": "..."}}],
@@ -8820,7 +8864,8 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
 
 def build_refract_review_prompt(candidate: dict, refractions: list[dict],
                                   english_fossil: str = "",
-                                  cultural_comparisons: "list[dict] | None" = None) -> str:
+                                  cultural_comparisons: "list[dict] | None" = None,
+                                  english_items: "list[dict] | None" = None) -> str:
     ref_block = "\n\n".join(
         f"Refraction {i}: {r.get('language', '')} — {r.get('romanization', '') or '(no term: gap claimed)'}\n"
         f"  literal: {r.get('literal', '')}\n"
@@ -8846,11 +8891,19 @@ def build_refract_review_prompt(candidate: dict, refractions: list[dict],
             for i, c in enumerate(comps))
     name = (candidate.get('title') or '').strip() or "an unnamed meaning"
     meaning_line = (candidate.get('definition') or '').strip() or "the sense of a passage the owner selected, as written"
+    eng = [e for e in (english_items or []) if isinstance(e, dict) and str(e.get("word") or "").strip()]
+    eng_block = ""
+    if eng:
+        eng_block = "\n\n" + "\n".join(
+            f"English item {i} ({e.get('section', '')}): {e.get('word', '')} — offered as "
+            f"{e.get('english_status') or 'english'}{(' from ' + e['loan_from']) if e.get('loan_from') else ''}; "
+            f"meaning: {e.get('meaning', '')}"
+            for i, e in enumerate(eng))
     return f"""You are the refraction-review stage of a Wordicon operation: a skeptical
 multilingual lexicographer reviewing translation claims proposed for the
 concept "{name}" ({meaning_line}).
 
-{ref_block}{fossil_block}{comp_block}
+{ref_block}{fossil_block}{comp_block}{eng_block}
 
 This genre — what English speakers don't know about other languages — is
 the most misinformation-dense territory in popular linguistics, and the
@@ -8910,6 +8963,7 @@ a term you cannot stake and point to cannot "hold", whatever its fit.
   ordinary case.
 {"For the claimed English fossil: folk etymology is this lane's besetting sin, so your DEFAULT is 'suspect' — award 'holds' only to textbook-canonical etymology you would stake real confidence on, and say where to verify it." if english_fossil else ""}
 {"For each numbered Comparison: the same two axes. attestation — does the named tradition, practice, text or concept exist as described, in the tradition named? verdict — is the stated connection to the meaning fair to what the thing documentedly is, or is it a generalization about a people dressed as a comparison? A comparison that attaches to no specific documented use cannot hold." if comps else ""}
+{"For each numbered English item: is_english — 'yes' (an English word), 'loanword' (adopted into English from another language and carried by English dictionaries as English — ennui, angst, karma; name the source language in the note) or 'no' (a foreign word English has not adopted, whatever its letters — a word you would gloss for an English reader). Latin letters alone do not make a word English; adoption does. A 'no' is set aside from the English sections by the code, with your note as the reason, so say plainly what the word is and where it belongs." if eng else ""}
 All advisory; nothing is hidden. Your own knowledge is recall too — when
 you contradict a refraction, say what you recall instead, labeled as
 recall.
@@ -8920,6 +8974,7 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
   "note": "..."}}],
  "comparison_reviews": [{{"index": 0, "attestation": "attested" or "uncertain" or "likely-invented",
   "verdict": "holds" or "strained" or "suspect", "note": "..."}}],
+ "english_reviews": [{{"index": 0, "is_english": "yes" or "loanword" or "no", "note": "..."}}],
  "fossil_verdict": "holds" or "strained" or "suspect" or "", "fossil_note": "..." or ""}}{ENGLISH_PROSE_RULE}"""
 
 
@@ -8939,36 +8994,53 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
 # Modern — so the names it returns are not the bare word, and a check that
 # compared bare names would report Greek missing on every honest reply.
 # The aliases below are what "came back" means for each required language.
-REFRACT_REQUIRED = ("Spanish", "Latin", "Greek")
+# His tightening of the same day: "Require Latin and Ancient Greek coverage,
+# with periods clearly identified; label Koine and Modern Greek separately."
+# Ancient Greek is the required Greek; Koine and Modern are their own
+# languages here, never folded into it; and an entry that says only "Greek"
+# is placed nowhere — it is not counted as Ancient Greek, and the page says
+# its period was not said.
+REFRACT_REQUIRED = ("Spanish", "Latin", "Ancient Greek")
 
 REFRACT_LANGUAGE_ALIASES = {
     "Spanish": ("spanish", "castilian", "español", "castellano"),
     "Latin": ("latin", "classical latin", "late latin", "medieval latin", "vulgar latin",
               "ecclesiastical latin", "church latin", "old latin", "neo-latin", "new latin",
               "renaissance latin", "scientific latin"),
-    "Greek": ("greek", "ancient greek", "classical greek", "attic greek", "homeric greek",
-              "koine greek", "koine", "hellenistic greek", "biblical greek", "byzantine greek",
-              "medieval greek", "modern greek", "demotic greek", "katharevousa"),
+    "Ancient Greek": ("ancient greek", "classical greek", "attic greek", "homeric greek", "epic greek",
+                      "ionic greek", "doric greek", "archaic greek", "greek (ancient)", "greek, ancient",
+                      "old greek"),
+    "Koine Greek": ("koine greek", "koine", "hellenistic greek", "biblical greek", "new testament greek",
+                    "septuagint greek", "greek (koine)", "greek, koine"),
+    "Modern Greek": ("modern greek", "demotic greek", "demotic", "katharevousa", "greek (modern)",
+                     "greek, modern"),
 }
+GREEK_UNPLACED = "Greek (period not stated)"
 
 
 def canonical_language(name: str) -> str:
-    """The required language a returned language name counts for, or the
-    name itself, title-cased, when it is not one of them. "Ancient Greek"
-    and "Koine Greek" are Greek; "Latin American Spanish" is Spanish, not
-    Latin — Spanish is tested first for exactly that reason; "Church Latin"
-    is Latin. A name this cannot place is left as the model wrote it."""
+    """The language a returned name counts for. "Attic Greek" is Ancient
+    Greek; "Koine" is Koine Greek; "Demotic" is Modern Greek; "Latin
+    American Spanish" is Spanish, not Latin — Spanish is tested first for
+    exactly that reason; "Church Latin" is Latin. A bare "Greek" is placed
+    nowhere: it becomes "Greek (period not stated)", which no required slot
+    accepts. A name this cannot place is left as the model wrote it."""
     n = (name or "").strip().lower()
     if not n:
         return ""
-    for canon in ("Spanish", "Latin", "Greek"):
-        aliases = REFRACT_LANGUAGE_ALIASES[canon]
+    for canon, aliases in REFRACT_LANGUAGE_ALIASES.items():
         if n in aliases:
             return canon
     if "spanish" in n or "castilian" in n:
         return "Spanish"
     if "greek" in n:
-        return "Greek"
+        if any(w in n for w in ("ancient", "classical", "attic", "homeric", "epic", "ionic", "doric", "archaic")):
+            return "Ancient Greek"
+        if any(w in n for w in ("koine", "hellenistic", "biblical", "testament", "septuagint")):
+            return "Koine Greek"
+        if any(w in n for w in ("modern", "demotic", "katharevousa")):
+            return "Modern Greek"
+        return GREEK_UNPLACED
     if "latin" in n:
         return "Latin"
     return (name or "").strip()
@@ -8981,10 +9053,17 @@ def missing_required_languages(refractions: list) -> list:
     real finding — Spanish has no close term — and is what the prompt asks
     for when that is true. A Spanish entry that is simply absent is the
     stage not doing as it was told, and the two must never render the same.
-    Greek counts as present under any of its period names.
+    Ancient Greek counts as present under any of its period names; Koine,
+    Modern, or a bare "Greek" do not stand in for it.
     """
     seen = {canonical_language(r.get("language") or "") for r in (refractions or [])}
     return [lang for lang in REFRACT_REQUIRED if lang not in seen]
+
+
+def unplaced_greek(refractions: list) -> list:
+    """The entries that said only "Greek": returned, but counted for no
+    period — the page shows them under their own heading and says why."""
+    return [r for r in (refractions or []) if canonical_language(r.get("language") or "") == GREEK_UNPLACED]
 
 
 # ---- archetype: the figure a concept implies, under constraint ----------
@@ -9917,12 +9996,46 @@ def _english_items(items, kind: str) -> "tuple[list, list]":
             continue
         it = {**it, "word": w}
         if not _LATIN_WORD_RX.match(w):
-            aside.append({"section": kind, "word": w,
+            aside.append({"section": kind, "word": w, "by": "script",
                           "reason": "not written in Latin letters — it cannot be an English "
                                     f"{'synonym' if kind == 'synonyms' else 'antonym'}, whatever it is"})
             continue
         kept.append(it)
     return kept, aside
+
+
+def _apply_english_reviews(synonyms: list, antonyms: list, reviews: list) -> "tuple[list, list, list]":
+    """The reviewer's judgement on each English item (his rule: Latin
+    letters alone do not make a word English; adoption does). 'no' sets the
+    item aside with the reviewer's note as the reason — visibly, never
+    dropped; 'loanword' keeps it and marks it; 'yes' keeps it. An item the
+    reviewer did not answer is kept and marked unreviewed. The order the
+    reviewer saw is synonyms then antonyms, as build_refract_review_prompt
+    laid them out."""
+    order = [("synonyms", it) for it in synonyms] + [("antonyms", it) for it in antonyms]
+    by_index = {r.get("index"): r for r in (reviews or []) if isinstance(r, dict)}
+    keep_s, keep_a, aside = [], [], []
+    for i, (section, it) in enumerate(order):
+        rev = by_index.get(i)
+        verdict = str((rev or {}).get("is_english") or "").strip().lower()
+        note = str((rev or {}).get("note") or "").strip()
+        if verdict == "no":
+            aside.append({"section": section, "word": it["word"], "by": "reviewer",
+                          "reason": "the reviewer judged it not an English word" + (f": {note}" if note else "")})
+            continue
+        it = dict(it)
+        if verdict == "loanword":
+            it["english_status"] = "loanword"
+            if note and not it.get("loan_from"):
+                it["loan_note"] = note
+        elif verdict == "yes":
+            it["english_status"] = "english" if it.get("english_status") != "loanword" else "loanword"
+        else:
+            it["english_review"] = "unreviewed"
+        if note:
+            it["english_note"] = note
+        (keep_s if section == "synonyms" else keep_a).append(it)
+    return keep_s, keep_a, aside
 
 
 def run_refract(candidate: dict, gateway: Gateway,
@@ -9999,10 +10112,17 @@ def run_refract(candidate: dict, gateway: Gateway,
 
     print(f"[{gateway.name}] reviewing {len(refractions)} refraction(s) for invention and folk-linguistics...")
     progress("friction", f"The critique on {len(refractions)} refraction(s)…")
+    english_for_review = ([{**x, "section": "synonyms"} for x in synonyms]
+                          + [{**x, "section": "antonyms"} for x in antonyms])
     review_raw, review_citations = gateway.complete_with_search(
         build_refract_review_prompt(candidate, refractions, english_fossil,
-                                    cultural_comparisons=cultural))
+                                    cultural_comparisons=cultural,
+                                    english_items=english_for_review))
     review_parsed = _extract_json(review_raw)
+    if english_for_review:
+        synonyms, antonyms, aside_r = _apply_english_reviews(
+            synonyms, antonyms, review_parsed.get("english_reviews") or [])
+        english_set_aside = english_set_aside + aside_r
     by_index = {r.get("index"): r for r in review_parsed.get("reviews", [])
                 if isinstance(r, dict)}
     comp_by_index = {r.get("index"): r for r in (review_parsed.get("comparison_reviews") or [])
@@ -10071,12 +10191,20 @@ def run_refract(candidate: dict, gateway: Gateway,
     n_invented = sum(1 for r in refractions if r.get("attestation") == "likely-invented")
     n_close = sum(1 for s in synonyms if s.get("closeness") == "close")
     n_exact = sum(1 for a in antonyms if a.get("relation") == "antonym")
+    n_loan = sum(1 for x in synonyms + antonyms if x.get("english_status") == "loanword")
+    unplaced = unplaced_greek(refractions)
     english_bit = ""
     if "english" in sections_asked:
         english_bit = (f"{len(synonyms)} English synonym(s) ({n_close} close, {len(synonyms) - n_close} related) · "
-                       f"{len(antonyms)} English opposite(s) ({n_exact} antonym(s), {len(antonyms) - n_exact} contrast(s)) · ")
+                       f"{len(antonyms)} English opposite(s) ({n_exact} antonym(s), {len(antonyms) - n_exact} contrast(s))"
+                       + (f", {n_loan} loanword(s) kept" if n_loan else "") + " · ")
         if english_set_aside:
-            english_bit += f"{len(english_set_aside)} set aside from the English sections (not in Latin letters) · "
+            n_script = sum(1 for x in english_set_aside if x.get("by") == "script")
+            n_rev = len(english_set_aside) - n_script
+            english_bit += (f"{len(english_set_aside)} set aside from the English sections ("
+                            + ", ".join(b for b in ([f"{n_script} not in Latin letters"] if n_script else [])
+                                        + ([f"{n_rev} judged not English by the reviewer"] if n_rev else []))
+                            + ") · ")
     summary = (english_bit
                + f"{len(refractions)} language(s) · "
                f"{sum(1 for r in refractions if r.get('review_verdict') == 'holds')} hold, "
@@ -10087,6 +10215,8 @@ def run_refract(candidate: dict, gateway: Gateway,
                + (f" · {n_invented} term(s) flagged likely-invented" if n_invented else "")
                + (f" · {', '.join(missing_langs)} was asked for and did not come back"
                   if missing_langs else "")
+               + (f" · {len(unplaced)} Greek entry(ies) came back without a period and count for no Greek slot"
+                  if unplaced else "")
                + " · all terms are recall, unverified — verify before you trust"
                + (_acquisition_phrase(review_citations) if review_citations else ""))
 

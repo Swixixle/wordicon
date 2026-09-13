@@ -139,9 +139,18 @@ const DRAFT = [
   ok((synSec.match(/κατήφεια/g) || []).length === 1 && /Set aside/.test(synSec),
      'and it appears in the synonyms section once — in the set-aside line, not as a card');
   ok(/\bLatin\b[\s\S]*limen[\s\S]*Classical Latin/i.test(T), 'Latin has its own section, with the term and its period');
-  ok(/Greek — Ancient, Koine or Modern, said which[\s\S]*Ancient Greek[\s\S]*κατήφεια[\s\S]*katēpheia[\s\S]*Ancient Greek, Homeric and Classical/i.test(T),
-     'Greek has its own section: the period name, the Greek letters, the romanization, the period');
-  ok(/lang="el"/.test(shown.html), 'the Greek term is marked as Greek for a screen reader');
+  ok(/Ancient Greek — required, with its period said[\s\S]*Ancient Greek[\s\S]*κατήφεια[\s\S]*katēpheia[\s\S]*Ancient Greek, Homeric and Classical/i.test(T),
+     'Ancient Greek has its own required section: the period name, the Greek letters, the romanization, the period');
+  ok(/Koine and Modern Greek — labelled apart, never folded into the Ancient entry[\s\S]*Modern Greek[\s\S]*στενοχώρια[\s\S]*stenochōria[\s\S]*Modern Greek, everyday/i.test(T),
+     'Modern Greek is shown apart under its own name, with its period');
+  const ancientSec = T.split(/Ancient Greek — required, with its period said/i)[1].split(/Koine and Modern Greek — labelled apart/i)[0];
+  ok(!/στενοχώρια/.test(ancientSec), 'and the Modern entry is not folded into the Ancient section');
+  ok(/ennui[\s\S]{0,80}English loanword from French/.test(T), 'a loanword English carries is kept and marked as one');
+  ok(/desasosiego — the reviewer judged it not an English word: Spanish/.test(T) && /\(the reviewer’s judgement, from recall\)/.test(T),
+     'a Latin-lettered foreign word offered as English is set aside with the reviewer\'s reason, marked as recall');
+  ok(!/desasosiego[\s\S]{0,40}related — adds or drops a part/.test(T.split(/English antonyms/i)[0]), 'and it is not shown as a synonym card');
+  ok(/κατήφεια — not written in Latin letters[^.]*\(checked in code\)/.test(T), 'the script check says it was checked in code');
+  ok(/lang="grc"/.test(shown.html) && /lang="el"/.test(shown.html), 'the Greek terms are marked for a screen reader — Ancient as grc, Modern as el');
   ok(/Italian[\s\S]*No close match found in this pass — an absence from recall, not proof the language lacks it/.test(T),
      'a language that came back empty reads as no close match in this pass, not as absence');
   ok(/Other languages — what each keeps, drops and adds[\s\S]*Spanish[\s\S]*German/i.test(T), 'the other languages follow, Spanish first');
@@ -237,8 +246,9 @@ const DRAFT = [
      && /Not checked — this comparison was made before the English opposites were part of the tool/.test(leg),
      'its English sections say they were never part of the tool then — not that nothing was found');
   ok(/Not checked — Latin was not asked for when this comparison was made/.test(leg)
-     && /Not checked — Greek was not asked for when this comparison was made/.test(leg),
-     'Latin and Greek say they were not asked for, by name');
+     && /Not checked — Ancient Greek was not asked for when this comparison was made/.test(leg)
+     && /Not checked — Koine and Modern Greek were not asked for when this comparison was made/.test(leg),
+     'Latin, Ancient Greek, and Koine and Modern Greek say they were not asked for, by name');
   ok(/Not checked — this comparison was made before cultural comparisons were part of the tool/.test(leg),
      'and so do the cultural comparisons');
   ok(/Spanish/.test(leg) && /German/.test(leg), 'the languages it did have are still there');

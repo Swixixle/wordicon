@@ -493,7 +493,8 @@ def seed_related():
     for k in ("sections_asked", "english_synonyms", "english_antonyms", "english_set_aside", "cultural_comparisons", "parse_notes"):
         d.pop(k, None)
     d["source"] = {k: d["source"].get(k, "") for k in ("title", "definition", "plain_gloss", "concept_id")}
-    d["refractions"] = [r for r in d["refractions"] if cli.canonical_language(r.get("language")) not in ("Latin", "Greek")]
+    d["refractions"] = [r for r in d["refractions"] if cli.canonical_language(r.get("language"))
+                        not in ("Latin", "Ancient Greek", "Koine Greek", "Modern Greek", cli.GREEK_UNPLACED)]
     for r in d["refractions"]:
         for k in ("language_canonical", "pronunciation", "meaning", "period", "example"):
             r.pop(k, None)

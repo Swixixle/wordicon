@@ -100,7 +100,10 @@ record's keys, the modes and the routes keep the old names.
 
 **Find related words (2026-09-13).** One panel, one record (mode `refract`):
 English synonyms (close / related), English antonyms (antonym / contrast, each
-saying what it opposes), Latin, Greek (by period, in Greek letters), other
+saying what it opposes) — English by adoption: loanwords kept and marked, a
+Latin-lettered foreign word set aside on the reviewer's judgement with the
+reason — Latin, Ancient Greek (required, `lang="grc"`), Koine and Modern Greek
+labelled apart (`lang="el"`), a bare "Greek" placed nowhere and said so, other
 languages (Spanish on every pass), cultural comparisons, the English fossil.
 Entry: a card's door (the meaning line editable, the saved comparisons for the
 idea shown first — by id, or by title and labelled a reconstruction; one press

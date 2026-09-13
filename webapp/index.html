@@ -4407,11 +4407,18 @@ function verdictTagHtml(v) {
 const RELATED_SRC = {};   // trace id → the meaning a panel was made for, for follow-ups
 const RELATED_ITEMS = {}; // trace id → {synonyms, antonyms, languages, cultural}: the items as rendered, for the three actions
 const RELATED_SAVED = {}; // trace id → {"section:index": saved_id}: what is already kept, read free
+// Mirrors canonical_language in the CLI: Ancient Greek is the required
+// Greek; Koine and Modern are their own; a bare "Greek" is placed nowhere.
 function canonLang(name) {
   const n = String(name || '').trim().toLowerCase();
   if (!n) return '';
   if (/spanish|castilian|castellano|español/.test(n)) return 'Spanish';
-  if (/greek|koine|katharevousa/.test(n)) return 'Greek';
+  if (/greek|koine|katharevousa|demotic/.test(n)) {
+    if (/ancient|classical|attic|homeric|epic|ionic|doric|archaic|old greek/.test(n)) return 'Ancient Greek';
+    if (/koine|hellenistic|biblical|testament|septuagint/.test(n)) return 'Koine Greek';
+    if (/modern|demotic|katharevousa/.test(n)) return 'Modern Greek';
+    return 'Greek (period not stated)';
+  }
   if (/latin/.test(n)) return 'Latin';
   return String(name || '').trim();
 }
@@ -4450,7 +4457,7 @@ function rwTermCard(r, nCitations, uid, index) {
   const verdictTag = (r.carries_verdict || '').trim()
     ? `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">settles what the concept leaves open</span>` : '';
   const termHtml = hasTerm
-    ? `<p class="body" style="font-size:18px;margin:4px 0 2px"><span${(r.language_canonical || canonLang(r.language)) === 'Greek' ? ' lang="el"' : ''}>${escapeHtml(r.term || r.romanization)}</span>
+    ? `<p class="body" style="font-size:18px;margin:4px 0 2px"><span${/greek/i.test(canonLang(r.language) || r.language_canonical || '') ? (canonLang(r.language) === 'Ancient Greek' ? ' lang="grc"' : ' lang="el"') : ''}>${escapeHtml(r.term || r.romanization)}</span>
          ${r.romanization && r.term && r.romanization !== r.term ? `<span class="muted" style="font-size:14px;font-style:italic"> ${escapeHtml(r.romanization)}</span>` : ''}
          ${(r.pronunciation || '').trim() ? `<span class="muted" style="font-size:12.5px"> · said ${escapeHtml(r.pronunciation)}</span>` : ''}</p>
        ${(r.meaning || '').trim() ? `<p class="body" style="font-size:13.5px;margin:0 0 2px">${escapeHtml(r.meaning)}</p>` : ''}
@@ -4484,9 +4491,15 @@ function rwEnglishCard(it, kind, uid, index) {
     : (it.relation === 'antonym'
         ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0">antonym</span>`
         : `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">a contrast, not an exact opposite</span>`);
+  // English by adoption, not by letters: a loanword is kept and says so; an
+  // item the reviewer did not answer says it was not reviewed
+  const loan = it.english_status === 'loanword'
+    ? `<span class="decision-tag" style="text-transform:none;letter-spacing:0" title="${escapeHtml(it.english_note || it.loan_note || '')}">English loanword${(it.loan_from || '').trim() ? ' from ' + escapeHtml(it.loan_from) : ''}</span>` : '';
+  const unrev = it.english_review === 'unreviewed'
+    ? `<span class="muted" style="font-size:11.5px;font-style:italic">not reviewed as English — recall only</span>` : '';
   return `
     <div class="card">
-      <div class="result-title" style="font-size:15px">${escapeHtml(it.word || '')} ${tag}</div>
+      <div class="result-title" style="font-size:15px">${escapeHtml(it.word || '')} ${tag} ${loan} ${unrev}</div>
       ${(it.meaning || '').trim() ? `<p class="body" style="font-size:13.5px;margin:2px 0">${escapeHtml(it.meaning)}</p>` : ''}
       ${isSyn && (it.fits || '').trim() ? `<p class="body" style="font-size:13.5px"><em>Why it fits:</em> ${escapeHtml(it.fits)}</p>` : ''}
       ${isSyn && (it.differs || '').trim() ? `<p class="body" style="font-size:13.5px"><em>What differs:</em> ${escapeHtml(it.differs)}</p>` : ''}
@@ -4572,25 +4585,43 @@ function buildRefractHtml(res, opts) {
   };
   const syns = res.english_synonyms || [], ants = res.english_antonyms || [];
   const aside = res.english_set_aside || [];
-  const asideHtml = aside.length ? `<p class="body muted" style="font-size:12.5px;border-left:2px solid var(--bad);padding-left:9px">Set aside from the English sections, not shown as English: ${aside.map(a => `${escapeHtml(a.word)} — ${escapeHtml(a.reason)}`).join('; ')}.</p>` : '';
+  const asideHtml = aside.length ? `<p class="body muted" style="font-size:12.5px;border-left:2px solid var(--bad);padding-left:9px">Set aside from the English sections, not shown as English: ${aside.map(a => `${escapeHtml(a.word)} — ${escapeHtml(a.reason)}${a.by === 'reviewer' ? ' (the reviewer’s judgement, from recall)' : a.by === 'script' ? ' (checked in code)' : ''}`).join('; ')}.</p>` : '';
   const synHtml = englishStatus(syns, 'synonyms') + syns.map((s, i) => rwEnglishCard(s, 'synonyms', uid, i)).join('') + asideHtml;
   const antHtml = englishStatus(ants, 'opposites') + ants.map((a, i) => rwEnglishCard(a, 'antonyms', uid, i)).join('');
-  // Latin and Greek have their own sections and are accounted for by name.
-  // every language card is addressed by its index in the record's own list,
-  // whichever section it is shown under
+  // Latin and Ancient Greek have their own sections and are accounted for
+  // by name; Koine and Modern Greek are shown apart, never folded into the
+  // Ancient slot; an entry that said only "Greek" counts for no slot and
+  // says so. Every language card is addressed by its index in the record's
+  // own list, whichever section it is shown under. The page's own placing
+  // of the name comes first, so a record written before the periods were
+  // told apart is read by today's rule rather than by the name it stored.
   const idxOf = r => refs.indexOf(r);
-  const byCanon = c => refs.filter(r => (r.language_canonical || canonLang(r.language)) === c);
+  const canonOf = r => canonLang(r.language) || r.language_canonical || '';
+  const byCanon = c => refs.filter(r => canonOf(r) === c);
+  const unplaced = byCanon('Greek (period not stated)');
   const classical = (c) => {
     const rows = byCanon(c);
     if (rows.length) return rows.map(r => rwTermCard(r, nCit, uid, idxOf(r))).join('');
-    if ((res.missing_languages || []).some(m => canonLang(m) === c))
-      return rwStatusHtml(`Not checked — ${c} was asked for and did not come back. That is the stage not doing as it was told, not ${c} having no word for this.`, 'absent');
-    if (asked === null) return rwStatusHtml(`Not checked — ${c} was not asked for when this comparison was made.`, 'absent');
-    return rwStatusHtml(`Not checked in this pass.`, 'absent');
+    const unplacedNote = c === 'Ancient Greek' && unplaced.length
+      ? ` A Greek entry came back without its period — it is shown under “Greek — period not stated” and does not count as Ancient Greek.` : '';
+    if ((res.missing_languages || []).some(m => canonLang(m) === c || m === c))
+      return rwStatusHtml(`Not checked — ${c} was asked for and did not come back. That is the stage not doing as it was told, not ${c} having no word for this.${unplacedNote}`, 'absent');
+    if (asked === null) return rwStatusHtml(`Not checked — ${c} was not asked for when this comparison was made.${unplacedNote}`, 'absent');
+    return rwStatusHtml(`Not checked in this pass.${unplacedNote}`, 'absent');
   };
+  const koineModern = [...byCanon('Koine Greek'), ...byCanon('Modern Greek')];
+  const koineModernHtml = koineModern.length
+    ? koineModern.map(r => `<p class="body muted" style="font-size:12px;margin:8px 0 0">${escapeHtml(canonOf(r))}</p>` + rwTermCard(r, nCit, uid, idxOf(r))).join('')
+    : rwStatusHtml(asked === null ? 'Not checked — Koine and Modern Greek were not asked for when this comparison was made.'
+                   : 'None offered in this pass — they are asked for only where they hold a term that differs from the Ancient one; not proof there is none.', asked === null ? 'absent' : 'gap');
+  const unplacedHtml = unplaced.length
+    ? `<div class="section-label" style="margin-top:16px">Greek — period not stated</div>`
+      + rwStatusHtml('These entries said only “Greek”. The period is part of the name here — Ancient, Koine or Modern — so they count for no Greek slot; the stage was told to say which.', 'absent')
+      + unplaced.map(r => rwTermCard(r, nCit, uid, idxOf(r))).join('')
+    : '';
   // The other languages, Spanish first, then as they came.
-  const others = refs.filter(r => !['Latin', 'Greek'].includes(r.language_canonical || canonLang(r.language)));
-  others.sort((a, b) => ((b.language_canonical || canonLang(b.language)) === 'Spanish') - ((a.language_canonical || canonLang(a.language)) === 'Spanish'));
+  const others = refs.filter(r => !['Latin', 'Ancient Greek', 'Koine Greek', 'Modern Greek', 'Greek (period not stated)'].includes(canonOf(r)));
+  others.sort((a, b) => (canonOf(b) === 'Spanish') - (canonOf(a) === 'Spanish'));
   const othersHtml = others.length ? others.map(r => rwTermCard(r, nCit, uid, idxOf(r))).join('')
     : rwStatusHtml('No other languages came back in this pass.', 'absent');
   const comps = res.cultural_comparisons || [];
@@ -4613,8 +4644,8 @@ function buildRefractHtml(res, opts) {
            <p class="body" style="font-size:13.5px;white-space:pre-wrap;margin:4px 0 0">${escapeHtml(src.passage.slice(0, 600))}${src.passage.length > 600 ? '…' : ''}</p>
            ${entryLine ? `<p class="body muted" style="font-size:12px;margin:2px 0 0">${escapeHtml(entryLine)}</p>` : ''}
          </div>` : '';
-  const nav = [['synonyms', 'English synonyms'], ['antonyms', 'English antonyms'], ['latin', 'Latin'], ['greek', 'Greek'],
-               ['languages', 'Other languages'], ['cultural', 'Cultural comparisons']]
+  const nav = [['synonyms', 'English synonyms'], ['antonyms', 'English antonyms'], ['latin', 'Latin'], ['greek', 'Ancient Greek'],
+               ['greek-later', 'Koine & Modern Greek'], ['languages', 'Other languages'], ['cultural', 'Cultural comparisons']]
     .map(([id, l]) => `<a href="#rw-sec-${id}-${escapeHtml(uid)}" onclick="event.preventDefault();rwScrollTo('${escapeJs(id)}','${escapeJs(uid)}')" style="margin-right:10px;font-size:12.5px">${l}</a>`).join('');
   const followHtml = (src.definition || '').trim() ? `
     <div class="card" id="rw-follow-card-${escapeHtml(uid)}" style="margin-top:12px">
@@ -4637,7 +4668,9 @@ function buildRefractHtml(res, opts) {
     ${sec('synonyms', 'English synonyms — words that fit this meaning', synHtml)}
     ${sec('antonyms', 'English antonyms — and what each one opposes', antHtml)}
     ${sec('latin', 'Latin', classical('Latin'))}
-    ${sec('greek', 'Greek — Ancient, Koine or Modern, said which', classical('Greek'))}
+    ${sec('greek', 'Ancient Greek — required, with its period said', classical('Ancient Greek'))}
+    ${sec('greek-later', 'Koine and Modern Greek — labelled apart, never folded into the Ancient entry', koineModernHtml)}
+    ${unplacedHtml}
     ${sec('languages', 'Other languages — what each keeps, drops and adds', othersHtml)}
     ${sec('cultural', 'Cultural comparisons — documented uses, with their limits', compHtml)}
     ${fossilHtml}

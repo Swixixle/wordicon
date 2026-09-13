@@ -2441,7 +2441,9 @@ def _check_related_words(server, paired):
     for need in ('"english_synonyms"', '"english_antonyms"', '"cultural_comparisons"', "English THROUGHOUT",
                  "Rank by fit to the intended meaning", "not by resemblance to the working name",
                  '"closeness": "close" or "related"', '"relation": "antonym" or "contrast"',
-                 "never dressed as an exact\nantonym", "SO\nARE LATIN AND GREEK", '"period"', '"pronunciation"',
+                 "never dressed as an exact\nantonym", "SO\nARE LATIN AND ANCIENT GREEK", '"period"', '"pronunciation"',
+                 '"english_status"', "the loanwords English has adopted", "Latin letters alone do not make\na word English",
+                 'entries when they hold a term that differs from the Ancient one',
                  "It is an example,\n  never a quotation", "Do not force an equivalent, an antonym or a\ncomparison to fill a slot",
                  "an absence IN THIS PASS", "not proof that the language lacks the concept",
                  "Three relationships are kept apart", "shared ORIGIN", "Working name (a handle only"):
@@ -2474,7 +2476,8 @@ def _check_related_words(server, paired):
         if not syn or any(not cli._LATIN_WORD_RX.match(x["word"]) for x in syn):
             out.append("RW: the English synonyms are not all in Latin letters")
         aside = rf.get("english_set_aside") or []
-        if len(aside) != 1 or aside[0].get("section") != "synonyms" or "not written in Latin letters" not in aside[0].get("reason", ""):
+        script_aside = [a for a in aside if a.get("by") == "script"]
+        if len(script_aside) != 1 or script_aside[0].get("section") != "synonyms" or "not written in Latin letters" not in script_aside[0].get("reason", ""):
             out.append(f"RW: the Greek-lettered word offered as an English synonym was not set aside with its reason ({aside})")
         if not (rf.get("english_antonyms") or []) or not any(a.get("relation") == "contrast" for a in rf["english_antonyms"]):
             out.append("RW: the fixture's contrast antonym did not survive as a contrast")
@@ -2482,13 +2485,51 @@ def _check_related_words(server, paired):
         if not comps or comps[0].get("review_verdict") not in ("holds", "strained", "suspect") or not comps[0].get("attestation"):
             out.append("RW: the cultural comparison did not get the reviewer's two axes")
         langs = {r.get("language_canonical") for r in rf["refractions"]}
-        if not {"Latin", "Greek", "Spanish"} <= langs:
-            out.append(f"RW: a full pass came back without Latin, Greek and Spanish ({sorted(langs)})")
+        if not {"Latin", "Ancient Greek", "Spanish"} <= langs:
+            out.append(f"RW: a full pass came back without Latin, Ancient Greek and Spanish ({sorted(langs)})")
+        if "Modern Greek" not in langs:
+            out.append("RW: the fixture no longer exercises a Modern Greek entry beside the Ancient one")
         if rf.get("missing_languages"):
             out.append(f"RW: the fixture reports required languages missing ({rf['missing_languages']})")
-        greek = [r for r in rf["refractions"] if r.get("language_canonical") == "Greek"]
+        greek = [r for r in rf["refractions"] if r.get("language_canonical") == "Ancient Greek"]
         if not greek or not greek[0].get("period") or not greek[0].get("term"):
-            out.append("RW: the Greek entry lost its period or its native-script term")
+            out.append("RW: the Ancient Greek entry lost its period or its native-script term")
+        # English by adoption: the reviewer's judgement keeps a loanword, marked,
+        # and sets a Latin-lettered foreign word aside with its reason
+        ennui = [x for x in rf["english_synonyms"] if x["word"] == "ennui"]
+        if not ennui or ennui[0].get("english_status") != "loanword" or ennui[0].get("loan_from") != "French":
+            out.append("RW: the loanword was not kept and marked as one")
+        if any(x["word"] == "desasosiego" for x in rf["english_synonyms"]):
+            out.append("RW: a Latin-lettered foreign word the reviewer refused is still shown as English")
+        rev_aside = [a for a in rf["english_set_aside"] if a.get("by") == "reviewer"]
+        if len(rev_aside) != 1 or rev_aside[0]["word"] != "desasosiego" or "the reviewer judged it not an English word" not in rev_aside[0]["reason"] \
+                or "Spanish" not in rev_aside[0]["reason"]:
+            out.append(f"RW: the reviewer's refusal did not set the word aside with its reason ({rev_aside})")
+        if "loanword(s) kept" not in rf.get("summary", "") or "judged not English by the reviewer" not in rf.get("summary", ""):
+            out.append("RW: the summary does not count the loanword and the reviewer's set-aside")
+        rev_prompt = cli.build_refract_review_prompt({"title": "T", "definition": "d"}, [], english_items=[
+            {"section": "synonyms", "word": "ennui", "english_status": "loanword", "loan_from": "French", "meaning": "m"}])
+        if "English item 0 (synonyms): ennui — offered as loanword from French" not in rev_prompt or '"english_reviews"' not in rev_prompt \
+                or "Latin letters alone do not make a word English; adoption does" not in rev_prompt:
+            out.append("RW: the reviewer is not asked whether each English item is English")
+        # a bare "Greek" entry from the model is placed nowhere and does not satisfy the requirement
+        class _BareGreek(cli.MockGateway):
+            def complete(self, prompt: str) -> str:
+                o = super().complete(prompt)
+                if prompt.startswith("You are the refraction stage"):
+                    d = _json.loads(o)
+                    for r in d["refractions"]:
+                        if r["language"] == "Ancient Greek":
+                            r["language"] = "Greek"
+                    return _json.dumps(d)
+                return o
+        bg = cli.run_refract({"title": "T4", "definition": "d4"}, _BareGreek())
+        if bg.get("missing_languages") != ["Ancient Greek"]:
+            out.append(f"RW: a bare Greek entry satisfied the Ancient Greek requirement ({bg.get('missing_languages')})")
+        if not [r for r in bg["refractions"] if r.get("language_canonical") == "Greek (period not stated)"]:
+            out.append("RW: a bare Greek entry is not recorded as placed nowhere")
+        if "came back without a period" not in bg.get("summary", ""):
+            out.append("RW: the summary does not say a Greek entry came back without its period")
         if "English synonym(s)" not in rf.get("summary", "") or "set aside" not in rf.get("summary", ""):
             out.append("RW: the summary does not count the English sections and the set-aside")
         snap = _json.loads((cli.RESULTS_DIR / f"{rf['trace_id']}.json").read_text())
@@ -2684,7 +2725,9 @@ def _check_related_words(server, paired):
                  "Example, written for this pass — not a quotation:",
                  "a contrast, not an exact opposite", "related — adds or drops a part",
                  "English synonyms — words that fit this meaning", "English antonyms — and what each one opposes",
-                 "'Greek — Ancient, Koine or Modern, said which'", "Ask another language",
+                 "'Ancient Greek — required, with its period said'", "'Koine and Modern Greek — labelled apart, never folded into the Ancient entry'",
+                 "Greek — period not stated", "return 'Greek (period not stated)';", "English loanword", "not reviewed as English — recall only",
+                 "(the reviewer’s judgement, from recall)", "Ask another language",
                  "function canonLang(name)", "function rwScrollTo(id, uid)",
                  'onclick="toggleWsMore();askRelated()"', 'id="related-ask"', "function askRelated()",
                  "if (relatedOpen()) { e.preventDefault(); closeRelated(); return; }",
@@ -2735,14 +2778,14 @@ def _check_related_words(server, paired):
         out.append("RW: Explore other languages does not open the languages section of the same panel")
     # ---- the law and the map -------------------------------------------
     for need in ("<strong>≈ Find related words</strong>", "No close match found in this pass", "Not checked",
-                 "English throughout", "Latin and Greek", "by id", "a reconstruction"):
+                 "English throughout", "Latin and Ancient Greek", "Koine and Modern Greek", "by id", "a reconstruction"):
         if need not in law:
             out.append(f"RW: the constitution does not carry {need!r}")
     smap = (root / "docs" / "nikodemus-surface-map.md").read_text(encoding="utf-8")
     if "Find related words" not in smap:
         out.append("RW: the surface map does not know Find related words")
-    if "REFRACT_REQUIRED = (\"Spanish\", \"Latin\", \"Greek\")" not in src:
-        out.append("RW: the required languages are not Spanish, Latin and Greek")
+    if "REFRACT_REQUIRED = (\"Spanish\", \"Latin\", \"Ancient Greek\")" not in src:
+        out.append("RW: the required languages are not Spanish, Latin and Ancient Greek")
     return out
 
 
@@ -7998,14 +8041,24 @@ console.log(JSON.stringify({ok: true, nodes: INK.childNodes.length, len: TA.valu
     # Find related words (the owner's addition, 2026-09-13): "Latin and Greek
     # must be visibly accounted for, not silently skipped." Required, and
     # Greek is asked for BY PERIOD, so the check must know its period names.
-    for _lang67 in ("Latin", "Greek"):
+    # His tightening of the same day: Ancient Greek is the required Greek;
+    # Koine and Modern are labelled apart and never stand in for it; a bare
+    # "Greek" is placed nowhere.
+    for _lang67 in ("Latin", "Ancient Greek"):
         if _lang67 not in cli.REFRACT_REQUIRED:
             failures.append(f"67: {_lang67} is not required of the refraction stage")
+    if "Greek" in cli.REFRACT_REQUIRED or "Koine Greek" in cli.REFRACT_REQUIRED or "Modern Greek" in cli.REFRACT_REQUIRED:
+        failures.append("67: a Greek other than Ancient Greek is required, or a bare Greek is")
     if "SPANISH IS ALWAYS ONE OF THEM" not in _rp67:
         failures.append("67: the prompt no longer asks for Spanish on every refraction")
-    if "SO\nARE LATIN AND GREEK" not in _rp67 and "SO ARE LATIN AND GREEK" not in _rp67.replace("\n", " "):
-        failures.append("67: the prompt no longer asks for Latin and Greek on every pass")
-    for _alias67, _canon67 in (("Ancient Greek", "Greek"), ("Koine Greek", "Greek"), ("Modern Greek", "Greek"),
+    if "SO ARE LATIN AND ANCIENT GREEK" not in _rp67.replace("\n", " "):
+        failures.append("67: the prompt no longer asks for Latin and Ancient Greek on every pass")
+    if 'never "Greek" alone' not in _re.sub(r"\s+", " ", _rp67):
+        failures.append("67: the prompt does not forbid a bare Greek entry")
+    for _alias67, _canon67 in (("Ancient Greek", "Ancient Greek"), ("Attic Greek", "Ancient Greek"), ("Homeric Greek", "Ancient Greek"),
+                               ("Koine Greek", "Koine Greek"), ("Koine", "Koine Greek"), ("Hellenistic Greek", "Koine Greek"),
+                               ("Modern Greek", "Modern Greek"), ("Demotic Greek", "Modern Greek"),
+                               ("Greek", "Greek (period not stated)"),
                                ("Church Latin", "Latin"), ("Latin American Spanish", "Spanish"),
                                ("castellano", "Spanish"), ("Japanese", "Japanese")):
         if cli.canonical_language(_alias67) != _canon67:
@@ -8018,7 +8071,7 @@ console.log(JSON.stringify({ok: true, nodes: INK.childNodes.length, len: TA.valu
                         "the whole reason one of them was never filled")
     # Absent is not the same as empty, and the two must never render alike.
     _present = [{"language": "Spanish", "term": "desasosiego"}, {"language": "German", "term": "x"},
-                {"language": "Latin", "term": "limen"}, {"language": "Koine Greek", "term": "x"}]
+                {"language": "Latin", "term": "limen"}, {"language": "Attic Greek", "term": "x"}]
     _empty = [{"language": "Spanish", "term": "", "keeps": "no term surfaces"},
               {"language": "German", "term": "x"}, {"language": "Latin", "term": ""},
               {"language": "Ancient Greek", "term": ""}]
@@ -8028,12 +8081,18 @@ console.log(JSON.stringify({ok: true, nodes: INK.childNodes.length, len: TA.valu
     if cli.missing_required_languages(_empty):
         failures.append("67: a required language that honestly came back EMPTY is reported "
                         "missing — a documented gap is a finding, not a failure to comply")
-    if cli.missing_required_languages(_absent) != ["Spanish", "Latin", "Greek"]:
+    if cli.missing_required_languages(_absent) != ["Spanish", "Latin", "Ancient Greek"]:
         failures.append("67: a required language that never came back is not reported")
-    if cli.missing_required_languages([{"language": "Spanish"}, {"language": "Latin"}]) != ["Greek"]:
-        failures.append("67: Greek absent is not reported as Greek absent")
+    if cli.missing_required_languages([{"language": "Spanish"}, {"language": "Latin"}]) != ["Ancient Greek"]:
+        failures.append("67: Ancient Greek absent is not reported as Ancient Greek absent")
+    # Koine or Modern Greek, or a bare "Greek", do not stand in for Ancient Greek
+    for _stand_in in ("Koine Greek", "Modern Greek", "Greek"):
+        if cli.missing_required_languages([{"language": "Spanish"}, {"language": "Latin"}, {"language": _stand_in}]) != ["Ancient Greek"]:
+            failures.append(f"67: {_stand_in!r} was allowed to stand in for Ancient Greek")
+    if [r["language"] for r in cli.unplaced_greek([{"language": "Greek"}, {"language": "Ancient Greek"}])] != ["Greek"]:
+        failures.append("67: a bare Greek entry is not reported as placed nowhere")
     # Case and spacing are the model's to get wrong, not his to pay for.
-    if cli.missing_required_languages([{"language": " spanish "}, {"language": "LATIN"}, {"language": "greek "}]):
+    if cli.missing_required_languages([{"language": " spanish "}, {"language": "LATIN"}, {"language": "ancient greek "}]):
         failures.append("67: a required language is reported missing over case or spacing")
     # It has to reach the screen, and say which of the two things it is.
     _pg67 = (_pathlib.Path(cli.__file__).parent.parent / "webapp" / "index.html").read_text(encoding="utf-8")
