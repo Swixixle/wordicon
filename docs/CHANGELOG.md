@@ -48,6 +48,22 @@ as it stands); the views pin amended for the third measure. The notebook
 journey adds seventeen checks, named in run.sh. Constitution: the room
 clause amended. Surface map.
 
+## v1.28.1 — An unnamed pass makes no box on the map
+
+Found by the full journey run on the tree above, not by source review.
+The map's overworld builder synthesizes a refract run's seed box from the
+snapshot's title; a pass from a described meaning or a selection has no
+title, so it synthesized a box with an empty label — and the Wayfinder's
+loose match (`startsWith`) read an empty name as a prefix of every place,
+so "Cassandra" became ambiguous and no route could be plotted. The
+builder now makes no seed box and no synthesized road for a nameless pass
+(the same rule the writer already applied to its recorded roads; the
+translations still appear as the run's items), and the Wayfinder ignores
+a box with no name. Pinned in `_check_related_words`. The related
+fixture's legacy record moved off "Lantern Debt", the map fixture's own
+title-keyed place, which its roads had been landing on; the room journey's
+view checks follow the centred default measure.
+
 ## v1.27.0 — Find related words
 
 His addition of 13 September, built on the Refract machinery rather than

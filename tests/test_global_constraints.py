@@ -2524,6 +2524,16 @@ def _check_related_words(server, paired):
         rcpt = _json.loads((cli.RECEIPTS_DIR / f"receipt_{sel['trace_id']}.json").read_text())
         if rcpt.get("candidates"):
             out.append("RW: an unnamed pass invented a candidate on its receipt")
+        # and the map synthesizes no nameless box and no road from one — a box
+        # with an empty label was a prefix of every place the Wayfinder looked for
+        ow = cli.build_overworld()
+        nameless = [it["key"] for r in ow["runs"] for it in r["items"] if not (it.get("label") or "").strip()]
+        if nameless:
+            out.append(f"RW: the map carries a nameless box for an unnamed pass ({nameless[:3]})")
+        if any((e.get("source") or {}).get("key") == "word:" for e in ow.get("edges") or []):
+            out.append("RW: the map synthesized a road from a nameless box")
+        if [r for r in ow["runs"] if r["trace_id"] == sel["trace_id"]] == []:
+            out.append("RW: the unnamed pass is not on the map at all — its translations are still a run")
         try:
             cli.run_refract({"title": "T", "definition": "   "}, gw)
             out.append("RW: a pass with no meaning ran")
@@ -2581,6 +2591,9 @@ def _check_related_words(server, paired):
                  "} else if (job.mode === 'refract') {", "From the record — related words and other languages"):
         if need not in pg:
             out.append(f"RW: the page lost {need!r}")
+    ow_pg = (root / "webapp" / "overworld.html").read_text(encoding="utf-8")
+    if "if (!have) continue;   // a box with no name is a prefix of every name" not in ow_pg:
+        out.append("RW: the Wayfinder matches a nameless box as a prefix of every place")
     # the room's start path sends a COPY of the selection and touches nothing
     start = pg[pg.index("async function startRelatedFromRoom()"):pg.index("\n}", pg.index("async function startRelatedFromRoom()"))]
     for bad in ("ta.value", "setSelectionRange", "input-text"):

@@ -5740,8 +5740,14 @@ def build_overworld() -> dict:
 
         elif mode == "refract":
             seed_title = (s.get("source") or {}).get("title", "")
-            seed_n = node_word(seed_title)
-            items.append({**seed_n, "seed": True, "verdict": "", "judgment": ""})
+            # Find related words (2026-09-13): a pass from a described meaning
+            # or a selection has no name and no box — the same rule the
+            # writer applies to its roads. Synthesizing a seed from an empty
+            # title made a box with an empty label, which the Wayfinder's
+            # loose match then read as a prefix of every place on the map.
+            seed_n = node_word(seed_title) if seed_title.strip() else None
+            if seed_n:
+                items.append({**seed_n, "seed": True, "verdict": "", "judgment": ""})
             for r in s.get("refractions", []):
                 term = (r.get("romanization") or r.get("term") or "").strip()
                 if not term:
@@ -5749,14 +5755,16 @@ def build_overworld() -> dict:
                 n = node_translation(r.get("language", ""), term)
                 items.append({**n, "verdict": r.get("review_verdict", ""),
                                "judgment": "", "attestation": r.get("attestation", "")})
-                synth("translated_as", seed_n, n, trace,
-                      verdict=r.get("review_verdict", ""),
-                      detail=f"attestation: {r.get('attestation') or 'unstated'}")
+                if seed_n:
+                    synth("translated_as", seed_n, n, trace,
+                          verdict=r.get("review_verdict", ""),
+                          detail=f"attestation: {r.get('attestation') or 'unstated'}")
             if (s.get("english_fossil") or "").strip():
                 n = node_external(s["english_fossil"][:60], "English etymology")
                 items.append({**n, "verdict": s.get("fossil_verdict", ""), "judgment": ""})
-                synth("english_fossil", seed_n, n, trace,
-                      verdict=s.get("fossil_verdict", ""))
+                if seed_n:
+                    synth("english_fossil", seed_n, n, trace,
+                          verdict=s.get("fossil_verdict", ""))
 
         runs.append({"trace_id": trace, "mode": mode,
                       "created_at": s.get("created_at", ""),

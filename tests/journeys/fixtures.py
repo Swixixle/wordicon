@@ -481,7 +481,9 @@ def seed_related():
     ids["selection"] = sel["trace_id"]
     # the legacy shape: what this lane wrote before 2026-09-13 — no English
     # sections, no sections_asked, no Latin or Greek, the old gap wording
-    legacy = cli.run_refract({"title": "Lantern Debt", "definition": "a debt kept lit for nobody"}, g, entry="concept")
+    # its own invented title: the map fixture's legacy place is "Lantern Debt"
+    # by title key, and a refract under that title would add roads to it
+    legacy = cli.run_refract({"title": "Tallow Ledger", "definition": "an account kept by the light it burns"}, g, entry="concept")
     lp = cli.RESULTS_DIR / f"{legacy['trace_id']}.json"
     d = json.loads(lp.read_text())
     for k in ("sections_asked", "english_synonyms", "english_antonyms", "english_set_aside", "cultural_comparisons", "parse_notes"):

@@ -829,6 +829,7 @@ function keyForLabel(lbl) {
   const exact = [], loose = [];
   for (const key of Object.keys(boxes)) {
     const have = norm(boxes[key][0].item.label);
+    if (!have) continue;   // a box with no name is a prefix of every name; it is not a place to travel to
     if (have === want) exact.push(key);
     else if (have.startsWith(want) || want.startsWith(have)) loose.push(key);
   }

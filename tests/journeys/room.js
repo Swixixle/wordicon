@@ -213,7 +213,7 @@ const DRAFT = [
   const undone = await page.evaluate(() => document.getElementById('compose-text').value.slice(0, 24));
   ok(undone !== replaced && /^The refusenik/.test(undone), 'undo walks the replacement back: ' + JSON.stringify(undone));
 
-  // ---- 4. the two views ------------------------------------------------
+  // ---- 4. the views: the centred measure by default, Focused and Wide kept ---
   const measure = async () => page.evaluate(() => {
     const b = document.querySelector('.compose .ink-wrap').getBoundingClientRect();
     return { x: Math.round(b.x), w: Math.round(b.width), view: writeView()[0],
@@ -222,9 +222,11 @@ const DRAFT = [
   });
   await page.evaluate(() => { const ta = document.getElementById('compose-text'); ta.setSelectionRange(97, 97); });
   const f1 = await measure();
+  // stage C: a profile that never chose lands on the centred 68ch measure
+  ok(f1.view === 'measure', 'a new profile opens on the centred measure: ' + JSON.stringify(f1.view));
   await page.evaluate(() => setWriteView('wide')); await page.waitForTimeout(400);
   const w1 = await measure();
-  ok(w1.w > f1.w && w1.view === 'wide', 'Wide uses more of the room than Focused: ' + f1.w + ' -> ' + w1.w);
+  ok(w1.w > f1.w && w1.view === 'wide', 'Wide uses more of the room than the default measure: ' + f1.w + ' -> ' + w1.w);
   ok(w1.draft === f1.draft && w1.caret === f1.caret, 'changing the view touches neither the draft nor the caret: ' + JSON.stringify([f1.draft, f1.caret, w1.draft, w1.caret]));
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('wordicon.write.style.v1') || '{}'));
   ok(stored.view === 'wide', 'the view is remembered on this device and nowhere else: ' + JSON.stringify(stored));
@@ -232,11 +234,14 @@ const DRAFT = [
   page.on('request', r => { if (r.method() !== 'GET' && r.url().indexOf('/api/notebook/') === -1) posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
   await page.evaluate(() => setWriteView('focused')); await page.waitForTimeout(500);
   ok(posts.length === 0, 'changing the view records nothing: ' + JSON.stringify(posts));
+  const fo = await measure();
+  ok(fo.view === 'focused' && fo.w < f1.w, 'Focused, kept by name, is the shorter line: ' + f1.w + ' -> ' + fo.w);
+  await page.evaluate(() => setWriteView('measure')); await page.waitForTimeout(400);
   const f2 = await measure();
-  ok(Math.abs(f2.w - f1.w) <= 2, 'Focused comes back to the same measure: ' + f1.w + ' -> ' + f2.w);
-  // an unknown view name must not break the room — that is what lets a third be added later
+  ok(Math.abs(f2.w - f1.w) <= 2, 'the centred measure comes back to the same width: ' + f1.w + ' -> ' + f2.w);
+  // an unknown view name must not break the room — that is what let this third one be added
   const unknown = await page.evaluate(() => { writeStyle.view = 'someday'; applyWriteStyle(); return { w: Math.round(document.querySelector('.compose .ink-wrap').getBoundingClientRect().width), view: writeView()[0] }; });
-  ok(unknown.view === 'focused' && Math.abs(unknown.w - f1.w) <= 2, 'a view name this build does not know falls back rather than breaking: ' + JSON.stringify(unknown));
+  ok(unknown.view === 'measure' && Math.abs(unknown.w - f1.w) <= 2, 'a view name this build does not know falls back to the default measure rather than breaking: ' + JSON.stringify(unknown));
   await page.evaluate(() => setWriteView('focused'));
 
   // ---- 5. the caret survives every mode, at both measures --------------
