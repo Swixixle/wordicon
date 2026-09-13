@@ -9,7 +9,7 @@ anatomy's stillness until a click. `tests/test_global_constraints.py`
 stays the fast unit job; these run in a real headless Chromium against
 a scratch store.
 
-    cd tests/journeys && npm ci && npx playwright install --with-deps chromium
+    cd tests/journeys && npm ci && npx playwright install --with-deps chromium webkit
     bash tests/journeys/run.sh
 
 `run.sh` makes a scratch directory, seeds sanitized fixtures
