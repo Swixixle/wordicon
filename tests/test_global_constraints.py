@@ -2743,7 +2743,9 @@ def _check_related_words(server, paired):
     for need in (">Explore this word</button>", ">Compare with my idea</button>", "${saved ? 'Saved — remove' : 'Save'}</button>",
                  "function rwExplore(uid, section, index)", "function rwCompare(uid, section, index)", "async function rwSaveToggle(uid, section, index)",
                  "Saved words — kept from related-words passes, with the meaning each was found for",
-                 "not analysed in this pass", "Compare with my idea — from this pass, no model call"):
+                 "not analysed in this pass", "Compare with my idea — from this pass, no model call",
+                 "reviewed as English: ", "its fit and its differences are recall, not reviewed",
+                 "the English sections are recall, not reviewed"):
         if need not in pg:
             out.append(f"RW: the page lost {need!r}")
     cmp_src = pg[pg.index("function rwCompare(uid, section, index)"):pg.index("async function rwLoadSaved(uid)")]
@@ -2798,7 +2800,8 @@ def _check_run_identity(server, paired):
     leaves the file as it was. Proven here on the real lanes with the clock
     FROZEN: two runs on identical input at the same clock value get two ids
     and two records, each reopenable through /api/result; eight runs started
-    at the same instant on eight threads likewise; an id the process already
+    at the same instant on eight threads likewise, each reopening on its own
+    id; an id the process already
     handed out, or one the store already holds, is never handed out again;
     an existing record is never rewritten. Old ids keep their shape (prefix +
     ten hex) and nothing in the store is renamed."""
@@ -2862,6 +2865,9 @@ def _check_run_identity(server, paired):
             for t in ids:
                 if not (cli.RESULTS_DIR / f"{t}.json").exists():
                     out.append(f"ID: concurrent run {t} has no snapshot")
+                got = c.get(f"/api/result/{t}")
+                if got.status_code != 200 or (got.get_json() or {}).get("trace_id") != t:
+                    out.append(f"ID: concurrent run {t} does not reopen on its own")
             # an id already handed out, or already in the store, is never handed out again
             real_urandom = cli.os.urandom
             cli.os.urandom = lambda n: b"\x00" * n

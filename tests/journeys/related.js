@@ -182,8 +182,15 @@ const DRAFT = [
   ok(cmpClosed === '', 'and a second press closes it');
   await page.evaluate(u => rwCompare(u, 'synonyms', 0), uid); await page.waitForTimeout(200);
   const cmpSyn = await page.evaluate(u => document.getElementById(`rw-act-${u}-synonyms-0`).innerText.replace(/\s+/g, ' '), uid);
-  ok(/anticipatory grief · English/.test(cmpSyn) && /What differs: not analysed in this pass/.test(cmpSyn) && /the English sections are recall, not reviewed/.test(cmpSyn),
-     'a field the pass did not produce is named as not analysed, and the English sections say they were not reviewed: ' + cmpSyn.slice(0, 200));
+  ok(/anticipatory grief · English/.test(cmpSyn) && /What differs: not analysed in this pass/.test(cmpSyn)
+     && /reviewed as English: yes/.test(cmpSyn) && /its fit and its differences are recall, not reviewed/.test(cmpSyn),
+     'a field the pass did not produce is named as not analysed, and an English item says what the reviewer judged and that its fit is recall: ' + cmpSyn.slice(0, 200));
+  await page.evaluate(u => rwCompare(u, 'synonyms', 0), uid); await page.waitForTimeout(100);   // close it
+  await page.evaluate(u => rwCompare(u, 'synonyms', 2), uid); await page.waitForTimeout(200);
+  const cmpLoan = await page.evaluate(u => document.getElementById(`rw-act-${u}-synonyms-2`).innerText.replace(/\s+/g, ' '), uid);
+  ok(/ennui · English/.test(cmpLoan) && /reviewed as English: a loanword English carries from French/.test(cmpLoan),
+     'and a loanword says so in Compare, with where it came from: ' + cmpLoan.slice(0, 200));
+  await page.evaluate(u => rwCompare(u, 'synonyms', 2), uid); await page.waitForTimeout(100);   // close it
   // Explore this word: the panel, filled in, and nothing sent
   await page.evaluate(([u, i]) => rwExplore(u, 'languages', i), [uid, latinIdx]); await page.waitForTimeout(600);
   const exp = await page.evaluate(([u, i]) => { const h = document.getElementById(`rw-act-${u}-languages-${i}`); const inp = h.querySelector('input[id^="rw-meaning-"]'); return { text: h.innerText.replace(/\s+/g, ' '), meaning: inp ? inp.value : null, find: !!h.querySelector('button[id^="rw-go-"]') }; }, [uid, latinIdx]);

@@ -4727,9 +4727,19 @@ function rwCompare(uid, section, index) {
       : section === 'cultural'
         ? [['What it is', it.what], ['The connection', it.connection], ['Where it stops', it.limits]]
         : [['Its meaning', it.meaning], ['Literally', it.literal], ['Why it fits (keeps)', it.keeps], ['What differs (drops)', it.drops], ['What it brings (adds)', it.adds], ['Period · register', [it.period, it.register].filter(x => (x || '').trim()).join(' · ')]];
+  // An English item: the reviewer judges whether the word is English (by
+  // adoption) and nothing else — its fit and its differences stay recall.
+  // A record from before that review, or an item the reviewer did not
+  // answer, says the section is recall throughout.
+  const englishReview = (section === 'synonyms' || section === 'antonyms')
+    ? ((it.english_status && it.english_review !== 'unreviewed')
+        ? `<span class="muted" style="font-size:12px">reviewed as English: ${it.english_status === 'loanword'
+              ? 'a loanword English carries' + ((it.loan_from || '').trim() ? ' from ' + escapeHtml(it.loan_from) : '') : 'yes'}${(it.english_note || '').trim() ? ' — ' + escapeHtml(it.english_note) : ''}</span><br><span class="muted" style="font-size:12px;font-style:italic">its fit and its differences are recall, not reviewed</span>`
+        : '<span class="muted" style="font-size:12px;font-style:italic">the English sections are recall, not reviewed</span>')
+    : null;
   const review = (it.review_verdict || it.attestation || it.review_note)
     ? `${verdictTagHtml(it.review_verdict)} ${it.attestation ? `<span class="muted" style="font-size:12px">attestation: ${escapeHtml(it.attestation)}</span>` : ''}${it.review_note ? `<p class="body muted" style="font-size:12px;margin:4px 0 0">${escapeHtml(it.review_note)}</p>` : ''}`
-    : (section === 'synonyms' || section === 'antonyms' ? '<span class="muted" style="font-size:12px;font-style:italic">the English sections are recall, not reviewed</span>' : na);
+    : (englishReview !== null ? englishReview : na);
   holder.innerHTML = `
     <div class="card rw-compare" style="margin-top:6px;border-left:3px solid var(--accent, #888)">
       <div class="section-label" style="margin-top:0">Compare with my idea — from this pass, no model call</div>

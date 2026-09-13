@@ -122,8 +122,10 @@ the precise clock and sixteen random bytes, checked against the results and rece
 stores and against the ids this process has handed out — and writes its snapshot and
 receipt through `write_run_snapshot` / `persist_receipt`, which create exclusively and
 raise `RunRecordCollision` (a RuntimeError, so the writers that tolerate a disk error
-cannot swallow it) rather than overwrite. Job ids are minted the same way against the
-live job table. The shape of an id is unchanged and nothing in the store is renamed.
+cannot swallow it) rather than overwrite — a job that hits it is marked failed and that
+run's result is lost with it; the record that was there stands. Job ids are minted the
+same way against the live job table. The shape of an id is unchanged and nothing in the
+store is renamed.
 `scripts/map_focus.py` is Map · focus: the served projection behind one place's ring —
 exact-identity issuer derivation (`edge_specs_from_snapshot`, `SnapshotIndex`,
 `derive_issuer`), provenance resolution, the ring with its burden, facets, groups and

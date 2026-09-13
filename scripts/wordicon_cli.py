@@ -6124,7 +6124,8 @@ def _write_exclusive(path: Path, text: str, what: str) -> Path:
     except FileExistsError:
         raise RunRecordCollision(
             f"{what} {path.name} already exists in the store; refusing to overwrite it — "
-            "this run keeps its result in memory and the record that was there is untouched") from None
+            "the record that was there is untouched, and this run's result was not written: "
+            "a job that hits this is marked failed and its result is lost with it") from None
     return path
 
 

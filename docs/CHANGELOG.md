@@ -1,5 +1,28 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.31.1 — Compare says what was reviewed; the concurrent runs are reopened
+
+Corrections found while writing report 75, none a new feature.
+
+**Compare with my idea, on an English item.** v1.31.0 made the reviewer
+judge each English word's Englishness, and left Compare's review line
+saying *the English sections are recall, not reviewed* — now partly false.
+It says what the reviewer judged (*reviewed as English: yes*, or *a
+loanword English carries from French*, with the reviewer's note) and that
+the fit and the differences are recall, not reviewed. A record from before
+that review, or an item the reviewer did not answer, keeps the old line,
+which is true of it. Journey `related` +1 (93); the page's words pinned.
+
+**The collision's sentence.** `RunRecordCollision` said the run keeps its
+result in memory — true of a terminal run, not of a server job, whose body
+is marked failed and drops the result. It now says so. The identity pin
+also reopens each of the eight concurrent runs through `/api/result`; it
+had checked that their snapshots exist, not that the route serves them.
+
+The surface map's route line still said `original.definition` was required;
+since v1.30.1 it may be empty when `entry` is `selection` and a `passage` is
+given. Corrected.
+
 ## v1.31.0 — English by adoption; Ancient Greek required, Koine and Modern apart
 
 His order of 13 September, fourth of four: "Keep English synonyms and

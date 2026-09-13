@@ -117,13 +117,15 @@ follow-up on one named language (*Ask another language*) is its own record,
 rendered beneath. Status words: *No close match found in this pass* (asked,
 empty) and *Not checked* (not asked, or asked and not returned); a record from
 before this date says which sections were not part of the tool then. The
-route: `POST /api/jobs` mode `refract` with `original.definition` required,
+route: `POST /api/jobs` mode `refract` with `original.definition` (the meaning;
+may be empty only when `entry` is `selection` and `passage` is given),
 `original.title` optional, `entry` (concept / description / selection),
 `passage`, `only_languages`; `GET /api/related/saved?concept_id=&title=` lists
 the saved comparisons with `via: recorded | derived`. On every result: *Explore
 this word* (the same panel, prefilled; Find is the only spend), *Compare with my
 idea* (your meaning beside the word's, from the record; absent fields say *not
-analysed in this pass*), *Save* (`POST /api/related/save` → one append to
+analysed in this pass*; an English item says what the reviewer judged of it and
+that its fit is recall), *Save* (`POST /api/related/save` → one append to
 `local_state/saved_words.jsonl`; *Saved — remove* appends a removal; the Library's
 *Saved words* shelf lists what stands, each with the meaning it was found for and
 a door back to its comparison; `GET /api/related/saved_words`).
