@@ -6002,7 +6002,7 @@ def summary_line(private_receipt: dict, candidate_results: list) -> str:
     sources_part = (f"{n_sources} public source(s) admitted" if n_sources
                     else "no public source admitted — none was searched for")
     return (f"{sources_part} · {n_constraints} private constraint(s) · "
-            f"{n_candidates} candidate(s) · {n_survived} drew no objection from Friction, "
+            f"{n_candidates} candidate(s) · {n_survived} drew no objection from the critique, "
             f"{n_flagged} flagged{existing_part}{contra_part} · "
             f"your judgment still decides · provisional")
 
@@ -6175,7 +6175,7 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
     # Generation stays sequential by design: within-run title avoidance
     # depends on earlier branches finishing before later ones start.
     print(f"[{gateway.name}] adversarial pass on {len(candidates)} candidate(s), in parallel...")
-    progress("friction", f"Friction on {len(candidates)} candidate(s), in parallel…")
+    progress("friction", f"The critique on {len(candidates)} candidate(s), in parallel…")
 
     def _adversarial(c: dict) -> dict:
         # block 119: a pool worker names its own stage. Without this the
@@ -6227,7 +6227,7 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
     all_claims_for_receipt = []
     sources_for_receipt = []
     for i, (candidate, adversarial, support) in enumerate(zip(candidates, adversarials, supports)):
-        print(f"  Friction on {candidate['title']!r}: {adversarial.get('verdict', '?')}")
+        print(f"  Critique of {candidate['title']!r}: {adversarial.get('verdict', '?')}")
 
         claims = filter_bone_claims(candidate, admitted_fragment_ids)
         for c in claims:
@@ -6380,13 +6380,13 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
     for r in results:
         bff = r["bff"]
         print(f"\n--- {bff['title']} ---")
-        print(f"BONE\n  {bff['bone']['summary']}")
+        print(f"CLAIMS & SOURCES\n  {bff['bone']['summary']}")
         for c in r["claims_detail"]:
             print(f"  - {c['text']}  [{c['fragment_id']}]")
-        print(f"\nFLESH\n  {bff['flesh']['definition']}")
+        print(f"\nMEANING\n  {bff['flesh']['definition']}")
         print(f"  Contradiction: {bff['flesh']['central_contradiction']}")
         print(f"  Axiom: {bff['flesh']['axiom']}")
-        print(f"\nFRICTION ({bff['friction'].get('verdict', 'no verdict')} — informational, not a gate)")
+        print(f"\nCRITIQUE ({bff['friction'].get('verdict', 'no verdict')} — informational, not a gate)")
         print(f"  {bff['friction'].get('hostile_read')}")
         print(f"  Redundancy: {bff['friction'].get('redundancy_note')}")
     print(f"\nRECEIPT (summary): {summary_line(private_receipt, results)}")
@@ -7663,7 +7663,7 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
                         "axiom": c.get("axiom") or ""})
                   for c in candidates if (c.get("title") or "").strip()]
         print(f"[{gateway.name}] adversarial pass on {len(judged)} candidate(s), in parallel...")
-        progress("friction", f"Friction on {len(judged)} candidate(s), in parallel…")
+        progress("friction", f"The critique on {len(judged)} candidate(s), in parallel…")
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, max(1, len(judged)))) as pool:
             advs = list(pool.map(
                 lambda pair: _extract_json(gateway.complete(build_adversarial_prompt(pair[1]))),
@@ -7750,7 +7750,7 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
                 candidate = {"title": title, **frozen_flesh}
             judged_v.append((v, candidate))
         print(f"[{gateway.name}] adversarial pass on {len(judged_v)} variant(s), in parallel...")
-        progress("friction", f"Friction on {len(judged_v)} variant(s), in parallel…")
+        progress("friction", f"The critique on {len(judged_v)} variant(s), in parallel…")
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, max(1, len(judged_v)))) as pool:
             advs_v = list(pool.map(
                 lambda pair: _extract_json(gateway.complete(build_adversarial_prompt(pair[1], riff=True))),
@@ -8142,7 +8142,7 @@ def run_sprout(candidate: dict, gateway: Gateway,
     doors = normalize_doors((parsed.get("doors") or [])[:4], trace_id, len(threads))
 
     print(f"[{gateway.name}] reviewing {len(threads)} thread(s) for strain and fabrication...")
-    progress("friction", f"Friction on {len(threads)} lateral thread(s)…")
+    progress("friction", f"The critique on {len(threads)} lateral thread(s)…")
     review_raw, review_citations = gateway.complete_with_search(build_sprout_review_prompt(
         candidate, threads, visited=visited or None))
     reviews = _extract_json(review_raw).get("reviews", [])
@@ -9059,7 +9059,7 @@ def run_recheck(candidate: dict, gateway: Gateway,
     definition = candidate.get("definition", "")
     input_text = f"recheck of '{title}': {definition[:160]}"
     trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
-    progress("friction", f"Friction on your definition of {title!r}…")
+    progress("friction", f"The critique on your definition of {title!r}…")
     print(f"[{gateway.name}] rechecking {title!r} against your own definition...")
 
     adversarial = _extract_json(gateway.complete(
@@ -9087,8 +9087,8 @@ def run_recheck(candidate: dict, gateway: Gateway,
         "friction": {k: adversarial.get(k) for k in
                       ("hostile_read", "redundancy_note", "verdict", "register")},
     }
-    summary = (f"Friction on your own definition · {len(near)} nearby word(s) already in "
-               f"your lexicon" if near else "Friction on your own definition")
+    summary = (f"The critique on your own definition · {len(near)} nearby word(s) already in "
+               f"your lexicon" if near else "The critique on your own definition")
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     (RESULTS_DIR / f"{trace_id}.json").write_text(json.dumps({
@@ -9430,7 +9430,7 @@ def run_refract(candidate: dict, gateway: Gateway,
     fossil_check = (parsed.get("fossil_check") or "").strip()
 
     print(f"[{gateway.name}] reviewing {len(refractions)} refraction(s) for invention and folk-linguistics...")
-    progress("friction", f"Friction on {len(refractions)} refraction(s)…")
+    progress("friction", f"The critique on {len(refractions)} refraction(s)…")
     review_raw, review_citations = gateway.complete_with_search(
         build_refract_review_prompt(candidate, refractions, english_fossil))
     review_parsed = _extract_json(review_raw)
@@ -9659,7 +9659,7 @@ def run_verify(candidate: dict, gateway: Gateway,
                 "overall_note": "",
                 "summary": "Friction left no checkable claims on this candidate — nothing to verify."}
 
-    print(f"[{gateway.name}] verifying Friction's claims about {title!r}...")
+    print(f"[{gateway.name}] verifying the critique's claims about {title!r}...")
     progress("verifying", f"Checking Friction's claims about {title!r} against live sources…")
     review_raw, citations = gateway.complete_with_search(build_verify_prompt(candidate))
     parsed = _extract_json(review_raw)
@@ -12109,7 +12109,7 @@ def run_deep(text: str, gateway: Gateway, interactive: bool = True,
             c.get("constraints", ""), anchor, text)
 
     print(f"[{gateway.name}] attacking the input as given...")
-    progress("friction", "Friction on the input as given…")
+    progress("friction", "The critique on the input as given…")
     attack = _extract_json(gateway.complete(build_attack_prompt(text, gesture=gesture)))
     attack = {k: attack.get(k) for k in
               ("input_kind", "hostile_read", "redundancy_note", "verdict", "reason")}

@@ -257,7 +257,7 @@
   <summary>Legend & what this map does NOT claim</summary>
   <div id="legend-routes"></div>
   <div class="row prose">◆ concept &nbsp; ● word-form &nbsp; ★ external work &nbsp; ⬠ translation &nbsp; ▣ source text &nbsp; ◇ component &nbsp; <span style="color:var(--bad)">⊘ contradicts its own anchor</span></div>
-  <div class="row prose"><strong>Two judgments per item, never one.</strong> <span class="tag rejected">Friction: reject</span> is the critic's advice and decides nothing. <span class="tag accepted">you: accepted</span> is your ruling and is the only thing that settles anything. An item can carry both — Friction arguing against a word you kept is a normal, recorded disagreement, not an error.</div>
+  <div class="row prose"><strong>Two judgments per item, never one.</strong> <span class="tag rejected">Critique: reject</span> is the critic's advice and decides nothing. <span class="tag accepted">you: accepted</span> is your ruling and is the only thing that settles anything. An item can carry both — the critique arguing against a word you kept is a normal, recorded disagreement, not an error.</div>
   <div class="row prose">solid = recorded lineage · dashed arc = same title recurring · thick solid arc = different titles, one shared concept (carried by Revise/Wordify) · broken + ⚠ = disputed verdicts · faint = rejected, kept as ghost · green ring = you accepted it</div>
   <div class="row prose"><strong>Wayfinder roads identify themselves:</strong> <span class="tag accepted">recorded</span> written to the log as it happened · <span class="tag revised">reconstructed from snapshot</span> the event happened, the road was written down late · <span style="color:var(--route-declared)">declared</span> you ruled it exists · <span style="color:var(--route-warp)">inferred</span> a model proposed it just now — not part of the record, editable, and real only if you declare it. Lineage, Direct and History never infer; “No road exists” is a result, not an error.</div>
   <div class="limits" id="legend-limits"></div>
@@ -294,7 +294,7 @@ const GLYPH = { concept: '◆', word: '●', external: '★', translation: '⬠'
 // owner's half is always the one carrying "you:".
 function dispositionLabel(it) {
   const bits = [];
-  if (it.verdict) bits.push('Friction: ' + it.verdict);
+  if (it.verdict) bits.push('Critique: ' + it.verdict);
   if (it.judgment) bits.push('you: ' + it.judgment);
   return bits.join(' · ');
 }
@@ -744,14 +744,14 @@ async function openDetail(key, trace) {
   });
   const edgeRows = Object.values(grouped).map(g => `
     <p style="margin:3px 0;font-size:12.5px">${escapeHtml(g.e.rel)} ${escapeHtml(g.dir)}
-      ${g.e.verdict ? `<span class="tag ${escapeHtml(g.e.verdict)}">Friction: ${escapeHtml(g.e.verdict)}</span>` : ''}
+      ${g.e.verdict ? `<span class="tag ${escapeHtml(g.e.verdict)}">Critique: ${escapeHtml(g.e.verdict)}</span>` : ''}
       ${g.n > 1 ? `<span style="color:var(--muted)">×${g.n}</span>` : ''}
       ${g.synth ? `<span style="color:var(--muted);font-size:10px">(reconstructed from snapshot)</span>` : ''}</p>`
   ).join('') || '<p style="color:var(--muted)">No recorded relationships.</p>';
   const inDispute = DATA.disputes.find(d => d.target_key === key);
   showDetail(`<h2>${GLYPH[it.kind] || ''} ${escapeHtml(it.label)}</h2>
     <p style="color:var(--muted);font-size:12px">${escapeHtml(it.kind)}
-      ${it.verdict ? `<span class="tag ${escapeHtml(it.verdict)}">Friction: ${escapeHtml(it.verdict)}</span>` : ''}
+      ${it.verdict ? `<span class="tag ${escapeHtml(it.verdict)}">Critique: ${escapeHtml(it.verdict)}</span>` : ''}
       ${it.judgment ? `<span class="tag ${escapeHtml(it.judgment)}">you: ${escapeHtml(it.judgment)}</span>` : ''}</p>
     ${inDispute ? `<p style="color:var(--route-dispute);font-size:12.5px">⚠ Disputed across runs: ${escapeHtml(tallyStr(inDispute))}. Same target, different verdicts — the map shows both; reconciling them is a judgment, and it's yours.</p>` : ''}
     <div style="border-top:1px solid var(--border);margin:10px 0;padding-top:8px">
@@ -770,7 +770,7 @@ async function openDetail(key, trace) {
         <p style="font-size:13px">${escapeHtml(f.definition || '')}</p>
         ${f.central_contradiction ? `<p style="font-size:12.5px;color:var(--muted)"><em>Contradiction:</em> ${escapeHtml(f.central_contradiction)}</p>` : ''}
         ${f.axiom ? `<p style="font-size:12.5px;color:var(--muted)"><em>Axiom:</em> ${escapeHtml(f.axiom)}</p>` : ''}
-        ${fr.hostile_read ? `<p style="font-size:12px;color:var(--muted)"><em>Friction:</em> ${escapeHtml(fr.hostile_read)}</p>` : ''}
+        ${fr.hostile_read ? `<p style="font-size:12px;color:var(--muted)"><em>Critique:</em> ${escapeHtml(fr.hostile_read)}</p>` : ''}
       </div>`;
     } else {
       const th = (snap.threads || []).find(t => it.label.startsWith(t.anchor_name || '\0'));

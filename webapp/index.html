@@ -1178,7 +1178,7 @@ const STAGE_LABELS = {
   dissecting: 'Dissecting the input into components…',
   generating: 'Generating candidates…',
   retrieving: 'Checking candidates against sources…',
-  friction: 'Running Friction…',
+  friction: 'Running the critique…',
   sprouting: 'Traveling laterally…',
   refracting: 'Refracting through other languages…',
 };
@@ -1445,7 +1445,7 @@ function renderHistory() {
       <div class="history-item moded" style="--m:var(${modeStyle(newest.operation).v});cursor:pointer"
            onclick="loadPastResult('${escapeJs(newest.trace_id)}','recent','${escapeJs(row.titles[0] || '')}')">
         <div class="history-title" style="font-size:14px">${label}
-          ${decided.map(dd => `<span class="decision-tag ${dd}" title="your ruling — Friction's advice is inside the run, not here">${dd}</span>`).join('')}
+          ${decided.map(dd => `<span class="decision-tag ${dd}" title="your ruling — the critique's advice is inside the run, not here">${dd}</span>`).join('')}
         </div>
         <div style="margin:5px 0 3px">${chips}</div>
         <div class="history-meta">${nRuns} run${nRuns === 1 ? '' : 's'} · last ${new Date(row.created_at).toLocaleString()}</div>
@@ -2031,7 +2031,7 @@ async function watchJob(jobId) {
       // The lane says what it is: invented meanings are LABELED invented,
       // and interpret claims no authority — on the surface, not in a doc.
       if (job.mode === 'play') {
-        header += '<div class="card" style="padding:8px 14px;font-size:12px;color:var(--muted)"><strong style="color:var(--text)">PLAY</strong> — meanings invented on purpose, labeled so; Friction judged whether the coin is alive, never whether it is respectable.</div>';
+        header += '<div class="card" style="padding:8px 14px;font-size:12px;color:var(--muted)"><strong style="color:var(--text)">PLAY</strong> — meanings invented on purpose, labeled so; the critique judged whether the coin is alive, never whether it is respectable.</div>';
       } else if (job.mode === 'deep' && result.gesture === 'interpret') {
         header += '<div class="card" style="padding:8px 14px;font-size:12px;color:var(--muted)"><strong style="color:var(--text)">INTERPRET</strong> — readings offered, none authoritative; nothing here demanded a referent.</div>';
       }
@@ -2377,7 +2377,7 @@ function backgroundHtml(background) {
   if (!background) return '';
   return `<div class="body muted" style="font-size:12.5px;border-left:3px solid #d9a441;padding-left:10px;margin:6px 0">
       <em style="color:#d9a441">Common context — NOT the text itself:</em> ${escapeHtml(background)}
-      <span class="muted" style="display:block;font-size:11px;margin-top:2px">Recall, unverified.${whyHtml('Background a candidate may use, ignore, or push against. Friction will not treat diverging from this alone as a misreading of the source.')}</span>
+      <span class="muted" style="display:block;font-size:11px;margin-top:2px">Recall, unverified.${whyHtml('Background a candidate may use, ignore, or push against. The critique will not treat diverging from this alone as a misreading of the source.')}</span>
     </div>`;
 }
 
@@ -2437,7 +2437,7 @@ function componentHeaderHtml(g, opts) {
     g.constraints ? `<p class="body muted" style="font-size:12.5px"><em>Bound by the source:</em> ${escapeHtml(g.constraints)}</p>` : '',
     scIsFinding ? '' : sourceCheckHtml(sc),
     backgroundHtml(g.background),
-    g.stance ? `<p class="body muted" style="font-size:12.5px"><em>The text's own stance:</em> ${escapeHtml(g.stance)} — a candidate that reads against this is a counter-reading; Friction labels those under “Beyond the source.”</p>` : '',
+    g.stance ? `<p class="body muted" style="font-size:12.5px"><em>The text's own stance:</em> ${escapeHtml(g.stance)} — a candidate that reads against this is a counter-reading; the critique labels those under “Beyond the source.”</p>` : '',
   ].join('');
 
   return `
@@ -2802,7 +2802,7 @@ function renderCandidateCard(cand, traceId, extra) {
         ${inventedExampleHtml(bff.flesh.example_sentence, {traceId: traceId, ref: {concept_id: bff.concept_id || '', title: bff.title}})}
       </div>` : ''}
 
-      <div class="section-label">The concept — what the idea is, before any name</div>
+      <div class="section-label">Meaning — what the idea is, before any name</div>
       <p class="body">${escapeHtml(bff.flesh.definition || '')}</p>
       ${bff.flesh.central_contradiction ? `<p class="body muted"><em>Tension:</em> ${escapeHtml(bff.flesh.central_contradiction)}</p>` : ''}
       ${bff.flesh.mechanism ? `<p class="body muted"><em>Mechanism:</em> ${escapeHtml(bff.flesh.mechanism)}</p>` : ''}
@@ -2827,19 +2827,19 @@ function renderCandidateCard(cand, traceId, extra) {
                               'Anchor fit (' + cs.support + ') on “' + bff.title + '”: ' + fitWhy,
                               {anchor_fit: cs.support, route: 'anchor-fit difference — reviewer-selected words, not a proof'}) : ''}
           ${f.hostile_read ? carryBtn(traceId, 'friction', Object.assign({field: 'hostile_read'}, ref),
-                                      'Friction on “' + bff.title + '”: ' + f.hostile_read,
+                                      'Critique of “' + bff.title + '”: ' + f.hostile_read,
                                       {friction_verdict: f.verdict || '', route: 'critic\u2019s objection — advisory'}) : ''}
         </div>`; })()}
 
       <details class="case"><summary>show the case \u2014 the evidence behind those rows</summary>
 
-      <div class="section-label">Bone</div>
+      <div class="section-label">Claims &amp; sources</div>
       <p class="body muted">${escapeHtml(bff.bone.summary)}</p>
       ${claimsHtml}
 
       ${twoTierHtml(bff)}
 
-      <div class="section-label">Friction — a verdict on CRAFT, advisory, not a gate
+      <div class="section-label">Critique — a verdict on craft, advisory, not a gate
         ${verdictLabel ? `<span class="decision-tag ${verdictClass}" style="margin-left:6px;text-transform:none;letter-spacing:0">${escapeHtml(verdictLabel)}</span>` : ''}
       </div>
       <p class="body muted">${escapeHtml(bff.friction.hostile_read || '')}</p>
@@ -2866,7 +2866,7 @@ function renderCandidateCard(cand, traceId, extra) {
       ${(() => { const D = liveDoor(bff); const hasClaims = !!(bff.friction && (bff.friction.redundancy_note || bff.friction.hostile_read || bff.friction.source_fidelity_note)); return `
       <div class="door-head">${escapeHtml(D.label)}${whyHtml(D.why)}</div>
       ${(D.key === 'verify' || D.key === 'verify-not-anchor') && hasClaims
-        ? `<button class="judge-btn live" style="margin-top:6px;font-size:12.5px" onclick="startVerifyFromCard(${i})">✓ Verify — test Friction's own claims${D.key === 'verify-not-anchor' ? ', not the anchor' : ''}</button>` : ''}
+        ? `<button class="judge-btn live" style="margin-top:6px;font-size:12.5px" onclick="startVerifyFromCard(${i})">✓ Verify — test the critique's own claims${D.key === 'verify-not-anchor' ? ', not the anchor' : ''}</button>` : ''}
       ${D.key === 'none'
         ? `<button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="openBenchFromCard('${escapeJs(bff.title)}', '${escapeJs(bff.concept_id || '')}')">⚒ Take it to the Bench — structure and names, not the anchor</button>` : ''}
       <details class="case" style="margin-top:8px"><summary>${D.key === 'travel' ? 'Where you can travel from it' : 'The other doors — none of them change the rows above'}</summary>
@@ -2874,7 +2874,7 @@ function renderCandidateCard(cand, traceId, extra) {
         <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startRefractFromCard(${i}, '${escapeJs(bff.title)}')">⇄ Refract — the same idea in other languages</button>
         <button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startArchetypeFromCard(${i}, '${escapeJs(bff.title)}')">◈ Archetype — the figure this concept implies</button>
         ${hasClaims && D.key !== 'verify' && D.key !== 'verify-not-anchor'
-          ? `<button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startVerifyFromCard(${i})">✓ Verify — test Friction's own claims against live sources</button>` : ''}
+          ? `<button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="startVerifyFromCard(${i})">✓ Verify — test the critique's own claims against live sources</button>` : ''}
         ${D.key === 'none' ? '' : `<button class="judge-btn" style="margin-top:6px;font-size:12.5px" onclick="openBenchFromCard('${escapeJs(bff.title)}', '${escapeJs(bff.concept_id || '')}')">⚒ Take it to the Bench — refine its structure, or explore names</button>`}
       </details>`; })()}
       <details class="case" style="margin-top:10px"><summary>Naming — the handle, not the concept; optional, and sometimes rightly never</summary>
@@ -3232,7 +3232,7 @@ function liveDoor(bff) {
       label: 'Nothing here repairs the warrant. Verify can still test the objection.',
       why: 'Two different rows are failing and they do not take the same door. The anchor was ' +
            'chosen when your text was taken apart and the check that placed it runs once, ' +
-           'during the run — no button here re-runs it. Friction\u2019s objection is separate, ' +
+           'during the run — no button here re-runs it. The critique\u2019s objection is separate, ' +
            'and Verify tests the exact claims it recorded. Moving that row leaves the warrant ' +
            'row exactly where it is.'};
   }
@@ -3249,7 +3249,7 @@ function liveDoor(bff) {
   if (hasClaims && (f.verdict === 'reject' || f.verdict === 'contradicted' || f.verdict === 'existing')) {
     return {key: 'verify',
       label: 'Verify is the door that can move this.',
-      why: 'Friction recorded specific claims against this candidate, and Verify is the ' +
+      why: 'The critique recorded specific claims against this candidate, and Verify is the ' +
            'one action that tests those exact claims against live sources. Every other ' +
            'button travels away from the objection rather than at it.'};
   }
@@ -3463,7 +3463,7 @@ const PART_CHIPS = [
   {key: 'definition',    label: 'the definition'},
   {key: 'contradiction', label: 'the contradiction'},
   {key: 'axiom',         label: 'the axiom'},
-  {key: 'friction',      label: "Friction's critique"},
+  {key: 'friction',      label: "Critique"},
 ];
 const MEANING_PARTS = ['definition', 'contradiction', 'axiom'];
 let pendingParts = {};
@@ -4303,7 +4303,7 @@ function verifyVerdictTagHtml(v) {
 
 function fieldLabel(f) {
   return f === 'redundancy_note' ? 'Redundancy'
-    : f === 'hostile_read' ? 'Friction'
+    : f === 'hostile_read' ? 'Critique'
     : f === 'source_fidelity_note' ? 'Beyond the source' : f;
 }
 
@@ -4321,7 +4321,7 @@ function buildVerifyHtml(res) {
       ${c.note ? `<p class="body" style="font-size:13px">${escapeHtml(c.note)}</p>` : ''}
     </div>`).join('');
   return `
-    <div class="section-label">Verify — checking Friction's own claims${res.source_title ? ` for “${escapeHtml(res.source_title)}”` : ''}</div>
+    <div class="section-label">Verify — checking the critique's own claims${res.source_title ? ` for “${escapeHtml(res.source_title)}”` : ''}</div>
     ${summaryHtml}
     ${citationsHtml(res.citations)}
     ${res.overall_note ? `<p class="body muted" style="font-size:12.5px">${escapeHtml(res.overall_note)}</p>` : ''}
@@ -4351,7 +4351,7 @@ async function startVerifyInto(areaId, candidate) {
   const area = document.getElementById(areaId);
   if (!area) return;
   area.innerHTML = `<div class="section-label">Verifying “${escapeHtml(candidate.title)}”</div>
-    <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>checking Friction's own claims against live sources…</p>`;
+    <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>checking the critique's own claims against live sources…</p>`;
   try {
     const r = await fetch('/api/jobs', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -4580,7 +4580,7 @@ function openDefine(name) {
     <textarea id="def-text-${cssId(name)}" style="min-height:110px">${escapeHtml(w.definition || '')}</textarea>
     <input class="note" id="def-why-${cssId(name)}" placeholder="why you're changing it — optional, kept with the old wording">
     <p class="body muted" style="font-size:12px;margin:6px 0">Saving replaces the meaning and
-    <strong>resets its grounding</strong>: the anchor, the support check, Friction's ruling and every
+    <strong>resets its grounding</strong>: the anchor, the support check, the critique's ruling and every
     refraction or sprout made from this word were all checked against the sentence you are replacing.
     The old wording is kept.</p>
     <button class="judge-btn" style="font-size:12px;padding:4px 10px;margin-right:6px"
@@ -5278,7 +5278,7 @@ function carryLabels(st) {
   if (st.invented) out.push('INVENTED EXAMPLE — NOT IN YOUR TEXT');
   if (st.contradicted || st.anchor_fit === 'contradicted') out.push('CONTRADICTED — the anchor conflicts with this');
   if (st.anchor_fit && st.anchor_fit !== 'contradicted') out.push('anchor fit: ' + st.anchor_fit);
-  if (st.friction_verdict) out.push('Friction: ' + st.friction_verdict);
+  if (st.friction_verdict) out.push('Critique: ' + st.friction_verdict);
   if (st.recall_only) out.push('RECALL ONLY — unverified');
   else if (st.unverified) out.push('UNVERIFIED');
   if (st.provider_returned) out.push('provider-returned, not examined');
@@ -8090,7 +8090,7 @@ function renderLibrary(q) {
         here is a suggestion, and none of it is a second verdict on anything you decided.${
         whyHtml('Every number in this panel is counted over the rows on this shelf and no other population. A count with no named denominator is a number two readers will divide differently.')}</div>
       ${obsRow(obs.kept_over_objection.length, 'kept over the critic\u2019s objection',
-               'Friction ruled against these and you kept them anyway. That is the arrangement working — it advises, you decide — and it is also a fact about how you rule.', 'objected')}
+               'The critique objected to these and you kept them anyway. That is the arrangement working — it advises, you decide — and it is also a fact about how you rule.', 'objected')}
       ${obsRow(obs.set_aside_unopposed.length, 'set aside with no objection on record',
                'Nothing in the run argued against these. You set them aside on your own read.', '')}
       ${obsRow(obs.kept_unchecked.length, 'kept with nothing checked',

@@ -2334,6 +2334,50 @@ def _check_notebook_a():
     return out
 
 
+def _check_plain_words():
+    """The plain-language renaming (the owner's authorization, 2026-09-13):
+    display words change, internal identifiers do not. Each rename is pinned
+    on the surface it lives on, and the record's keys are pinned unchanged
+    beside it, so a future edit can neither bring a mythic word back onto a
+    card nor "helpfully" rename a stored field."""
+    out = []
+    root = _pathlib.Path(cli.__file__).resolve().parents[1]
+    pg = (root / "webapp" / "index.html").read_text(encoding="utf-8")
+    law = _canon_source()
+    ow = (root / "webapp" / "overworld.html").read_text(encoding="utf-8")
+    src = _pathlib.Path(cli.__file__).read_text(encoding="utf-8")
+    # the three layers on the card
+    for need in ('<div class="section-label">Claims &amp; sources</div>',
+                 '<div class="section-label">Meaning — what the idea is, before any name</div>',
+                 '<div class="section-label">Critique — a verdict on craft, advisory, not a gate',
+                 "label: \"Critique\"", "'Critique: ' + st.friction_verdict"):
+        if need not in pg:
+            out.append(f"W: the card lost the plain label {need!r}")
+    for gone in ('<div class="section-label">Bone</div>', '<div class="section-label">Friction',
+                 "'Friction on “'", "Running Friction…", "Friction ruled against these",
+                 "test Friction's own claims", "checking Friction's own claims"):
+        if gone in pg:
+            out.append(f"W: the mythic label {gone!r} is back on the page")
+    # the law says the three layers under their plain names, with the old names once, as provenance
+    for need in ("<strong>Claims &amp; sources</strong> (formerly Bone)", "<strong>Meaning</strong>",
+                 "(formerly Flesh)", "<strong>Critique</strong> (formerly Friction)",
+                 "Critique: reject · you: accepted", "The critique's verdict is about <strong>craft</strong>"):
+        if need not in law:
+            out.append(f"W: the constitution does not carry {need!r}")
+    # the terminal says the same words
+    for need in ('print(f"CLAIMS & SOURCES\\n', 'print(f"\\nMEANING\\n', 'print(f"\\nCRITIQUE (',
+                 "drew no objection from the critique"):
+        if need not in src:
+            out.append(f"W: the terminal lost {need!r}")
+    # the record's keys are not renamed: every stored candidate still carries bone/flesh/friction
+    for key in ('"bone"', '"flesh"', '"friction"'):
+        if src.count(key) < 5:
+            out.append(f"W: the record key {key} looks renamed — the record must keep the keys it was written with")
+    if "Critique: ${escapeHtml(" not in ow:
+        out.append("W: the map's verdict tag lost its plain name")
+    return out
+
+
 def _check_reply_parse(server):
     """The Go deep parse repair (the owner's yes, 2026-09-13). Reproduces
     the 2026-09-09 failure — a one-line dissection reply with the passage's
@@ -3411,6 +3455,7 @@ def main() -> int:
     failures.extend(_check_moira_routes(server, _paired))
     failures.extend(_check_notebook_b(server, _paired))
     failures.extend(_check_reply_parse(server))
+    failures.extend(_check_plain_words())
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key
@@ -4561,7 +4606,7 @@ def main() -> int:
     if not all(f.get("verdict") == "contradicted" for f in cfr):
         failures.append(f"expected verdict 'contradicted', got {[f.get('verdict') for f in cfr]}")
     sl = cli.summary_line(contra_run["private_receipt"], contra_run["candidates"])
-    if "drew no objection from Friction" not in sl or "contradicting the source" not in sl:
+    if "drew no objection from the critique" not in sl or "contradicting the source" not in sl:
         failures.append(f"summary line does not report contradictions separately: {sl!r}")
     # (block 117: a dead `if ...: pass` stood here and read like a check. The
     # real assertion is the one below; a no-op shaped like a guard is worse
@@ -5275,18 +5320,19 @@ def main() -> int:
     # never a gate — so a display that flattens the two into one
     # undifferentiated list is not a cosmetic problem; it is the product
     # misreporting its own authority structure. The owner's half always
-    # carries "you:", Friction's always carries "Friction:".
+    # carries "you:", the critic's always carries "Critique:" (its display
+    # name since the 2026-09-13 renaming; "Friction" was the name before).
     ow = (Path(__file__).resolve().parents[1] / "webapp" / "overworld.html").read_text()
     if "function dispositionLabel" not in ow:
         failures.append("overworld lost dispositionLabel — the two judgments merge again")
     if "[it.verdict, it.judgment].filter(Boolean).join" in ow:
         failures.append("overworld still joins verdict and judgment with no attribution")
-    for needle in ("'Friction: ' + it.verdict", "'you: ' + it.judgment"):
+    for needle in ("'Critique: ' + it.verdict", "'you: ' + it.judgment"):
         if needle not in ow:
             failures.append(f"a judgment is rendered unattributed on the map: {needle!r}")
     # the detail panel and the edge rows attribute too, or the map teaches
     # one thing and the panel behind it teaches another
-    if ow.count("Friction: ${escapeHtml(") < 2:
+    if ow.count("Critique: ${escapeHtml(") < 2:
         failures.append("the detail panel still shows a bare verdict with no owner")
     if "Two judgments per item, never one." not in ow:
         failures.append("the legend does not explain the two-judgment format")
@@ -5309,9 +5355,9 @@ def main() -> int:
         failures.append("the constitution could not be read — the checks below would be vacuous")
     if 'href="/constitution"' not in _about_panel(idx11):
         failures.append("the What-is panel no longer opens the constitution")
-    if "your ruling — Friction's advice is inside the run" not in flat11:
+    if "your ruling — the critique's advice is inside the run" not in flat11:
         failures.append("Recent's decision tags are unattributed")
-    if "Friction: reject · you: accepted" not in panel:
+    if "Critique: reject · you: accepted" not in panel:
         failures.append("the What-is panel does not decode the two-judgment format")
 
     # 35. STALE SELF-DESCRIPTION. Sprout's and Refract's reviews were
@@ -11132,7 +11178,7 @@ console.log(out.join('\\n'));
     ]:
         _line = cli.summary_line(_rec, _cands)
         _nums = {k: int(v) for v, k in re.findall(
-            r"(-?\d+) (drew no objection from Friction|flagged|already-named|contradicting the source)", _line)}
+            r"(-?\d+) (drew no objection from the critique|flagged|already-named|contradicting the source)", _line)}
         _total = sum(_nums.values())
         if any(v < 0 for v in _nums.values()):
             failures.append(f"summary_line reports a negative count on {_name}: {_line}")
@@ -14771,7 +14817,7 @@ console.log(out.join('\\n'));
     # the ruled hierarchy, plus the order itself.
     _idx94 = (Path(cli.__file__).parent.parent / "webapp"
               / "index.html").read_text()
-    for _pin94 in ("The concept — what the idea is, before any name",
+    for _pin94 in ("Meaning — what the idea is, before any name",
                    "<em>Tension:</em>", "<em>Mechanism:</em>",
                    "<em>Boundary:</em>", "In one breath",
                    ">working title</span>",
@@ -14781,7 +14827,7 @@ console.log(out.join('\\n'));
                    "function namingNote"):
         if _pin94 not in _idx94:
             _f94(f"index.html lost the concept-first pin {_pin94!r}")
-    _o1 = _idx94.find("The concept — what the idea is")
+    _o1 = _idx94.find("Meaning — what the idea is")
     _o2 = _idx94.find("${verdictHeadHtml(bff, extra)}")
     _o3 = _idx94.find("Your judgment on the CONCEPT")
     _o4 = _idx94.find("Sprout — travel laterally")
@@ -14789,7 +14835,8 @@ console.log(out.join('\\n'));
     if not (-1 < _o1 < _o2 < _o3 < _o4 < _o5):
         _f94(f"the card hierarchy is out of the ruled order "
              f"({_o1},{_o2},{_o3},{_o4},{_o5})")
-    if '<div class="section-label">Flesh</div>' in _idx94:
+    if ('<div class="section-label">Flesh</div>' in _idx94
+            or '<div class="section-label">Meaning</div>' in _idx94):
         _f94("the anatomy is still hidden inside the collapsed case")
 
     # 18. lexical novelty does not gate the concept: the strip source has
@@ -21171,7 +21218,7 @@ console.log(out.join('\\n'));
     # THE LESSONS ARE BEHIND THE MARK.
     for _lesson in ("not judged by the model",
                     "it is a word count, not a judgment",
-                    "Friction will not treat diverging from this alone",
+                    "The critique will not treat diverging from this alone",
                     "a matter of degree you weigh",
                     "it proves only this"):
         if _lesson not in _why_blob:

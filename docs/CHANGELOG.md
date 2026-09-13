@@ -1,5 +1,37 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.24.0 — Plain words, first pass: Claims & sources, Meaning, Critique
+
+The owner's authorization (2026-09-13) for the plain-language renaming, in
+small commits. This one is the three layers of a result. Display words
+only: every record keeps the keys it was written with (`bone`, `flesh`,
+`friction`), every route, id and stored field is unchanged, and the old
+names stand once, as provenance, where the constitution introduces the new.
+
+- **Bone → Claims & sources** — the card's section label and the terminal's
+  section header.
+- **Flesh → Meaning** — the card's "The concept — what the idea is, before
+  any name" reads "Meaning — what the idea is, before any name"; the
+  terminal's FLESH header reads MEANING.
+- **Friction → Critique** — the card's "Critique — a verdict on craft,
+  advisory, not a gate"; the verdict tags on the Map and in Recent read
+  "Critique: reject" beside "you: accepted"; the Verify doors test "the
+  critique's own claims"; the counted panel's sentence, the PLAY header, the
+  stage line ("Running the critique…"), the terminal's progress lines and
+  CRITIQUE header, the summary line's "drew no objection from the critique";
+  the carry excerpt of an objection is now "Critique of “title”: …" (new
+  carries only — recorded excerpts are not rewritten). The constitution's
+  "Three layers, always" paragraph, the Verify sentence, the two-judgment
+  sentence and the craft-versus-grounding paragraph say the new words; the
+  anatomy's Boundary & Critique organ describes "the critique". The
+  Wayfinder's own *Friction roads* (a road type, not the critic) are not in
+  this pass.
+
+Pins: `_check_plain_words` requires the plain labels on the card, the law,
+the terminal and the map, refuses the mythic labels on the page, and
+requires the record keys unchanged. The seven existing pins that quoted the
+old wording were amended to the new wording with their intent intact.
+
 ## v1.23.0 — The reply that could not be read is kept, and one defect is repaired
 
 The owner's Go deep on a 424-word passage died on 2026-09-09 with "could not

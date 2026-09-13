@@ -25,8 +25,9 @@ and the one network act is fetching the model once. **Depositions** arrive from 
 other instruments — Open Case and EthicalAlt — as exact signed bytes, verified under a
 key you pinned out of band (docs/adr-federation.md).
 
-**Where the work happens.** A run comes back as **readings** — Bone, Flesh, and
-Friction layered so the objection is visible beside the claim — each with its own
+**Where the work happens.** A run comes back as **readings** — Claims & sources, Meaning,
+and Critique (Bone, Flesh and Friction until 2026-09-13; the record keeps those keys)
+layered so the objection is visible beside the claim — each with its own
 receipt and its own support question, which asks whether a passage *grounds* a claim
 and not merely whether it mentions it. The **writing room** is one live element that is
 never rebuilt, so a draft, its caret, its undo stack and its scroll survive every layout
@@ -79,8 +80,8 @@ pinned keys, credential *references* only, a fetcher locked to configured origin
 exact-byte custody of every package received.
 
 **Where the work happens** — `scripts/wordicon_cli.py` is the oldest organ: the run
-engines (forge, crack, decompose, sprout, refract, archetype), the Bone/Flesh/Friction
-layering, the judgment log, the Map builder. `scripts/clinic.py` is the medical wing:
+engines (forge, crack, decompose, sprout, refract, archetype), the Claims & sources /
+Meaning / Critique layering (`bone`/`flesh`/`friction` in every record), the judgment log, the Map builder. `scripts/clinic.py` is the medical wing:
 custody by institutional role, declared and never inferred supersession, one topic room.
 `scripts/carry.py` is Carry Back: the append-only store of what the owner carried from
 a workup back beside his draft (`local_state/carries.jsonl`), each carry's excerpt and
