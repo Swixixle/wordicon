@@ -118,8 +118,10 @@ rendered beneath; it is offered wherever the pass had a source — a stated mean
 kept passage — and sends that record's own passage exactly. Status words: *No close match found in this pass* (asked,
 empty) and *Not checked* (not asked, or asked and not returned); a record from
 before this date says which sections were not part of the tool then. The
-route: `POST /api/jobs` mode `refract` with `original.definition` (the meaning;
-may be empty only when `entry` is `selection` and `passage` is given),
+route: `POST /api/jobs` mode `refract` with `original.definition` (the meaning, whole —
+4,000 code points at most, over that refused with the count, never cut; may be empty only
+when `entry` is `selection` and `passage` is given; `meaning_narrowed` says it is a
+shorter meaning given for this comparison),
 `original.title` optional, `entry` (concept / description / selection),
 `passage` (4,000 code points at most — over that is refused with the count, never cut),
 `only_languages`; `GET /api/related/saved?concept_id=&title=` lists

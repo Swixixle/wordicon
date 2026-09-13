@@ -113,7 +113,12 @@ all. Live lookup is `run_word_sources` / `POST /api/related/word_sources`, ephem
 verify, built from the word, its language and its period alone and refusing a body that
 carries anything else; `REFRACT_PASSAGE_MAX` (4,000 code points, the unit the page's
 `passageLen` counts too) is a refusal at `run_refract` and at the route, before an id is
-minted or a job exists, never a silent cut.
+minted or a job exists, never a silent cut. `REFRACT_MEANING_MAX` is the same limit and
+the same refusal for `original.definition` and `plain_gloss` (2026-09-14): the meaning
+goes to both prompts and into `source.definition` exactly as written, line breaks and
+all, and `source.meaning_narrowed` marks a shorter meaning given for one comparison
+because the stored concept was longer than a pass takes. Only `input_text`, the run's
+label, collapses whitespace.
 `REFRACT_REQUIRED` is Spanish, Latin and Ancient Greek (`canonical_language` places
 Attic/Homeric as Ancient, Koine/Hellenistic as Koine, Demotic as Modern, and a bare
 "Greek" nowhere — `unplaced_greek`); the reviewer judges each English item

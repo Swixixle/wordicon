@@ -740,7 +740,8 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
                                       known_neighbors=known_neighbors,
                                       passage=related_entry.get("passage"),
                                       entry=related_entry.get("entry") or "concept",
-                                      only_languages=related_entry.get("only_languages") or None)
+                                      only_languages=related_entry.get("only_languages") or None,
+                                      meaning_narrowed=bool(related_entry.get("meaning_narrowed")))
             result["gateway"] = gateway.name
         elif mode == "archetype":
             with JOBS_LOCK:
@@ -3360,11 +3361,28 @@ def api_create_job():
             return jsonify({"error": "refract requires original.definition — the meaning to find "
                                      "related words for — or a selected passage; a title is optional"}), 400
         only_languages = [str(x)[:40] for x in (data.get("only_languages") or []) if str(x).strip()][:6]
+        # HIS MEANING IS NOT SHORTENED HERE (2026-09-14). It used to be
+        # sliced at 1,500 characters in silence, which changed what the
+        # comparison was about without saying so. Over the limit is refused,
+        # with both counts, before a job exists; under it, the meaning and
+        # the gloss go exactly as he wrote them, line breaks included.
+        _definition = str(original.get("definition") or "")
+        _gloss = str(original.get("plain_gloss") or "")
+        for _field, _val in (("meaning", _definition), ("plain gloss", _gloss)):
+            if len(_val) > cli.REFRACT_MEANING_MAX:
+                return jsonify({"error": f"the {_field} is {len(_val)} characters and the most this "
+                                         f"pass will take is {cli.REFRACT_MEANING_MAX} — give a shorter "
+                                         f"meaning for this comparison; the concept it came from is "
+                                         f"not changed by that"}), 400
         original = {"title": str(original.get("title") or "")[:200],
-                    "definition": str(original.get("definition") or "")[:1500],
-                    "plain_gloss": str(original.get("plain_gloss") or "")[:800],
+                    "definition": _definition,
+                    "plain_gloss": _gloss,
                     "concept_id": str(original.get("concept_id") or "")[:64]}
-        related_entry = {"entry": entry, "passage": passage, "only_languages": only_languages}
+        # The page says so when the meaning being sent is a shorter one given
+        # for this comparison because the stored concept is longer than the
+        # pass will take. The stored concept is untouched either way.
+        related_entry = {"entry": entry, "passage": passage, "only_languages": only_languages,
+                         "meaning_narrowed": bool(data.get("meaning_narrowed"))}
         input_text = (f"refract: {original['title']}" if original["title"]
                       else f"related words: {original['definition'][:120]}")
     elif mode == "recheck":

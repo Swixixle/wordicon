@@ -90,7 +90,7 @@ const DRAFT = [
   await page.waitForTimeout(1200);
   const panel = await page.evaluate(() => {
     const a = document.querySelector('[id^="refract-area-"]');
-    const inp = a ? a.querySelector('input[id^="rw-meaning-"]') : null;
+    const inp = a ? a.querySelector('textarea[id^="rw-meaning-"]') : null;
     return { text: a ? a.innerText.replace(/\s+/g, ' ') : '', meaning: inp ? inp.value : null };
   });
   ok(posts.length === before, 'opening the door spent nothing: ' + JSON.stringify(posts.slice(before)));
@@ -99,6 +99,41 @@ const DRAFT = [
      'the panel says the cost and the lane before anything is pressed: ' + panel.text.slice(0, 200));
   ok(/review runs with no search tool/i.test(panel.text) && /Check sources on a single word is the lookup/i.test(panel.text),
      'and it says the review cannot search, and where the lookup lives instead: ' + panel.text.slice(0, 240));
+  // ---- 2b-ii. the meaning box keeps what is put in it --------------------
+  // A stored concept with line breaks used to lose them to a single-line
+  // input, and anything past 1,500 characters was cut at the route in
+  // silence. The box is a growing textarea now, and over the limit it
+  // refuses and says both counts rather than shortening his meaning.
+  const multi = 'first line of the meaning\nsecond line, after a break 🜂\n\nand a third';
+  await page.evaluate(m => {
+    const ta = document.querySelector('[id^="refract-area-"] textarea[id^="rw-meaning-"]');
+    ta.value = m; ta.dispatchEvent(new Event('input', {bubbles: true}));
+  }, multi);
+  const keptMulti = await page.evaluate(() => document.querySelector('[id^="refract-area-"] textarea[id^="rw-meaning-"]').value);
+  ok(keptMulti === multi, 'the meaning box keeps line breaks and non-BMP characters exactly: ' + JSON.stringify(keptMulti));
+  const over = 'x'.repeat(4001);
+  const overState = await page.evaluate(o => {
+    const ta = document.querySelector('[id^="refract-area-"] textarea[id^="rw-meaning-"]');
+    ta.value = o; ta.dispatchEvent(new Event('input', {bubbles: true}));
+    const go = document.querySelector('[id^="refract-area-"] button[id^="rw-go-"]');
+    const note = document.querySelector('[id^="refract-area-"] p[id^="rw-meaning-note-"]');
+    return { disabled: go.disabled, label: go.textContent.trim(), note: note.hidden ? '' : note.innerText.replace(/\s+/g, ' ') };
+  }, over);
+  ok(overState.disabled === true && /Shorten the meaning — 4000 characters at most/.test(overState.label),
+     'a meaning over the limit stops the pass before it starts: ' + JSON.stringify(overState.label));
+  ok(/4001 characters and a comparison takes 4000/.test(overState.note) && /keeps the meaning it has/.test(overState.note),
+     'and it says both counts and that the idea it came from is not changed: ' + overState.note.slice(0, 160));
+  const postsBeforeOver = posts.length;
+  await page.evaluate(() => startRelatedFromPanel(document.querySelector('[id^="refract-area-"]').id));
+  await page.waitForTimeout(300);
+  ok(posts.length === postsBeforeOver, 'and pressing it anyway sends nothing: ' + JSON.stringify(posts.slice(postsBeforeOver)));
+  await page.evaluate(m => {
+    const ta = document.querySelector('[id^="refract-area-"] textarea[id^="rw-meaning-"]');
+    ta.value = m; ta.dispatchEvent(new Event('input', {bubbles: true}));
+  }, IDS.meaning);
+  const backOk = await page.evaluate(() => document.querySelector('[id^="refract-area-"] button[id^="rw-go-"]').disabled);
+  ok(backOk === false, 'shortening it lets the pass start again');
+
   // the seeded full pass and follow-up by id, the same-title pass by title,
   // and the map seed's two refracts — the offline forge names every
   // candidate the same, so they match by title too
@@ -109,7 +144,7 @@ const DRAFT = [
   ok(/matched by concept id; title as a fallback, marked derived/.test(panel.text), 'the panel says how it matched');
 
   // ---- 2. one press, the edited meaning goes, the title is a handle ------
-  await page.fill('[id^="refract-area-"] input[id^="rw-meaning-"]', 'the stance of leaving without claiming the leaving settles anything');
+  await page.fill('[id^="refract-area-"] textarea[id^="rw-meaning-"]', 'the stance of leaving without claiming the leaving settles anything');
   served = FULL;
   await page.click('[id^="refract-area-"] button:has-text("Find related words — 2 model calls")');
   await page.waitForTimeout(400);
@@ -195,7 +230,7 @@ const DRAFT = [
   await page.evaluate(u => rwCompare(u, 'synonyms', 2), uid); await page.waitForTimeout(100);   // close it
   // Explore this word: the panel, filled in, and nothing sent
   await page.evaluate(([u, i]) => rwExplore(u, 'languages', i), [uid, latinIdx]); await page.waitForTimeout(600);
-  const exp = await page.evaluate(([u, i]) => { const h = document.getElementById(`rw-act-${u}-languages-${i}`); const inp = h.querySelector('input[id^="rw-meaning-"]'); return { text: h.innerText.replace(/\s+/g, ' '), meaning: inp ? inp.value : null, find: !!h.querySelector('button[id^="rw-go-"]') }; }, [uid, latinIdx]);
+  const exp = await page.evaluate(([u, i]) => { const h = document.getElementById(`rw-act-${u}-languages-${i}`); const inp = h.querySelector('textarea[id^="rw-meaning-"]'); return { text: h.innerText.replace(/\s+/g, ' '), meaning: inp ? inp.value : null, find: !!h.querySelector('button[id^="rw-go-"]') }; }, [uid, latinIdx]);
   ok(/Find related words for “limen”/i.test(exp.text) && exp.meaning === 'a threshold; by extension a beginning or a boundary' && exp.find && /Model calls: 2/.test(exp.text),
      'Explore this word opens the word-comparison panel with the word, its sense and the cost, and waits for Find: ' + JSON.stringify([exp.meaning, exp.find]));
   ok(/Latin — found for “/.test(exp.text), 'and says which language it was found in and for what meaning');

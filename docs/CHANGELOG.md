@@ -1,5 +1,53 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.33.1 — His meaning reaches the model as he wrote it
+
+The second half of his ruling of 14 September 2026: "The remaining
+definition cutoff should also be fixed; silently changing your meaning
+isn't acceptable."
+
+It was being shortened in three places at once, and only one of them was
+the route. `/api/jobs` sliced `original.definition` at 1,500 characters and
+queued the short version. The prompt builders trimmed its ends. And the
+interface put it in a single-line `<input maxlength="1500">` — which not
+only blocks the rest of a longer meaning but, by the input element's own
+value sanitiser, strips the line breaks out of any value placed in it. A
+stored multiline definition lost its shape the moment it was shown, before
+anything was sent.
+
+Nothing shortens it now. `REFRACT_MEANING_MAX` is the same limit, in the
+same unit, as the passage cap, and it refuses rather than cuts — in
+`run_refract` before the id is minted or a call made, and at the route
+before a job exists, each naming both counts and saying the idea the
+meaning came from is not changed by shortening it here. The plain gloss is
+held to the same rule, for the same reason: it is his prose and it goes
+into the prompt. The builders take the meaning as written, trimming only to
+ask whether there is one.
+
+The meaning is now a **growing textarea**: one line for a one-line meaning,
+taller for a paragraph, and its value is assigned rather than inlined, so
+even a leading newline survives. In the room, Enter still starts the pass
+and shift-Enter makes a new line. Over the limit, the panel says both
+counts, disables the start, and says the idea keeps the meaning it has;
+shortening it there is recorded as a narrowing (`source.meaning_narrowed`),
+which is his ruling exactly — a shorter meaning for that comparison, never
+a shortened concept and never a silent excerpt.
+
+One squeeze remains and it is deliberate: the run's own LABEL (`input_text`,
+which the Library parses and a record row displays) collapses the meaning's
+whitespace onto one line. The meaning itself reaches both prompts and
+`source.definition` exactly as written. The displayed selection count and
+preview now measure in code points, the unit validation uses, so an
+ellipsis cannot land inside a surrogate pair.
+
+`_check_meaning_kept_whole` proves it through every door he named — a
+stored concept, a typed meaning, a language follow-up, and a meaning beside
+a passage — with a multiline, emoji-bearing meaning whose ending sits past
+character 1,500: present in both prompts and in the record, byte for byte.
+The refusals are proven at the CLI and the route with nothing spent and no
+job made; a narrowing is recorded as one and an ordinary pass is not.
+Journey `related` 112 → 117 checks.
+
 ## v1.33.0 — Reviewing his writing and searching for words are two acts
 
 His ruling of 14 September 2026, on the question report 76 left open:

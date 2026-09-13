@@ -4068,15 +4068,21 @@ function relatedCostLine(lane) {
 async function openRelatedPanel(areaId, original, focus) {
   const area = document.getElementById(areaId);
   if (!area) return;
-  RELATED_PENDING[areaId] = {...original, focus: focus || 'synonyms'};
-  const meaning = (original.definition || original.plain_gloss || '').trim();
+  // His meaning as it is stored — line breaks and all, not trimmed. A stored
+  // concept is shown here in full and is never shortened by this panel; when
+  // it is longer than a pass will take he gives a shorter meaning for this
+  // comparison, and the record says that is what it is.
+  const meaning = (original.definition || '').trim() ? original.definition
+                  : (original.plain_gloss || '');
+  RELATED_PENDING[areaId] = {...original, focus: focus || 'synonyms', prefill: meaning};
   const id = areaId.replace(/[^a-z0-9_-]/gi, '');
   area.innerHTML = `
     <div class="card" style="border-left:3px solid var(--accent, #888)">
       <div class="section-label" style="margin-top:0">Find related words${original.title ? ` for “${escapeHtml(original.title)}”` : ''}</div>
       ${(original.note || '').trim() ? `<p class="body muted" style="font-size:12.5px;margin:0 0 4px">${escapeHtml(original.note)}</p>` : ''}
       <p class="body muted" style="font-size:12.5px;margin:0 0 4px">The meaning to match — correct it here if the sense is off; the title is only a handle:</p>
-      <input class="note" id="rw-meaning-${id}" value="${escapeHtml(meaning)}" aria-label="the meaning to find related words for" maxlength="1500" style="width:100%">
+      <textarea class="note" id="rw-meaning-${id}" aria-label="the meaning to find related words for" rows="1" oninput="growMeaning(this);rwMeaningState('${escapeJs(id)}')" style="width:100%;resize:vertical;overflow:auto;font-family:inherit"></textarea>
+      <p class="body" id="rw-meaning-note-${id}" style="font-size:12.5px;margin:2px 0" hidden></p>
       <div id="rw-saved-${id}"><p class="body muted" style="font-size:12.5px"><span class="spinner"></span>looking for saved comparisons…</p></div>
       <p class="fact" id="rw-cost-${id}" style="font-size:12.5px">${relatedCostLine(null)}</p>
       <div class="row" style="margin-top:8px">
@@ -4084,6 +4090,10 @@ async function openRelatedPanel(areaId, original, focus) {
         <button class="judge-btn" onclick="closeRelatedPanel('${escapeJs(areaId)}')">Cancel</button>
       </div>
     </div>`;
+  const _mta = document.getElementById(`rw-meaning-${id}`);
+  if (_mta) _mta.value = meaning;      // assigned, not inlined: exact, leading newline and all
+  growMeaning(_mta);
+  rwMeaningState(id);
   // the saved comparisons and the lane, after the panel is on screen — the
   // panel does not wait on either
   try {
@@ -4101,6 +4111,30 @@ async function openRelatedPanel(areaId, original, focus) {
     const c = document.getElementById(`rw-cost-${id}`);
     if (c) c.innerHTML = relatedCostLine(lane);
   } catch (e) { /* the cost line keeps its call count */ }
+}
+// What the meaning box is doing, said in the panel rather than discovered at
+// the route: over the limit, the pass will not start, and the reason names
+// both counts and says the stored concept is not being changed.
+function rwMeaningState(id) {
+  const ta = document.getElementById(`rw-meaning-${id}`);
+  const note = document.getElementById(`rw-meaning-note-${id}`);
+  const go = document.getElementById(`rw-go-${id}`);
+  if (!ta || !note || !go) return;
+  const n = passageLen(ta.value);
+  if (meaningTooLong(ta.value)) {
+    note.hidden = false;
+    note.innerHTML = `This meaning is <b>${n}</b> characters and a comparison takes <b>${RELATED_MEANING_MAX}</b>.
+      Shorten it here for this comparison — what you leave is recorded as a narrowing, and the idea it came
+      from keeps the meaning it has.`;
+    note.style.borderLeft = '2px solid var(--bad)';
+    note.style.paddingLeft = '9px';
+    go.disabled = true;
+    go.textContent = `Shorten the meaning — ${RELATED_MEANING_MAX} characters at most`;
+  } else {
+    note.hidden = true;
+    go.disabled = false;
+    go.textContent = 'Find related words — 2 model calls';
+  }
 }
 function relatedSavedHtml(d, original) {
   const items = (d && d.items) || [];
@@ -4127,10 +4161,16 @@ function startRelatedFromPanel(areaId) {
   if (!p) return;
   const id = areaId.replace(/[^a-z0-9_-]/gi, '');
   const input = document.getElementById(`rw-meaning-${id}`);
-  const meaning = (input ? input.value : p.definition || '').trim();
-  if (!meaning) { if (input) input.focus(); return; }
+  // Trimmed only to ask whether he wrote anything; what goes is what is there.
+  const meaning = input ? input.value : (p.definition || '');
+  if (!meaning.trim()) { if (input) input.focus(); return; }
+  if (meaningTooLong(meaning)) { rwMeaningState(id); if (input) input.focus(); return; }
+  // A narrowing is the specific case his ruling names: the idea's own meaning
+  // was longer than a pass takes, so this shorter one stands for this
+  // comparison only. An ordinary correction of a short meaning is not that.
+  const narrowed = meaningTooLong(p.prefill || '') && meaning !== (p.prefill || '');
   delete RELATED_PENDING[areaId];
-  startRefractInto(areaId, {...p, definition: meaning}, p.focus);
+  startRefractInto(areaId, {...p, definition: meaning, meaning_narrowed: narrowed}, p.focus);
 }
 
 async function startRefractInto(areaId, original, focus) {
@@ -4154,6 +4194,7 @@ async function startRefractInto(areaId, original, focus) {
         entry: original.entry || 'concept',
         passage: original.entry === 'selection' ? (original.passage || '') : '',
         only_languages: only,
+        meaning_narrowed: !!original.meaning_narrowed,
         provenance: original.entry === 'selection' ? 'typed' : 'door'}),
     });
     const d = await r.json();
@@ -6081,13 +6122,13 @@ function renderRelatedAsk() {
       <div class="lbl" id="related-ask-title" style="margin:0">Find related words</div>
       <button class="compose-exit" onclick="closeRelated()" aria-label="close">× esc</button></div>
     ${hasSel
-      ? `<p class="scope" style="margin-top:8px">from <strong>your selection</strong> — ${words} word${words === 1 ? '' : 's'}, ${sel.length} character${sel.length === 1 ? '' : 's'}, sent exactly as selected</p>
-         <p class="preview">“${escapeHtml(sel.slice(0, 180))}${sel.length > 180 ? '…' : ''}”</p>`
+      ? `<p class="scope" style="margin-top:8px">from <strong>your selection</strong> — ${words} word${words === 1 ? '' : 's'}, ${passageLen(sel)} character${passageLen(sel) === 1 ? '' : 's'}, sent exactly as selected</p>
+         <p class="preview">“${escapeHtml(passageHead(sel, 180))}${passageLen(sel) > 180 ? '…' : ''}”</p>`
       : `<p class="scope" style="margin-top:8px">nothing is selected — <strong>describe the meaning</strong> in one line below, or select a word or a passage first</p>`}
-    <p class="fact">${hasSel ? 'Narrow the meaning — <b>optional</b>: leave this empty to use the selected passage as it stands, or say the sense you mean if the passage holds several' : 'The meaning to match, one line'}:</p>
-    <input class="note" id="related-meaning" aria-label="${hasSel ? 'narrow the meaning, optional' : 'the meaning to find related words for'}" maxlength="1500" style="width:100%"
-           value="${escapeHtml(RELATED_ASK.meaning || '')}" placeholder="${hasSel ? 'optional — the sense you mean' : 'e.g. the sadness of being between stages'}"
-           oninput="RELATED_ASK.meaning = this.value; relatedGoState()" onkeydown="if (event.key === 'Enter') { event.preventDefault(); startRelatedFromRoom(); }">
+    <p class="fact">${hasSel ? 'Narrow the meaning — <b>optional</b>: leave this empty to use the selected passage as it stands, or say the sense you mean if the passage holds several' : 'The meaning to match'}${' — Enter starts it, shift-Enter makes a new line'}:</p>
+    <textarea class="note" id="related-meaning" aria-label="${hasSel ? 'narrow the meaning, optional' : 'the meaning to find related words for'}" rows="1" style="width:100%;resize:vertical;overflow:auto;font-family:inherit"
+           placeholder="${hasSel ? 'optional — the sense you mean' : 'e.g. the sadness of being between stages'}"
+           oninput="RELATED_ASK.meaning = this.value; growMeaning(this); relatedGoState()" onkeydown="if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); startRelatedFromRoom(); }"></textarea>
     <p class="fact" id="related-lane">Lane: <b>checking…</b></p>
     <p class="fact">Model calls: <b>2</b> — one to find (English synonyms and opposites first, then Latin, Greek and other languages), one to review the foreign terms and comparisons. A hosted lane sends the meaning line${sel ? ' and your selection' : ''} to the provider. Neither call has a web-search tool: the reviewing call is the one shown your writing, so it is the one that cannot search. Everything that comes back is recall, labelled so — <b>Check sources</b> on a single word is the lookup, and it is given only that word, its language and its period.</p>
     <p class="fact">It keeps running if you close the room or the tab. The answer opens beside your writing when it arrives; the draft, the caret and the undo history are not touched.</p>
@@ -6095,7 +6136,10 @@ function renderRelatedAsk() {
       <button id="related-go" onclick="startRelatedFromRoom()">Find related words</button>
       <button onclick="closeRelated()">Cancel · esc</button>
     </div>`;
+  const _rta = document.getElementById('related-meaning');
+  if (_rta) _rta.value = RELATED_ASK.meaning || '';   // assigned, not inlined
   relatedGoState();
+  growMeaning(_rta);
   const inp = document.getElementById('related-meaning');
   const go = document.getElementById('related-go');
   // with a passage selected the one press is ready; without one the line needs the sense first
@@ -6116,17 +6160,37 @@ const RELATED_PASSAGE_MAX = 4000;   // the route's cap; a selection goes exactly
 // server, and the page could refuse a selection the route would have taken —
 // or pass one it would have refused. One unit, both sides (2026-09-14).
 function passageLen(s) { return [...String(s || '')].length; }
+// The same limit the server applies to the meaning line and the plain gloss,
+// in the same unit. It had been 1,500 applied silently at the route and as a
+// maxlength on a single-line <input> — which also strips line breaks out of
+// any value put in it, so a multiline definition lost its shape on sight.
+const RELATED_MEANING_MAX = 4000;
+// A meaning box that grows with what is in it: one line when the meaning is
+// one line, taller when it is a paragraph, never a scrollbar the size of a
+// word. Called on render and on input.
+function growMeaning(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 260) + 'px';
+}
+function meaningTooLong(v) { return passageLen(v) > RELATED_MEANING_MAX; }
+// A preview cut by code points, so an ellipsis never lands inside a surrogate
+// pair and turns an emoji into a broken glyph.
+function passageHead(s, n) { return [...String(s || '')].slice(0, n).join(''); }
 function relatedGoState() {
   const go = document.getElementById('related-go');
   if (!go || !RELATED_ASK) return;
   const hasSel = !!(RELATED_ASK.selection || '').trim();
   const narrowed = !!(RELATED_ASK.meaning || '').trim();
-  const tooLong = hasSel && passageLen(RELATED_ASK.selection) > RELATED_PASSAGE_MAX;
-  const ok = (hasSel || narrowed) && !tooLong;
+  const selLen = hasSel ? passageLen(RELATED_ASK.selection) : 0;
+  const tooLong = hasSel && selLen > RELATED_PASSAGE_MAX;
+  const meaningLong = meaningTooLong(RELATED_ASK.meaning || '');
+  const ok = (hasSel || narrowed) && !tooLong && !meaningLong;
   go.disabled = !ok;
   if (ok) go.removeAttribute('aria-disabled'); else go.setAttribute('aria-disabled', 'true');
-  // the button says what will go: the passage as selected, or the passage narrowed, or the meaning alone
-  go.textContent = tooLong ? `Select less — ${RELATED_PASSAGE_MAX} characters at most`
+  // the button says what will go, and when it will not go it says the counts
+  go.textContent = tooLong ? `Select less — ${selLen} of ${RELATED_PASSAGE_MAX} characters`
+    : meaningLong ? `Shorten the meaning — ${passageLen(RELATED_ASK.meaning || '')} of ${RELATED_MEANING_MAX} characters`
     : hasSel && !narrowed ? 'Use selected passage' : (hasSel ? 'Find related words — narrowed' : 'Find related words');
 }
 function closeRelated() {
@@ -6139,10 +6203,11 @@ function closeRelated() {
 async function startRelatedFromRoom() {
   const ask = RELATED_ASK;
   if (!ask) return;
-  const meaning = (ask.meaning || '').trim();
+  const meaning = ask.meaning || '';           // trimmed only to test emptiness
   const hasSel = !!(ask.selection || '').trim();
-  if (!meaning && !hasSel) { const inp = document.getElementById('related-meaning'); if (inp) inp.focus(); return; }
+  if (!meaning.trim() && !hasSel) { const inp = document.getElementById('related-meaning'); if (inp) inp.focus(); return; }
   if (hasSel && passageLen(ask.selection) > RELATED_PASSAGE_MAX) return;   // it goes exactly, or not at all
+  if (meaningTooLong(meaning)) { relatedGoState(); return; }
   closeRelated();
   roomRun('submitted · waiting for a turn');
   // A COPY of the selection goes; the draft is not touched, not copied into

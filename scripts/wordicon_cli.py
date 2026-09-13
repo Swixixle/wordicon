@@ -8645,6 +8645,8 @@ REFRACT_PASSAGE_MAX = 4000
 # refused, with both counts, before anything is spent. A stored concept
 # longer than this stays exactly as it is on the shelf; the pass takes a
 # shorter meaning given for that comparison, recorded as a narrowing.
+REFRACT_MEANING_MAX = 4000
+
 # Which review actually ran. The comparison reviewer is the stage that is
 # shown his passage and his meaning, so it runs with NO search tool
 # (his ruling, 2026-09-14): separation rather than an instruction a model
@@ -8657,8 +8659,8 @@ def build_refract_prompt(candidate: dict,
                           known_neighbors: str | None = None,
                           passage: str | None = None,
                           only_languages: "list[str] | None" = None) -> str:
-    gloss = (candidate.get("plain_gloss") or "").strip()
-    gloss_line = f"\nPlain gloss: {gloss}" if gloss else ""
+    gloss = candidate.get("plain_gloss") or ""      # his words, untrimmed
+    gloss_line = f"\nPlain gloss: {gloss}" if gloss.strip() else ""
     title = (candidate.get("title") or "").strip()
     # A working name is a handle, not the thing to match. The owner's rule:
     # rank by the intended meaning, never by resemblance to the title — and
@@ -8666,7 +8668,9 @@ def build_refract_prompt(candidate: dict,
     # sense of a selected passage).
     title_line = (f"Working name (a handle only — do not match words to it): {title}\n"
                   if title else "Working name: none yet — the meaning below is the whole brief.\n")
-    meaning_text = (candidate.get("definition") or "").strip()
+    # His words as he wrote them: trimmed only to ask whether there are any.
+    meaning_text = candidate.get("definition") or ""
+    has_meaning = bool(meaning_text.strip())
     passage_block = ""
     if passage and passage.strip():
         # The selection goes EXACTLY as it was selected — leading space, line
@@ -8677,7 +8681,7 @@ def build_refract_prompt(candidate: dict,
         # shortened a narrowed pass to 1,500 characters in silence, so the
         # stage was matching words to something the owner had not written.
         p = passage
-        if meaning_text:
+        if has_meaning:
             passage_block = f"""
 
 The passage this sense was taken from — context for WHICH sense is
@@ -8964,7 +8968,7 @@ def build_refract_review_prompt(candidate: dict, refractions: list[dict],
             f"  check: {c.get('check', '') or '(none named)'}"
             for i, c in enumerate(comps))
     name = (candidate.get('title') or '').strip() or "an unnamed meaning"
-    stated_meaning = (candidate.get('definition') or '').strip()
+    stated_meaning = candidate.get('definition') or ''      # his words, untrimmed
     # The owner's own source, exactly as he selected it, goes to THIS call
     # too (2026-09-14). Until today only the producing stage saw it, so this
     # stage was asked whether proposed words fit a source it had never been
@@ -8977,14 +8981,14 @@ def build_refract_review_prompt(candidate: dict, refractions: list[dict],
     if src.strip():
         src_block = ("\n\nTHE OWNER'S OWN SOURCE — the passage he selected, exactly as he\n"
                      + ("selected it, and the passage the stated meaning above was taken from.\n"
-                        if stated_meaning else
+                        if stated_meaning.strip() else
                         "selected it. He gave no narrower statement, so this passage IS the\nmeaning the proposals below claim to fit.\n")
                      + "These are HIS words, not the producing stage's account of them: judge\n"
                        "each proposal's fit against what is actually here. Do not rewrite it\n"
                        "and do not comment on its quality. Nothing on this call can leave the\n"
                        "conversation: there is no search tool here, which is why his writing\n"
                        "can be shown to you at all.\n<<<\n" + src + "\n>>>")
-    meaning_line = stated_meaning or "the sense of the passage reproduced below, as he selected it"
+    meaning_line = stated_meaning if stated_meaning.strip() else "the sense of the passage reproduced below, as he selected it"
     eng = [e for e in (english_items or []) if isinstance(e, dict) and str(e.get("word") or "").strip()]
     eng_block = ""
     if eng:
@@ -10137,7 +10141,8 @@ def run_refract(candidate: dict, gateway: Gateway,
                  known_neighbors: "str | None" = None,
                  passage: "str | None" = None,
                  entry: str = "concept",
-                 only_languages: "list[str] | None" = None) -> dict:
+                 only_languages: "list[str] | None" = None,
+                 meaning_narrowed: bool = False) -> dict:
     """One pass of Find related words / Explore other languages — the same
     record either door opens (2026-09-13). `entry` says how the meaning
     arrived: "concept" (a candidate with a title), "description" (a meaning
@@ -10151,13 +10156,24 @@ def run_refract(candidate: dict, gateway: Gateway,
 
     seed = load_seed_corpus()
     title = (candidate.get("title") or "").strip()
-    meaning = (candidate.get("definition") or "").strip()
+    # HIS MEANING, AS HE WROTE IT (2026-09-14). Trimmed only to ask whether
+    # there is one: the line breaks of a multiline definition, and anything
+    # he chose to put at either end, are his and go as they are.
+    meaning = candidate.get("definition") or ""
     entry = entry if entry in ("concept", "description", "selection") else "concept"
     # the selection is kept exactly as it came — leading space, line breaks
     # and all; only the emptiness test strips
     passage_text = (passage or "") if (entry == "selection" and (passage or "").strip()) else ""
-    if not meaning and not passage_text:
+    if not meaning.strip() and not passage_text:
         raise ValueError("there is no meaning to find related words for — give a meaning, or select a passage")
+    if len(meaning) > REFRACT_MEANING_MAX:
+        raise ValueError(f"the meaning is {len(meaning)} characters and the most this pass will take "
+                         f"is {REFRACT_MEANING_MAX} — give a shorter meaning for this comparison; "
+                         f"the concept it came from is not changed by that")
+    gloss_len = len(candidate.get("plain_gloss") or "")
+    if gloss_len > REFRACT_MEANING_MAX:
+        raise ValueError(f"the plain gloss is {gloss_len} characters and the most this pass will "
+                         f"take is {REFRACT_MEANING_MAX}")
     # Exact or refused, and refused HERE — before the id is minted, before
     # the record exists, before a single call is made. This is the CLI's own
     # boundary; the route has the same one (2026-09-14).
@@ -10169,10 +10185,16 @@ def run_refract(candidate: dict, gateway: Gateway,
     # The parent link the Library reads back out of this sentence (see
     # server._PARENT_RX) needs the word and this exact shape; a meaning
     # with no name has no parent word, and says what it is instead.
+    # The run's LABEL, not his meaning: one line, because the Library reads
+    # this sentence back and a record row displays it. His meaning itself
+    # goes to the prompts and into source.definition exactly as he wrote it,
+    # line breaks and all — this is the only place it is squeezed, and it is
+    # squeezed into a label rather than into the thing being compared.
+    label_meaning = " ".join((meaning or "").split())[:160]
     if title:
-        input_text = f"refract of '{title}': {meaning[:160]}"
-    elif meaning:
-        input_text = f"related words for: {meaning[:160]}"
+        input_text = f"refract of '{title}': {label_meaning}"
+    elif meaning.strip():
+        input_text = f"related words for: {label_meaning}"
     else:
         input_text = f"related words for the passage: {passage_text.strip()[:160]}"
     trace_id = mint_trace_id(input_text)
@@ -10362,6 +10384,11 @@ def run_refract(candidate: dict, gateway: Gateway,
             # was about (the owner's rule: the intended meaning is saved
             # with the words found for it)
             "entry": entry,
+            # True when the meaning sent is a shorter one he gave for THIS
+            # comparison because the concept it came from is longer than a
+            # pass will take. The concept itself is untouched; this record
+            # says plainly that its meaning is a narrowing, not the concept.
+            "meaning_narrowed": bool(meaning_narrowed),
             # whole: the record keeps what was sent, and what was sent is
             # bounded by the refusal above, so there is nothing left to cut
             "passage": passage_text,

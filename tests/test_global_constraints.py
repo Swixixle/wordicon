@@ -3167,6 +3167,162 @@ def _check_source_delivery(server, paired):
     return out
 
 
+def _check_meaning_kept_whole(server, paired):
+    """His meaning reaches the model and the record as he wrote it
+    (his ruling, 2026-09-14): "silently changing your meaning isn't
+    acceptable."
+
+    It was shortened in three places at once. The route sliced
+    `original.definition` at 1,500 characters and queued the short version.
+    The prompt builders trimmed its ends. And the interface put it in a
+    single-line <input maxlength="1500">, which both blocks the rest of a
+    longer meaning and — by the input's own value sanitiser — strips the
+    line breaks out of any stored definition that had them, so a multiline
+    concept lost its shape the moment it was shown.
+
+    What must hold now: nothing shortens it; a limit refuses, before a job
+    exists or a call is made, naming both counts; a stored concept is never
+    rewritten or excerpted, and when it is longer than a pass takes the
+    shorter meaning given for that comparison is recorded AS a narrowing;
+    line breaks, leading and trailing space, and non-BMP characters survive
+    the whole way, through a stored-concept door, a typed meaning and a
+    language follow-up alike; and what the interface counts is what the
+    server counts."""
+    out = []
+    with _isolated_store("meaning_whole") as _store:
+        class _Cap(cli.MockGateway):
+            def __init__(self):
+                self.calls = []
+            def complete(self, prompt):
+                self.calls.append(prompt)
+                return super().complete(prompt)
+        # a meaning that only survives if nothing trims, cuts or flattens it
+        long_meaning = ("  ZZOPEN a stance that refuses the exit it takes.\n\n"
+                        + ("It keeps the refusal visible rather than resolving it. " * 30)
+                        + "\n\nAnd the part that matters, 🜂 past fifteen hundred: ZZEND  ")
+        if len(long_meaning) <= 1500 or "\n" not in long_meaning:
+            out.append("MEAN: the case is not actually long or multiline enough to prove anything")
+        end_at = long_meaning.index("ZZEND")
+        if end_at <= 1500:
+            out.append(f"MEAN: the ending marker sits at {end_at}, inside the old cut — it proves nothing")
+
+        def _meaning_survived(where, prompts, snap):
+            bad = []
+            if not any(long_meaning in pr for pr in prompts):
+                missing = [m for m in ("ZZOPEN", "ZZEND", "🜂") if not any(m in pr for pr in prompts)]
+                bad.append(f"MEAN: {where}: no outgoing prompt carried the meaning exactly"
+                           + (f" (missing {', '.join(missing)})" if missing else " (whitespace or line breaks changed)"))
+            if snap["source"]["definition"] != long_meaning:
+                bad.append(f"MEAN: {where}: the record did not keep the meaning exactly")
+            return bad
+
+        # 1. a stored concept, through the door that opens from a card
+        gw = _Cap()
+        r1 = cli.run_refract({"title": "The Refusenik Posture", "definition": long_meaning,
+                              "plain_gloss": "", "concept_id": "concept_meaning_whole"}, gw)
+        s1 = _json.loads((cli.RESULTS_DIR / f"{r1['trace_id']}.json").read_text(encoding="utf-8"))
+        out.extend(_meaning_survived("a stored concept", gw.calls, s1))
+        # both stages, not only the producing one
+        if not any(pr.startswith("You are the refraction-review stage") and long_meaning in pr
+                   for pr in gw.calls):
+            out.append("MEAN: a stored concept: the reviewing call did not receive the whole meaning")
+        # the run's label is one line, and it is the ONLY place that squeezes
+        if "\n" in (s1.get("input_text") or ""):
+            out.append("MEAN: the run's label carries raw line breaks into the record's own sentence")
+        if "ZZOPEN" not in (s1.get("input_text") or ""):
+            out.append("MEAN: the run's label lost the beginning of the meaning")
+
+        # 2. a typed meaning with no title and no concept
+        gw2 = _Cap()
+        r2 = cli.run_refract({"title": "", "definition": long_meaning, "plain_gloss": "",
+                              "concept_id": ""}, gw2, entry="description")
+        s2 = _json.loads((cli.RESULTS_DIR / f"{r2['trace_id']}.json").read_text(encoding="utf-8"))
+        out.extend(_meaning_survived("a typed meaning", gw2.calls, s2))
+
+        # 3. a language follow-up on that same meaning
+        gw3 = _Cap()
+        r3 = cli.run_refract({"title": "", "definition": long_meaning, "plain_gloss": "",
+                              "concept_id": ""}, gw3, entry="description", only_languages=["Japanese"])
+        s3 = _json.loads((cli.RESULTS_DIR / f"{r3['trace_id']}.json").read_text(encoding="utf-8"))
+        out.extend(_meaning_survived("a language follow-up", gw3.calls, s3))
+
+        # 4. a meaning beside a passage: both go whole, neither is cut for the other
+        gw4 = _Cap()
+        sel = "  \nHe threw it once, cleanly, and the room laughed. ZZSEL\n"
+        r4 = cli.run_refract({"title": "", "definition": long_meaning, "plain_gloss": "",
+                              "concept_id": ""}, gw4, passage=sel, entry="selection")
+        s4 = _json.loads((cli.RESULTS_DIR / f"{r4['trace_id']}.json").read_text(encoding="utf-8"))
+        out.extend(_meaning_survived("a meaning beside a passage", gw4.calls, s4))
+        if s4["source"]["passage"] != sel:
+            out.append("MEAN: a meaning beside a passage: the passage was not kept exactly")
+        if not any(sel in pr and long_meaning in pr for pr in gw4.calls):
+            out.append("MEAN: no single prompt carried both the whole meaning and the whole passage")
+
+        # 5. the limit refuses rather than cuts, at the CLI and at the route
+        over = "m" * (cli.REFRACT_MEANING_MAX + 1)
+        gw5 = _Cap()
+        try:
+            cli.run_refract({"title": "", "definition": over, "plain_gloss": "", "concept_id": ""}, gw5)
+            out.append("MEAN: the CLI accepted a meaning over the limit")
+        except ValueError as e:
+            for want in (str(cli.REFRACT_MEANING_MAX + 1), str(cli.REFRACT_MEANING_MAX), "not changed by that"):
+                if want not in str(e):
+                    out.append(f"MEAN: the CLI's refusal does not say {want!r} ({e})")
+        if gw5.calls:
+            out.append("MEAN: a call was made before an over-long meaning was refused")
+        c = paired(server.app.test_client())
+        n_jobs = len(server.JOBS)
+        rr = c.post("/api/jobs", json={"mode": "refract", "original": {"definition": over}})
+        if rr.status_code != 400 or str(cli.REFRACT_MEANING_MAX + 1) not in (rr.get_json() or {}).get("error", ""):
+            out.append(f"MEAN: the route did not refuse an over-long meaning with its count ({rr.status_code})")
+        if len(server.JOBS) != n_jobs:
+            out.append("MEAN: a job was created for a meaning the route refused")
+        # and the route no longer shortens one that fits
+        if '"definition": str(original.get("definition") or "")[:1500]' in \
+                (_pathlib.Path(server.__file__).read_text(encoding="utf-8")):
+            out.append("MEAN: the route still slices the meaning at 1,500 characters")
+
+        # 6. a narrowing is recorded as one, and the concept is not touched
+        gw6 = _Cap()
+        r6 = cli.run_refract({"title": "The Refusenik Posture", "definition": "a shorter meaning, for this pass",
+                              "plain_gloss": "", "concept_id": "concept_meaning_whole"}, gw6,
+                             meaning_narrowed=True)
+        s6 = _json.loads((cli.RESULTS_DIR / f"{r6['trace_id']}.json").read_text(encoding="utf-8"))
+        if s6["source"].get("meaning_narrowed") is not True:
+            out.append("MEAN: a narrowing is not recorded as one")
+        if s6["source"]["definition"] != "a shorter meaning, for this pass":
+            out.append("MEAN: the narrowing itself was not kept as given")
+        if s1["source"].get("meaning_narrowed") is not False:
+            out.append("MEAN: an ordinary pass is recorded as a narrowing")
+        # nothing anywhere rewrote the concept's own definition
+        if s1["source"]["definition"] != long_meaning:
+            out.append("MEAN: the stored concept's meaning was changed by a later narrowed pass")
+
+    # ---- the interface: a box that grows, no maxlength, no trimming ------
+    pg = (_pathlib.Path(cli.__file__).resolve().parents[1] / "webapp" / "index.html").read_text(encoding="utf-8")
+    if 'maxlength="1500"' in pg:
+        out.append("MEAN: a meaning box still refuses keystrokes past 1,500 characters")
+    if '<input class="note" id="related-meaning"' in pg or '<input class="note" id="rw-meaning-' in pg:
+        out.append("MEAN: a meaning is still typed into a single-line input, which strips line breaks")
+    for need in ('<textarea class="note" id="related-meaning"',
+                 '<textarea class="note" id="rw-meaning-${id}"',
+                 "function growMeaning(el)", "const RELATED_MEANING_MAX = 4000;",
+                 "function rwMeaningState(id)",
+                 "if (_mta) _mta.value = meaning;", "if (_rta) _rta.value = RELATED_ASK.meaning"):
+        if need not in pg:
+            out.append(f"MEAN: the page lost {need!r}")
+    # the counts it SHOWS are the counts the server applies
+    for bad in ("${sel.length} character", "sel.slice(0, 180)"):
+        if bad in pg:
+            out.append(f"MEAN: a displayed count or preview still measures in UTF-16 units ({bad})")
+    _start = pg[pg.index("function startRelatedFromPanel(areaId)"):pg.index("async function startRefractInto")]
+    if ".value : p.definition || '').trim()" in _start or "input.value).trim()" in _start:
+        out.append("MEAN: the card door still trims the meaning it sends")
+    if "meaningTooLong(meaning)" not in _start or "meaning_narrowed: narrowed" not in _start:
+        out.append("MEAN: the card door neither refuses an over-long meaning nor marks a narrowing")
+    return out
+
+
 def _check_saved_words_repeat(server, paired):
     """One bookmark per result, and a bookmark that knows where it lives
     (the review's findings 4 and 5, 2026-09-14).
@@ -4532,6 +4688,7 @@ def main() -> int:
     failures.extend(_check_run_identity(server, _paired))
     failures.extend(_check_source_delivery(server, _paired))
     failures.extend(_check_saved_words_repeat(server, _paired))
+    failures.extend(_check_meaning_kept_whole(server, _paired))
     failures.extend(_check_job_reservation(server))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
