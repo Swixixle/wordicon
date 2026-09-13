@@ -3068,6 +3068,85 @@ def _check_source_delivery(server, paired):
     return out
 
 
+def _check_saved_words_repeat(server, paired):
+    """One bookmark per result, and a bookmark that knows where it lives
+    (the review's findings 4 and 5, 2026-09-14).
+
+    A press that arrived twice — a double-click, a retry, two tabs — used to
+    append a second row for the same result, so the shelf showed the word
+    twice and removing one left the other standing. And the shelf reopened
+    the RUN, leaving the owner to find the word again inside it. Proven
+    here: repeated and concurrent saves leave one bookmark; removing it and
+    saving again makes a new one; a different run, and a different section
+    of the same run, are never folded into one; the append-only file only
+    ever grows; and the bookmark carries the section and index the page
+    lands on, with the honest answer when that position is gone."""
+    out = []
+    import threading as _th
+    pg = (_pathlib.Path(cli.__file__).resolve().parents[1] / "webapp" / "index.html").read_text(encoding="utf-8")
+    with _isolated_store("saved_words_repeat") as _store:
+        base = cli.run_refract({"title": "Threshold Grief", "definition": "the sadness of being between stages",
+                                "plain_gloss": "", "concept_id": "concept_srcsaves"}, cli.MockGateway())
+        tid = base["trace_id"]
+        a = cli.save_word(tid, "languages", 0)
+        b = cli.save_word(tid, "languages", 0)
+        if a["saved_id"] != b["saved_id"] or not b.get("already"):
+            out.append(f"SRC: saving the same result twice made two bookmarks ({a['saved_id']} / {b['saved_id']})")
+        if len(cli.list_saved_words(tid)) != 1:
+            out.append(f"SRC: {len(cli.list_saved_words(tid))} bookmarks stand after two identical saves")
+        # concurrent presses: still one
+        got, errs = [], []
+        def _press():
+            try:
+                got.append(cli.save_word(tid, "languages", 1)["saved_id"])
+            except Exception as e:   # noqa: BLE001
+                errs.append(repr(e))
+        ts = [_th.Thread(target=_press) for _ in range(6)]
+        for t in ts: t.start()
+        for t in ts: t.join()
+        if errs:
+            out.append(f"SRC: a concurrent save failed ({errs[0][:120]})")
+        if len(set(got)) != 1 or len([w for w in cli.list_saved_words(tid) if w["index"] == 1]) != 1:
+            out.append(f"SRC: six concurrent saves of one result did not leave one bookmark ({len(set(got))} ids)")
+        # removing it and saving again is a NEW bookmark, and the file only grew
+        rows_before = len(cli.saved_words_path().read_text(encoding="utf-8").splitlines())
+        cli.unsave_word(a["saved_id"])
+        if [w for w in cli.list_saved_words(tid) if w["index"] == 0]:
+            out.append("SRC: a removed bookmark still stands")
+        again = cli.save_word(tid, "languages", 0)
+        if again["saved_id"] == a["saved_id"] or again.get("already"):
+            out.append("SRC: saving again after a removal did not make a new bookmark")
+        rows_after = len(cli.saved_words_path().read_text(encoding="utf-8").splitlines())
+        if rows_after != rows_before + 2:
+            out.append(f"SRC: the append-only file did not gain exactly the removal and the new save "
+                       f"({rows_before} → {rows_after})")
+        # a second run's identical result is its own bookmark
+        other = cli.run_refract({"title": "Threshold Grief", "definition": "the sadness of being between stages",
+                                 "plain_gloss": "", "concept_id": "concept_srcsaves"}, cli.MockGateway())
+        o = cli.save_word(other["trace_id"], "languages", 0)
+        if o["saved_id"] == again["saved_id"] or o.get("already"):
+            out.append("SRC: the same word from a different run was folded into one bookmark")
+        # the same spelling in another section is its own bookmark too
+        syn = cli.save_word(tid, "synonyms", 0)
+        if syn.get("already") or syn["saved_id"] == again["saved_id"]:
+            out.append("SRC: two sections of one pass shared a bookmark")
+        for row in cli.list_saved_words(tid):
+            if not isinstance(row.get("index"), int) or row.get("section") not in cli.RELATED_SECTIONS:
+                out.append(f"SRC: a bookmark does not carry the position the shelf needs ({row.get('section')}/{row.get('index')})")
+        if "function rwReveal(uid, section, index)" not in pg:
+            out.append("SRC: nothing on the page can land on a saved result")
+        if "loadPastResult('${escapeJs(w.trace_id)}','library-saved','${escapeJs(w.word)}',false,'${escapeJs(w.section)}',${Number(w.index)})" not in pg:
+            out.append("SRC: the Saved words shelf still reopens the run without saying which result")
+        _rv = pg[pg.index("function rwReveal(uid, section, index)"):pg.index("// A follow-up on a language the owner names")]
+        if "closest('.card')" not in _rv or "rw-revealed" not in _rv:
+            out.append("SRC: the reveal does not mark the card it landed on")
+        if "guess" not in _rv:
+            out.append("SRC: a bookmark whose position is gone is not told plainly — it may be guessed by spelling")
+
+    # --- 6. a job id is reserved as it is minted -------------------------
+    return out
+
+
 def _check_stage_c():
     """Stage C of the notebook brief (the owner's go-ahead, 2026-09-13):
     "blue & yellow default + simple colours, Download wording, desktop
@@ -4260,6 +4339,7 @@ def main() -> int:
     failures.extend(_check_stage_c())
     failures.extend(_check_run_identity(server, _paired))
     failures.extend(_check_source_delivery(server, _paired))
+    failures.extend(_check_saved_words_repeat(server, _paired))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key

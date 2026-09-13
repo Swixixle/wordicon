@@ -4364,7 +4364,9 @@ def api_related_save():
         return jsonify({"error": "that record could not be found"}), 404
     except (ValueError, IndexError) as e:
         return jsonify({"error": str(e)}), 400
-    return jsonify({"saved": rec})
+    # `already_saved` says the result was already bookmarked and this request
+    # returned the bookmark it already had — a retry is not a second one.
+    return jsonify({"saved": rec, "already_saved": bool(rec.get("already"))})
 
 
 @app.route("/api/related/unsave", methods=["POST"])

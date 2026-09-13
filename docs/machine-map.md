@@ -119,7 +119,9 @@ a pass with no title records no road, because there is no box to tie one to. `GE
 (`recorded`) or by title (`derived`) — reads only.
 `local_state/saved_words.jsonl` is the words he kept from related-words passes
 (`save_word` / `unsave_word` / `list_saved_words`): append-only, a removal is a second
-row, each row the item as it stood with its run, receipt, language, the meaning the
+row, one bookmark per (run, section, index) while it stands — a repeat hands back the
+row it already has (`already`, and `already_saved` on the route) rather than making a
+second (2026-09-14) — each row the item as it stood with its run, receipt, language, the meaning the
 pass was made for and the reviewer's axes; it reaches no judgment, no accepted concept,
 no document, no model; the Vault stages it with the rest.
 Run identity (2026-09-13): every lane mints its id through `mint_trace_id` — the input,

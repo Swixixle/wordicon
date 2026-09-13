@@ -1,5 +1,36 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.32.1 — One bookmark per result, and it knows where it lives
+
+The review's fourth and fifth findings.
+
+**Saving twice made two bookmarks.** `rwSaveToggle` left the button live
+while its request was in the air, and `save_word` minted a new id for every
+request — so a double-click, a retry or two tabs put the same result on the
+shelf twice, and removing one left the other standing. `save_word` is now
+idempotent while the bookmark stands: an already-saved result hands back the
+bookmark it already has, under a lock so a concurrent request finds the row
+that was just written, and the route says `already_saved` so a caller can
+tell a retry from a new save. The button refuses to fire twice into the air.
+The file is append-only as before, saving again after a removal is a new
+bookmark as it should be, and two runs — or two sections of one run — are
+never folded together.
+
+**The shelf reopened the run, not the word.** *Saved words* called
+`loadPastResult` with the run id and the word's spelling, which put the
+owner back in the pass to hunt for the word again. The bookmark already
+carries its section and index, so the button now passes them: the record
+reopens, the card is outlined and its Save button takes focus. When the
+record no longer holds that position the page says so — a word can appear in
+two sections of one pass, so finding it by spelling would be a guess.
+
+Proven in `_check_saved_words_repeat`: repeated and six concurrent saves
+leave one bookmark; removing and saving again makes a new one and the file
+gains exactly two rows; a second run's identical result, and the same
+spelling in another section, each keep their own bookmark. Journey `related`
+96 → 101 checks, including the double press, the bypassed button, the
+reveal, and the honest answer for a position that is gone.
+
 ## v1.32.0 — The reviewer is shown the owner's own source
 
 The independent review of report 75 found six defects in the follow-up.

@@ -656,6 +656,8 @@
   .history-title { font-weight: 600; font-size: 14.5px; }
   .history-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
   .decision-tag { font-size: 11px; padding: 2px 7px; border-radius: 20px; margin-left: 6px; }
+  /* the card a saved word points at, when the shelf reopens its run */
+  .card.rw-revealed { outline: 2px solid var(--accent, #888); outline-offset: 2px; }
   .decision-tag.accepted { background: rgba(111,207,151,0.18); color: var(--good); }
   .decision-tag.rejected { background: rgba(224,138,138,0.18); color: var(--bad); }
   .decision-tag.revised { background: rgba(120,170,255,0.18); color: var(--accent); }
@@ -2165,10 +2167,13 @@ async function watchJob(jobId) {
   poll();
 }
 
-async function loadPastResult(traceId, shelf, label, restoring) {
+async function loadPastResult(traceId, shelf, label, restoring, revealSection, revealIndex) {
   // Captured BEFORE anything renders: the jump is from what was on screen
   // a moment ago, not from what is about to replace it.
   const cameFrom = ON_SCREEN;
+  // revealSection/revealIndex: a saved word's own position in this run, so
+  // the Saved words shelf lands on the card rather than on the pass
+  // (2026-09-14). Only a refract record has positions to reveal.
   const area = document.getElementById('result-area');
   area.innerHTML = '<div class="card"><span class="spinner"></span></div>';
   (pageScroller() || window).scrollTo({top: 0, behavior: 'smooth'});
@@ -2229,6 +2234,8 @@ async function loadPastResult(traceId, shelf, label, restoring) {
         <p class="body muted" style="font-size:13px">related words · ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}</p>
       </div>` + parseNoticeHtml(d) +
       buildRefractHtml({...d, source_title: (d.source && d.source.title) || ''});
+    if (revealSection !== undefined && revealSection !== null && revealSection !== '')
+      rwReveal(String(d.trace_id || traceId), revealSection, Number(revealIndex));
     return;
   }
   if (d.mode === 'etymon') {
@@ -4779,10 +4786,19 @@ async function rwLoadSaved(uid) {
     });
   } catch (e) { /* the buttons keep their last state */ }
 }
+const RW_SAVE_INFLIGHT = new Set();   // one press at a time per result
 async function rwSaveToggle(uid, section, index) {
   const k = section + ':' + index;
   const b = document.getElementById(`rw-save-${uid}-${section}-${index}`);
   const savedId = (RELATED_SAVED[uid] || {})[k];
+  // A second press while the first is still in the air used to send a second
+  // save, and the store made a second bookmark of the same result
+  // (2026-09-14). The store now refuses to duplicate; the button no longer
+  // asks it to.
+  const flight = uid + '|' + k;
+  if (RW_SAVE_INFLIGHT.has(flight)) return;
+  RW_SAVE_INFLIGHT.add(flight);
+  if (b) b.disabled = true;
   try {
     if (savedId) {
       const r = await fetch('/api/related/unsave', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({saved_id: savedId})});
@@ -4798,6 +4814,30 @@ async function rwSaveToggle(uid, section, index) {
     }
     if (typeof refreshLibraryIfOpen === 'function') refreshLibraryIfOpen();
   } catch (e) { if (b) b.textContent = savedId ? 'could not remove' : 'could not save'; }
+  finally { RW_SAVE_INFLIGHT.delete(flight); if (b) b.disabled = false; }
+}
+// ---- finding 5: the shelf lands on the word, not merely on its run --------
+// The bookmark keeps the run, the section and the index, so reopening it can
+// put the reader in front of the card itself. Matching by spelling would be a
+// guess — a word can appear in two sections of one pass — so when the record
+// no longer holds that position, this says so instead.
+function rwReveal(uid, section, index) {
+  if (!section && section !== 0) return;
+  const holder = document.getElementById(`rw-act-${uid}-${section}-${index}`);
+  const card = holder && holder.closest ? holder.closest('.card') : null;
+  if (!card) {
+    const area = document.getElementById('result-area');
+    if (area) area.insertAdjacentHTML('afterbegin',
+      `<div class="card" style="border-left:3px solid var(--bad)"><p class="body">The saved word was kept as
+       result ${Number(index) + 1} of the ${escapeHtml(String(section))} in this pass, and this record no longer
+       has one there. The run is open below; the word is not pointed at, because finding it by spelling would
+       be a guess and the same spelling can appear in two sections.</p></div>`);
+    return;
+  }
+  card.classList.add('rw-revealed');
+  if (card.scrollIntoView) card.scrollIntoView({block: 'center', behavior: 'smooth'});
+  const b = document.getElementById(`rw-save-${uid}-${section}-${index}`);
+  if (b && b.focus) b.focus({preventScroll: true});
 }
 // A saved word, on the Library shelf: reopen the comparison it came from,
 // see it beside the meaning, or remove it.
@@ -8871,7 +8911,7 @@ function renderLibrary(q) {
       <div class="history-meta" style="font-size:12.5px">${(w.intended_meaning || '').trim() ? `for “${escapeHtml(w.intended_meaning.slice(0, 160))}”` : (w.intended_passage || '').trim() ? `for the passage “${escapeHtml(w.intended_passage.slice(0, 160))}${w.intended_passage.length > 160 ? '…' : ''}”` : 'for a meaning this record did not keep'}${w.intended_title ? ` (${escapeHtml(w.intended_title)})` : ''}</div>
       <div class="history-meta" style="font-size:12px">${w.at ? new Date(w.at).toLocaleString() : ''} · ${escapeHtml(w.section)} · ${escapeHtml((w.source || {}).entry || 'concept')}</div>
       <div style="margin-top:4px">
-        <button class="judge-btn" style="font-size:11px;padding:2px 6px" onclick="loadPastResult('${escapeJs(w.trace_id)}','library-saved','${escapeJs(w.word)}')">open the comparison it came from</button>
+        <button class="judge-btn" style="font-size:11px;padding:2px 6px" onclick="loadPastResult('${escapeJs(w.trace_id)}','library-saved','${escapeJs(w.word)}',false,'${escapeJs(w.section)}',${Number(w.index)})">open it where it was found</button>
         <button class="judge-btn" style="font-size:11px;padding:2px 6px;margin-left:4px" onclick="rwUnsaveFromShelf('${escapeJs(w.saved_id)}')">remove</button>
       </div>
     </div>`).join('') : '<div class="empty">No saved words' + (needle ? ' match' : ' yet — Save on a result keeps it here') + '.</div>';

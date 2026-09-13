@@ -5236,6 +5236,15 @@ def _note_parse(note: dict) -> None:
 # judgments log, the accepted concepts or the notebook.
 RELATED_SECTIONS = ("synonyms", "antonyms", "languages", "cultural")
 
+# One bookmark per (run, section, index) while it stands. A double-click, a
+# retry, two tabs — each used to append a second row, so the shelf showed
+# the word twice and removing one left the other behind (2026-09-14). The
+# append-only file is unchanged; what changed is that an ALREADY-SAVED
+# result hands back the bookmark it already has instead of making another.
+# Saving again after a removal is a new bookmark, as it should be, and two
+# runs or two senses of the same spelling are never merged.
+_SAVED_LOCK = threading.Lock()
+
 
 def saved_words_path() -> Path:
     return Path(LOCAL_STATE) / "saved_words.jsonl"
@@ -5257,7 +5266,11 @@ def related_item_label(section: str, item: dict) -> "tuple[str, str]":
 
 
 def save_word(trace_id: str, section: str, index: int) -> dict:
-    """Bookmark one result of a related-words pass, from its record."""
+    """Bookmark one result of a related-words pass, from its record.
+
+    Idempotent while the bookmark stands: saving a result that is already
+    saved returns the bookmark it already has (`already` marks which), so a
+    retry or a double press cannot make two."""
     if section not in RELATED_SECTIONS:
         raise ValueError("section must be one of synonyms, antonyms, languages, cultural")
     path = RESULTS_DIR / f"{trace_id}.json"
@@ -5293,9 +5306,15 @@ def save_word(trace_id: str, section: str, index: int) -> dict:
     }
     p = saved_words_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "a", encoding="utf-8") as f:
-        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    return rec
+    with _SAVED_LOCK:
+        # Read inside the lock: the row a concurrent request has just written
+        # is the row this one must find, or two presses make two bookmarks.
+        for row in list_saved_words(trace_id):
+            if row.get("section") == section and int(row.get("index", -1)) == int(index):
+                return {**row, "already": True}
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    return {**rec, "already": False}
 
 
 def unsave_word(saved_id: str) -> dict:

@@ -130,7 +130,9 @@ analysed in this pass*; an English item says what the reviewer judged of it and
 that its fit is recall), *Save* (`POST /api/related/save` → one append to
 `local_state/saved_words.jsonl`; *Saved — remove* appends a removal; the Library's
 *Saved words* shelf lists what stands, each with the meaning it was found for and
-a door back to its comparison; `GET /api/related/saved_words`).
+a door back that reopens the run ON the card it bookmarked, by section and index —
+saying so plainly when the record no longer holds that position, never guessing by
+spelling; a save that arrives twice returns the bookmark it already made; `GET /api/related/saved_words`).
 
 **In the Inquiry rail** — *ask my record*, *research outside*, *trial*,
 *comparison*, *synthesis*, each with its own why.

@@ -200,10 +200,18 @@ const DRAFT = [
   ok(bodies.length === nJobs, 'Compare and Explore sent no run: ' + bodies.length + ' = ' + nJobs);
   // Save: kept with its run, language, meaning and review; found again on the shelf; removable
   const postsBeforeSave = posts.length;
-  await page.evaluate(([u, i]) => rwSaveToggle(u, 'languages', i), [uid, latinIdx]); await page.waitForTimeout(700);
+  // fired twice, as a double-click or an impatient retry fires it
+  await page.evaluate(([u, i]) => { rwSaveToggle(u, 'languages', i); rwSaveToggle(u, 'languages', i); }, [uid, latinIdx]);
+  await page.waitForTimeout(900);
   const savedBtn = await page.evaluate(([u, i]) => document.getElementById(`rw-save-${u}-languages-${i}`).textContent.trim(), [uid, latinIdx]);
   ok(savedBtn === 'Saved — remove', 'Save keeps the result and says so: ' + JSON.stringify(savedBtn));
-  ok(posts.slice(postsBeforeSave).join(',') === 'POST /api/related/save', 'saving is one append and no run: ' + JSON.stringify(posts.slice(postsBeforeSave)));
+  ok(posts.slice(postsBeforeSave).join(',') === 'POST /api/related/save', 'a save pressed twice sends one request and no run: ' + JSON.stringify(posts.slice(postsBeforeSave)));
+  // and the store refuses to duplicate even when the button is bypassed
+  const dupe = await (await fetch(BASE + '/api/related/save', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieHeader },
+    body: JSON.stringify({ trace_id: uid, section: 'languages', index: latinIdx }) })).json();
+  const afterDupe = await (await fetch(BASE + '/api/related/saved_words?trace_id=' + uid, { headers: { Cookie: cookieHeader } })).json();
+  ok(dupe.already_saved === true && (afterDupe.items || []).length === 1,
+     'and a save sent again for the same result hands back the bookmark it already has: ' + JSON.stringify({ already: dupe.already_saved, n: (afterDupe.items || []).length }));
   const savedRec = await (await fetch(BASE + '/api/related/saved_words?trace_id=' + uid, { headers: { Cookie: cookieHeader } })).json();
   const sr = (savedRec.items || [])[0] || {};
   ok(sr.word === 'limen' && sr.language === 'Latin' && sr.trace_id === uid && sr.intended_meaning === IDS.meaning && (sr.review || {}).verdict === 'holds' && (sr.review || {}).attestation === 'attested' && sr.receipt_id === 'receipt_' + uid,
@@ -216,11 +224,30 @@ const DRAFT = [
   ok(/Saved words — kept from related-words passes, with the meaning each was found for — 1/i.test(shelf.replace(/\s+/g, ' ')) && /limen · Latin · holds/.test(shelf.replace(/\s+/g, ' ')),
      'the Library has a Saved words shelf with the word, its language and its verdict: ' + (shelf.match(/Saved words[^\n]*/i) || [''])[0]);
   ok(/for “The stance of one who exits/.test(shelf), 'and the meaning it was found for');
+  // the bookmark's own position, used: the run reopens ON the card
+  await page.click('button:has-text("open it where it was found")'); await page.waitForTimeout(1200);
+  const revealed = await page.evaluate(() => { const m = [...document.querySelectorAll('.card.rw-revealed')];
+    return { n: m.length, text: m.length ? m[0].innerText.replace(/\s+/g, ' ').slice(0, 140) : '',
+             focused: document.activeElement ? document.activeElement.id : '' }; });
+  ok(revealed.n === 1 && /limen/.test(revealed.text),
+     'opening a saved word lands on the card it bookmarked, not merely on its run: ' + JSON.stringify(revealed));
+  ok(new RegExp('rw-save-' + uid + '-languages-' + latinIdx).test(revealed.focused), 'and the card it marked is the one in hand: ' + revealed.focused);
+  const missing = await page.evaluate(u => { rwReveal(u, 'languages', 99);
+    return document.getElementById('result-area').innerText.replace(/\s+/g, ' ').slice(0, 300); }, uid);
+  ok(/no longer has one there/.test(missing) && /guess/.test(missing),
+     'and a bookmark whose position the record no longer holds is told plainly, not guessed by spelling: ' + missing.slice(0, 120));
+  await page.goto(BASE + '/#concepts'); await page.waitForTimeout(1500);
   await page.evaluate(id => rwUnsaveFromShelf(id), sr.saved_id); await page.waitForTimeout(900);
   const shelf2 = await page.evaluate(() => (document.getElementById('library-content') || {}).innerText || '');
   ok(/Saved words — kept from related-words passes, with the meaning each was found for — 0/i.test(shelf2.replace(/\s+/g, ' ')), 'remove takes it off the shelf');
   const afterUnsave = await (await fetch(BASE + '/api/related/saved_words', { headers: { Cookie: cookieHeader } })).json();
   ok((afterUnsave.items || []).length === 0, 'and it no longer stands, though the record keeps both rows');
+  const resaved = await (await fetch(BASE + '/api/related/save', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieHeader },
+    body: JSON.stringify({ trace_id: uid, section: 'languages', index: latinIdx }) })).json();
+  ok(resaved.already_saved === false && (resaved.saved || {}).saved_id !== sr.saved_id,
+     'saving it again after a removal is meant, and makes a new bookmark: ' + JSON.stringify({ already: resaved.already_saved, fresh: (resaved.saved || {}).saved_id !== sr.saved_id }));
+  await (await fetch(BASE + '/api/related/unsave', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookieHeader },
+    body: JSON.stringify({ saved_id: (resaved.saved || {}).saved_id }) })).json();
   // back to the card for the follow-up
   await page.goto(BASE + '/'); await page.waitForTimeout(1000);
   await page.evaluate(t => loadPastResult(t), EP.groupOk); await page.waitForTimeout(900);
