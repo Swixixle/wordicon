@@ -5042,6 +5042,132 @@ Respond with ONLY a JSON object of this exact shape, no prose outside the JSON:
 {{"hostile_read": "...", "redundancy_note": "...", "verdict": "keep" or "reject" or "existing", "register": "kitchen" or "seminar", "source_fidelity_note": "..." or "", "source_contradiction": "..." or "", "reason": "..."}}{ENGLISH_PROSE_RULE}"""
 
 
+# ---- reply parsing: repair only what is unambiguous, keep what failed --------
+#
+# A model reply is JSON or it is nothing, and for most of this program's
+# life a reply that did not parse was thrown away with one line: "could not
+# find a JSON object in model output (Expecting ',' delimiter: line 1
+# column 658 (char 657))". Nothing kept the reply, so nothing could say
+# what was wrong with it. The owner's 424-word Go deep died exactly this
+# way on 2026-09-09 — a paid dissection, unrecoverable and undiagnosable.
+#
+# Two things change (his yes, 2026-09-13). A reply that cannot be used as
+# it came is KEPT, whole, under local_state/kept_replies/, and the error
+# names the file — the reply is model output about the owner's own passage
+# and belongs in his record the way every receipt does; the error no longer
+# quotes the reply's first 200 characters, because the file holds all of
+# it. And ONE class of defect is repaired: a double quote sitting inside a
+# string value without a backslash — the model quoting the passage's own
+# dialogue verbatim, which is what "Expecting ',' delimiter" on a one-line
+# reply means — is escaped when it cannot be structural, that is, when the
+# next non-space character is not one of , } ] : or the end of the text.
+# The repaired text is parsed STRICTLY, the repair is counted, printed,
+# and noted on the run's receipt as a warning with the reply's hash and the
+# kept file, so a run that needed it never reads as one that did not.
+# Nothing else is repaired. A reply cut off mid-string, a missing brace, a
+# comma the model forgot — those stay failures, because the alternative is
+# inventing the rest of a document nobody wrote.
+
+class ReplyParseError(ValueError):
+    """A model reply that is not JSON, after the one repair. Carries the
+    raw reply and where it was kept, so the boundary that records the
+    failure can say so without re-reading anything."""
+
+    def __init__(self, message: str, raw: str = "", kept: str = ""):
+        super().__init__(message)
+        self.raw = raw
+        self.kept = kept
+
+
+_PARSE_LEDGER = threading.local()
+
+
+def parse_notes_mark() -> int:
+    return len(getattr(_PARSE_LEDGER, "notes", None) or [])
+
+
+def parse_notes_since(mark: int) -> "list[dict]":
+    """Drain the parse repairs noted on this thread since `mark` — the
+    same discipline as the prompt ledger, and the same limit: a repair
+    made on a pool worker's thread is printed and its reply kept, but it
+    is not drained into the parent's receipt."""
+    notes = getattr(_PARSE_LEDGER, "notes", None) or []
+    used = list(notes[mark:])
+    del notes[mark:]
+    return used
+
+
+def _note_parse(note: dict) -> None:
+    notes = getattr(_PARSE_LEDGER, "notes", None)
+    if notes is None:
+        notes = _PARSE_LEDGER.notes = []
+    notes.append(note)
+
+
+def keep_reply(raw: str, reason: str) -> str:
+    """Write a model reply, whole and unaltered, under
+    local_state/kept_replies/ (0600). Returns the path, or '' when the
+    write failed — a diagnosis must never break the run's own failure."""
+    try:
+        d = Path(LOCAL_STATE) / "kept_replies"
+        d.mkdir(parents=True, exist_ok=True)
+        sha = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        stamp = _now().replace("-", "").replace(":", "")
+        p = d / f"{stamp}_{reason}_{sha[:8]}.txt"
+        p.write_text(raw, encoding="utf-8")
+        try:
+            os.chmod(p, 0o600)
+        except OSError:
+            pass
+        return str(p)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _escape_inner_quotes(text: str) -> "tuple[str, int]":
+    """Escape every double quote that sits inside a string value and
+    cannot close it. A quote closes a string only when the next non-space
+    character is , } ] : or the end of the text; any other quote inside a
+    string is the model's unescaped inner quote. Backslash escapes are
+    honoured. Returns the text and how many quotes were escaped — zero
+    means the text was left exactly as it was."""
+    out: list[str] = []
+    n = 0
+    i = 0
+    in_str = False
+    L = len(text)
+    while i < L:
+        c = text[i]
+        if not in_str:
+            if c == '"':
+                in_str = True
+            out.append(c)
+            i += 1
+            continue
+        if c == "\\":
+            out.append(c)
+            if i + 1 < L:
+                out.append(text[i + 1])
+            i += 2
+            continue
+        if c == '"':
+            j = i + 1
+            while j < L and text[j] in " \t\r\n":
+                j += 1
+            nxt = text[j] if j < L else ""
+            if nxt in (",", "}", "]", ":", ""):
+                in_str = False
+                out.append(c)
+            else:
+                out.append('\\"')
+                n += 1
+            i += 1
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out), n
+
+
 def _extract_json(raw: str) -> dict:
     # A live failure (5 generations into a rabbithole, a Furies/Skinner/
     # Proust thread batch): "Invalid control character at: line 23 column
@@ -5065,9 +5191,34 @@ def _extract_json(raw: str) -> dict:
                 return json.loads(text, strict=strict)
             except json.JSONDecodeError as e:
                 last_err = e
-    raise ValueError(
-        f"could not find a JSON object in model output "
-        f"({last_err}): {raw[:200]!r}")
+    # the one repair: unescaped quotes inside string values (see above)
+    for text in candidates:
+        fixed, n = _escape_inner_quotes(text)
+        if not n:
+            continue
+        for strict in (True, False):
+            try:
+                obj = json.loads(fixed, strict=strict)
+            except json.JSONDecodeError:
+                continue
+            sha = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            kept = keep_reply(raw, "repaired")
+            label = _current_label(None)
+            note = {"kind": "parse_repair", "escaped_quotes": n,
+                    "reply_sha256": sha, "reply_chars": len(raw), "reply_kept": kept,
+                    "top_keys": sorted(str(k) for k in obj.keys())[:8] if isinstance(obj, dict) else [],
+                    "stage": label.get("stage", ""), "component": label.get("component", ""),
+                    "run_id": label.get("run_id", ""), "at": _now()}
+            _note_parse(note)
+            print(f"  [parse] the reply parsed only after {n} unescaped quote(s) inside string "
+                  f"values were escaped — repaired parse, not a clean one; the reply as it "
+                  f"came is kept at {kept or '(could not be kept)'}")
+            return obj
+    kept = keep_reply(raw, "failed")
+    raise ReplyParseError(
+        f"could not find a JSON object in model output ({last_err}); the reply, "
+        f"{len(raw)} characters, is kept whole at {kept or '(it could not be kept)'}",
+        raw=raw, kept=kept)
 
 
 # ---- Bone validation: mechanically enforced, not just requested ---------
@@ -5749,7 +5900,7 @@ def record_composite_run(kind: str, result: dict, input_text: str, gateway=None,
             receipt_id=f"receipt_{trace_id}", trace_id=trace_id, operation=kind,
             input_text=input_text, kernel_version=kernel_version, engine_version="cli-0.2.0",
             sources=[], derived_constraints_applied=[], claims=[], candidates=[],
-            rejections=[], warnings=[], model_calls=[model_call],
+            rejections=[], warnings=list(result.get("parse_notes") or []), model_calls=[model_call],
             prompt_identities=list(prompt_identities if prompt_identities is not None
                                    else (result.get("prompt_identities") or [])),
             composite=composite)
@@ -5767,6 +5918,7 @@ def record_composite_run(kind: str, result: dict, input_text: str, gateway=None,
             "groups": groups, "completion": completion, "partial": bool(n_failed), "n_failed": n_failed,
             "n_components": len(groups), "n_completed": len(groups) - n_failed,
             "gateway": gw_name, "epoch": composite["epoch"],
+            "parse_notes": list(result.get("parse_notes") or []),
             "prompt_identities": receipt.get("prompt_identities", []),
             # block 119: the run's real HTTP attempts, one event each,
             # retries included. prompt_identities[].calls is a count of
@@ -5908,6 +6060,7 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
 
     trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
     _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
+    _parse_mark = parse_notes_mark()   # repaired parses, drained into the receipt's warnings
     # block 119: the HTTP attempts this run makes. A NESTED forge (one
     # component inside a deep run) inherits the ledger its parent opened
     # and does not drain it, so every worker event reaches the parent's
@@ -6179,7 +6332,7 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
         sources=sources_for_receipt, derived_constraints_applied=constraint_entries,
         claims=all_claims_for_receipt,
         candidates=[{"title": r["bff"]["title"]} for r in results],
-        rejections=[], warnings=[], model_calls=[{"gateway": gateway.name, "is_external": gateway.is_external}],
+        rejections=[], warnings=parse_notes_since(_parse_mark), model_calls=[{"gateway": gateway.name, "is_external": gateway.is_external}],
         prompt_identities=prompt_identities_since(_pmark, gateway),
     )
     validators.validate_receipt_invariants(private_receipt)
@@ -6203,6 +6356,7 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
                          "claims_detail": r["claims_detail"]} for r in results],
         "summary": summary_line(private_receipt, results),
         "metrics": metrics.as_dict(),
+        "parse_notes": list(private_receipt.get("warnings") or []),
     }, indent=2))
 
     # Write order (gate 0): the roads last, after the receipt and the
@@ -6276,6 +6430,7 @@ def run(mode: str, input_text: str, gateway: Gateway, interactive: bool = True,
     return {"trace_id": trace_id, "candidates": results,
             "private_receipt": private_receipt, "public_receipt": public_receipt,
             "metrics": metrics.as_dict(),
+            "parse_notes": list(private_receipt.get("warnings") or []),
             "decisions": decisions,
             "attempts": _attempts,
             "attempt_summary": attempt_summary(_attempts) if _owns_ledger else {}}
@@ -7205,6 +7360,7 @@ def run_decompose(text: str, gateway: Gateway, interactive: bool = True,
     # edges its components record can cite the parent's receipt.
     parent_trace_id = "trace_decompose_" + uuid.uuid4().hex[:12]
     _pmark = prompt_ledger_mark()
+    _parse_mark = parse_notes_mark()
     # block 119: the composite run owns the ledger. Its component forges
     # inherit it, so a pool worker three frames down still lands here.
     _ledger, _owns_ledger = open_attempt_ledger(gateway, run_id=parent_trace_id)
@@ -7436,9 +7592,10 @@ def run_decompose(text: str, gateway: Gateway, interactive: bool = True,
     # which record_composite_run persists; it appends them only after that
     # receipt and the snapshot exist, and reports how many it withheld if
     # the record could not be written.
+    out["parse_notes"] = parse_notes_since(_parse_mark)
     out.update(record_composite_run("decompose",
                                     {"groups": _groups_for_record, "gateway": gateway.name,
-                                     "attempts": _attempts,
+                                     "attempts": _attempts, "parse_notes": out["parse_notes"],
                                      "pending_roads": deferred_split},
                                     text, gateway=gateway, trace_id=parent_trace_id,
                                     prompt_identities=prompt_identities_since(_pmark, gateway)))
@@ -7489,6 +7646,7 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
         input_text = f"revise of '{original.get('title', '')}': {frozen_flesh['definition']}"
     trace_id = "trace_cli_" + hashlib.sha256((input_text + _now()).encode()).hexdigest()[:10]
     _pmark = prompt_ledger_mark()   # block 104: the stages this run will use, drained into its receipt
+    _parse_mark = parse_notes_mark()
 
     results = []
     deferred_edges = []   # road writers, called after the receipt and snapshot exist (gate 0)
@@ -7630,7 +7788,7 @@ def run_revise(original: dict, gateway: Gateway, claims_detail: list | None = No
         input_text=input_text, kernel_version=seed["kernel"]["kernel_version"],
         engine_version="cli-0.2.0", sources=[], derived_constraints_applied=[],
         claims=[], candidates=[{"title": r["bff"]["title"]} for r in results],
-        rejections=[], warnings=[], model_calls=[{"gateway": gateway.name, "is_external": gateway.is_external}],
+        rejections=[], warnings=parse_notes_since(_parse_mark), model_calls=[{"gateway": gateway.name, "is_external": gateway.is_external}],
         prompt_identities=prompt_identities_since(_pmark, gateway),
     )
     validators.validate_receipt_invariants(private_receipt)
@@ -11920,6 +12078,7 @@ def run_deep(text: str, gateway: Gateway, interactive: bool = True,
     # own receipt, and the stages it uses are drained into that receipt.
     deep_trace_id = "trace_deep_" + uuid.uuid4().hex[:12]
     _pmark = prompt_ledger_mark()
+    _parse_mark = parse_notes_mark()
     # block 119: the composite run owns the ledger. Its component forges
     # inherit it, so a pool worker three frames down still lands here.
     _ledger, _owns_ledger = open_attempt_ledger(gateway, run_id=deep_trace_id)
@@ -12061,7 +12220,8 @@ def run_deep(text: str, gateway: Gateway, interactive: bool = True,
             "n_completed": len(groups) - n_failed, "n_components": len(groups),
             "trace_id": deep_trace_id,
             "attempts": _attempts, "attempt_summary": attempt_summary(_attempts),
-            "prompt_identities": prompt_identities_since(_pmark, gateway)}
+            "prompt_identities": prompt_identities_since(_pmark, gateway),
+            "parse_notes": parse_notes_since(_parse_mark)}
 
 
 _install_prompt_ledger()
@@ -12092,6 +12252,7 @@ def main() -> int:
             "attack": _r.get("attack") or {}, "gesture": _r.get("gesture", "trial"),
             "gateway": gateway.name, "gateway_external": bool(gateway.is_external),
             "prompt_identities": _r.get("prompt_identities") or [], "attempts": _r.get("attempts") or [],
+            "parse_notes": _r.get("parse_notes") or [],
             "pending_roads": _r.get("pending_roads") or []}, args.input_text, trace_id=_r.get("trace_id"))
         if not _rec.get("recorded"):
             print(f"[deep] the run's own record was NOT written ({_rec.get('record_error')}); "

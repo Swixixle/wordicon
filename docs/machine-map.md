@@ -91,6 +91,11 @@ to the text the run examined — file I/O only, no model, no network.
 fingerprint; every accepted save by its request id, so a lost reply is answered once;
 checkpoints), one `BEGIN IMMEDIATE` transaction per save, a stale base refused with the
 head returned — SQLite only, no model, no network; the Vault stages the file with the rest.
+`local_state/kept_replies/` holds model replies that could not be used as they came —
+a reply that parsed only after its unescaped inner quotes were escaped (the one repair
+`_extract_json` makes, counted and noted on the run's receipt as a warning), and a reply
+that did not parse at all (the failure names the file, and no longer quotes the reply) —
+each whole, as it came, 0600, under the Vault like every receipt.
 `scripts/map_focus.py` is Map · focus: the served projection behind one place's ring —
 exact-identity issuer derivation (`edge_specs_from_snapshot`, `SnapshotIndex`,
 `derive_issuer`), provenance resolution, the ring with its burden, facets, groups and

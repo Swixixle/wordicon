@@ -1,5 +1,42 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.23.0 — The reply that could not be read is kept, and one defect is repaired
+
+The owner's Go deep on a 424-word passage died on 2026-09-09 with "could not
+find a JSON object in model output (Expecting ',' delimiter: line 1 column
+658 (char 657))" — a paid dissection thrown away, and nothing kept the reply
+so nothing could say what was wrong with it. Reproduced: that is what
+`json.loads` says of a one-line reply in which the model quoted the
+passage's own dialogue inside a string value without escaping it.
+
+**Kept.** A reply that cannot be used as it came is written whole to
+`local_state/kept_replies/<utc>_<failed|repaired>_<sha8>.txt` (0600, under
+the Vault) and the error names the file and the reply's length. The error
+no longer quotes the reply's first 200 characters — the file holds all of
+it and the message travels into job records and pasted terminals.
+
+**One repair.** A double quote inside a string value that cannot be
+structural — the next non-space character is not `,` `}` `]` `:` or the
+end — is escaped; the repaired text must parse strictly. The repair is
+counted, printed, noted on the run (`parse_notes`: the count, the reply's
+hash and length, its top-level keys, the kept file) and carried into the
+receipt's `warnings`, the results snapshot, the job result, and the page,
+which shows a "Repaired parse" card on arrival and on reopening for deep,
+decompose and candidate results. Nothing else is repaired: a reply cut off
+mid-string, a missing brace, a forgotten comma stay failures; no field is
+invented to close a document nobody wrote. One residual ambiguity is
+inherent and recorded here: an inner closing quote followed directly by a
+comma reads as the string's end, so `"x "b", "c"` parses as `x "b` — the
+anchor then fails its verbatim check honestly rather than passing wrongly.
+
+`_check_reply_parse`: the reproduction, the repair with the inner quotes
+surviving, the note's hash/length/keys, the kept file byte-identical, a cut
+reply refused with its file named and nothing quoted, a cut reply with the
+defect still refused, `run_deep` carrying the note into result, receipt and
+snapshot, the job body failing with the file named, the page's notice on
+every result path. Sabotage: repair removed, keeping removed, noting
+removed — each caught by name.
+
 ## v1.22.0 — Reading quality, the first two corrections
 
 The owner's yes (2026-09-13) on two of the reading-quality findings; the

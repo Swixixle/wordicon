@@ -2042,20 +2042,20 @@ async function watchJob(jobId) {
         if (!result.groups || result.groups.length === 0) {
           document.getElementById('result-area').innerHTML = `<div class="card"><p class="body muted">The workup came back empty — try rephrasing.</p></div>`;
         } else {
-          document.getElementById('result-area').innerHTML = header + buildDeepHtml(result);
+          document.getElementById('result-area').innerHTML = header + parseNoticeHtml(result) + buildDeepHtml(result);
           appendRetryCard();
         }
       } else if (job.mode === 'decompose') {
         if (!result.groups || result.groups.length === 0) {
           document.getElementById('result-area').innerHTML = `<div class="card"><p class="body muted">No distinct concepts came back — try a longer passage.</p></div>`;
         } else {
-          document.getElementById('result-area').innerHTML = header + buildDecomposeHtml(result);
+          document.getElementById('result-area').innerHTML = header + parseNoticeHtml(result) + buildDecomposeHtml(result);
           appendRetryCard();
         }
       } else if (!result.candidates || result.candidates.length === 0) {
         document.getElementById('result-area').innerHTML = header + `<div class="card"><p class="body muted">No candidates came back — try rephrasing.</p></div>`;
       } else {
-        document.getElementById('result-area').innerHTML = header + buildCandidatesHtml(result.candidates, result.summary, result.trace_id, result.metrics);
+        document.getElementById('result-area').innerHTML = header + parseNoticeHtml(result) + buildCandidatesHtml(result.candidates, result.summary, result.trace_id, result.metrics);
         appendRetryCard();
       }
       loadHistory();
@@ -2165,7 +2165,7 @@ async function loadPastResult(traceId, shelf, label, restoring) {
         <div class="section-label" style="margin-top:0">From the record — a deep run · ${escapeHtml(d.completion || (d.partial ? 'partial' : 'complete'))}</div>
         <p class="body">${escapeHtml(d.input_text || d.source_text || '')}</p>
         <p class="body muted" style="font-size:13px">deep · ${escapeHtml(d.gesture || 'trial')} · ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}</p>
-      </div>` + buildDeepHtml(d);
+      </div>` + parseNoticeHtml(d) + buildDeepHtml(d);
     return;
   }
   // block 114: a decompose run had no branch here at all. It fell into the
@@ -2183,7 +2183,7 @@ async function loadPastResult(traceId, shelf, label, restoring) {
         <div class="section-label" style="margin-top:0">From the record — a decompose run · ${escapeHtml(d.completion || (d.partial ? 'partial' : 'complete'))}</div>
         <p class="body">${escapeHtml(d.input_text || d.source_text || '')}</p>
         <p class="body muted" style="font-size:13px">decompose · ${componentCountLine(d)} · ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}</p>
-      </div>` + buildDecomposeHtml(d);
+      </div>` + parseNoticeHtml(d) + buildDecomposeHtml(d);
     return;
   }
   if (['forge','crack','decompose','riff','play'].includes(d.mode)) {
@@ -2572,6 +2572,22 @@ function buildDecomposeHtml(d) {
       ${cards}
     `;
   }).join('<div style="height:8px"></div>');
+}
+
+// A reply the model sent that parsed only after repair is state, not
+// explanation: it says the run rests on a document that was not well-formed
+// as it came. One unescaped quote inside a string is the one defect repaired
+// (the model quoting the passage's own dialogue); the reply as it came is
+// kept on this machine and named here. Nothing else is ever repaired — a
+// reply cut short stays a failure, with its file named in the error.
+function parseNoticeHtml(d) {
+  const notes = (d && d.parse_notes) || [];
+  if (!notes.length) return '';
+  return notes.map(n => `<div class="card" style="padding:8px 14px;font-size:12.5px;color:var(--muted)">
+    <strong style="color:var(--text)">Repaired parse</strong> — the ${escapeHtml(n.stage || (n.top_keys && n.top_keys.length ? n.top_keys.join('/') : 'model'))} reply parsed only after
+    ${n.escaped_quotes} unescaped quote${n.escaped_quotes === 1 ? '' : 's'} inside its text were escaped. The reply as it came
+    (${n.reply_chars} characters) is kept on this machine${n.reply_kept ? ': <code>' + escapeHtml(String(n.reply_kept).split('/').slice(-2).join('/')) + '</code>' : ''}.
+    Read the quoted words with that in mind.</div>`).join('');
 }
 
 function buildDeepHtml(d) {

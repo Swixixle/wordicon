@@ -2334,6 +2334,156 @@ def _check_notebook_a():
     return out
 
 
+def _check_reply_parse(server):
+    """The Go deep parse repair (the owner's yes, 2026-09-13). Reproduces
+    the 2026-09-09 failure — a one-line dissection reply with the passage's
+    own dialogue quoted unescaped inside a string value, which json.loads
+    refuses with "Expecting ',' delimiter" — and proves the one repair:
+    such quotes are escaped when they cannot be structural, the repaired
+    text parses strictly, the inner quotes survive, the repair is counted
+    and noted, and the reply as it came is kept whole under
+    local_state/kept_replies/. Everything else stays a failure: a reply cut
+    off mid-string raises, names its length and the kept file, quotes none
+    of the reply in the message, and no field is invented to close it. A
+    well-formed reply is not touched. Through run_deep the note reaches the
+    result, the composite receipt's warnings and the results snapshot; a
+    job whose dissection cannot be parsed fails with the kept file named."""
+    out = []
+    import importlib
+    good = ('{"components": [{"label": "the throw", "gist": "a skilled throw at a wake", '
+            '"anchor": "he said \\"watch this\\" and threw", "constraints": "keep the grief context", "background": ""}]}')
+    bad = good.replace('\\"watch this\\"', '"watch this"')
+    try:
+        _json.loads(bad)
+        out.append("P: the reproduction is not a reproduction — the unescaped inner quote parsed")
+    except _json.JSONDecodeError as e:
+        if "Expecting ',' delimiter" not in str(e):
+            out.append(f"P: the reproduction fails differently from the owner's run ({e})")
+    fixed, n = cli._escape_inner_quotes(good)
+    if n != 0 or fixed != good:
+        out.append("P: a well-formed reply was touched by the quote repair")
+    with _isolated_store("reply_parse") as root:
+        kept_dir = _pathlib.Path(root) / "kept_replies"
+        mark = cli.parse_notes_mark()
+        try:
+            obj = cli._extract_json(bad)
+        except Exception as e:  # noqa: BLE001
+            out.append(f"P: the repairable reply still fails ({type(e).__name__}: {e})")
+            obj = {}
+        anchor_v = ((obj.get("components") or [{}])[0]).get("anchor")
+        if anchor_v != 'he said "watch this" and threw':
+            out.append(f"P: the inner quotes did not survive the repair ({anchor_v!r})")
+        notes = cli.parse_notes_since(mark)
+        if len(notes) != 1 or notes[0].get("kind") != "parse_repair" or notes[0].get("escaped_quotes") != 2:
+            out.append(f"P: the repair was not noted as two escaped quotes ({notes})")
+        else:
+            nt = notes[0]
+            if nt.get("reply_chars") != len(bad) or nt.get("reply_sha256") != _hashlib.sha256(bad.encode()).hexdigest():
+                out.append("P: the note does not carry the reply's length and hash")
+            if nt.get("top_keys") != ["components"]:
+                out.append(f"P: the note does not name the reply's top-level keys ({nt.get('top_keys')})")
+            kp = _pathlib.Path(nt.get("reply_kept") or "")
+            if not (nt.get("reply_kept") and kp.exists() and kp.read_text(encoding="utf-8") == bad):
+                out.append("P: the repaired reply was not kept whole, as it came")
+            if not str(kp).startswith(str(kept_dir)):
+                out.append(f"P: the kept reply is not under the run's own store ({kp})")
+        # a reply cut off mid-string: a failure that keeps the reply and names it
+        trunc = bad[:110]
+        try:
+            cli._extract_json(trunc)
+            out.append("P: a truncated reply was parsed — something was invented to close it")
+        except cli.ReplyParseError as e:
+            msg = str(e)
+            if "kept whole at" not in msg or f"{len(trunc)} characters" not in msg:
+                out.append(f"P: the failure does not name the reply's length and kept file ({msg[:120]})")
+            if "watch this" in msg or "the throw" in msg:
+                out.append("P: the failure message quotes the reply")
+            if e.raw != trunc or not e.kept or not _pathlib.Path(e.kept).exists() or _pathlib.Path(e.kept).read_text(encoding="utf-8") != trunc:
+                out.append("P: the failed reply was not kept whole, as it came")
+        except Exception as e:  # noqa: BLE001
+            out.append(f"P: a truncated reply raises {type(e).__name__}, not ReplyParseError")
+        # the defect AND a cut: still a failure
+        try:
+            cli._extract_json(bad[:60])
+            out.append("P: a cut reply with an inner quote was parsed")
+        except cli.ReplyParseError:
+            pass
+        # through run_deep: the note reaches the result, the receipt and the snapshot
+        class DefectMock(cli.MockGateway):
+            def complete(self, prompt: str) -> str:
+                r = super().complete(prompt)
+                if prompt.startswith("You are the dissection stage"):
+                    return r.replace('"anchor": "pretending"', '"anchor": "he said "pretending" and left"')
+                return r
+        try:
+            deep = cli.run_deep("A passage about pretending while poor.", DefectMock(), interactive=False)
+        except Exception as e:  # noqa: BLE001
+            out.append(f"P: run_deep failed on a repairable dissection ({type(e).__name__}: {e})")
+            deep = {}
+        pn = deep.get("parse_notes") or []
+        if len(pn) != 1 or pn[0].get("escaped_quotes") != 2:
+            out.append(f"P: run_deep's result does not carry the one repair note ({pn})")
+        rec = cli.record_composite_run("deep", {"groups": [], "attack": deep.get("attack") or {}, "gesture": "trial",
+                                                "gateway": "mock", "parse_notes": pn, "prompt_identities": []},
+                                       "A passage about pretending while poor.", gateway=DefectMock(),
+                                       trace_id=deep.get("trace_id", ""))
+        rid = rec.get("receipt_id") or ""
+        rpath = cli.RECEIPTS_DIR / f"{rid}.json"
+        if not rid or not rpath.exists():
+            out.append("P: the composite record was not written")
+        else:
+            r = _json.loads(rpath.read_text(encoding="utf-8"))
+            if not any(w.get("kind") == "parse_repair" for w in (r.get("warnings") or []) if isinstance(w, dict)):
+                out.append("P: the composite receipt's warnings do not carry the repair")
+            snap = cli.RESULTS_DIR / f"{deep.get('trace_id', '')}.json"
+            if not snap.exists() or not (_json.loads(snap.read_text(encoding="utf-8")).get("parse_notes") or []):
+                out.append("P: the results snapshot does not carry the repair, so a reopened run would not say it")
+        # a dissection that cannot be parsed: the job fails and names the kept file
+        class CutMock(cli.MockGateway):
+            def complete(self, prompt: str) -> str:
+                r = super().complete(prompt)
+                if prompt.startswith("You are the dissection stage"):
+                    return r[:80]
+                return r
+        try:
+            cli.run_deep("A passage about pretending while poor.", CutMock(), interactive=False)
+            out.append("P: run_deep completed on a dissection cut off mid-reply")
+        except cli.ReplyParseError as e:
+            if "kept whole at" not in str(e):
+                out.append("P: the failed dissection does not name its kept reply")
+        except Exception as e:  # noqa: BLE001
+            out.append(f"P: a cut dissection raises {type(e).__name__}, not ReplyParseError")
+        # the server's job body: the error the page shows names the kept file and quotes nothing
+        _saved_gw = server.server_gateway
+        server.server_gateway = lambda: CutMock()
+        try:
+            jid = "job_parse_probe"
+            with server.JOBS_LOCK:
+                server.JOBS[jid] = {"id": jid, "mode": "deep", "gesture": "trial", "status": "queued",
+                                    "input_text": "A passage about pretending while poor.", "result": None, "error": None}
+            server._run_job_body(jid, "deep", "A passage about pretending while poor.")
+            with server.JOBS_LOCK:
+                j = dict(server.JOBS.get(jid) or {})
+            if j.get("status") != "failed" or "kept whole at" not in str(j.get("error") or ""):
+                out.append(f"P: the job did not fail naming the kept reply ({j.get('status')}: {str(j.get('error'))[:100]})")
+            if "pretending" in str(j.get("error") or ""):
+                out.append("P: the job's error quotes the reply")
+        finally:
+            server.server_gateway = _saved_gw
+            with server.JOBS_LOCK:
+                server.JOBS.pop("job_parse_probe", None)
+    # the page says it: one notice, on arrival and on reopening, for deep, decompose and candidates
+    pg = (_pathlib.Path(cli.__file__).resolve().parents[1] / "webapp" / "index.html").read_text(encoding="utf-8")
+    if "function parseNoticeHtml(d)" not in pg or "Repaired parse" not in pg or "kept on this machine" not in pg:
+        out.append("P: the page has no repaired-parse notice")
+    if pg.count("parseNoticeHtml(") < 6:
+        out.append(f"P: the notice is not rendered on every result path ({pg.count('parseNoticeHtml(')} of 6)")
+    src = (_pathlib.Path(cli.__file__)).read_text(encoding="utf-8")
+    if "{raw[:200]!r}" in src:
+        out.append("P: the parse error still quotes the first 200 characters of the reply")
+    return out
+
+
 def _check_notebook_b(server, paired):
     """Notebook stage B: the document store behind the room. Proven on the
     store (scripts/notebook.py) in an isolated scratch store, over the
@@ -3260,6 +3410,7 @@ def main() -> int:
     failures.extend(_check_map_focus_routes(server, _paired))
     failures.extend(_check_moira_routes(server, _paired))
     failures.extend(_check_notebook_b(server, _paired))
+    failures.extend(_check_reply_parse(server))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key

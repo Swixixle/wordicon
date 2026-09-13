@@ -565,6 +565,8 @@ def _shape_operation_result(mode: str, gateway_name: str, cli_result) -> dict:
                 "uncovered": cli_result.get("uncovered", []),
                 "partial": cli_result.get("partial", False),
                 "n_failed": cli_result.get("n_failed", 0),
+                # a reply that parsed only after repair is state the page shows
+                "parse_notes": cli_result.get("parse_notes") or [],
                 "groups": groups, "gateway": gateway_name}
 
     receipt = cli_result["private_receipt"]
@@ -575,6 +577,7 @@ def _shape_operation_result(mode: str, gateway_name: str, cli_result) -> dict:
         "receipt_id": receipt["receipt_id"],
         "summary": cli.summary_line(receipt, cli_result["candidates"]),
         "metrics": cli_result.get("metrics", {}),
+        "parse_notes": cli_result.get("parse_notes") or [],
         "gateway": gateway_name,
     }
 
@@ -674,6 +677,7 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
                        # and whether the gateway was external — for its receipt
                        "trace_id": cli_result.get("trace_id", ""),
                        "prompt_identities": cli_result.get("prompt_identities") or [],
+                       "parse_notes": cli_result.get("parse_notes") or [],
                        "gateway_external": bool(gateway.is_external),
                        # gate 0 (Map Focus): the split roads wait for the
                        # composite receipt they cite; record_composite_run

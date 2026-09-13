@@ -33,6 +33,9 @@ function deepResult() {
   });
   return { trace_id: 'trace_probe', mode: 'deep', gesture: 'trial',
            attack: { verdict: 'keep', notes: [] },
+           // the dissection reply parsed only after repair: state the page must show
+           parse_notes: [{ kind: 'parse_repair', escaped_quotes: 2, reply_chars: 1234, top_keys: ['components'], stage: '',
+                           reply_kept: '/probe/local_state/kept_replies/20260913T000000+0000_repaired_ab12cd34.txt' }],
            groups: [group('One', 'Probe Alpha'), group('Two', 'Probe Beta'), group('Three', 'Probe Gamma')] };
 }
 
@@ -193,6 +196,10 @@ function deepResult() {
     'through all of which the room is the same element with the same draft and caret');
   ok(arrived.focus === 'compose-text', 'the caret is still in the draft when the answer lands');
   ok(arrived.line, 'the running line goes quiet once the answer is here');
+  const repaired = await page.evaluate(() => (document.getElementById('result-area').innerText || '').replace(/\s+/g, ' '));
+  ok(/Repaired parse/.test(repaired) && /2 unescaped quotes/.test(repaired) && /1234 characters/.test(repaired) && /kept_replies\/20260913T000000\+0000_repaired_ab12cd34\.txt/.test(repaired),
+    'a reply that parsed only after repair is said on the page, with the count, the length and the kept file: '
+    + JSON.stringify((repaired.match(/Repaired parse[^.]*\./) || [''])[0].slice(0, 140)));
 
   // ---- the expansion is priced from what came back, and runs nothing ----
   const exp = await page.evaluate(() => {
