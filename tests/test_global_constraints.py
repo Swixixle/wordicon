@@ -17490,6 +17490,15 @@ console.log(out.join('\\n'));
         _f99("the band doors are not wired to the rail — a second press of the same door does nothing")
     if "function railHere(name, path)" not in _idx99 or '#rail a[href^="/"]' not in _idx99:
         _f99("the rail cannot say which place you are standing in")
+    # THE CLOSED PLACE PANE. An author `display` beats the UA stylesheet's
+    # [hidden] rule, so #place rendered its bar and its frame under Home on
+    # every screen even while closed. #home-main has no display of its own
+    # and hides correctly; anything given one has to say so itself.
+    if "#place[hidden] { display: none; }" not in _idx99:
+        _f99("the closed place pane renders under Home — an author display beats [hidden]")
+    for _m in _re99.finditer(r"#(place|home-main|side)\s*\{([^}]*)\}", _idx99):
+        if "display:" in _m.group(2) and f"#{_m.group(1)}[hidden]" not in _idx99:
+            _f99(f"#{_m.group(1)} declares a display but has no [hidden] rule — it cannot be hidden")
     # THE DISCLOSURE ARROW. A JavaScript escape inside a stylesheet is the
     # literal text u25BE, which is what he saw on the page.
     _content_decls = _re99.findall(r"content:\s*'[^']*'", _idx99)

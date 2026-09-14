@@ -1,5 +1,20 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.34.2 — The closed place pane was never actually closed
+
+`#place` carries `hidden` when no place is open, and `hidden` hides an
+element through the UA stylesheet's `display: none` — which any author
+`display` rule beats. `#place { display: flex; … }` has been beating it since
+slice 2, so the closed pane rendered its bar and its zero-height frame under
+Home on every screen. It reads as a stray "← Home · open on its own ↗" strip
+at the foot of the page; it is the clearest at the bottom of the Library,
+which is where a screenshot of the new layout caught it.
+
+`#place[hidden] { display: none; }`, and a pin that checks the general case
+rather than this one instance: any of the shell's three panes that declares a
+display of its own must also say how it hides. `#home-main` declares none and
+so was always correct.
+
 ## v1.34.1 — The page pane is a pane, not a window
 
 With the writing room open, `#page` stops being the window and becomes half

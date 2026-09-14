@@ -637,6 +637,12 @@
      /anatomy and /pair are not places: they are ruled standalone
      documents and they still take the whole window. */
   #place { display: flex; flex-direction: column; padding: 0; margin: 0; max-width: none; }
+  /* An author display beats the UA stylesheet's [hidden] rule, so the closed
+     place pane was never actually hidden: its bar and its zero-height frame
+     rendered under Home on every screen, which is what the stray "← Home /
+     open on its own" strip at the bottom of the Library was. #home-main
+     declares no display of its own and so hides correctly; this one did not. */
+  #place[hidden] { display: none; }
   #place-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     padding: 8px 24px; border-bottom: 1px solid var(--border); background: var(--panel);
     font-size: 12.5px; color: var(--muted); }
