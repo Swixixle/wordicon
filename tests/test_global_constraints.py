@@ -17431,6 +17431,53 @@ console.log(out.join('\\n'));
         _f99("the three zones (rail, work, the panel beside it) are not in the page")
     if ".band-grid" not in _idx99:
         _f99("Home's bands are not laid across the desk")
+    # THE MEASURING ELEMENT. A viewport query is wrong for the bands in three
+    # separate ways at once — the rail takes 216px, the panel beside the work
+    # takes another 340 when it is open, and with the writing room open the
+    # whole page is a pane half a window wide. The ladder is climbed against
+    # #work's own width. The @media copy is kept as the fallback for a
+    # browser with no container queries and must not be the only rule.
+    if "container-name: work" not in _idx99 or "container-type: inline-size" not in _idx99:
+        _f99("#work is not the element the bands measure themselves against")
+    for _cq in ("@container work (min-width: 820px) { .band-grid",
+                "@container work (min-width: 1180px) { .band-grid",
+                "@container work (min-width: 1180px) { .list-cols",
+                "@container work (min-width: 1720px) { .list-cols"):
+        if _cq not in _idx99:
+            _f99(f"a band ladder rung is missing or still keyed to the window: {_cq}")
+    if "@supports not (container-type: inline-size)" not in _idx99:
+        _f99("the no-container-queries fallback ladder is gone")
+    # THE PAGE PANE. With the room open #page is half a window, and a 216px
+    # rail plus three band tracks inside it is the strip complaint one level
+    # down — clipped cards, a rail eating a third of what is left. The rail
+    # folds to its row of doors, and the panel beside the work steps aside
+    # because in a split the page pane IS the surface beside the writing.
+    for _sp, _why in (
+            ("body.ws-open #shell { grid-template-columns: minmax(0, 1fr); }",
+             "the page pane still runs a three-column shell beside the writing"),
+            ("body.ws-open #rail { position: static;",
+             "the rail does not fold when the page becomes a pane"),
+            ("body.ws-open #rail .rail-foot { display: contents; }",
+             "the rail's tools hang off the end of the folded row as a block"),
+            ("body.ws-open #side { display: none; }",
+             "a third column opens inside a half window")):
+        if _sp not in _idx99:
+            _f99(f"{_why} ({_sp})")
+    # THE ROOM'S HEAD. #ws-bar is fixed to the WINDOW's right edge, so in a
+    # split the head printed on top of Get feedback, Aa and done. A max-width
+    # is not a right edge: a shrink-to-fit row simply overflows.
+    if "body.ws-write .compose-head, body.ws-split .compose-head { right: 324px; }" not in _idx99:
+        _f99("the room's head does not stop short of the bar fixed to the window's edge")
+    if "body.ws-split.write-left .compose-head { right: 16px; }" not in _idx99:
+        _f99("the head still reserves the bar's width with the writing on the left, where the bar is not")
+    if "body.ws-split .compose-head { max-width:" in _idx99:
+        _f99("the head is back to a max-width, which overflows instead of stopping")
+    # and what gives way when the line is short is the CLOCK, never the word:
+    # hide explanation when necessary, never hide state.
+    if 'class="nb-when"' not in _idx99 or "body.ws-split .nb-when { display: none; }" not in _idx99:
+        _f99("the save clock is not separable from the save state")
+    if "body.ws-split .nb-word" in _idx99:
+        _f99("a mode hides the save state itself")
     # THE OPEN DOOR IS LIT. markPlace pointed at header nav.places, a selector
     # that has matched nothing since the rail replaced that row — so standing
     # in the Bench lit nothing at all.

@@ -96,7 +96,14 @@
   main { padding: 0 16px 40px; margin: 0; max-width: none; min-width: 0; }
   #shell { display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: start; }
-  #work { min-width: 0; }
+  /* #work is the measuring element. The bands below ask #work how wide it
+     actually is, not how wide the window is — because the window's width is
+     a bad proxy for theirs: the rail takes 216px, the right panel takes
+     another 340 when it is open, and in split mode the whole page pane is
+     half a window. A viewport query gets all three of those wrong. There is
+     nothing position:fixed inside #work, so the containment this turns on
+     changes no other behaviour. */
+  #work { min-width: 0; container-type: inline-size; container-name: work; }
 
   /* the rail */
   #rail { position: sticky; top: 0; align-self: start; width: 216px;
@@ -153,11 +160,19 @@
      track is ever empty, auto-fit has nothing to collapse, and the bands
      sit at their minimum width with a third of a wide desk left over —
      the original complaint in a new shape. A counted ladder stretches
-     every band to its share of whatever is there. */
+     every band to its share of whatever is there.
+     The ladder is climbed against #work's width, not the window's. The
+     @media copy below it is the fallback for a browser with no container
+     queries; where both are understood the container rules come later and
+     win. */
   .band-grid { display: grid; gap: 16px; align-items: start;
     grid-template-columns: minmax(0, 1fr); }
-  @media (min-width: 1080px) { .band-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (min-width: 1400px) { .band-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @supports not (container-type: inline-size) {
+    @media (min-width: 1080px) { .band-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (min-width: 1400px) { .band-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  }
+  @container work (min-width: 820px) { .band-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @container work (min-width: 1180px) { .band-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   /* Three is the ceiling on purpose: Home's action bands are three, so a
      fourth track would always stand empty beside them. A wide desk is used
      by the LISTS below, whose items run in columns of their own. */
@@ -166,8 +181,12 @@
      metre of blank paper beside every row. */
   .list-cols { display: grid; gap: 0 22px; align-items: start;
     grid-template-columns: minmax(0, 1fr); }
-  @media (min-width: 1400px) { .list-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (min-width: 2000px) { .list-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @supports not (container-type: inline-size) {
+    @media (min-width: 1400px) { .list-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (min-width: 2000px) { .list-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  }
+  @container work (min-width: 1180px) { .list-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @container work (min-width: 1720px) { .list-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   .band-grid > .band-wide { grid-column: 1 / -1; }
   .band-grid > .card { margin-bottom: 0; }
 
@@ -190,6 +209,34 @@
     #rail-search { width: 11em; }
     .band-grid { grid-template-columns: minmax(0, 1fr); }
   }
+
+  /* ---- the page pane when the writing room is open --------------------
+     The room is a sibling of #page, and when it opens, #page stops being
+     the window and becomes a pane — half of it by default, and whatever
+     the divider is dragged to after that. A 216px rail and a three-track
+     band grid inside a 700px pane is the strip complaint again, one level
+     down: the cards were clipped mid-word and the rail ate a third of what
+     was left. So the rail folds to the same row of doors it uses on a
+     narrow window — for a different reason, hence a second block and not a
+     wider media query: this one is about the PANE's width, which no
+     viewport query can see.
+     The right panel closes here rather than folding, and that is a
+     decision worth stating: in split mode the page pane IS the surface
+     beside the writing — feedback, readings and related words already land
+     there — so a second panel beside it would be a third column inside a
+     half window. Nothing is lost; the panel is a press away when the room
+     closes, and the room keeps its own revision-notes tray. */
+  body.ws-open #shell { grid-template-columns: minmax(0, 1fr); }
+  body.ws-open #rail { position: static; width: auto; max-height: none; overflow: visible;
+    flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px;
+    border-right: 0; border-bottom: 1px solid var(--border); padding: 6px 14px; }
+  body.ws-open #rail a, body.ws-open #rail button.rail-item { width: auto;
+    padding: 5px 8px; font-size: 13px; }
+  body.ws-open #rail .rail-group, body.ws-open #rail .rail-sub,
+  body.ws-open #rail-recent { display: none; }
+  body.ws-open #rail .rail-foot { display: contents; }
+  body.ws-open #rail-search { width: 11em; }
+  body.ws-open #side { display: none; }
 
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
     padding: 16px; margin-bottom: 16px; }
@@ -373,11 +420,24 @@
     display: flex; gap: 8px; z-index: 61; }
   /* The header: title, My writing, New, save state — one quiet line at the
      top left, in the room's colours, clear of the writing column. */
-  .compose-head { position: absolute; top: calc(env(safe-area-inset-top, 0) + 14px); left: 16px;
-    display: flex; gap: 8px; align-items: center; z-index: 61;
-    max-width: calc(100% - 32px); }
-  body.ws-split .compose-head { max-width: calc(100% - 32px); }
-  body.ws-write .compose-head { max-width: calc(100% - 340px); }
+  .compose-head { position: absolute; top: calc(env(safe-area-inset-top, 0) + 14px);
+    left: 16px; right: 16px; overflow: hidden;
+    display: flex; gap: 8px; align-items: center; z-index: 61; }
+  /* The head had a max-width and no right edge, which is not the same thing:
+     a shrink-to-fit row simply overflowed, and in a split it overflowed
+     straight under #ws-bar — the title, My writing, New and the save state
+     printed on top of Get feedback, Aa and done. #ws-bar is fixed to the
+     WINDOW's right edge, not the room's, so wherever the room reaches that
+     edge the head must stop short of it. With the writing on the LEFT of a
+     split the room never reaches it — the bar floats over the page pane —
+     and the head gets the whole line back. */
+  body.ws-write .compose-head, body.ws-split .compose-head { right: 324px; }
+  body.ws-split.write-left .compose-head { right: 16px; }
+  /* The title is the only part that gives ground; the doors keep their
+     labels whole or they are not doors. */
+  .compose-head .nb-title { flex: 0 1 auto; min-width: 6em; }
+  body.ws-split .nb-when { display: none; }
+  .compose-head .compose-exit, .compose-head .nb-status { flex: 0 0 auto; }
   .nb-title { background: transparent; border: 1px solid transparent; border-radius: 8px;
     color: var(--write-ink); font-family: inherit; font-size: 13.5px; padding: 5px 8px;
     min-width: 8em; width: min(34ch, 40vw); opacity: 0.85; }
@@ -391,7 +451,10 @@
   body.ws-focus #ws-head, body.ws-focus #ws-bar { opacity: 0; pointer-events: none; }
   body.ws-focus #ws-head:focus-within, body.ws-focus #ws-bar:focus-within { opacity: 1; pointer-events: auto; }
   @media (max-width: 820px) {
-    .compose-head { max-width: calc(100vw - 32px); top: auto; bottom: calc(env(safe-area-inset-bottom, 0) + 12px); }
+    /* On a phone the head moves to the bottom, where the bar is not, so it
+       takes the whole line back in every mode. */
+    .compose-head, body.ws-write .compose-head, body.ws-split .compose-head {
+      right: 16px; top: auto; bottom: calc(env(safe-area-inset-bottom, 0) + 12px); }
     .nb-title { width: min(22ch, 46vw); }
   }
   .compose-exit { background: transparent; border: 1px solid var(--write-faint);
@@ -8644,8 +8707,11 @@ function nbRetryNow() {
 }
 
 // ---- what the room says about it ---------------------------------------------
+function nbSavedClock() {
+  return NB.savedAt ? new Date(NB.savedAt).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'}) : '';
+}
 function nbStatusText() {
-  const when = NB.savedAt ? new Date(NB.savedAt).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'}) : '';
+  const when = nbSavedClock();
   switch (NB.status) {
     case 'saving': case 'pending': return NB.localOk ? 'Saving…' : 'Saving… · device recovery unavailable';
     case 'saved': return 'Saved · ' + when;
@@ -8663,7 +8729,15 @@ function nbRenderStatus() {
   let extra = '';
   if (NB.status === 'failed') extra = ` <button class="nb-act" onclick="nbRetryNow()">Retry</button> <button class="nb-act" onclick="exportWriting('download')">Download</button>`;
   if (NB.status === 'conflict') extra = ` <button class="nb-act" onclick="nbOpenPanel('conflict')">Review</button>`;
-  el.innerHTML = text ? `<span class="nb-word" title="${escapeHtml(NB.serverError || '')}">${escapeHtml(text)}</span>${extra}` : '';
+  // The word and the clock are painted as two spans, always both present.
+  // In a split the room is a pane with one short line to spend, and the law
+  // is hide explanation when necessary, never hide state: CSS drops the
+  // CLOCK there and never the word. Nothing here decides that — the text
+  // and its reading order are the same in every mode.
+  const when = nbSavedClock();
+  let word = text, tail = '';
+  if (when && text.endsWith(' · ' + when)) { word = text.slice(0, -(when.length + 3)); tail = ' · ' + when; }
+  el.innerHTML = text ? `<span class="nb-word" title="${escapeHtml(NB.serverError || '')}">${escapeHtml(word)}<span class="nb-when">${escapeHtml(tail)}</span></span>${extra}` : '';
   el.style.display = text ? 'flex' : 'none';
   if (typeof nbRenderHead === 'function') nbRenderHead();
 }

@@ -1,5 +1,44 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.34.1 — The page pane is a pane, not a window
+
+With the writing room open, `#page` stops being the window and becomes half
+of it — and everything above was still laid out as though it were a window.
+A 216px rail and a three-track band grid inside a 700px pane is the strip
+complaint one level down: cards clipped mid-word, a rail eating a third of
+what was left, and the room's own header — the title, My writing, New and
+the save state — printed on top of Get feedback, Aa, ⋯ and done.
+
+The bands no longer ask the window how wide they are. `#work` is the
+measuring element (`container-type: inline-size`), and the ladder is climbed
+against its width, which is the only width that knows about the rail, the
+panel beside the work and the pane. The viewport ladder is kept under
+`@supports not (container-type: inline-size)` as the fallback and is no
+longer the rule. Nothing `position: fixed` lives inside `#work`, so the
+containment this turns on changes no other behaviour.
+
+With the room open the rail folds to the same row of doors it uses on a
+narrow window — a separate block, because this is about the PANE's width and
+no viewport query can see it — the foot's links become doors in that row
+rather than a block hanging off its end, and the panel on the right steps
+aside: in a split the page pane IS the surface beside the writing, and a
+second panel would be a third column inside a half window. Nothing is lost;
+the panel is a press away when the room closes.
+
+The room's head had a max-width and no right edge, which is not the same
+thing — a shrink-to-fit row simply overflows, and it overflowed under a bar
+that is fixed to the WINDOW's right edge. It now stops short of the bar
+wherever the room reaches that edge, and takes the whole line back where it
+does not (a split with the writing on the left, where the bar floats over the
+page pane). What gives way when the line is still short is the CLOCK, never
+the word: the save state is painted as two spans and a mode may hide only the
+second — hide explanation when necessary, never hide state.
+
+Measured, not eyeballed, at 1440×900 and 2560×1400: the work area is 1224 and
+2004 wide on Home with no card clipped; in a split the page pane is 720 and
+1280 with the rail folded, and the head's right edge clears the bar by 44px at
+both sizes.
+
 ## v1.34.0 — The desk, not a strip
 
 His ruling of 14 September 2026: the application was a 700px column in a
