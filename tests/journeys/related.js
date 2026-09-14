@@ -295,16 +295,30 @@ const DRAFT = [
 
   // ---- 2c. Check sources: it searches, so it never sees the writing ------
   const srcReqs = [];
+  // Three replies, served in turn: a real-looking one with a returned
+  // result; the review's fictional reference with zero searches and no
+  // citations; and one with no acquisition record at all.
+  const SRC_NOTE = 'This lookup was given the word, its language and its period and nothing else — not the meaning it was found for. A source can support that the word exists or how it is used; it cannot say the word fits your writing, and it does not change the comparison\u2019s verdict.';
+  const SRC_REPLIES = [
+    { existence: 'found', existence_note: 'Lewis & Short carries it as a Latin noun.',
+      usage_note: 'Everyday and poetic; the threshold of a door.',
+      sources: [{ name: 'Lewis & Short', says: 'attested as a noun', url: 'https://example.org/ls', named_by_model: true, host_result: 'example.org' }],
+      from_recall: '', citations: [{ url: 'https://example.org/ls', title: 'Lewis & Short' }],
+      acquisition: { state: 'source_returned', label: 'Source result returned — inspect it.', citations: 1, web_search_requests: 1, verified: false },
+      summary: 'limen · Latin · Source result returned — inspect it · 1 search result(s) came back · 1 search(es) recorded · model\u2019s finding: found · this says nothing about fit' },
+    { existence: 'found', existence_note: 'A fictional reference carries this word.',
+      usage_note: '', sources: [{ name: 'FICTIONAL REFERENCE', says: 'This spelling is attested.', url: '', named_by_model: true, host_result: '' }],
+      from_recall: '', citations: [],
+      acquisition: { state: 'none', label: 'No search was recorded — model answer unverified.', citations: 0, web_search_requests: 0, verified: false },
+      summary: 'limen · Latin · No search was recorded — model answer unverified · 0 search result(s) came back · 0 search(es) recorded · model\u2019s finding: found · this says nothing about fit' },
+    { existence: 'found', existence_note: 'Said from memory.', usage_note: '', sources: [], from_recall: 'all of it',
+      citations: [], summary: 'limen · Latin · existence: found' },
+  ];
   await page.route('**/api/related/word_sources', r => {
     let b = {}; try { b = JSON.parse(r.request().postData() || '{}'); } catch (e) {}
     srcReqs.push(b);
-    return r.fulfill({ json: { mode: 'word_sources', word: b.word, language: b.language, period: b.period,
-      existence: 'found', existence_note: 'Lewis & Short carries it as a Latin noun.',
-      usage_note: 'Everyday and poetic; the threshold of a door.',
-      sources: [{ name: 'Lewis & Short', says: 'attested as a noun' }], from_recall: '',
-      citations: [{ url: 'https://example.org/ls', title: 'Lewis & Short' }],
-      note: 'This lookup was given the word, its language and its period and nothing else — not the meaning it was found for. A source can support that the word exists or how it is used; it cannot say the word fits your writing, and it does not change the comparison\u2019s verdict.',
-      summary: 'limen · Latin · existence: found · this says nothing about fit' } });
+    const reply = SRC_REPLIES[Math.min(srcReqs.length - 1, SRC_REPLIES.length - 1)];
+    return r.fulfill({ json: { mode: 'word_sources', word: b.word, language: b.language, period: b.period, note: SRC_NOTE, ...reply } });
   });
   const verdictBefore = await page.evaluate(([u, i]) => {
     const h = document.getElementById(`rw-act-${u}-languages-${i}`);
@@ -329,12 +343,47 @@ const DRAFT = [
     const h = document.getElementById(`rw-act-${u}-languages-${i}`);
     return { out: h.innerText.replace(/\s+/g, ' '), card: h.closest('.card').innerText.replace(/\s+/g, ' ') };
   }, [uid, latinIdx]);
-  ok(/sources carry it/.test(srcAfter.out) && /Lewis & Short/.test(srcAfter.out),
-     'the sources come back and are named: ' + srcAfter.out.slice(0, 200));
+  ok(/Source result returned — inspect it/.test(srcAfter.out) && /Source named by the model: Lewis & Short/.test(srcAfter.out),
+     'a returned result is drawn as a result to inspect, and the source stays the model\u2019s own naming: ' + srcAfter.out.slice(0, 200));
+  ok(/a result was returned from example\.org; that is not a reading of it/.test(srcAfter.out),
+     'a same-host result is said as a result from that host and no more');
+  ok(!/sources carry it/.test(srcAfter.out) && !/decision-tag accepted/.test(await page.evaluate(([u, i]) => document.getElementById(`rw-act-${u}-languages-${i}`).innerHTML, [uid, latinIdx])),
+     'no proof-style badge is drawn in the lookup lane');
   ok(/cannot say the word fits your writing/.test(srcAfter.out) && /verdict on this card is unchanged/.test(srcAfter.out),
      'and it says plainly that it cannot speak to fit');
   ok(/holds/.test(verdictBefore) && /holds/.test(srcAfter.card) && !/strained/.test(srcAfter.card.split('Check sources')[0]),
      'the card\u2019s own verdict is untouched by the lookup');
+  // The review's case: found, a fictional reference, zero searches, nothing
+  // returned. The card must lead with the absence and never wear the badge.
+  await page.click(`#rw-src-go-${uid}-languages-${latinIdx}`); await page.waitForTimeout(700);
+  const srcNone = await page.evaluate(([u, i]) => {
+    const h = document.getElementById(`rw-act-${u}-languages-${i}`);
+    const t = h.innerText.replace(/\s+/g, ' ');
+    const acq = h.querySelector('.rw-acq');
+    return { text: t, html: h.innerHTML, state: acq ? acq.dataset.acquisition : null,
+             warn: !!(acq && acq.classList.contains('rw-acq-warn')),
+             acqAt: t.indexOf('No search was recorded'), findingAt: t.toLowerCase().indexOf('model\u2019s finding') };
+  }, [uid, latinIdx]);
+  ok(srcReqs.length === 2 && srcNone.state === 'none' && srcNone.warn,
+     'zero searches is drawn as no acquisition, in warning colour: ' + srcNone.state);
+  ok(/No search was recorded — model answer unverified/.test(srcNone.text) && /0 search result\(s\) came back/.test(srcNone.text) && /0 search\(es\) recorded/.test(srcNone.text),
+     'the zero is stated, not omitted: ' + srcNone.text.slice(0, 160));
+  ok(!/sources carry it/.test(srcNone.text) && !/decision-tag accepted/.test(srcNone.html),
+     'a fictional reference with nothing acquired never wears "sources carry it"');
+  ok(srcNone.acqAt !== -1 && srcNone.findingAt !== -1 && srcNone.acqAt < srcNone.findingAt,
+     'the acquisition line is above the model\u2019s finding, so the card cannot claim and then retract: ' + srcNone.acqAt + ' < ' + srcNone.findingAt);
+  ok(/model\u2019s finding found/i.test(srcNone.text) && /Source named by the model: FICTIONAL REFERENCE/.test(srcNone.text),
+     'the model\u2019s claim is kept, as its claim');
+  ok(!/did not search/.test(srcNone.text), 'and the review-lane wording is not printed under a lookup');
+  // A reply with no acquisition record at all is unverified, not success.
+  await page.click(`#rw-src-go-${uid}-languages-${latinIdx}`); await page.waitForTimeout(700);
+  const srcUnk = await page.evaluate(([u, i]) => {
+    const h = document.getElementById(`rw-act-${u}-languages-${i}`);
+    const acq = h.querySelector('.rw-acq');
+    return { text: h.innerText.replace(/\s+/g, ' '), state: acq ? acq.dataset.acquisition : null, warn: !!(acq && acq.classList.contains('rw-acq-warn')) };
+  }, [uid, latinIdx]);
+  ok(srcReqs.length === 3 && srcUnk.state === 'unreported' && srcUnk.warn && /Search use was not reported — model answer unverified/.test(srcUnk.text),
+     'a reply with no acquisition record is drawn as unverified, never as success: ' + srcUnk.state);
   await page.evaluate(([u, i]) => rwCheckSources(u, 'languages', i), [uid, latinIdx]); await page.waitForTimeout(200);
 
   // ---- 3. the follow-up: one language, appended, nothing replaced --------

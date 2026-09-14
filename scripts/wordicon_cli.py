@@ -10499,6 +10499,55 @@ def run_refract(candidate: dict, gateway: Gateway,
 # period — not that the search engine sees only those.
 WORD_SOURCES_MAX = 200
 
+# What the provider demonstrably ACQUIRED on a Check sources call, kept apart
+# from what the model CONCLUDED (his ruling, 2026-09-14). The state is derived
+# from the citations the provider returned and the search count it reported —
+# never from the model's own text, which is exactly the thing that cannot
+# vouch for itself. Unknown is unknown: a count the provider did not report
+# is neither zero nor success.
+WORD_SOURCES_ACQUISITION = {
+    "source_returned":    "Source result returned — inspect it.",
+    "searched_no_source": "Search ran — no supporting source was returned.",
+    "none":               "No search was recorded — model answer unverified.",
+    "unreported":         "Search use was not reported — model answer unverified.",
+}
+# The one label a search-backed result may wear in this lane. It is not a
+# proof-style badge and the interface may not draw one: nothing here ties the
+# exact claim to the page that came back, so nothing here is "verified".
+WORD_SOURCES_INSPECT = "inspect it"
+
+
+def word_sources_acquisition(citations, usage) -> dict:
+    """Derive the acquisition state. citations: the provider's returned
+    results (a nonempty list means a search demonstrably ran and returned
+    something, whatever the count says). usage: the provider's own numbers,
+    where `web_search_requests` is None when it was not reported."""
+    n_cit = len(citations or [])
+    reqs = None
+    if isinstance(usage, dict):
+        reqs = usage.get("web_search_requests")
+    if n_cit > 0:
+        state = "source_returned"
+    elif reqs is None:
+        state = "unreported"
+    elif int(reqs) == 0:
+        state = "none"
+    else:
+        state = "searched_no_source"
+    return {"state": state, "label": WORD_SOURCES_ACQUISITION[state],
+            "citations": n_cit, "web_search_requests": reqs,
+            # said on the record: this lane never mechanically proves a claim
+            "verified": False}
+
+
+def _host_of(url: str) -> str:
+    try:
+        from urllib.parse import urlsplit
+        h = (urlsplit(str(url or "")).hostname or "").lower()
+    except Exception:
+        return ""
+    return h[4:] if h.startswith("www.") else h
+
 
 def build_word_sources_prompt(word: str, language: str, period: str) -> str:
     """Built from exactly three fields, all of them already on screen."""
@@ -10532,7 +10581,7 @@ Respond with ONLY a JSON object of this exact shape, no prose outside it:
 {{"existence": "found" or "not found" or "uncertain",
  "existence_note": "one or two sentences, naming the source(s) or saying none was found",
  "usage_note": "what the sources say about meaning and register, or '' if none was found",
- "sources": [{{"name": "the reference", "says": "the one thing it establishes"}}],
+ "sources": [{{"name": "the reference", "says": "the one thing it establishes", "url": "the page you read, or '' if none"}}],
  "from_recall": "anything you are adding from memory rather than a source, or ''"}}{ENGLISH_PROSE_RULE}"""
 
 
@@ -10564,12 +10613,32 @@ def run_word_sources(word: str, language: str = "", period: str = "",
     existence = str(parsed.get("existence") or "uncertain").strip().lower()
     if existence not in ("found", "not found", "uncertain"):
         existence = "uncertain"
-    sources = [{"name": str(x.get("name") or "")[:200], "says": str(x.get("says") or "")[:600]}
-               for x in (parsed.get("sources") or []) if isinstance(x, dict)
-               and str(x.get("name") or "").strip()]
+    usage = getattr(gateway, "last_acquisition", None)
+    acquisition = word_sources_acquisition(citations, usage)
+    # A source the MODEL names is the model's claim and stays labelled as
+    # one. The only thing the application can add is whether a result
+    # actually came back from the same host as the page the model says it
+    # read — and that establishes a result from that host, not that the
+    # page supports the claim. A name with no url can match nothing.
+    returned_hosts = {_host_of(c.get("url")) for c in (citations or []) if isinstance(c, dict)}
+    returned_hosts.discard("")
+    sources = []
+    for x in (parsed.get("sources") or []):
+        if not isinstance(x, dict) or not str(x.get("name") or "").strip():
+            continue
+        url = str(x.get("url") or "")[:400]
+        host = _host_of(url)
+        sources.append({"name": str(x.get("name") or "")[:200],
+                        "says": str(x.get("says") or "")[:600],
+                        "url": url,
+                        "named_by_model": True,
+                        "host_result": host if host and host in returned_hosts else ""})
     out = {
         "mode": "word_sources",
         "word": w, "language": lang, "period": per,
+        # what the provider acquired, first — it governs how the rest reads
+        "acquisition": acquisition,
+        # what the model concluded, second, and labelled as its own
         "existence": existence,
         "existence_note": str(parsed.get("existence_note") or "")[:1200],
         "usage_note": str(parsed.get("usage_note") or "")[:1200],
@@ -10585,12 +10654,17 @@ def run_word_sources(word: str, language: str = "", period: str = "",
                  "how it is used; it cannot say the word fits your writing, and it does not change "
                  "the comparison's verdict."),
     }
+    # The count is stated whatever it is. A zero used to be omitted, which
+    # read as "search was not a factor" rather than "no search happened".
+    reqs = acquisition["web_search_requests"]
     out["summary"] = (f"{w}" + (f" · {lang}" if lang else "")
-                      + f" · existence: {existence}"
-                      + (f" · {len(sources)} source(s) named" if sources else " · no source named")
-                      + (f" · {len(citations)} search result(s) came back" if citations else "")
+                      + f" · {acquisition['label'].rstrip('.')}"
+                      + f" · {len(citations)} search result(s) came back"
+                      + (" · search use not reported" if reqs is None else f" · {reqs} search(es) recorded")
+                      + f" · model's finding: {existence}"
+                      + (f" · {len(sources)} source(s) named by the model" if sources else " · no source named by the model")
                       + " · this says nothing about fit")
-    print(f"  [{existence}] {out['existence_note'][:120]}")
+    print(f"  [{acquisition['state']}] model's finding: {existence} — {out['existence_note'][:100]}")
     return out
 
 

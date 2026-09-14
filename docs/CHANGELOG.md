@@ -1,5 +1,36 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.35.0 — Check sources says what was acquired, apart from what the model concluded
+
+An independent review of report 77 supplied the lookup with a reply naming a
+fictional reference, with zero searches and no citations, and the card drew
+a green "sources carry it". The badge was picked from the model's own
+`existence` field — the one thing that cannot vouch for itself — and the
+printed "did not search" line sat below it, so the card claimed at the top
+and retracted below the fold.
+
+Two things now, kept apart and in this order (his ruling, 14 September
+2026). First, what the provider demonstrably acquired, derived from the
+citations it returned and the search count it reported and never from the
+model's text: *Source result returned — inspect it* · *Search ran — no
+supporting source was returned* · *No search was recorded — model answer
+unverified* · *Search use was not reported — model answer unverified*. An
+unreported count is neither zero nor success. Second, the model's finding
+— found, uncertain, not found — as its own claim. Every source the model
+names is "Source named by the model"; when a result actually came back from
+the same host as the page the model says it read, the card says a result was
+returned from that host and no more. The lane draws no proof-style badge at
+all; a returned result is neutral, nothing acquired is a warning, and the
+summary states a zero search rather than omitting the count. A reply with no
+acquisition record is drawn as unverified. The word/language/period
+boundary, the unchanged verdict, and the provider's own query composition
+are exactly as they were.
+
+Seven regression cases against the real `run_word_sources`, three replies
+through the real card in the Related journey, and two sabotages — the
+derivation made to believe the model, the page made to believe the model —
+each failing its named check.
+
 ## v1.34.2 — The closed place pane was never actually closed
 
 `#place` carries `hidden` when no place is open, and `hidden` hides an

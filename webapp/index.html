@@ -672,6 +672,14 @@
     body.ws-split #ws-divider { display: none; }
   }
   /* ---- the shelf ------------------------------------------------------ */
+  /* Check sources (2026-09-14): what was acquired, said first. Warning
+     colour when nothing was; plain when something came back — and never
+     the green of an accepted ruling, which this lane may not wear. */
+  .rw-acq { font-size: 12.5px; padding: 6px 9px; border-radius: 8px; margin-top: 8px;
+    border-left: 3px solid var(--border); background: var(--panel-2); }
+  .rw-acq-warn { border-left-color: var(--bad); }
+  .rw-acq-plain { border-left-color: var(--muted); }
+  .decision-tag.plain { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
   .chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 2px 0 10px; }
   .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
     border-radius: 999px; border: 1px solid var(--border); background: var(--panel-2);
@@ -5310,7 +5318,7 @@ function rwCheckSources(uid, section, index) {
     <div class="card rw-sources" style="margin-top:6px;border-left:3px solid var(--accent, #888)">
       <div class="section-label" style="margin-top:0">Check sources — ${escapeHtml(f.word)}</div>
       <p class="body" style="font-size:13px;margin:2px 0">What goes out: the word <b>${escapeHtml(f.word)}</b>${f.language ? `, the language <b>${escapeHtml(f.language)}</b>` : ''}${f.period ? `, the period <b>${escapeHtml(f.period)}</b>` : ''} — and nothing else. Not your passage, not your meaning, not your notes, not what this pass wrote about the word.</p>
-      <p class="fact" style="font-size:12.5px">Model calls: <b>1</b>, with web search — this one spends. It can say whether sources carry the word and how they say it is used; it cannot say the word fits your writing, and it will not change the verdict above.</p>
+      <p class="fact" style="font-size:12.5px">Model calls: <b>1</b>, with web search — this one spends. It reports what the provider actually returned, kept apart from what the model concludes; a source the model names stays the model’s claim until a result from it comes back. It cannot say the word fits your writing, and it will not change the verdict above.</p>
       <p class="body muted" style="font-size:12px;margin:2px 0">The search itself is run by the model provider, which composes its own queries from that prompt. What is controlled here is what the lookup is given, not the exact words of the query it issues.</p>
       <div class="row" style="margin-top:6px">
         <button class="judge-btn live" id="rw-src-go-${escapeHtml(key)}" onclick="rwRunSources('${escapeJs(uid)}','${escapeJs(section)}',${Number(index)})">Look it up — 1 model call</button>
@@ -5336,24 +5344,48 @@ async function rwRunSources(uid, section, index) {
     });
     const d = await r.json();
     if (!r.ok || d.error) { out.innerHTML = `<div class="error">${escapeHtml(d.error || 'The lookup could not run.')}</div>`; if (go) { go.disabled = false; go.textContent = 'Look it up — 1 model call'; } return; }
-    const tag = d.existence === 'found'
-      ? `<span class="decision-tag accepted" style="text-transform:none;letter-spacing:0">sources carry it</span>`
-      : d.existence === 'not found'
-        ? `<span class="decision-tag rejected" style="text-transform:none;letter-spacing:0">no source found in this lookup</span>`
-        : `<span class="decision-tag revised" style="text-transform:none;letter-spacing:0">uncertain</span>`;
-    out.innerHTML = `
-      <div class="section-label" style="margin-top:10px">What the sources say ${tag}</div>
-      ${(d.existence_note || '').trim() ? `<p class="body" style="font-size:13.5px">${escapeHtml(d.existence_note)}</p>` : ''}
-      ${(d.usage_note || '').trim() ? `<p class="body" style="font-size:13.5px"><em>Usage:</em> ${escapeHtml(d.usage_note)}</p>` : ''}
-      ${(d.sources || []).length ? `<ul class="body" style="font-size:13px;margin:4px 0 0;padding-left:18px">${(d.sources || []).map(x => `<li><b>${escapeHtml(x.name)}</b> — ${escapeHtml(x.says)}</li>`).join('')}</ul>` : ''}
-      ${(d.from_recall || '').trim() ? `<p class="body muted" style="font-size:12.5px"><em>From recall, not from a source:</em> ${escapeHtml(d.from_recall)}</p>` : ''}
-      <p class="body muted" style="font-size:12px;border-left:2px solid var(--rule-reworked, #888);padding-left:9px;margin-top:6px">${escapeHtml(d.note || '')} The verdict on this card is unchanged.</p>
-      ${citationsHtml(d.citations)}`;
+    out.innerHTML = rwSourcesHtml(d);
     if (go) { go.disabled = false; go.textContent = 'Look it up again — 1 model call'; }
   } catch (e) {
     out.innerHTML = `<div class="error">Couldn't reach the server.</div>`;
     if (go) { go.disabled = false; go.textContent = 'Look it up — 1 model call'; }
   }
+}
+// What a Check sources reply is DRAWN as (his ruling, 2026-09-14). Two
+// things, kept apart and in this order: what the provider demonstrably
+// acquired, then what the model concluded. The acquisition line comes first
+// so the card cannot make a confident claim at the top and retract it below
+// the fold — which is what it did when the badge was picked from the model's
+// own `existence` field: a reply naming a fictional reference, with zero
+// searches and no citations, wore a green "sources carry it" above a line
+// that said the lookup had not searched. No proof-style badge is drawn in
+// this lane at all, because nothing here ties the exact claim to the page
+// that came back. A source the model names stays "named by the model"; a
+// returned result from the same host is said as exactly that and no more.
+// A reply with no acquisition record is drawn as unverified, not as success.
+function rwSourcesHtml(d) {
+  const acq = (d.acquisition && d.acquisition.state) ? d.acquisition
+    : {state: 'unreported', label: 'Search use was not reported — model answer unverified.',
+       citations: (d.citations || []).length, web_search_requests: null};
+  const warn = acq.state !== 'source_returned';
+  const reqs = acq.web_search_requests;
+  const counts = `${acq.citations || 0} search result(s) came back · `
+    + (reqs === null || reqs === undefined ? 'search use not reported' : `${reqs} search(es) recorded`);
+  const finding = d.existence === 'found' ? 'found' : d.existence === 'not found' ? 'not found' : 'uncertain';
+  const tag = (text, cls) => `<span class="decision-tag ${cls}" style="text-transform:none;letter-spacing:0">${escapeHtml(text)}</span>`;
+  const srcRow = x => `<li><span class="muted">Source named by the model:</span> <b>${escapeHtml(x.name)}</b> — ${escapeHtml(x.says)}`
+    + (x.host_result ? ` <span class="muted">· a result was returned from ${escapeHtml(x.host_result)}; that is not a reading of it</span>` : '')
+    + `</li>`;
+  return `
+      <div class="rw-acq ${warn ? 'rw-acq-warn' : 'rw-acq-plain'}" data-acquisition="${escapeHtml(acq.state)}">
+        <b>${escapeHtml(acq.label)}</b> <span class="muted">${counts}</span></div>
+      <div class="section-label" style="margin-top:8px">Model’s finding ${tag(finding, 'plain')}</div>
+      ${(d.existence_note || '').trim() ? `<p class="body" style="font-size:13.5px">${escapeHtml(d.existence_note)}</p>` : ''}
+      ${(d.usage_note || '').trim() ? `<p class="body" style="font-size:13.5px"><em>Usage:</em> ${escapeHtml(d.usage_note)}</p>` : ''}
+      ${(d.sources || []).length ? `<ul class="body" style="font-size:13px;margin:4px 0 0;padding-left:18px">${(d.sources || []).map(srcRow).join('')}</ul>` : ''}
+      ${(d.from_recall || '').trim() ? `<p class="body muted" style="font-size:12.5px"><em>From recall, not from a source:</em> ${escapeHtml(d.from_recall)}</p>` : ''}
+      <p class="body muted" style="font-size:12px;border-left:2px solid var(--rule-reworked, #888);padding-left:9px;margin-top:6px">${escapeHtml(d.note || '')} The verdict on this card is unchanged.</p>
+      ${(d.citations || []).length ? citationsHtml(d.citations) : ''}`;
 }
 // ---- finding 5: the shelf lands on the word, not merely on its run --------
 // The bookmark keeps the run, the section and the index, so reopening it can

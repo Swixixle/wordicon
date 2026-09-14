@@ -3167,6 +3167,155 @@ def _check_source_delivery(server, paired):
     return out
 
 
+def _check_word_sources_evidence(server, paired):
+    """Check sources says what was ACQUIRED apart from what the model
+    CONCLUDED (his ruling, 2026-09-14), after an independent review showed
+    a reply naming a fictional reference, with zero searches and no
+    citations, drawn as a green "sources carry it".
+
+    The acquisition state is derived from the provider's returned citations
+    and its reported search count — never from the model's own text. An
+    unreported count is neither zero nor success. A source the model names
+    stays the model's claim; a returned result from the same host is said as
+    exactly that. Nothing in this lane is "verified", and the interface may
+    draw no proof-style badge. Seven cases, each against the real
+    run_word_sources, and the interface pinned to draw the acquisition
+    before the finding."""
+    out = []
+    import json as _json
+
+    def _gw(reply, citations, usage):
+        class G:
+            name = "evidence-probe"
+            last_acquisition = usage
+            def complete_with_search(self, prompt, **k):
+                return _json.dumps(reply), citations
+            def complete(self, prompt, **k):
+                return _json.dumps(reply)
+        return G()
+
+    FICTION = {"existence": "found",
+               "existence_note": "A fictional reference carries this word.",
+               "sources": [{"name": "FICTIONAL REFERENCE", "says": "This spelling is attested.",
+                            "url": "https://fictional.example/entry"}],
+               "usage_note": "", "from_recall": ""}
+    AFFIRM = ("carry", "carries", "verified", "proven", "confirmed", "supported")
+
+    def _no_affirmation(r, where):
+        # whole words: "unverified" is the honest word, not the affirmative one
+        import re as _re
+        text = (r["acquisition"]["label"] + " " + r["summary"]).lower()
+        for w in AFFIRM:
+            if _re.search(r"\b" + w + r"\b", text):
+                out.append(f"SOURCES {where}: an affirmative word reached the record: {w!r} in {text[:120]!r}")
+
+    # 1. found + a fictional named source, zero searches, no citations
+    r = cli.run_word_sources("thresholdry", "English", "modern",
+                             gateway=_gw(FICTION, [], {"web_search_requests": 0}))
+    if r["acquisition"]["state"] != "none" or "No search was recorded" not in r["acquisition"]["label"]:
+        out.append(f"SOURCES 1: zero searches did not derive 'none': {r['acquisition']}")
+    if r["existence"] != "found":
+        out.append("SOURCES 1: the model's finding was rewritten — it is its claim and must be kept as one")
+    if not r["sources"] or not r["sources"][0].get("named_by_model") or r["sources"][0].get("host_result"):
+        out.append(f"SOURCES 1: the fictional source is not marked as named by the model: {r['sources']}")
+    if "0 search result(s) came back" not in r["summary"] or "0 search(es) recorded" not in r["summary"]:
+        out.append(f"SOURCES 1: a zero search is omitted from the summary rather than stated: {r['summary']!r}")
+    if r["acquisition"].get("verified") is not False:
+        out.append("SOURCES 1: the lane claims verification")
+    _no_affirmation(r, "1")
+
+    # 2. found with an EMPTY source list, zero searches
+    r = cli.run_word_sources("thresholdry", "English", "",
+                             gateway=_gw({**FICTION, "sources": []}, [], {"web_search_requests": 0}))
+    if r["acquisition"]["state"] != "none" or r["sources"]:
+        out.append(f"SOURCES 2: found-with-nothing-named did not stay 'none': {r['acquisition']} {r['sources']}")
+    if "no source named by the model" not in r["summary"]:
+        out.append(f"SOURCES 2: the summary does not say no source was named: {r['summary']!r}")
+
+    # 3. a recorded search with no citations
+    r = cli.run_word_sources("thresholdry", "English", "",
+                             gateway=_gw(FICTION, [], {"web_search_requests": 2}))
+    if r["acquisition"]["state"] != "searched_no_source" or "no supporting source was returned" not in r["acquisition"]["label"]:
+        out.append(f"SOURCES 3: a search with nothing returned did not derive 'searched_no_source': {r['acquisition']}")
+    if "2 search(es) recorded" not in r["summary"]:
+        out.append(f"SOURCES 3: the recorded count is not in the summary: {r['summary']!r}")
+    _no_affirmation(r, "3")
+
+    # 4. a citation from an UNRELATED domain beside a model-named source
+    cit = [{"url": "https://unrelated.example.org/page", "title": "Elsewhere",
+            "observed": [cli.RESULT_RETURNED], "returned_occurrences": 1, "cited_occurrences": 0,
+            "provider_citation_excerpts": [], "used": "searched"}]
+    r = cli.run_word_sources("thresholdry", "English", "",
+                             gateway=_gw(FICTION, cit, {"web_search_requests": 1}))
+    if r["acquisition"]["state"] != "source_returned":
+        out.append(f"SOURCES 4: a returned citation did not derive 'source_returned': {r['acquisition']}")
+    if r["sources"][0].get("host_result"):
+        out.append(f"SOURCES 4: an unrelated host was tied to the model's source: {r['sources'][0]}")
+    if not r["sources"][0].get("named_by_model"):
+        out.append("SOURCES 4: a returned citation upgraded the model's source out of 'named by the model'")
+    _no_affirmation(r, "4")
+
+    # 5. a returned citation from the SAME host as the model-named source
+    cit = [{"url": "https://www.fictional.example/other-entry", "title": "The reference",
+            "observed": [cli.RESULT_RETURNED], "returned_occurrences": 1, "cited_occurrences": 0,
+            "provider_citation_excerpts": [], "used": "searched"}]
+    r = cli.run_word_sources("thresholdry", "English", "",
+                             gateway=_gw(FICTION, cit, {"web_search_requests": 1}))
+    if r["sources"][0].get("host_result") != "fictional.example":
+        out.append(f"SOURCES 5: a same-host result was not recorded as a host result: {r['sources'][0]}")
+    if not r["sources"][0].get("named_by_model") or r["acquisition"].get("verified") is not False:
+        out.append("SOURCES 5: a host match was treated as more than a result from that host")
+    _no_affirmation(r, "5")
+
+    # 6. unknown acquisition usage — the provider reported nothing
+    r = cli.run_word_sources("thresholdry", "English", "", gateway=_gw(FICTION, [], None))
+    if r["acquisition"]["state"] != "unreported" or "not reported" not in r["acquisition"]["label"]:
+        out.append(f"SOURCES 6: an unreported count was treated as something: {r['acquisition']}")
+    if "search use not reported" not in r["summary"]:
+        out.append(f"SOURCES 6: the summary does not say the count was not reported: {r['summary']!r}")
+    r = cli.run_word_sources("thresholdry", "English", "",
+                             gateway=_gw(FICTION, [], {"web_search_requests": None}))
+    if r["acquisition"]["state"] != "unreported":
+        out.append(f"SOURCES 6b: a None count inside a usage dict was treated as something: {r['acquisition']}")
+
+    # 7. an honestly supported-LOOKING result stays "inspect it", never proven
+    r = cli.run_word_sources("thresholdry", "English", "",
+                             gateway=_gw(FICTION, cit, {"web_search_requests": 1, "usage_reported": True}))
+    if "inspect it" not in r["acquisition"]["label"] or r["acquisition"].get("verified") is not False:
+        out.append(f"SOURCES 7: the best case is drawn as more than 'inspect it': {r['acquisition']}")
+    _no_affirmation(r, "7")
+
+    # the boundary is unchanged: the prompt is built from three fields and the
+    # route still refuses the seven names
+    with server.app.test_client() as c:
+        paired(c)
+        for bad in ("trace_id", "passage", "definition", "meaning", "item", "section", "index"):
+            rr = c.post("/api/related/word_sources", json={"word": "x", bad: "y"})
+            if rr.status_code != 400:
+                out.append(f"SOURCES: the route accepted {bad!r} ({rr.status_code})")
+
+    # THE INTERFACE. Static pins on what the page draws: the acquisition line
+    # first, with the state on it; no proof-style badge in the lane; a reply
+    # with no acquisition record drawn as unverified.
+    idx = (Path(cli.__file__).parent.parent / "webapp" / "index.html").read_text(encoding="utf-8")
+    fn_at = idx.find("function rwSourcesHtml(")
+    if fn_at == -1:
+        out.append("SOURCES: rwSourcesHtml is gone — the card is drawn some other way")
+    else:
+        body = idx[fn_at: idx.find("\n}\n", fn_at)]
+        if "sources carry it" in body or "decision-tag accepted" in body or "decision-tag rejected" in body:
+            out.append("SOURCES: a proof-style or verdict-style badge is drawn in the Check sources lane")
+        if "data-acquisition=" not in body or body.find("data-acquisition=") > body.find("Model\u2019s finding"):
+            out.append("SOURCES: the acquisition line is not drawn above the model's finding")
+        if "state: 'unreported'" not in body or "model answer unverified" not in body:
+            out.append("SOURCES: a reply with no acquisition record is not drawn as unverified")
+        if "Source named by the model" not in body or "a result was returned from" not in body:
+            out.append("SOURCES: a model-named source is not labelled as the model's, or a host result claims more than a result")
+        if "d.existence === 'found' ?" in body and "rw-acq" not in body:
+            out.append("SOURCES: the card is keyed off the model's existence field")
+    return out
+
+
 def _check_meaning_kept_whole(server, paired):
     """His meaning reaches the model and the record as he wrote it
     (his ruling, 2026-09-14): "silently changing your meaning isn't
@@ -4700,6 +4849,7 @@ def main() -> int:
     failures.extend(_check_saved_words_repeat(server, _paired))
     failures.extend(_check_meaning_kept_whole(server, _paired))
     failures.extend(_check_job_reservation(server))
+    failures.extend(_check_word_sources_evidence(server, _paired))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key
