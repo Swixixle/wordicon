@@ -4504,28 +4504,55 @@ async function openRelatedPanel(areaId, original, focus) {
   // concept is shown here in full and is never shortened by this panel; when
   // it is longer than a pass will take he gives a shorter meaning for this
   // comparison, and the record says that is what it is.
-  const meaning = (original.definition || '').trim() ? original.definition
-                  : (original.plain_gloss || '');
-  RELATED_PENDING[areaId] = {...original, focus: focus || 'synonyms', prefill: meaning};
+  //
+  // THE PLAIN GLOSS IS SHOWN WHENEVER IT WILL BE SENT (his ruling,
+  // 2026-09-14): the panel must show every piece of his prose that leaves.
+  // It used to ride along unshown and unvalidated, so a gloss over the
+  // limit was refused by the route in the meaning's name, and the refusal
+  // replaced the panel — with everything typed into it. Two shapes:
+  //   - the concept has a meaning: the gloss gets its own box beside it,
+  //     shortened here for this comparison or left out by a deliberate
+  //     press; either choice is recorded, and the concept keeps its gloss;
+  //   - the concept has NO meaning of its own: the gloss stands in as the
+  //     meaning, shown once in the meaning box and sent once, as the
+  //     meaning — never a second time as the gloss. Recorded as such.
+  const hasMeaning = (original.definition || '').trim().length > 0;
+  const gloss = original.plain_gloss || '';
+  const fromGloss = !hasMeaning && !!gloss.trim();
+  const meaning = hasMeaning ? original.definition : (fromGloss ? gloss : '');
+  const showGloss = hasMeaning && !!gloss.trim();
+  RELATED_PENDING[areaId] = {...original, focus: focus || 'synonyms', prefill: meaning,
+                             gloss_prefill: showGloss ? gloss : '', gloss_omitted: false,
+                             meaning_from_gloss: fromGloss};
   const id = areaId.replace(/[^a-z0-9_-]/gi, '');
   area.innerHTML = `
-    <div class="card" style="border-left:3px solid var(--accent, #888)">
+    <div class="card" id="rw-panel-${id}" style="border-left:3px solid var(--accent, #888)">
       <div class="section-label" style="margin-top:0">Find related words${original.title ? ` for “${escapeHtml(original.title)}”` : ''}</div>
       ${(original.note || '').trim() ? `<p class="body muted" style="font-size:12.5px;margin:0 0 4px">${escapeHtml(original.note)}</p>` : ''}
       <p class="body muted" style="font-size:12.5px;margin:0 0 4px">The meaning to match — correct it here if the sense is off; the title is only a handle:</p>
-      <textarea class="note" id="rw-meaning-${id}" aria-label="the meaning to find related words for" rows="1" oninput="growMeaning(this);rwMeaningState('${escapeJs(id)}')" style="width:100%;resize:vertical;overflow:auto;font-family:inherit"></textarea>
+      <textarea class="note" id="rw-meaning-${id}" aria-label="the meaning to find related words for" rows="1" oninput="growMeaning(this);rwPanelState('${escapeJs(id)}')" style="width:100%;resize:vertical;overflow:auto;font-family:inherit"></textarea>
       <p class="body" id="rw-meaning-note-${id}" style="font-size:12.5px;margin:2px 0" hidden></p>
+      ${fromGloss ? `<p class="body muted" id="rw-from-gloss-${id}" style="font-size:12.5px;margin:2px 0">This idea has no meaning of its own, so its plain gloss is standing in as the meaning above. It goes once, as the meaning; the idea keeps its gloss.</p>` : ''}
+      ${showGloss ? `
+      <p class="body muted" style="font-size:12.5px;margin:8px 0 4px">Its plain gloss — sent with the meaning. Shorten it here for this comparison, or leave it out; the idea keeps its own either way:</p>
+      <textarea class="note" id="rw-gloss-${id}" aria-label="the plain gloss sent with the meaning" rows="1" oninput="growMeaning(this);rwPanelState('${escapeJs(id)}')" style="width:100%;resize:vertical;overflow:auto;font-family:inherit"></textarea>
+      <p class="body" id="rw-gloss-note-${id}" style="font-size:12.5px;margin:2px 0" hidden></p>
+      <div class="row" style="margin-top:4px"><button class="judge-btn" id="rw-gloss-omit-${id}" onclick="rwOmitGloss('${escapeJs(areaId)}')">Leave the gloss out of this comparison</button></div>` : ''}
       <div id="rw-saved-${id}"><p class="body muted" style="font-size:12.5px"><span class="spinner"></span>looking for saved comparisons…</p></div>
       <p class="fact" id="rw-cost-${id}" style="font-size:12.5px">${relatedCostLine(null)}</p>
       <div class="row" style="margin-top:8px">
         <button class="judge-btn live" id="rw-go-${id}" onclick="startRelatedFromPanel('${escapeJs(areaId)}')">Find related words — 2 model calls</button>
         <button class="judge-btn" onclick="closeRelatedPanel('${escapeJs(areaId)}')">Cancel</button>
       </div>
+      <div id="rw-run-${id}" aria-live="polite"></div>
     </div>`;
   const _mta = document.getElementById(`rw-meaning-${id}`);
   if (_mta) _mta.value = meaning;      // assigned, not inlined: exact, leading newline and all
   growMeaning(_mta);
-  rwMeaningState(id);
+  const _gta = document.getElementById(`rw-gloss-${id}`);
+  if (_gta) _gta.value = gloss;        // the same: exactly as stored, whitespace and line breaks included
+  growMeaning(_gta);
+  rwPanelState(id);
   // the saved comparisons and the lane, after the panel is on screen — the
   // panel does not wait on either
   try {
@@ -4544,29 +4571,77 @@ async function openRelatedPanel(areaId, original, focus) {
     if (c) c.innerHTML = relatedCostLine(lane);
   } catch (e) { /* the cost line keeps its call count */ }
 }
-// What the meaning box is doing, said in the panel rather than discovered at
-// the route: over the limit, the pass will not start, and the reason names
-// both counts and says the stored concept is not being changed.
-function rwMeaningState(id) {
+// What the panel is doing, said in the panel rather than discovered at the
+// route: over the limit, the pass will not start, and the reason names the
+// FIELD that is over, both counts, and says the stored concept is not being
+// changed. Both boxes are judged; the start button names whichever blocks.
+function rwPanelState(id) {
   const ta = document.getElementById(`rw-meaning-${id}`);
   const note = document.getElementById(`rw-meaning-note-${id}`);
   const go = document.getElementById(`rw-go-${id}`);
   if (!ta || !note || !go) return;
+  const areaId = Object.keys(RELATED_PENDING).find(k => k.replace(/[^a-z0-9_-]/gi, '') === id);
+  const p = areaId ? RELATED_PENDING[areaId] : null;
   const n = passageLen(ta.value);
-  if (meaningTooLong(ta.value)) {
+  const meaningOver = meaningTooLong(ta.value);
+  if (meaningOver) {
     note.hidden = false;
     note.innerHTML = `This meaning is <b>${n}</b> characters and a comparison takes <b>${RELATED_MEANING_MAX}</b>.
       Shorten it here for this comparison — what you leave is recorded as a narrowing, and the idea it came
       from keeps the meaning it has.`;
     note.style.borderLeft = '2px solid var(--bad)';
     note.style.paddingLeft = '9px';
-    go.disabled = true;
-    go.textContent = `Shorten the meaning — ${RELATED_MEANING_MAX} characters at most`;
   } else {
     note.hidden = true;
+  }
+  // the gloss, when it has a box of its own
+  const gta = document.getElementById(`rw-gloss-${id}`);
+  const gnote = document.getElementById(`rw-gloss-note-${id}`);
+  const omitBtn = document.getElementById(`rw-gloss-omit-${id}`);
+  let glossOver = false;
+  if (gta && gnote) {
+    const omitted = !!(p && p.gloss_omitted);
+    const gn = passageLen(gta.value);
+    glossOver = !omitted && meaningTooLong(gta.value);
+    gta.disabled = omitted;
+    gta.style.opacity = omitted ? '0.5' : '';
+    if (omitBtn) omitBtn.textContent = omitted ? 'Put the gloss back' : 'Leave the gloss out of this comparison';
+    if (omitted) {
+      gnote.hidden = false;
+      gnote.innerHTML = `The gloss will be <b>left out of this comparison</b>, and the record will say so. The idea keeps its gloss.`;
+      gnote.style.borderLeft = '2px solid var(--muted)';
+      gnote.style.paddingLeft = '9px';
+    } else if (glossOver) {
+      gnote.hidden = false;
+      gnote.innerHTML = `This plain gloss is <b>${gn}</b> characters and a comparison takes <b>${RELATED_MEANING_MAX}</b>.
+        Shorten it here for this comparison — what you leave is recorded as a narrowing of the gloss — or leave it out
+        of this one. The idea keeps the gloss it has.`;
+      gnote.style.borderLeft = '2px solid var(--bad)';
+      gnote.style.paddingLeft = '9px';
+    } else {
+      gnote.hidden = true;
+    }
+  }
+  if (meaningOver) {
+    go.disabled = true;
+    go.textContent = `Shorten the meaning — ${RELATED_MEANING_MAX} characters at most`;
+  } else if (glossOver) {
+    go.disabled = true;
+    go.textContent = `Shorten the plain gloss, or leave it out — ${RELATED_MEANING_MAX} characters at most`;
+  } else {
     go.disabled = false;
     go.textContent = 'Find related words — 2 model calls';
   }
+}
+function rwMeaningState(id) { rwPanelState(id); }   // the older name, kept for callers
+// A deliberate press, and reversible: the gloss is left out of THIS
+// comparison and the record says so. Nothing is trimmed, nothing is
+// discarded quietly, and the concept is untouched.
+function rwOmitGloss(areaId) {
+  const p = RELATED_PENDING[areaId];
+  if (!p) return;
+  p.gloss_omitted = !p.gloss_omitted;
+  rwPanelState(areaId.replace(/[^a-z0-9_-]/gi, ''));
 }
 function relatedSavedHtml(d, original) {
   const items = (d && d.items) || [];
@@ -4596,25 +4671,54 @@ function startRelatedFromPanel(areaId) {
   // Trimmed only to ask whether he wrote anything; what goes is what is there.
   const meaning = input ? input.value : (p.definition || '');
   if (!meaning.trim()) { if (input) input.focus(); return; }
-  if (meaningTooLong(meaning)) { rwMeaningState(id); if (input) input.focus(); return; }
+  if (meaningTooLong(meaning)) { rwPanelState(id); if (input) input.focus(); return; }
+  // The gloss goes exactly as its box holds it, or not at all by his press.
+  // Every prose field that will leave is validated HERE, before anything is
+  // spent, so the route's refusal is never the first the panel hears of it.
+  const gta = document.getElementById(`rw-gloss-${id}`);
+  const glossVal = p.gloss_omitted ? '' : (gta ? gta.value : (p.meaning_from_gloss ? '' : (p.plain_gloss || '')));
+  if (!p.gloss_omitted && meaningTooLong(glossVal)) { rwPanelState(id); if (gta) gta.focus(); return; }
   // A narrowing is the specific case his ruling names: the idea's own meaning
   // was longer than a pass takes, so this shorter one stands for this
   // comparison only. An ordinary correction of a short meaning is not that.
+  // The gloss is judged by the same rule.
   const narrowed = meaningTooLong(p.prefill || '') && meaning !== (p.prefill || '');
-  delete RELATED_PENDING[areaId];
-  startRefractInto(areaId, {...p, definition: meaning, meaning_narrowed: narrowed}, p.focus);
+  const glossNarrowed = !p.gloss_omitted && meaningTooLong(p.gloss_prefill || '') && glossVal !== (p.gloss_prefill || '');
+  // The panel is NOT taken down here. It stays, with everything typed in
+  // it, until the pass is accepted and its result arrives; a refusal or a
+  // failure lands beside it and leaves it to be corrected and retried.
+  startRefractInto(areaId, {...p, definition: meaning, plain_gloss: glossVal,
+                            meaning_narrowed: narrowed, plain_gloss_narrowed: glossNarrowed,
+                            plain_gloss_omitted: !!p.gloss_omitted,
+                            meaning_from_gloss: !!p.meaning_from_gloss}, p.focus);
 }
 
+// Where a pass's progress and errors are written. While the comparison
+// panel is open, its own status region — BESIDE the boxes, never over
+// them, so a refusal or a failure leaves the meaning, the gloss, the
+// selection and the caret exactly where he left them for a retry. With
+// no panel (a follow-up asked by name), the area itself.
+function rwStatusTarget(areaId) {
+  const id = areaId.replace(/[^a-z0-9_-]/gi, '');
+  return document.getElementById(`rw-run-${id}`) || document.getElementById(areaId);
+}
+function rwStatus(areaId, html) {
+  const t = rwStatusTarget(areaId);
+  if (t) t.innerHTML = html;
+}
 async function startRefractInto(areaId, original, focus) {
   const area = document.getElementById(areaId);
   if (!area) return;
+  const id = areaId.replace(/[^a-z0-9_-]/gi, '');
   const only = (original.only_languages || []).filter(Boolean);
   const label = original.title ? `for “${escapeHtml(original.title)}”` : 'for the meaning you gave';
-  area.innerHTML = only.length
+  const go = document.getElementById(`rw-go-${id}`);
+  if (go) { go.disabled = true; go.textContent = 'Starting…'; }
+  rwStatus(areaId, only.length
     ? `<div class="section-label">Asking ${only.map(escapeHtml).join(', ')} ${label}</div>
        <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>one language, by name…</p>`
     : `<div class="section-label">Finding related words ${label}</div>
-       <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>English first, then Latin, Greek and other languages…</p>`;
+       <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>English first, then Latin, Greek and other languages…</p>`);
   try {
     const r = await fetch('/api/jobs', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -4627,13 +4731,21 @@ async function startRefractInto(areaId, original, focus) {
         passage: original.entry === 'selection' ? (original.passage || '') : '',
         only_languages: only,
         meaning_narrowed: !!original.meaning_narrowed,
+        plain_gloss_narrowed: !!original.plain_gloss_narrowed,
+        plain_gloss_omitted: !!original.plain_gloss_omitted,
+        meaning_from_gloss: !!original.meaning_from_gloss,
         provenance: original.entry === 'selection' ? 'typed' : 'door'}),
     });
     const d = await r.json();
-    if (d.error) { area.innerHTML = `<div class="error">${escapeHtml(d.error)}</div>`; return; }
+    if (!r.ok || d.error) {
+      rwStatus(areaId, `<div class="error">${escapeHtml(d.error || `The server answered ${r.status}.`)}</div>`);
+      rwPanelState(id);      // the boxes are untouched; the start button follows their state again
+      return;
+    }
     pollRefract(d.job_id, areaId, focus);
   } catch (e) {
-    area.innerHTML = `<div class="error">Couldn't reach the server.</div>`;
+    rwStatus(areaId, `<div class="error">Couldn't reach the server.</div>`);
+    rwPanelState(id);
   }
 }
 
@@ -4813,26 +4925,31 @@ async function pollArchetype(jobId, areaId) {
 async function pollRefract(jobId, areaId, focus) {
   const area = document.getElementById(areaId);
   if (!area) return;
+  const id = areaId.replace(/[^a-z0-9_-]/gi, '');
   let job;
   try {
     const r = await fetch(`/api/jobs/${jobId}`);
-    if (!r.ok) { area.innerHTML = `<div class="error">Lost track of the related-words job — the server may have restarted. Its result will still appear in the Library if it finished.</div>`; return; }
+    if (!r.ok) { rwStatus(areaId, `<div class="error">Lost track of the related-words job — the server may have restarted. Its result will still appear in the Library if it finished.</div>`); rwPanelState(id); return; }
     job = await r.json();
   } catch (e) {
     setTimeout(() => pollRefract(jobId, areaId, focus), 4000);
     return;
   }
   if (job.status === 'complete') {
+    // the pass is in: the panel has done its work and the result takes the area
+    delete RELATED_PENDING[areaId];
     const result = job.result || {};
     area.innerHTML = parseNoticeHtml(result) + buildRefractHtml(result);
     loadHistory();
     // Explore other languages lands on its own section of the same panel
     if (focus && focus !== 'synonyms' && result.trace_id) rwScrollTo(focus, String(result.trace_id));
   } else if (job.status === 'failed') {
-    area.innerHTML = `<div class="error">Find related words failed: ${escapeHtml(job.error || 'unknown error')}</div>`;
+    // beside the panel, never over it: everything typed is still there to retry
+    rwStatus(areaId, `<div class="error">Find related words failed: ${escapeHtml(job.error || 'unknown error')}</div>`);
+    rwPanelState(id);
   } else {
-    area.innerHTML = `<div class="section-label">Finding related words</div>
-      <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>${escapeHtml(job.progress || 'working…')}</p>${stageElapsedHtml(job)}`;
+    rwStatus(areaId, `<div class="section-label">Finding related words</div>
+      <p class="body muted" style="font-size:13.5px"><span class="spinner"></span>${escapeHtml(job.progress || 'working…')}</p>${stageElapsedHtml(job)}`);
     setTimeout(() => pollRefract(jobId, areaId, focus), 3500);
   }
 }
@@ -5024,7 +5141,10 @@ function buildRefractHtml(res, opts) {
   RELATED_SRC[uid] = {title: src.title || res.source_title || '', definition: src.definition || '',
                       plain_gloss: src.plain_gloss || '', concept_id: src.concept_id || '',
                       entry: src.entry || 'concept', passage: src.passage || '',
-                      meaning_narrowed: !!src.meaning_narrowed};
+                      meaning_narrowed: !!src.meaning_narrowed,
+                      plain_gloss_narrowed: !!src.plain_gloss_narrowed,
+                      plain_gloss_omitted: !!src.plain_gloss_omitted,
+                      meaning_from_gloss: !!src.meaning_from_gloss};
   RELATED_ITEMS[uid] = {synonyms: res.english_synonyms || [], antonyms: res.english_antonyms || [],
                         languages: refs, cultural: res.cultural_comparisons || []};
   if (res.trace_id) rwLoadSaved(String(res.trace_id));
@@ -5126,6 +5246,9 @@ function buildRefractHtml(res, opts) {
          ${(src.plain_gloss || '').trim() ? `<p class="body muted" style="font-size:12.5px;margin:2px 0 0">${escapeHtml(src.plain_gloss)}</p>` : ''}
          ${entryLine ? `<p class="body muted" style="font-size:12px;margin:2px 0 0">${escapeHtml(entryLine)}</p>` : ''}
          ${src.meaning_narrowed ? `<p class="body muted" id="rw-narrowed-${escapeHtml(uid)}" style="font-size:12px;margin:2px 0 0"><em>a shorter meaning given for this comparison</em> — the concept’s own meaning is longer and was not changed</p>` : ''}
+         ${src.meaning_from_gloss ? `<p class="body muted" id="rw-from-gloss-said-${escapeHtml(uid)}" style="font-size:12px;margin:2px 0 0"><em>the idea had no meaning of its own; its plain gloss stood in as the meaning</em></p>` : ''}
+         ${src.plain_gloss_narrowed ? `<p class="body muted" id="rw-gloss-narrowed-${escapeHtml(uid)}" style="font-size:12px;margin:2px 0 0"><em>the plain gloss was shortened for this comparison</em> — the idea keeps its own</p>` : ''}
+         ${src.plain_gloss_omitted ? `<p class="body muted" id="rw-gloss-omitted-${escapeHtml(uid)}" style="font-size:12px;margin:2px 0 0"><em>the plain gloss was left out of this comparison</em> by choice — the idea keeps its own</p>` : ''}
        </div>`
     : (src.passage || '').trim()
       ? `<div class="card" style="border-left:3px solid var(--accent, #888)">

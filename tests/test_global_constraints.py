@@ -3383,6 +3383,129 @@ def _check_narrowing_history(server, paired):
     return out
 
 
+def _check_gloss_shown_and_kept(server, paired):
+    """The plain gloss is shown whenever it will be sent, correctable for one
+    comparison, and never silently cut, combined or discarded (his ruling,
+    2026-09-14). The route and the runner record what was done with it —
+    shortened for this comparison, left out by choice, or promoted to stand
+    as the meaning — and a refusal names the field that is actually over.
+    The browser journey `gloss` proves the panel; this proves the route, the
+    runner, the record and the wording."""
+    out = []
+    import json as _json
+    with _isolated_store("gloss_kept"):
+        c = paired(server.app.test_client())
+        real_gw = server.server_gateway
+        real_thread = server.threading.Thread
+        server.server_gateway = lambda: cli.MockGateway()
+
+        class _NoThread:
+            def __init__(self, *a, **k):
+                pass
+            def start(self):
+                pass
+        server.threading.Thread = _NoThread
+        try:
+            # 1. the refusal names the field that is over, and says so in a
+            #    machine-readable way too, before any job exists
+            n0 = len(server.JOBS)
+            rr = c.post("/api/jobs", json={"mode": "refract", "entry": "concept",
+                                          "original": {"title": "T", "definition": "short", "plain_gloss": "g" * (cli.REFRACT_MEANING_MAX + 1)}})
+            body = rr.get_json() or {}
+            if rr.status_code != 400 or body.get("field") != "plain_gloss" or body.get("count") != cli.REFRACT_MEANING_MAX + 1 \
+                    or "plain gloss" not in body.get("error", "") or "shorten the meaning" in body.get("error", ""):
+                out.append(f"GLOSS: an over-long gloss is not refused in its own name ({rr.status_code}): {body}")
+            if "leave it out" not in body.get("error", ""):
+                out.append("GLOSS: the refusal does not offer the omission")
+            rr = c.post("/api/jobs", json={"mode": "refract", "entry": "concept",
+                                          "original": {"title": "T", "definition": "m" * (cli.REFRACT_MEANING_MAX + 1), "plain_gloss": ""}})
+            body = rr.get_json() or {}
+            if rr.status_code != 400 or body.get("field") != "definition" or "shorten the meaning" not in body.get("error", ""):
+                out.append(f"GLOSS: an over-long meaning is not refused in its own name ({rr.status_code}): {body}")
+            if len(server.JOBS) != n0:
+                out.append("GLOSS: a job was created for a refused request")
+            try:
+                cli.run_refract({"title": "T", "definition": "short", "plain_gloss": "g" * (cli.REFRACT_MEANING_MAX + 1)}, cli.MockGateway())
+                out.append("GLOSS: the CLI accepted an over-long gloss")
+            except ValueError as e:
+                if "plain gloss" not in str(e) or "shorten the meaning" in str(e) or "leave it out" not in str(e):
+                    out.append(f"GLOSS: the CLI's refusal does not name the gloss and offer the omission: {e}")
+
+            # 2. each history reaches the record, exactly as sent, and the
+            #    concept's own text is never what is changed
+            cases = [
+                ("narrowed", {"definition": "A stored meaning.", "plain_gloss": "A shorter gloss, for this comparison.",
+                              "plain_gloss_narrowed": True, "plain_gloss_omitted": False, "meaning_from_gloss": False}),
+                ("omitted", {"definition": "A stored meaning.", "plain_gloss": "",
+                             "plain_gloss_narrowed": False, "plain_gloss_omitted": True, "meaning_from_gloss": False}),
+                ("promoted", {"definition": "The gloss, standing in as the meaning.", "plain_gloss": "",
+                              "plain_gloss_narrowed": False, "plain_gloss_omitted": False, "meaning_from_gloss": True,
+                              "meaning_narrowed": True}),
+                ("plain", {"definition": "A stored meaning.", "plain_gloss": "A stored gloss.\n\nWith a second line.",
+                           "plain_gloss_narrowed": False, "plain_gloss_omitted": False, "meaning_from_gloss": False}),
+            ]
+            for name, case in cases:
+                flags = {k: case[k] for k in ("plain_gloss_narrowed", "plain_gloss_omitted", "meaning_from_gloss")}
+                rr = c.post("/api/jobs", json={"mode": "refract", "entry": "concept",
+                                              "original": {"title": "T", "definition": case["definition"],
+                                                           "plain_gloss": case["plain_gloss"], "concept_id": "c_gloss_" + name},
+                                              "meaning_narrowed": bool(case.get("meaning_narrowed")), **flags})
+                if rr.status_code != 200:
+                    out.append(f"GLOSS {name}: refused ({rr.status_code}): {rr.get_data(as_text=True)[:100]}")
+                    continue
+                jid = rr.get_json()["job_id"]
+                job = server.JOBS[jid]
+                for k, v in flags.items():
+                    if (job.get("related_entry") or {}).get(k) is not v:
+                        out.append(f"GLOSS {name}: the route recorded {k}={job.get('related_entry', {}).get(k)} for {v}")
+                if job["original"].get("plain_gloss") != case["plain_gloss"]:
+                    out.append(f"GLOSS {name}: the route changed the gloss: {job['original'].get('plain_gloss')!r}")
+                server._run_job_body(jid, "refract", job["input_text"])
+                if server.JOBS[jid]["status"] != "complete":
+                    out.append(f"GLOSS {name}: the job did not finish: {server.JOBS[jid].get('error')}")
+                    continue
+                trace = server.JOBS[jid]["result"]["trace_id"]
+                snap = _json.loads((cli.RESULTS_DIR / f"{trace}.json").read_text(encoding="utf-8"))
+                for k, v in flags.items():
+                    if snap["source"].get(k) is not v:
+                        out.append(f"GLOSS {name}: the record holds {k}={snap['source'].get(k)} for {v}")
+                if snap["source"].get("plain_gloss") != case["plain_gloss"] or snap["source"].get("definition") != case["definition"]:
+                    out.append(f"GLOSS {name}: the record does not hold what was sent: {snap['source'].get('plain_gloss')!r}")
+        finally:
+            server.server_gateway = real_gw
+            server.threading.Thread = real_thread
+
+    # THE PANEL, statically: a box for the gloss, a deliberate omission
+    # control, a status region beside the boxes, and no error path that
+    # replaces the panel's container.
+    pg = (Path(cli.__file__).parent.parent / "webapp" / "index.html").read_text(encoding="utf-8")
+    if 'id="rw-gloss-${id}"' not in pg or 'id="rw-gloss-omit-${id}"' not in pg or 'id="rw-run-${id}"' not in pg:
+        out.append("GLOSS: the panel lacks a gloss box, an omission control or a status region beside them")
+    if "Leave the gloss out of this comparison" not in pg or "Put the gloss back" not in pg:
+        out.append("GLOSS: the omission is not a deliberate, reversible press")
+    for fn in ("async function startRefractInto(", "async function pollRefract("):
+        at = pg.find(fn)
+        body = pg[at: pg.find("\n}\n", at)] if at != -1 else ""
+        if not body:
+            out.append(f"GLOSS: {fn} is gone")
+            continue
+        # the one allowed replacement is the RESULT taking the area on completion
+        allowed = body.count("area.innerHTML = parseNoticeHtml(result) + buildRefractHtml(result);")
+        if body.count("area.innerHTML =") != allowed:
+            out.append(f"GLOSS: {fn} still replaces the panel's container on an error")
+        if "rwStatus(areaId," not in body:
+            out.append(f"GLOSS: {fn} does not write its status beside the panel")
+    at = pg.find("function startRelatedFromPanel(")
+    body = pg[at: pg.find("\n}\n", at)]
+    if "delete RELATED_PENDING[areaId]" in body:
+        out.append("GLOSS: the panel's state is dropped before the pass is accepted, so an error cannot be retried")
+    if "meaningTooLong(glossVal)" not in body or "plain_gloss: glossVal" not in body:
+        out.append("GLOSS: the gloss is not validated before sending, or what is sent is not what the box holds")
+    if "plain_gloss_narrowed: glossNarrowed" not in body or "plain_gloss_omitted: !!p.gloss_omitted" not in body:
+        out.append("GLOSS: the gloss's history is not recorded from what was actually done")
+    return out
+
+
 def _check_meaning_kept_whole(server, paired):
     """His meaning reaches the model and the record as he wrote it
     (his ruling, 2026-09-14): "silently changing your meaning isn't
@@ -4918,6 +5041,7 @@ def main() -> int:
     failures.extend(_check_job_reservation(server))
     failures.extend(_check_word_sources_evidence(server, _paired))
     failures.extend(_check_narrowing_history(server, _paired))
+    failures.extend(_check_gloss_shown_and_kept(server, _paired))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key

@@ -10142,7 +10142,10 @@ def run_refract(candidate: dict, gateway: Gateway,
                  passage: "str | None" = None,
                  entry: str = "concept",
                  only_languages: "list[str] | None" = None,
-                 meaning_narrowed: bool = False) -> dict:
+                 meaning_narrowed: bool = False,
+                 plain_gloss_narrowed: bool = False,
+                 plain_gloss_omitted: bool = False,
+                 meaning_from_gloss: bool = False) -> dict:
     """One pass of Find related words / Explore other languages — the same
     record either door opens (2026-09-13). `entry` says how the meaning
     arrived: "concept" (a candidate with a title), "description" (a meaning
@@ -10172,8 +10175,11 @@ def run_refract(candidate: dict, gateway: Gateway,
                          f"the concept it came from is not changed by that")
     gloss_len = len(candidate.get("plain_gloss") or "")
     if gloss_len > REFRACT_MEANING_MAX:
+        # The refusal names the field that is actually over: a gloss too long
+        # for the pass is not fixed by shortening the meaning.
         raise ValueError(f"the plain gloss is {gloss_len} characters and the most this pass will "
-                         f"take is {REFRACT_MEANING_MAX}")
+                         f"take is {REFRACT_MEANING_MAX} — shorten the plain gloss for this comparison, "
+                         f"or leave it out of this one; the concept it came from is not changed by that")
     # Exact or refused, and refused HERE — before the id is minted, before
     # the record exists, before a single call is made. This is the CLI's own
     # boundary; the route has the same one (2026-09-14).
@@ -10389,6 +10395,15 @@ def run_refract(candidate: dict, gateway: Gateway,
             # pass will take. The concept itself is untouched; this record
             # says plainly that its meaning is a narrowing, not the concept.
             "meaning_narrowed": bool(meaning_narrowed),
+            # The plain gloss's own history (2026-09-14): shortened for THIS
+            # comparison, left out of THIS comparison by a deliberate choice,
+            # or — when the concept had no meaning of its own — promoted to
+            # stand as the meaning, in which case it is sent once, as the
+            # meaning, and not a second time as the gloss. The concept keeps
+            # its gloss in every case.
+            "plain_gloss_narrowed": bool(plain_gloss_narrowed),
+            "plain_gloss_omitted": bool(plain_gloss_omitted),
+            "meaning_from_gloss": bool(meaning_from_gloss),
             # whole: the record keeps what was sent, and what was sent is
             # bounded by the refusal above, so there is nothing left to cut
             "passage": passage_text,

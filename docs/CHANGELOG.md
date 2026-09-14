@@ -1,5 +1,40 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.35.2 — The plain gloss is shown, correctable, and safe across errors
+
+The review's third finding. The comparison panel showed and validated one
+box — the meaning — while the concept's plain gloss rode along unshown and
+unvalidated. A gloss over the limit was refused by the route in the
+*meaning's* name, which sent him to fix a box that was already short; and
+the refusal replaced the panel's container, taking everything typed into it.
+
+The panel now shows every piece of his prose that will leave (his ruling,
+14 September 2026). A concept with a meaning of its own gets a second box
+for its gloss, holding it exactly — whitespace and line breaks included.
+Over the limit, the full value stays visible, the paid action is disabled
+in the gloss's name with its actual count and the limit, and he either
+shortens it for this comparison — recorded as `plain_gloss_narrowed` — or
+presses *Leave the gloss out of this comparison* — recorded as
+`plain_gloss_omitted`, reversible with *Put the gloss back*. A concept with
+no meaning of its own has its gloss stand in as the meaning: shown once, in
+the meaning box, sent once, as the meaning, never a second time as the
+gloss, and recorded as `meaning_from_gloss`. The concept keeps its gloss in
+every case; nothing is trimmed, cut, combined or discarded without a press.
+
+Errors land beside the panel now, never over it. `startRefractInto` and
+`pollRefract` write their progress, refusals and failures into a status
+region inside the panel while it is open, so the meaning, the gloss, the
+selection, the caret and every correction are still there for the retry;
+the panel's state is held until the pass is accepted and its result takes
+the area. The route's and the runner's refusals name the field that is
+actually over and offer the omission when it is the gloss, and the route
+returns `field`, `count` and `limit` beside the sentence.
+
+A new WebKit journey, `gloss`, runs the five cases; the suite proves the
+route, the runner and the record for each history and the wording of every
+refusal. Sabotaging the request to send the hidden original gloss,
+unvalidated, fails seven named checks.
+
 ## v1.35.1 — The narrowing survives a follow-up
 
 The review's second finding. A comparison made on a shorter meaning given for

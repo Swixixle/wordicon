@@ -741,7 +741,10 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
                                       passage=related_entry.get("passage"),
                                       entry=related_entry.get("entry") or "concept",
                                       only_languages=related_entry.get("only_languages") or None,
-                                      meaning_narrowed=bool(related_entry.get("meaning_narrowed")))
+                                      meaning_narrowed=bool(related_entry.get("meaning_narrowed")),
+                                      plain_gloss_narrowed=bool(related_entry.get("plain_gloss_narrowed")),
+                                      plain_gloss_omitted=bool(related_entry.get("plain_gloss_omitted")),
+                                      meaning_from_gloss=bool(related_entry.get("meaning_from_gloss")))
             result["gateway"] = gateway.name
         elif mode == "archetype":
             with JOBS_LOCK:
@@ -3370,10 +3373,16 @@ def api_create_job():
         _gloss = str(original.get("plain_gloss") or "")
         for _field, _val in (("meaning", _definition), ("plain gloss", _gloss)):
             if len(_val) > cli.REFRACT_MEANING_MAX:
+                # named by the field that is over: "give a shorter meaning" was
+                # said for an over-long GLOSS too, which sent him to fix the
+                # wrong box (independent review, 2026-09-14)
                 return jsonify({"error": f"the {_field} is {len(_val)} characters and the most this "
-                                         f"pass will take is {cli.REFRACT_MEANING_MAX} — give a shorter "
-                                         f"meaning for this comparison; the concept it came from is "
-                                         f"not changed by that"}), 400
+                                         f"pass will take is {cli.REFRACT_MEANING_MAX} — shorten the "
+                                         f"{_field} for this comparison"
+                                         + (", or leave it out of this one" if _field == "plain gloss" else "")
+                                         + "; the concept it came from is not changed by that",
+                                "field": "definition" if _field == "meaning" else "plain_gloss",
+                                "count": len(_val), "limit": cli.REFRACT_MEANING_MAX}), 400
         original = {"title": str(original.get("title") or "")[:200],
                     "definition": _definition,
                     "plain_gloss": _gloss,
@@ -3382,7 +3391,10 @@ def api_create_job():
         # for this comparison because the stored concept is longer than the
         # pass will take. The stored concept is untouched either way.
         related_entry = {"entry": entry, "passage": passage, "only_languages": only_languages,
-                         "meaning_narrowed": bool(data.get("meaning_narrowed"))}
+                         "meaning_narrowed": bool(data.get("meaning_narrowed")),
+                         "plain_gloss_narrowed": bool(data.get("plain_gloss_narrowed")),
+                         "plain_gloss_omitted": bool(data.get("plain_gloss_omitted")),
+                         "meaning_from_gloss": bool(data.get("meaning_from_gloss"))}
         input_text = (f"refract: {original['title']}" if original["title"]
                       else f"related words: {original['definition'][:120]}")
     elif mode == "recheck":
