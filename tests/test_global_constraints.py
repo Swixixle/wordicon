@@ -7774,7 +7774,7 @@ console.log(JSON.stringify(out));
     # the first time.
     if 'id="page-note"' not in _pg59:
         failures.append("59: the page note is gone")
-    elif _pg59.index('id="page-note"') > _pg59.index('<div id="result-area">'):
+    elif _pg59.index('id="page-note"') > _pg59.index('id="result-area"'):
         failures.append("59: the page note sits inside or after the result area, where a "
                         "render will wipe it")
     if "/api/inflight" not in _pg59:
@@ -17270,18 +17270,25 @@ console.log(out.join('\\n'));
     if not _re98.match(r"\d{4}-\d{2}-\d{2}$", str(_d98.get("as_of", ""))):
         _f98("no as-of date")
 
-    # 9. placement: quiet links only — the header's system zone and the
-    #    What-is-<brand> panel — none in the working grid, none in the room
+    # 9. placement: quiet links only — the header's system zone, the rail's
+    #    own settings-and-help group, and the What-is-<brand> panel — none in
+    #    the working grid, none in the room.
     #    ledger (block 101, anatomy door): the owner could not find the page
-    #    behind the panel's single link; a second quiet link now sits in the
-    #    header beside About & proof. Still outside the places nav.
+    #    behind the panel's single link; a second quiet link went into the
+    #    header beside About & proof. The desktop layout (2026-09-14) adds
+    #    the third, at the foot of the rail under Settings & help, which is
+    #    where he asked for help to be reachable from every screen. All three
+    #    are still outside the Write/Explore/Library group.
     _idx98 = (_root98 / "webapp" / "index.html").read_text(encoding="utf-8")
     _links = [m.start() for m in _re98.finditer(r'href="/anatomy"', _idx98)]
     _panel = _idx98.find('id="about-panel"')   # ledger (block 99): the panel is "What is <brand>?"
     _room = _idx98.find('id="compose-text"')
     _hdr98 = (_idx98.find("<header>"), _idx98.find("</header>"))
-    if len(_links) != 2 or not (_hdr98[0] < _links[0] < _hdr98[1]) or _links[1] < _panel:
-        _f98(f"the anatomy links are not the two quiet ones — header system zone and panel ({len(_links)})")
+    _foot98 = _idx98.find('class="rail-foot"')
+    if len(_links) != 3:
+        _f98(f"the anatomy links are not the three quiet ones — header, rail foot, panel ({len(_links)})")
+    elif not (_hdr98[0] < _links[0] < _hdr98[1]) or not (_foot98 < _links[1] < _panel) or _links[2] < _panel:
+        _f98("an anatomy link left its quiet zone — header, the rail's settings group, the panel")
     if "See the anatomy" not in _idx98:
         _f98("the link lost its name")
     if _room != -1 and any(abs(_l - _room) < 400 for _l in _links):
@@ -17379,14 +17386,71 @@ console.log(out.join('\\n'));
         _f99("Home's bands are not in the ruled order (Continue, rulings, intake, places)")
     if _idx99.index('<textarea id="input-text"') < _idx99.index('id="continue-card"'):
         _f99("the phrase box is above Continue — the hero again")
-    for _place in ('data-place="concepts"', 'data-place="rooms"', 'data-place="library"', 'href="/map"', 'onclick="openCompose();return false">Write',
-                   'href="/anatomy"'):   # ledger (block 101, anatomy door): the owner could not find /anatomy — it sits in the header's quiet zone now
-        if _place not in _hdr:
-            _f99(f"a place is missing from navigation: {_place}")
-    if _idx99.count('href="/anatomy"') != 2 or _idx99.index('href="/anatomy"', _idx99.index('id="about-panel"')) > _idx99.index('id="about-explanation"'):
-        _f99("the anatomy is not reachable from the header AND the top of About & proof")
-    if 'href="/anatomy"' in _idx99[_idx99.index('<nav class="places"'):_idx99.index('</nav>')]:
-        _f99("the anatomy entered the working grid — it belongs to the system zone")
+    # NAVIGATION, as his ruling of 2026-09-14 arranged it. It used to be six
+    # destinations in a header row that mixed places, bands and a mode; the
+    # doors now live in the rail on the left, where Write, Explore and
+    # Library are the three he uses and the rest are grouped under them. The
+    # old shape is not postponed behind this pin — the pin describes the new
+    # one, which is what he asked for.
+    _rail99 = _idx99[_idx99.index('<nav id="rail"'):_idx99.index('</nav>', _idx99.index('<nav id="rail"'))]
+    for _door, _why in (
+            ('data-rail="write"', 'Write'),
+            ('data-rail="explore"', 'Explore'),
+            ('data-rail="library"', 'Library'),
+            ('data-place="concepts"', 'Concepts, under Explore'),
+            ('data-place="rooms"', 'Rooms, under Explore'),
+            ('href="/map"', 'the Map, under Explore'),
+            ('id="rail-search"', 'the search box'),
+            ('id="rail-recent"', 'the recent list')):
+        if _door not in _rail99:
+            _f99(f"the rail is missing {_why} ({_door})")
+    # every specialized workspace has a door now — four of them had none at
+    # all when report 62 listed them, which is the complaint this answers
+    for _tool in ('href="/bench"', 'href="/clinic"', 'href="/recovery"',
+                  'href="/investigation"', 'href="/trails"'):
+        if _tool not in _rail99:
+            _f99(f"a specialized workspace has no door in the rail: {_tool}")
+    # settings and help, reachable from every screen rather than buried
+    _foot99 = _rail99[_rail99.index('class="rail-foot"'):] if 'class="rail-foot"' in _rail99 else ''
+    for _sys in ('openAbout();return false', 'href="/constitution"', 'href="/anatomy"'):
+        if _sys not in _foot99:
+            _f99(f"settings and help are not at the foot of the rail: {_sys}")
+    if _idx99.count('href="/anatomy"') != 3:
+        _f99("the anatomy is not reachable from the header, the rail and About & proof")
+    if _idx99.index('href="/anatomy"', _idx99.index('id="about-panel"')) > _idx99.index('id="about-explanation"'):
+        _f99("the anatomy link left the top of About & proof")
+    # the working grid stays the three he uses; the system zone stays apart
+    for _sys in ('href="/anatomy"', 'href="/constitution"'):
+        if _sys in _rail99[:_rail99.index('class="rail-foot"')] if 'class="rail-foot"' in _rail99 else False:
+            _f99(f"{_sys} entered the working group — it belongs to settings and help")
+    # THE WIDTH. The application was a 700px column in a window twice that,
+    # which is what he saw and what this delivery is for.
+    if "max-width: 700px" in _idx99:
+        _f99("the application is capped at 700px again — the strip with the empty sides")
+    if 'id="shell"' not in _idx99 or 'id="work"' not in _idx99 or 'id="side"' not in _idx99:
+        _f99("the three zones (rail, work, the panel beside it) are not in the page")
+    if ".band-grid" not in _idx99:
+        _f99("Home's bands are not laid across the desk")
+    # THE OPEN DOOR IS LIT. markPlace pointed at header nav.places, a selector
+    # that has matched nothing since the rail replaced that row — so standing
+    # in the Bench lit nothing at all.
+    for _dead in ("document.querySelectorAll('header nav.places a')",
+                  "document.querySelectorAll('header nav.places a[data-place]')",
+                  "header nav.places {"):
+        if _dead in _idx99:
+            _f99(f"a selector for the header row the rail replaced is still live: {_dead}")
+    if "document.querySelectorAll('#rail a[data-place]')" not in _idx99:
+        _f99("the band doors are not wired to the rail — a second press of the same door does nothing")
+    if "function railHere(name, path)" not in _idx99 or '#rail a[href^="/"]' not in _idx99:
+        _f99("the rail cannot say which place you are standing in")
+    # THE DISCLOSURE ARROW. A JavaScript escape inside a stylesheet is the
+    # literal text u25BE, which is what he saw on the page.
+    _content_decls = _re99.findall(r"content:\s*'[^']*'", _idx99)
+    if not any("\u25BE" in _c for _c in _content_decls):
+        _f99("the open disclosure lost its arrow")
+    for _c in _content_decls:
+        if "\\u" in _c:
+            _f99(f"a JavaScript escape is back inside a CSS content declaration — it prints as text: {_c}")
     if _brand99["lead"] not in _idx99 or _brand99["lead_sub"] not in _idx99:
         _f99("the lead sentences are not the ruled ones")
 
@@ -20552,6 +20616,11 @@ console.log(out.join('\\n'));
             # existing section covered that, so they got a subsection here
             # rather than a sixth movement — checked before inventing one.
             "What a run cost, and what it retried",
+            # the desktop layout (2026-09-14): the surface the rest of this
+            # movement happens on — three zones, a panel that only reads, and
+            # a door for every specialized workspace. It precedes the room
+            # because the room opens inside it.
+            "The desk — three zones, and no place without a door",
             "The room — where writing happens",
             # block 125: the readers read the text the room holds; their
             # clause sits beside the room's, under the same movement.

@@ -1,5 +1,48 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.34.0 — The desk, not a strip
+
+His ruling of 14 September 2026: the application was a 700px column in a
+window twice that. It is now three zones in one grid — a rail on the left
+with Write, Explore and Library, a search of the record and what he touched
+recently, and, at its foot, the specialized workspaces that report 62 listed
+as having no navigation entry at all; the work in the middle taking the width
+it has; and a panel on the right that opens beside the work, resizes by
+dragging its edge, and closes for good on this device when he closes it. The
+panel reads and never acts: revision notes, the record behind the open run,
+the words he kept — no control in it begins a model call.
+
+Home and the Library lay their bands across the desk. The column count is an
+explicit ladder rather than `auto-fill` or `auto-fit`: the section heads and
+the result area span every track, so no track is ever empty, auto-fit has
+nothing to collapse, and both attempts left the bands at their minimum width
+with a third of a wide desk blank — the original complaint in a new shape.
+Lists run in columns of their own rather than as one ribbon with a metre of
+paper beside every row. The six specialized documents had their own width
+caps raised to match.
+
+The header's row of six destinations is gone; the rail is the navigation. Two
+of its selectors were left behind pointing at it — the one that lit the door
+you were standing in, which is why standing in the Bench lit nothing, and the
+one that made a band door a press rather than a hash change, which is why a
+second press of the same door did nothing at all. Both are wired to the rail
+now, and the old journey check that counted six header destinations counts the
+rail's fourteen doors in their three named groups instead, on a phone and in a
+split, where the rail folds to a row.
+
+Two visible defects went with it. The open disclosure's arrow was written
+`'\u25BE '` in a stylesheet — a JavaScript escape, which CSS reads as the
+literal text, so every open disclosure printed `u25BE` at the reader; it is
+the glyph now. And an embedded place was given the whole height that was left
+regardless of its own: the Bench's 401px document sat in a 784px frame with a
+dead band of panel colour under it. The frame is sized to the shorter of the
+two, and watches the embedded document so it follows it.
+
+The writing room is untouched by all of this. `#compose` is a sibling of
+`#page`, is never rebuilt, and keeps the blue-and-yellow notebook, the
+readable paragraph width, Focus, and the draft's element, caret, selection,
+undo history and scroll.
+
 ## v1.33.1 — His meaning reaches the model as he wrote it
 
 The second half of his ruling of 14 September 2026: "The remaining

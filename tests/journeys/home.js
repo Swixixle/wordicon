@@ -207,8 +207,20 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
     const ctx = await paired({ viewport: { width: w, height: h }, reducedMotion: 'reduce' }); const page = await ctx.newPage();
     await page.route('**/api/vault/status', r => r.fulfill({ json: healthyVault }));
     await page.goto(BASE + '/'); await page.waitForTimeout(1200);
-    const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: innerWidth, cards: document.querySelectorAll('#continue-area .cont').length, rulings: document.querySelectorAll('#ruling-area .rule-row').length, savedVisible: (() => { const el = document.getElementById('ruling-saved'); if (!el) return false; const b = el.getBoundingClientRect(); return !el.hidden && b.width > 0 && b.right <= innerWidth; })(), intake: !!document.getElementById('input-text'), nav: document.querySelectorAll('header nav.places a').length, caretTransition: getComputedStyle(document.querySelector('.collapse-head .caret')).transitionDuration }));
-    ok(m.sw <= m.iw && m.cards >= 3 && m.rulings === 2 && m.intake && m.nav === 6 && !m.savedVisible, `${name} ${w}px: no overflow (${m.sw}/${m.iw}); Continue, two rulings, no saved line, intake, navigation present`);
+    const m = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: innerWidth, cards: document.querySelectorAll('#continue-area .cont').length, rulings: document.querySelectorAll('#ruling-area .rule-row').length, savedVisible: (() => { const el = document.getElementById('ruling-saved'); if (!el) return false; const b = el.getBoundingClientRect(); return !el.hidden && b.width > 0 && b.right <= innerWidth; })(), intake: !!document.getElementById('input-text'),
+      // The six destinations in the header are gone; the rail is the
+      // navigation. Fourteen doors, in three named groups, and every one of
+      // them still reachable when the rail folds to a row on a narrow window.
+      // the DOORS, not the rail's Recent list — those are seven links to
+      // runs and they come and go with the record
+      nav: document.querySelectorAll('#rail > a, #rail > button.rail-item, #rail .rail-foot > a, #rail .rail-foot > button.rail-item').length,
+      named: ['write', 'explore', 'library'].filter(n => !!document.querySelector(`#rail [data-rail="${n}"]`)).length,
+      tools: ['/bench', '/clinic', '/recovery', '/investigation', '/trails'].filter(h => !!document.querySelector(`#rail a[href="${h}"]`)).length,
+      help: ['/constitution', '/anatomy'].filter(h => !!document.querySelector(`#rail .rail-foot a[href="${h}"]`)).length,
+      railVisible: (() => { const r = document.getElementById('rail'); const b = r.getBoundingClientRect(); return b.width > 0 && b.height > 0 && b.right <= innerWidth + 1; })(),
+      caretTransition: getComputedStyle(document.querySelector('.collapse-head .caret')).transitionDuration }));
+    ok(m.sw <= m.iw && m.cards >= 3 && m.rulings === 2 && m.intake && !m.savedVisible, `${name} ${w}px: no overflow (${m.sw}/${m.iw}); Continue, two rulings, no saved line, intake`);
+    ok(m.nav === 14 && m.named === 3 && m.tools === 5 && m.help === 2 && m.railVisible, `${name} ${w}px: the rail is the navigation — ${m.nav} doors, Write/Explore/Library ${m.named}/3, tools ${m.tools}/5, help ${m.help}/2, on screen ${m.railVisible}`);
     ok(m.caretTransition === '0s', `${name}: reduced motion honored (caret transition ${m.caretTransition})`);
     await ctx.close();
   }

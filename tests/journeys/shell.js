@@ -47,7 +47,7 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   // ---- walk to a place -------------------------------------------------
   // clicked in the page rather than by Playwright, which scrolls a target
   // into view first and would move the very scroll position under test
-  await page.evaluate(() => document.querySelector('header nav.places a[href="/map"]').click());
+  await page.evaluate(() => document.querySelector('#rail a[href="/map"]').click());
   await page.waitForTimeout(1500);
   const at = await page.evaluate(() => {
     const ta = document.getElementById('compose-text');
@@ -60,14 +60,16 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
              probe: ta.dataset.shellProbe || '', value: ta.value,
              start: ta.selectionStart, end: ta.selectionEnd,
              cls: document.body.className, pageScroll: pg ? pg.scrollTop : -1,
-             here: Array.from(document.querySelectorAll('header nav.places a.here')).map(a => a.getAttribute('href')).join(',') };
+             here: Array.from(document.querySelectorAll('#rail a.here')).map(a => a.getAttribute('href')).join(','),
+             writeLit: !!document.querySelector('#rail [data-rail="write"].here') };
   });
   ok(at.url === '/map', 'the address says /map: ' + at.url);
   ok(await stillHere() === LOAD_ID, 'the document was never replaced — this is the same window');
   ok(!at.paneHidden && at.homeHidden, 'the place pane replaced Home inside the shell');
   ok(at.name === 'Map' && at.frameSrc === '/map', 'the pane names the place and holds its document: ' + at.name + ' ' + at.frameSrc);
   ok(at.frameH > 320, 'the place was given the height that is left: ' + at.frameH);
-  ok(at.here === '/map', 'the header marks where you are: ' + JSON.stringify(at.here));
+  ok(at.here === '/map', 'the rail marks where you are: ' + JSON.stringify(at.here));
+  ok(at.writeLit, 'and writing beside it lights Write too — both are true at once');
   ok(at.probe === 'live-element-1', 'the writing room is the SAME element — nothing was rebuilt');
   ok(at.value === before.value, 'the draft is untouched');
   ok(at.start === 4 && at.end === 9, 'the caret AND the selection survived the walk: ' + at.start + '-' + at.end);

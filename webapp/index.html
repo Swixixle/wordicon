@@ -78,7 +78,118 @@
     display: flex; align-items: baseline; justify-content: space-between; }
   header h1 { font-size: 20px; margin: 0; font-weight: 700; letter-spacing: 0.2px; }
   header .status { font-size: 12px; color: var(--muted); }
-  main { padding: 0 16px 40px; max-width: 700px; margin: 0 auto; }
+  /* ---- the desktop workspace (his ruling, 2026-09-14) -----------------
+     The application used to be a 700px column centred in the window, so a
+     laptop showed a narrow strip with two empty halves. The column was
+     never the reading measure — the writing room has its own, and keeps
+     it (68ch, in .ink-wrap); this was the whole application wearing a
+     paragraph's width. A comfortable paragraph and a spacious workspace
+     are two different measurements and they now coexist.
+
+     Three columns, in one grid: the rail on the left (Write · Explore ·
+     Library, search, recent, and the tools that had no door), the work in
+     the middle taking whatever is left, and a panel on the right that
+     opens when there is something to put beside the work. The writing
+     room is NOT in this grid — it is a sibling of #page and is never
+     rebuilt, which is the rule that protects the draft, the caret and the
+     undo stack. */
+  main { padding: 0 16px 40px; margin: 0; max-width: none; min-width: 0; }
+  #shell { display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start; }
+  #work { min-width: 0; }
+
+  /* the rail */
+  #rail { position: sticky; top: 0; align-self: start; width: 216px;
+    max-height: 100vh; overflow-y: auto; overflow-x: hidden;
+    padding: 4px 10px 20px; border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 2px; }
+  #rail .rail-group { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); margin: 14px 0 4px 8px; font-weight: 600; }
+  #rail a, #rail button.rail-item { display: flex; align-items: center; gap: 9px;
+    padding: 7px 9px; border-radius: 9px; color: var(--text); text-decoration: none;
+    font-size: 14px; border: 1px solid transparent; background: none;
+    font-family: inherit; text-align: left; width: 100%; cursor: pointer; }
+  #rail a:hover, #rail button.rail-item:hover { background: var(--panel-2); }
+  #rail a.here, #rail button.rail-item.here { background: var(--accent-dim);
+    border-color: var(--accent); color: var(--text); }
+  #rail .rail-glyph { width: 1.15em; text-align: center; opacity: .8; flex: 0 0 auto; }
+  #rail .rail-sub { font-size: 13px; padding-left: 28px; color: var(--muted); }
+  #rail-search { width: 100%; padding: 7px 9px; border-radius: 9px;
+    border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+    font-size: 13px; font-family: inherit; }
+  #rail-recent .rail-recent-row { display: block; padding: 5px 9px; border-radius: 8px;
+    font-size: 12.5px; color: var(--muted); text-decoration: none;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #rail-recent .rail-recent-row:hover { background: var(--panel-2); color: var(--text); }
+  #rail .rail-foot { margin-top: auto; padding-top: 14px; }
+  #rail-toggle { display: none; }
+  header .home-link { color: var(--muted); text-decoration: none; font-size: 13px; }
+  header .home-link:hover { color: var(--text); }
+
+  /* the panel on the right: collapsible, and resizable by dragging its edge */
+  #side { width: var(--side-w, 340px); max-width: 46vw; min-width: 0;
+    position: sticky; top: 0; align-self: start; max-height: 100vh;
+    display: flex; flex-direction: column;
+    border-left: 1px solid var(--border); background: var(--panel); }
+  #side[hidden] { display: none; }
+  #side-grip { position: absolute; left: -3px; top: 0; bottom: 0; width: 7px;
+    cursor: col-resize; }
+  #side-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+    border-bottom: 1px solid var(--border); }
+  #side-head .side-tab { font-size: 12.5px; padding: 4px 9px; border-radius: 8px;
+    border: 1px solid transparent; background: none; color: var(--muted);
+    font-family: inherit; cursor: pointer; }
+  #side-head .side-tab.on { background: var(--accent-dim); border-color: var(--accent); color: var(--text); }
+  #side-head .side-x { margin-left: auto; background: none; border: 0; color: var(--muted);
+    font-size: 15px; cursor: pointer; font-family: inherit; }
+  #side-body { padding: 10px 12px 24px; overflow-y: auto; font-size: 13.5px; }
+
+  /* Home and Library lay their bands ACROSS the desk rather than stacking
+     them in a strip. Source order is unchanged — this is the same document
+     in a grid — so the ruled band order still reads top-left to bottom. */
+  /* An explicit number of columns per width, NOT auto-fill or auto-fit.
+     Both were tried and both failed here for the same reason: the section
+     heads and the result area span every track (grid-column: 1/-1), so no
+     track is ever empty, auto-fit has nothing to collapse, and the bands
+     sit at their minimum width with a third of a wide desk left over —
+     the original complaint in a new shape. A counted ladder stretches
+     every band to its share of whatever is there. */
+  .band-grid { display: grid; gap: 16px; align-items: start;
+    grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 1080px) { .band-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (min-width: 1400px) { .band-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  /* Three is the ceiling on purpose: Home's action bands are three, so a
+     fourth track would always stand empty beside them. A wide desk is used
+     by the LISTS below, whose items run in columns of their own. */
+  .band-grid > .card.band-wide { grid-column: 1 / -1; }
+  /* A list on a wide desk reads in columns, not as one long ribbon with a
+     metre of blank paper beside every row. */
+  .list-cols { display: grid; gap: 0 22px; align-items: start;
+    grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 1400px) { .list-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (min-width: 2000px) { .list-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .band-grid > .band-wide { grid-column: 1 / -1; }
+  .band-grid > .card { margin-bottom: 0; }
+
+  @media (max-width: 1180px) {
+    #side { position: fixed; right: 0; top: 0; bottom: 0; z-index: 40;
+      box-shadow: -18px 0 40px rgba(0,0,0,.35); max-width: 90vw; }
+  }
+  @media (max-width: 900px) {
+    /* the rail folds to a row of doors above the work */
+    #shell { grid-template-columns: minmax(0, 1fr); }
+    #rail { position: static; width: auto; max-height: none; overflow: visible;
+      flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px;
+      border-right: 0; border-bottom: 1px solid var(--border); padding: 6px 14px; }
+    #rail a, #rail button.rail-item { width: auto; padding: 5px 8px; font-size: 13px; }
+    #rail .rail-group, #rail .rail-sub, #rail-recent { display: none; }
+    /* display:contents, not margin:0 — the foot is a BLOCK of links, and one
+       block inside a row of doors renders as a tall column hanging off the
+       end of the row. Its children have to become doors in the same row. */
+    #rail .rail-foot { display: contents; }
+    #rail-search { width: 11em; }
+    .band-grid { grid-template-columns: minmax(0, 1fr); }
+  }
 
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
     padding: 16px; margin-bottom: 16px; }
@@ -628,7 +739,10 @@
   .case > summary { cursor: pointer; font-size: 12px; opacity: .7; margin: 6px 0 2px;
                     list-style: none; }
   .case > summary::before { content: '▸ '; }
-  .case[open] > summary::before { content: '\u25BE '; }
+  /* a literal glyph, like the ▸ above it. This was '\u25BE' — a JavaScript
+     escape in a CSS file, which CSS reads as an escaped "u" followed by the
+     text 25BE, so every open disclosure printed "u25BE" at the reader. */
+  .case[open] > summary::before { content: '▾ '; }
   .part-row { display: none; margin-top: 10px; flex-wrap: wrap; gap: 6px; align-items: center; }
   .part-label { flex: 1 1 100%; font-size: 11.5px; color: var(--muted); margin-bottom: 2px; }
   .part-chip { padding: 7px 11px; border-radius: 20px; border: 1px solid var(--border);
@@ -672,10 +786,6 @@
   /* ---- the entrance (block 99): places, lead, continuation ---- */
   header { align-items: center; gap: 14px; flex-wrap: wrap; }
   header .wordmark { font-size: 20px; font-weight: 700; letter-spacing: 0.2px; color: var(--text); text-decoration: none; }
-  header nav.places { display: flex; gap: 4px; flex-wrap: wrap; }
-  header nav.places a { color: var(--muted); text-decoration: none; font-size: 13.5px; padding: 4px 9px; border-radius: 7px; }
-  header nav.places a.here { color: var(--text); background: var(--panel-2); }
-  header nav.places a:hover { color: var(--text); }
   header .quiet { margin-left: auto; display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
   header .quiet a { color: var(--muted); text-decoration: none; }
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--muted); }
@@ -725,14 +835,7 @@
 
 <header>
   <a class="wordmark" href="/" data-brand>Nikodemus</a>
-  <nav class="places" aria-label="Places">
-    <a href="/" class="here">Home</a>
-    <a href="#concepts" data-place="concepts">Concepts</a>
-    <a href="#rooms" data-place="rooms">Rooms</a>
-    <a href="#library" data-place="library">Library</a>
-    <a href="/map">Map</a>
-    <a href="#write" onclick="openCompose();return false">Write</a>
-  </nav>
+  <a class="home-link" href="/">Home</a>
   <div class="quiet"><span class="dot" id="quiet-dot"></span><span id="quiet-text">checking…</span> · <a href="#about" onclick="openAbout();return false">About &amp; proof</a> · <a href="/anatomy" title="how the parts cooperate, challenge one another, stay constrained, and preserve history — dormant until you set it in motion">Anatomy</a></div>
 </header>
 
@@ -743,8 +846,47 @@
 <div id="vault-strip" hidden
      style="font-size:12px;padding:3px 24px;color:var(--muted);border-bottom:1px solid var(--border);background:var(--panel)"></div>
 
+<div id="shell">
+
+<!-- The rail (his ruling, 2026-09-14): Write · Explore · Library, with
+     search and recent beneath them, and — at the foot, reachable from
+     every screen — the tools, the settings and the help that had no door
+     at all. Report 62 listed the Bench, the Clinic, Recovery Review and
+     the Investigation Rooms as places with no navigation entry; this is
+     where they live now. Nothing was removed to make room: every
+     specialized workspace that existed still exists and still answers on
+     its own URL. -->
+<nav id="rail" aria-label="Places and tools">
+  <button type="button" class="rail-item" data-rail="write" onclick="openCompose();return false"><span class="rail-glyph">✎</span>Write</button>
+  <a href="#concepts" data-rail="explore" data-place="concepts"><span class="rail-glyph">◎</span>Explore</a>
+  <a class="rail-sub" href="#concepts" data-place="concepts">Concepts</a>
+  <a class="rail-sub" href="#rooms" data-place="rooms">Rooms</a>
+  <a class="rail-sub" href="/map">Map</a>
+  <a href="#library" data-rail="library" data-place="library"><span class="rail-glyph">▤</span>Library</a>
+
+  <div class="rail-group">Find</div>
+  <input id="rail-search" type="search" placeholder="Search the record"
+         aria-label="Search the record" oninput="railSearch(this.value)">
+  <div id="rail-recent"><p class="rail-recent-row">reading the record…</p></div>
+
+  <div class="rail-foot">
+    <div class="rail-group">Tools</div>
+    <a href="/bench"><span class="rail-glyph">⚒</span>Bench</a>
+    <a href="/clinic"><span class="rail-glyph">◍</span>Clinic</a>
+    <a href="/recovery"><span class="rail-glyph">⟲</span>Recovery review</a>
+    <a href="/investigation"><span class="rail-glyph">❏</span>Investigation rooms</a>
+    <a href="/trails"><span class="rail-glyph">⋯</span>Trails</a>
+    <div class="rail-group">Settings &amp; help</div>
+    <button type="button" class="rail-item" onclick="openAbout();return false"><span class="rail-glyph">⚙</span>Settings &amp; proof</button>
+    <a href="/constitution"><span class="rail-glyph">§</span>What it will not do</a>
+    <a href="/anatomy"><span class="rail-glyph">?</span>How the parts work</a>
+  </div>
+</nav>
+
+<div id="work">
 <main id="home-main">
-  <section class="lead" id="lead">
+<div class="band-grid">
+  <section class="lead band-wide" id="lead">
     <h1 id="lead-line">Continue where your thinking left off.</h1>
     <p id="lead-sub">Your concepts, sources, and judgments—kept separate, connected, and reviewable.</p>
   </section>
@@ -863,20 +1005,20 @@
        result-area replaces its contents wholesale — a note written into
        that box is wiped by the next poll. Empty and invisible unless there
        is something true to say. -->
-  <div id="page-note" class="muted" style="font-size:12px;margin:0 0 8px"></div>
-  <div id="result-area"></div>
+  <div id="page-note" class="muted band-wide" style="font-size:12px;margin:0 0 8px"></div>
+  <div id="result-area" class="band-wide"></div>
 
-  <div class="card">
+  <div class="card band-wide">
     <div class="section-label collapse-head open" id="recent-head" style="margin-top:0"
          onclick="toggleSection('history-area','recent-head')">
       <span class="caret">▶</span>Recent <span class="count-pill" id="recent-count"></span>
     </div>
-    <div id="history-area"><div class="empty">Loading…</div></div>
+    <div id="history-area" class="list-cols"><div class="empty">Loading…</div></div>
   </div>
 
 
-  <div class="place-head" id="concepts">Concepts</div>
-  <div class="card">
+  <div class="place-head band-wide" id="concepts">Concepts</div>
+  <div class="card band-wide">
     <div class="section-label collapse-head open" id="library-head" style="margin-top:0"
          onclick="toggleSection('library-body','library-head')">
       <span class="caret">▶</span>Concepts
@@ -891,13 +1033,13 @@
       </details>
       <input class="note" id="library-search" placeholder="search words, definitions, inputs…" oninput="renderLibrary(this.value)" style="margin-top:0">
       <div id="library-sorts" style="margin:8px 0 4px;font-size:12px"></div>
-      <div id="library-content"><div class="empty">Loading…</div></div>
+      <div id="library-content" class="list-cols"><div class="empty">Loading…</div></div>
     </div>
     </div>
   </div>
 
-  <div class="place-head" id="rooms">Rooms</div>
-  <div class="card" id="rooms-card">
+  <div class="place-head band-wide" id="rooms">Rooms</div>
+  <div class="card band-wide" id="rooms-card">
     <p class="body muted" style="font-size:13.5px;margin-top:0">Work Rooms — a work as a place you can enter; and the Clinic, where sources keep their institutional voices apart.</p>
     <div id="rooms-area"><div class="empty">Looking at the record…</div></div>
   </div>
@@ -911,7 +1053,7 @@
   </div>
 
 
-  <div class="place-head" id="library">Library</div>
+  <div class="place-head band-wide" id="library">Library</div>
   <div class="card">
     <div class="section-label collapse-head" id="docs-head" style="margin-top:0"
          onclick="toggleSection('docs-body','docs-head')">
@@ -1003,7 +1145,7 @@
   </div>
 
 
-  <div class="place-head" id="system">The Keeper · About</div>
+  <div class="place-head band-wide" id="system">The Keeper · About</div>
   <!-- The Keeper: the Book's resident narrator. Summoned only — this card
        is the ONLY thing that ever asks it to speak. Custody of the
        narration, never authority over the record. -->
@@ -1060,6 +1202,7 @@
         <div class="muted" id="instruments-explain" style="margin-top:4px">Open Case and EthicalAlt stay sovereign — their own databases, code, vocabularies and signing keys. Nikodemus pulls one signed package at a time when you press, verifies it under a key you pinned here out of band, and keeps the exact bytes. Credentials are named by reference (<code>env:NAME</code>) and never stored. No polling, no refresh, no background comparison. The registry, the depositions and the Investigation Rooms are at <a href="/investigation">/investigation</a>.</div></div>
     </div>
   </details>
+</div><!-- /.band-grid -->
 </main>
 
 <!-- The place pane. Hidden until a place is opened; it holds ONE document at
@@ -1075,6 +1218,26 @@
   </div>
   <iframe id="place-frame" title="" src="about:blank"></iframe>
 </main>
+</div><!-- /#work -->
+
+<!-- The panel on the right: what belongs BESIDE the work rather than under
+     it — the revision notes, the record behind whatever is on screen, and
+     the words kept from a comparison. It opens when there is something to
+     put in it, collapses with one press, and its width is dragged and
+     remembered on this device. The writing room has its own split, which
+     is its own right-hand panel and is left exactly as it was. -->
+<aside id="side" hidden aria-label="Beside the work">
+  <div id="side-grip" title="drag to resize"></div>
+  <div id="side-head">
+    <button type="button" class="side-tab" data-side="notes" onclick="sideTab('notes')">Notes</button>
+    <button type="button" class="side-tab" data-side="record" onclick="sideTab('record')">Record</button>
+    <button type="button" class="side-tab" data-side="saved" onclick="sideTab('saved')">Saved</button>
+    <button type="button" class="side-x" onclick="closeSide()" aria-label="close the panel">×</button>
+  </div>
+  <div id="side-body"></div>
+</aside>
+
+</div><!-- /#shell -->
 
 </div>
 
@@ -1548,6 +1711,193 @@ function renderHistory() {
     : `${historyRuns.length} runs in all; runs that named the same subject are shown as one row, so ${groups.length} rows.`;
 }
 
+// ---- the workspace: the rail, and the panel beside the work -----------
+//
+// His ruling of 14 September 2026. The application had been a 700px column
+// with two empty halves; the doors he uses most were mixed in a header row
+// with bands and a mode, and four specialized workspaces had no door at
+// all. The rail is where the doors live now, the middle takes the width,
+// and the panel on the right holds what belongs beside the work.
+//
+// None of this touches the writing room. #compose is a sibling of #page,
+// is never rebuilt, and keeps its own measure, its own split and its own
+// undo stack — the rule that has governed every change to it.
+const SIDE_W_KEY = 'wordicon.side.width.v1';
+const SIDE_TAB_KEY = 'wordicon.side.tab.v1';
+const SIDE_OPEN_KEY = 'wordicon.side.open.v1';
+let SIDE_TAB = 'notes';
+
+function railHere(name, path) {
+  document.querySelectorAll('#rail [data-rail]').forEach(el => {
+    el.classList.toggle('here', !!name && el.dataset.rail === name);
+  });
+  // The tools and the Map are ordinary links to their own documents, so the
+  // rail says which one you are standing in by comparing the door to the
+  // place that is actually open. A place reached any way at all — a rail
+  // door, a link inside a card, a typed URL, the back button — lights the
+  // same door, because the comparison is against the open place and not
+  // against what was clicked.
+  document.querySelectorAll('#rail a[href^="/"]').forEach(el => {
+    el.classList.toggle('here', !!path && el.getAttribute('href') === path);
+  });
+}
+
+function openSide(tab) {
+  const el = document.getElementById('side');
+  if (!el) return;
+  el.hidden = false;
+  try {
+    const w = localStorage.getItem(SIDE_W_KEY);
+    if (w) document.documentElement.style.setProperty('--side-w', w);
+  } catch (e) { /* a device that keeps nothing still gets the default width */ }
+  try { localStorage.setItem(SIDE_OPEN_KEY, 'open'); } catch (e) {}
+  sideTab(tab || SIDE_TAB);
+  sizePlace();
+}
+function closeSide() {
+  const el = document.getElementById('side');
+  if (el) el.hidden = true;
+  try { localStorage.setItem(SIDE_OPEN_KEY, 'closed'); } catch (e) {}
+  sizePlace();
+}
+// On a wide desk the panel is the third zone rather than a thing to go and
+// find — but only until he says otherwise: a closed panel stays closed.
+function restoreSide() {
+  let pref = null;
+  try { pref = localStorage.getItem(SIDE_OPEN_KEY); } catch (e) {}
+  if (pref === 'closed') return;
+  if (pref === 'open' || window.innerWidth >= 1600) openSide();
+}
+function sideTab(tab) {
+  SIDE_TAB = tab;
+  try { localStorage.setItem(SIDE_TAB_KEY, tab); } catch (e) {}
+  document.querySelectorAll('#side-head .side-tab').forEach(b => {
+    b.classList.toggle('on', b.dataset.side === tab);
+  });
+  renderSide();
+}
+// Reads what is already on the page and in the record; it starts nothing
+// and spends nothing. An empty tab says what would be in it rather than
+// showing a blank.
+async function renderSide() {
+  const body = document.getElementById('side-body');
+  if (!body) return;
+  if (SIDE_TAB === 'notes') {
+    const n = (typeof CARRIES !== 'undefined' && Array.isArray(CARRIES)) ? CARRIES : [];
+    body.innerHTML = n.length
+      ? n.map(c => `<div class="history-item"><div class="history-meta">${escapeHtml(c.from_title || 'from a run')}</div><p class="body" style="font-size:13px;margin:2px 0">${escapeHtml((c.text || '').slice(0, 400))}</p></div>`).join('')
+      : `<p class="body muted" style="font-size:12.5px">Nothing carried yet. <b>Add to revision notes</b> on a reading puts it here — never a verdict on your draft.</p>`;
+    return;
+  }
+  if (SIDE_TAB === 'saved') {
+    body.innerHTML = `<p class="body muted" style="font-size:12.5px"><span class="spinner"></span>reading the shelf…</p>`;
+    try {
+      const d = await (await fetch('/api/related/saved_words')).json();
+      const items = d.items || [];
+      body.innerHTML = items.length
+        ? items.map(w => `<div class="history-item"><div class="history-title" style="font-size:13px">${escapeHtml(w.word)} <span class="muted" style="font-weight:400">· ${escapeHtml(w.language || '')}</span></div><div class="history-meta" style="font-size:12px">${escapeHtml((w.intended_meaning || w.intended_passage || '').slice(0, 120))}</div></div>`).join('')
+        : `<p class="body muted" style="font-size:12.5px">No words kept yet. <b>Save</b> on a related word keeps it here with the meaning it was found for.</p>`;
+    } catch (e) {
+      body.innerHTML = `<p class="body muted" style="font-size:12.5px">The shelf could not be read from the server.</p>`;
+    }
+    return;
+  }
+  // the record behind whatever is on screen
+  const id = (typeof ON_SCREEN !== 'undefined' && ON_SCREEN) ? ON_SCREEN : '';
+  if (!id) {
+    body.innerHTML = `<p class="body muted" style="font-size:12.5px">Open a run and its record appears here: what it was made from, what the review consulted, its receipt.</p>`;
+    return;
+  }
+  body.innerHTML = `<p class="body muted" style="font-size:12.5px"><span class="spinner"></span>reading the record…</p>`;
+  try {
+    const d = await (await fetch(`/api/result/${encodeURIComponent(id)}`)).json();
+    const cites = (d.citations || []).length;
+    body.innerHTML = `
+      <div class="history-meta" style="font-size:12px">${escapeHtml(d.mode || 'run')} · ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}</div>
+      <p class="body" style="font-size:13px">${escapeHtml((d.input_text || '').slice(0, 300))}</p>
+      ${d.summary ? `<p class="body muted" style="font-size:12.5px">${escapeHtml(d.summary)}</p>` : ''}
+      ${d.review_mode === 'tool_free' ? `<p class="body muted" style="font-size:12px">The review of this run had no search tool: everything in it is recall.</p>` : ''}
+      <p class="body muted" style="font-size:12px">${cites ? cites + ' search result(s) on the record' : 'no search results on this record'}${d.receipt_id ? ' · receipt ' + escapeHtml(String(d.receipt_id).slice(0, 22)) : ''}</p>`;
+  } catch (e) {
+    body.innerHTML = `<p class="body muted" style="font-size:12.5px">That record could not be read.</p>`;
+  }
+}
+
+// Dragging the panel's edge. The width is this device's preference, like the
+// measure and the colours — never document content and never a record event.
+function wireSideGrip() {
+  const grip = document.getElementById('side-grip');
+  const side = document.getElementById('side');
+  if (!grip || !side) return;
+  let start = 0, startW = 0;
+  const move = e => {
+    const x = (e.touches ? e.touches[0].clientX : e.clientX);
+    const w = Math.max(240, Math.min(Math.round(startW + (start - x)), Math.round(window.innerWidth * 0.46)));
+    document.documentElement.style.setProperty('--side-w', w + 'px');
+  };
+  const up = () => {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+    document.removeEventListener('touchmove', move);
+    document.removeEventListener('touchend', up);
+    document.body.style.userSelect = '';
+    try { localStorage.setItem(SIDE_W_KEY, getComputedStyle(document.documentElement).getPropertyValue('--side-w').trim() || '340px'); } catch (e) {}
+    sizePlace();
+  };
+  const down = e => {
+    start = (e.touches ? e.touches[0].clientX : e.clientX);
+    startW = side.getBoundingClientRect().width;
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+    document.addEventListener('touchmove', move, {passive: true});
+    document.addEventListener('touchend', up);
+    e.preventDefault();
+  };
+  grip.addEventListener('mousedown', down);
+  grip.addEventListener('touchstart', down, {passive: false});
+}
+
+// The rail's own search and recent list: both read what Home already
+// fetched. Typing here filters the record; it runs nothing.
+function railSearch(q) {
+  const needle = String(q || '').trim().toLowerCase();
+  renderRailRecent(needle);
+}
+let RAIL_RUNS = [];
+function renderRailRecent(needle) {
+  const box = document.getElementById('rail-recent');
+  if (!box) return;
+  const rows = (RAIL_RUNS || []).filter(r => {
+    if (!needle) return true;
+    return (r.label + ' ' + (r.mode || '')).toLowerCase().includes(needle);
+  }).slice(0, 7);
+  if (!rows.length) {
+    box.innerHTML = `<p class="rail-recent-row">${needle ? 'nothing matches' : 'nothing on the record yet'}</p>`;
+    return;
+  }
+  box.innerHTML = rows.map(r =>
+    `<a class="rail-recent-row" href="#" title="${escapeHtml(r.label)}" onclick="loadPastResult('${escapeJs(r.trace_id)}','rail','${escapeJs(r.label)}');return false">${escapeHtml(r.label)}</a>`).join('');
+}
+function setRailRuns(runs) {
+  // One row per idea, newest kept. Fifty runs of one concept were fifty
+  // identical rows, which is a list you cannot read and cannot search.
+  const seen = new Set();
+  RAIL_RUNS = (runs || []).map(r => ({
+    trace_id: r.trace_id || '',
+    mode: r.mode || '',
+    label: String((r.titles && r.titles[0]) || r.input_text || r.trace_id || '').slice(0, 80),
+  })).filter(r => {
+    if (!r.trace_id) return false;
+    const k = (r.label || r.trace_id).toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  const el = document.getElementById('rail-search');
+  renderRailRecent(el ? el.value.trim().toLowerCase() : '');
+}
+
 function toggleSection(id, headId) {
   const el = document.getElementById(id), head = document.getElementById(headId);
   if (!el) return;
@@ -1564,6 +1914,7 @@ async function loadHistory() {
     const d = await r.json();
     if (!d.items || d.items.length === 0) {
       area.innerHTML = '<div class="empty">Nothing yet — run your first forge above.</div>';
+      setRailRuns([]);
       return;
     }
     // One row per RUN, not per candidate. A single forge produces three
@@ -1583,6 +1934,10 @@ async function loadHistory() {
       if (it.decision) g.decisions.push(it.decision);
     });
     renderHistory();
+    // the rail's Recent is the same runs, read from the same fetch — the
+    // rail adds no request of its own and no second source of truth
+    setRailRuns(historyRuns.map(g => ({trace_id: g.trace_id, mode: g.operation,
+                                        titles: g.titles, input_text: ''})));
   } catch (e) {
     area.innerHTML = '<div class="error">Could not load history.</div>';
   }
@@ -6815,7 +7170,21 @@ function openWorkspace(mode) {
   // can be offered without moving anything under him.
   checkPendingRun();
 }
-function openCompose() { openWorkspace('write'); }
+function openCompose() { openWorkspace('write'); syncRail(); }
+// Where you are, shown in the rail. Read from what the page is actually
+// doing — the room being open, or the band in the address — rather than
+// tracked in a second variable that can drift from it.
+function syncRail() {
+  const place = PLACE || '';
+  // Writing beside a reading is both: the room is the mode, the place is
+  // the document. Both doors are lit, because both are true.
+  if (document.body.classList.contains('ws-open')) return railHere('write', place);
+  if (place) return railHere('', place);
+  const p = location.hash.slice(1);
+  if (p === 'library') return railHere('library', '');
+  if (p === 'concepts' || p === 'rooms') return railHere('explore', '');
+  railHere('', '');
+}
 
 function setWorkspaceMode(mode) {
   WS_MODE = mode;
@@ -6912,7 +7281,7 @@ function closeWorkspace() {
   const src = document.getElementById('input-text');
   if (src) src.focus({preventScroll: true});
 }
-function closeCompose() { closeWorkspace(); }
+function closeCompose() { closeWorkspace(); syncRail(); }
 
 // ---- the places: one shell, one document per place --------------------
 // Slice 2 of the shell redesign, and the only thing it does.
@@ -6974,11 +7343,14 @@ function frameGo(frame, url) {
   frame.src = url;
 }
 
+// Which door is lit. The header's row of places is gone — the rail is the
+// navigation now — so this says it in the rail instead, and it is called
+// from both ends: paintPlace when a place opens, closePlace when it closes.
+// It was left pointing at header nav.places, a selector that matches
+// nothing since the rail replaced that row, which is why standing in the
+// Bench lit no door at all.
 function markPlace() {
-  document.querySelectorAll('header nav.places a').forEach(a => {
-    const h = a.getAttribute('href') || '';
-    a.classList.toggle('here', PLACE ? h === PLACE : h === '/');
-  });
+  if (typeof syncRail === 'function') syncRail();
 }
 
 // The bar only: used both when a place is opened from here and when a place
@@ -7007,8 +7379,39 @@ function sizePlace() {
     ? pg.getBoundingClientRect().bottom : window.innerHeight;
   // exactly what is left, never a floor: a floor would push the frame past
   // the bottom of a stacked split on a phone and lie about the fit
-  const h = Math.max(0, Math.floor(bottom - top)) + 'px';
-  if (frame.style.height !== h) frame.style.height = h;
+  const avail = Math.max(0, Math.floor(bottom - top));
+  // ...and never more than the place actually fills. The frame used to take
+  // the whole window whatever was in it, so a short place — the Bench with
+  // nothing opened is 460px in a 784px frame — sat above a third of a
+  // screen of dead band that read as an empty footer under the page
+  // (2026-09-14). A place taller than the space still gets the space and
+  // scrolls inside it, as before.
+  let h = avail;
+  try {
+    const d = frame.contentDocument;
+    if (d && d.body) {
+      const content = Math.ceil(Math.max(d.body.scrollHeight || 0,
+                                         (d.documentElement && d.documentElement.scrollHeight) || 0));
+      if (content > 0 && content < avail) h = content;
+    }
+  } catch (e) { /* not same-origin: it takes what is left, as it always did */ }
+  const px = h + 'px';
+  if (frame.style.height !== px) frame.style.height = px;
+}
+
+// A place that grows after it loads — the Bench when a word is opened —
+// must not then be cut off by the height measured a moment ago.
+let PLACE_OBS = null;
+function watchPlaceHeight() {
+  const frame = document.getElementById('place-frame');
+  if (!frame) return;
+  if (PLACE_OBS) { try { PLACE_OBS.disconnect(); } catch (e) {} PLACE_OBS = null; }
+  try {
+    const d = frame.contentDocument;
+    if (!d || !d.body || typeof ResizeObserver === 'undefined') return;
+    PLACE_OBS = new ResizeObserver(() => sizePlace());
+    PLACE_OBS.observe(d.body);
+  } catch (e) { /* cross-origin, or no observer: the load and resize hooks stand */ }
 }
 
 function placeLoading(on) {
@@ -7137,6 +7540,7 @@ window.addEventListener('popstate', function (e) {
       if (location.pathname + location.search !== want) history.replaceState({place: want}, '', want);
     }
     sizePlace();
+    watchPlaceHeight();   // a place that grows after it loads resizes with it
   });
   window.addEventListener('resize', sizePlace);
   if (window.ResizeObserver) {
@@ -9393,6 +9797,10 @@ document.addEventListener('paste', e => {
 
 loadWriteStyle();
 loadInkPref();
+wireSideGrip();
+try { const t = localStorage.getItem(SIDE_TAB_KEY); if (t) SIDE_TAB = t; } catch (e) {}
+syncRail();
+restoreSide();
 loadHistory();
 loadHome();
 loadCarries();   // block 123: the revision-notes control, only if there is anything to show
@@ -11020,10 +11428,16 @@ function openBand(band, focusId) {
   if (head) head.scrollIntoView({block: 'start'});
   if (focusId) { const f = document.getElementById(focusId); if (f) { try { f.focus(); } catch (e) {} } }
   if (location.hash !== '#' + band) history.pushState(null, '', '#' + band);
-  document.querySelectorAll('header nav.places a').forEach(a => a.classList.toggle('here', a.dataset.place === band));
+  syncRail();
 }
-window.addEventListener('hashchange', () => { const p = location.hash.slice(1); if (['concepts', 'rooms', 'library', 'system'].includes(p)) openBand(p); });
-document.querySelectorAll('header nav.places a[data-place]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); openBand(a.dataset.place); }));
+window.addEventListener('hashchange', () => { const p = location.hash.slice(1); if (['concepts', 'rooms', 'library', 'system'].includes(p)) openBand(p); syncRail(); });
+// The band doors are the rail's now. This was wired to header nav.places,
+// which the rail replaced, so the handler bound to nothing: a band opened
+// only because the browser followed the #hash and hashchange happened to
+// fire — which means a SECOND press of the same door did nothing at all,
+// the hash being already there. The press is the event now; the hash still
+// works on its own, for a typed URL or the back button.
+document.querySelectorAll('#rail a[data-place]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); openBand(a.dataset.place); }));
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('input-text').addEventListener('input', updateGestureChooser);

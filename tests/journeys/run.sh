@@ -67,7 +67,11 @@ for j in quiet home anatomy chooser speak speakkeep encounter federation shell r
   fi
 done
 # the writing-room identity checks must have run (a journey that skipped them is not a pass)
-for need in "split: same room element" "swap: same room element" "full page: same room element" "undo history survived" "home: no request left the scratch origin"; do
+# The desktop layout (2026-09-14) adds two: the rail IS the navigation now,
+# and it has to survive the fold to a row on a narrow window — where the
+# six header destinations used to be counted, a dropped check would hide a
+# rail that had quietly stopped rendering.
+for need in "split: same room element" "swap: same room element" "full page: same room element" "undo history survived" "home: no request left the scratch origin" "phone 390px: the rail is the navigation" "split 700px: the rail is the navigation"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/home.log" || { echo "== home: missing check: $need"; status=1; }
 done
 for need in "a quote checked and not found in the text is a FAILED warrant" "the acquisition labels are real text and survive with every stylesheet removed" "a model-written example sentence carries the invented-example label in real text" "no fact this client cannot observe is printed as a number" "a component whose anchor WAS found keeps the machinery out of the reader" "opening the disclosure brings the anchor and the constraint back" "the reopened run still knows whether a component was shown in the text" "the counted panel does not recommend anything" "the live door explains itself only when asked" "a candidate with a broken warrant is told plainly that no door here repairs it" "a card with BOTH a failed warrant and a craft objection names the door that moves the objection"; do
@@ -138,7 +142,7 @@ done
 # same window, same element, and an undo stack that walked back through an
 # edit made before the walk. A journey that quietly stops making these is not
 # a pass, however green it looks.
-for need in "the document was never replaced" "the writing room is the SAME element" "the caret AND the selection survived the walk" "undo walked back through an edit made BEFORE the walk" "a closed place stops running" "Home came back to where it was scrolled" "the anatomy takes the whole window, as ruled"; do
+for need in "the document was never replaced" "the writing room is the SAME element" "the caret AND the selection survived the walk" "undo walked back through an edit made BEFORE the walk" "a closed place stops running" "Home came back to where it was scrolled" "the anatomy takes the whole window, as ruled" "the rail marks where you are" "and writing beside it lights Write too"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/shell.log" || { echo "== shell: missing check: $need"; status=1; }
 done
 # pass 1: the caret must have been measured against the letters actually drawn,

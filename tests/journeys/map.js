@@ -232,9 +232,9 @@ function encKey(k) { return encodeURIComponent(k); }
   // ---- 12. inside the shell: the door opens Focus, and a run door lands ----
   await page.goto(BASE + '/');
   await page.waitForTimeout(1200);
-  await page.evaluate(() => document.querySelector('header nav.places a[href="/map"]').click());
+  await page.evaluate(() => document.querySelector('#rail a[href="/map"]').click());
   const frame = await place(page, '/map');
-  ok(!!frame, 'the header\'s Map door opens the Map inside the shell');
+  ok(!!frame, 'the rail\'s Map door opens the Map inside the shell');
   ok(await waitFor(page, () => { const f = document.getElementById('place-frame'); const d = f && f.contentDocument; return !!(d && /Nothing is in focus until you choose it/.test((d.getElementById('stage') || {}).innerText || '')); }),
      'and what opens is the picker — Focus is the Map\'s door');
   // the title-keyed place: two roads, listed flat, each with its run door

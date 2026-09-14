@@ -4815,7 +4815,9 @@ def _home_pending() -> dict:
             "sources": ["claim", "media_claim", "clinic_disagreement", "keeper", "recovery_review"],
             "blocked": blocked[:12], "blocked_total": len(blocked),
             "saved": saved, "saved_sources": [], "unresolved": unresolved, "open_questions": open_questions,
-            "note": "Only what the record can count. Decisions that live in the backlog are not here."}
+            # The band's own head already says "only what the record can
+            # count"; the note said it a second time, on the same band.
+            "note": "Decisions that live in the backlog are not here."}
 
 
 @app.route("/api/home")
