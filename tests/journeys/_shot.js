@@ -74,6 +74,14 @@ const geom = () => {
     await page.waitForTimeout(600);
     await page.evaluate(t => loadPastResult(t), IDS.full);
     await page.waitForTimeout(2000);
+    // the workup lands in #result-area, below Home's bands: scroll the pane
+    // to it, because a screenshot of writing-with-feedback has to show the
+    // feedback
+    await page.evaluate(() => {
+      const r = document.getElementById('result-area');
+      if (r) r.scrollIntoView({block: 'start'});
+    });
+    await page.waitForTimeout(700);
     await page.screenshot({path: `${OUT}/writing-${name}.png`});
     console.log(name, 'writing', JSON.stringify(await page.evaluate(() => {
       const g = (id) => { const e = document.getElementById(id);
