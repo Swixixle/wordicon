@@ -506,7 +506,13 @@ def seed_related():
     d["summary"] = _re.sub(r" · \d+ cultural comparison\(s\)", "", d["summary"])
     lp.write_text(json.dumps(d, indent=2))
     ids["legacy"] = legacy["trace_id"]
-    assert len({ids["full"], ids["derived"], ids["followup"], ids["selection"], ids["selection_only"], ids["legacy"]}) == 6, "two related-words runs shared a trace id"
+    # a NARROWED comparison, as the runner records one: a shorter meaning given
+    # for this pass because the concept's own meaning is longer than a pass
+    # takes. The narrowing journey reopens it and asks another language.
+    nar = cli.run_refract({**cand, "definition": "a shorter meaning, given for this comparison only"}, g,
+                          entry="concept", meaning_narrowed=True)
+    ids["narrowed"] = nar["trace_id"]
+    assert len({ids["full"], ids["derived"], ids["followup"], ids["selection"], ids["selection_only"], ids["legacy"], ids["narrowed"]}) == 7, "two related-words runs shared a trace id"
     (DIR / "related.json").write_text(json.dumps(ids))
     return ids
 

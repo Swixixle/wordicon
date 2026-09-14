@@ -53,7 +53,7 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit carry wayfinder map moira notebook related; do
+for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit carry wayfinder map moira notebook related narrowing; do
   echo "== journey: $j"
   if [ "$j" = quiet ] || [ "$j" = speak ] || [ "$j" = map ]; then before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
@@ -196,6 +196,12 @@ done
 # stage C: colours and Download. Named because each is a way the surface could
 # quietly change what it never may: the default pair, the draft under a
 # recolour, the undo chain, the body of a download.
+# The narrowing history (2026-09-14): named individually because the defect
+# was a FLAG dropped in a projection — the text survived, the history did
+# not — and a dropped check would hide exactly that.
+for need in "the outgoing request carries meaning_narrowed: true" "and the queued job records meaning_narrowed: true, as received" "the outgoing request carries meaning_narrowed: false" "reopening projects the recorded value, true, into what a follow-up will send"; do
+  grep -qF "ok   $need" "$JOURNEY_OUT/narrowing.log" || { echo "== narrowing: missing check: $need"; status=1; }
+done
 for need in "the room opens blue & yellow — background #0f2350, caret #ffd97d" "Aa holds Colours: the four presets, Background, Text and Reset to blue & yellow" "Paper recolours the room through custom properties" "and the draft, the selection and the scroll are exactly as they were" "a pair under 4.5:1 gets a hint that says the number and offers the reset" "Reset to blue & yellow hands the colours back to the stylesheet — no inline copy of the default" "undo after the colour changes still takes back the word typed before them" "the chosen colours are back after a reload" "the download panel says Download, with Text and Markdown, PDF, and everything" "the Text download is the body exactly — leading spaces, a tab, a blank paragraph, the trailing newline"; do
   grep -qF "ok   $need" "$JOURNEY_OUT/notebook.log" || { echo "== notebook: missing check: $need"; status=1; }
 done

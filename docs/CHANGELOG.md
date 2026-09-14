@@ -1,5 +1,25 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.35.1 — The narrowing survives a follow-up
+
+The review's second finding. A comparison made on a shorter meaning given for
+that pass is recorded as a narrowing (`source.meaning_narrowed: true`, v1.33.1).
+Reopening that record projected six of its source fields into what a
+follow-up sends and left this one out, so asking another language about the
+same shortened meaning sent `meaning_narrowed: false` — the same text, with
+its history dropped — and the route and runner faithfully persisted the false.
+
+The projection carries the recorded value now, true or false, and never
+recomputes it from the length of the text on screen; the reopened card says
+*a shorter meaning given for this comparison — the concept's own meaning is
+longer and was not changed*, because a narrowing the record holds and the
+page hides is state hidden. A new WebKit journey, `narrowing`, reopens a
+seeded narrowed comparison and an ordinary one, asks Japanese of each, and
+proves the outgoing request and the job the server queued both carry the
+recorded value; the suite proves the same request through the real route and
+runner into the new record. Sabotaging the projection fails four named
+checks in the journey and one in the suite.
+
 ## v1.35.0 — Check sources says what was acquired, apart from what the model concluded
 
 An independent review of report 77 supplied the lookup with a reply naming a

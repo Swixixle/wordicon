@@ -3316,6 +3316,73 @@ def _check_word_sources_evidence(server, paired):
     return out
 
 
+def _check_narrowing_history(server, paired):
+    """A narrowing survives a follow-up (his ruling, 2026-09-14). The value
+    the record holds is carried into what a follow-up sends, through the
+    route, the runner and into the new record — true stays true, false
+    stays false — and it is never recomputed from the length of the text
+    now on screen. Proven on the real route and runner with a mock model;
+    the browser journey `narrowing` proves the same request leaves the
+    page."""
+    out = []
+    import json as _json, time as _time
+    with _isolated_store("narrowing_history"):
+        c = paired(server.app.test_client())
+        real_gw = server.server_gateway
+        real_thread = server.threading.Thread
+        server.server_gateway = lambda: cli.MockGateway()
+
+        class _NoThread:
+            """The route starts its job on a thread that takes the corpus
+            lock; here the body is run in the foreground instead, so the
+            check exercises the route AND the runner without waiting on a
+            lock the suite may be holding."""
+            def __init__(self, *a, **k):
+                pass
+            def start(self):
+                pass
+        server.threading.Thread = _NoThread
+        try:
+            for flag in (True, False):
+                rr = c.post("/api/jobs", json={
+                    "mode": "refract", "entry": "concept",
+                    "original": {"title": "The Refusenik Posture", "definition": "a shorter meaning, for this pass",
+                                 "plain_gloss": "", "concept_id": "concept_narrowing_history"},
+                    "only_languages": ["Japanese"], "meaning_narrowed": flag})
+                if rr.status_code != 200:
+                    out.append(f"NARROW: the follow-up route refused ({rr.status_code}): {rr.get_data(as_text=True)[:120]}")
+                    continue
+                jid = rr.get_json()["job_id"]
+                server._run_job_body(jid, "refract", server.JOBS[jid]["input_text"])
+                job = server.JOBS[jid]
+                if (job.get("related_entry") or {}).get("meaning_narrowed") is not flag:
+                    out.append(f"NARROW: the route recorded meaning_narrowed as {job.get('related_entry')} for a request saying {flag}")
+                if job["status"] != "complete":
+                    out.append(f"NARROW: the follow-up job did not finish ({job['status']}): {job.get('error')}")
+                    continue
+                trace = (job.get("result") or {}).get("trace_id")
+                snap = _json.loads((cli.RESULTS_DIR / f"{trace}.json").read_text(encoding="utf-8"))
+                if snap["source"].get("meaning_narrowed") is not flag:
+                    out.append(f"NARROW: the new record holds meaning_narrowed={snap['source'].get('meaning_narrowed')} for a follow-up that said {flag}")
+                if snap["source"].get("only_languages") != ["Japanese"]:
+                    out.append("NARROW: the follow-up record lost the language it asked")
+        finally:
+            server.server_gateway = real_gw
+            server.threading.Thread = real_thread
+    # the page: the projection a follow-up reads carries the recorded value,
+    # and the reopened card says it
+    pg = (Path(cli.__file__).parent.parent / "webapp" / "index.html").read_text(encoding="utf-8")
+    at = pg.find("RELATED_SRC[uid] = {")
+    proj = pg[at: pg.find("};", at)] if at != -1 else ""
+    if "meaning_narrowed: !!src.meaning_narrowed" not in proj:
+        out.append("NARROW: the page's projection of a record drops meaning_narrowed, so a follow-up sends false")
+    if "meaningTooLong(" in proj or ".length" in proj:
+        out.append("NARROW: the projection recomputes the narrowing from the text instead of carrying the record")
+    if "a shorter meaning given for this comparison" not in pg or 'id="rw-narrowed-' not in pg:
+        out.append("NARROW: a reopened narrowed comparison does not say it is one")
+    return out
+
+
 def _check_meaning_kept_whole(server, paired):
     """His meaning reaches the model and the record as he wrote it
     (his ruling, 2026-09-14): "silently changing your meaning isn't
@@ -4850,6 +4917,7 @@ def main() -> int:
     failures.extend(_check_meaning_kept_whole(server, _paired))
     failures.extend(_check_job_reservation(server))
     failures.extend(_check_word_sources_evidence(server, _paired))
+    failures.extend(_check_narrowing_history(server, _paired))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key

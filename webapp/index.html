@@ -5015,9 +5015,16 @@ function buildRefractHtml(res, opts) {
   const followUp = !!((src.only_languages || []).length) || (asked && asked.length === 1 && asked[0] === 'languages');
   const nCit = (res.citations || []).length;
   const uid = String(res.trace_id || ('rw' + Date.now()));
+  // Everything a follow-up will send is projected here, and the narrowing
+  // flag is part of that: an independent review (2026-09-14) found it left
+  // out, so a language asked about a shortened meaning was recorded as not
+  // narrowed — the same text, with its history dropped. The recorded value
+  // is carried as recorded, true or false; it is never recomputed from the
+  // length of the text now on screen.
   RELATED_SRC[uid] = {title: src.title || res.source_title || '', definition: src.definition || '',
                       plain_gloss: src.plain_gloss || '', concept_id: src.concept_id || '',
-                      entry: src.entry || 'concept', passage: src.passage || ''};
+                      entry: src.entry || 'concept', passage: src.passage || '',
+                      meaning_narrowed: !!src.meaning_narrowed};
   RELATED_ITEMS[uid] = {synonyms: res.english_synonyms || [], antonyms: res.english_antonyms || [],
                         languages: refs, cultural: res.cultural_comparisons || []};
   if (res.trace_id) rwLoadSaved(String(res.trace_id));
@@ -5118,6 +5125,7 @@ function buildRefractHtml(res, opts) {
          <p class="body" style="margin:0"><strong>The meaning explored:</strong> ${escapeHtml(src.definition)}</p>
          ${(src.plain_gloss || '').trim() ? `<p class="body muted" style="font-size:12.5px;margin:2px 0 0">${escapeHtml(src.plain_gloss)}</p>` : ''}
          ${entryLine ? `<p class="body muted" style="font-size:12px;margin:2px 0 0">${escapeHtml(entryLine)}</p>` : ''}
+         ${src.meaning_narrowed ? `<p class="body muted" id="rw-narrowed-${escapeHtml(uid)}" style="font-size:12px;margin:2px 0 0"><em>a shorter meaning given for this comparison</em> — the concept’s own meaning is longer and was not changed</p>` : ''}
        </div>`
     : (src.passage || '').trim()
       ? `<div class="card" style="border-left:3px solid var(--accent, #888)">
