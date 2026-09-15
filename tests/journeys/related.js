@@ -200,6 +200,37 @@ const DRAFT = [
   ok(/Ask another language/i.test(T), 'a follow-up on a named language is offered');
   ok(!/no close word — a gap, and the gap is the finding/.test(T), 'the old gap wording is gone');
 
+  // ---- 2a½. the cards on a wide desk: two columns per section, measured
+  //      against the result area; nothing that is not a card in a column;
+  //      reading order is the DOM order (his ruling, 2026-09-14)
+  const grid = await page.evaluate(() => {
+    const grids = Array.from(document.querySelectorAll('#result-area .rw-cards'));
+    const cards = Array.from(document.querySelectorAll('#result-area .rw-cards > .card'));
+    let ordered = true;
+    for (let i = 1; i < cards.length; i++) {
+      const a = cards[i - 1].getBoundingClientRect(), b = cards[i].getBoundingClientRect();
+      if (b.top < a.top - 1 || (Math.abs(b.top - a.top) <= 1 && b.left < a.left)) { ordered = false; break; }
+    }
+    const notices = Array.from(document.querySelectorAll('#result-area .rw-cards > :not(.card)'));
+    // a card's record section is the token before its index in the action
+    // holder's id (rw-act-<uid>-<section>-<index>); one grid, one section
+    // (a card without a holder — a collision note, say — belongs to no section and is not counted)
+    const mixed = grids.some(g => new Set(Array.from(g.querySelectorAll(':scope > .card'))
+      .map(c => ((c.querySelector('[id^="rw-act-"]') || {}).id || '').split('-').slice(-2, -1)[0] || '')
+      .filter(Boolean)).size > 1);
+    return { sections: grids.length, cols: grids.length ? getComputedStyle(grids[0]).gridTemplateColumns.split(' ').length : 0,
+             area: Math.round(document.getElementById('result-area').getBoundingClientRect().width),
+             widest: Math.round(cards.reduce((m, c) => Math.max(m, c.getBoundingClientRect().width), 0)),
+             ordered, notices: notices.length,
+             noticesSpan: notices.every(el => el.getBoundingClientRect().width >= el.parentElement.getBoundingClientRect().width - 2),
+             mixed };
+  });
+  ok(grid.sections >= 6 && grid.cols === 2 && grid.area >= 1000, `at 1440 wide each section lays its cards in two columns, measured against a ${grid.area}px result area: ${grid.cols} columns in ${grid.sections} sections`);
+  ok(grid.widest < grid.area * 0.6, `no card runs the whole pane: widest ${grid.widest}px of ${grid.area}px`);
+  ok(grid.ordered, 'reading order is the DOM order — the grid reorders nothing');
+  ok(grid.notices > 0 && grid.noticesSpan, `status notices and asides span the row rather than sitting in a column: ${grid.notices}`);
+  ok(!grid.mixed, 'no section\u2019s grid holds another section\u2019s cards');
+
   // ---- 2b. the three actions on a result: none of them spends ------------
   const nJobs = bodies.length;
   const latinIdx = await page.evaluate(() => (RELATED_ITEMS[Object.keys(RELATED_ITEMS)[0]].languages || []).findIndex(r => canonLang(r.language) === 'Latin'));

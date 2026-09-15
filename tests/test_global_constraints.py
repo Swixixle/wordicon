@@ -18110,6 +18110,19 @@ console.log(out.join('\\n'));
     for _m in _re99.finditer(r"#(place|home-main|side)\s*\{([^}]*)\}", _idx99):
         if "display:" in _m.group(2) and f"#{_m.group(1)}[hidden]" not in _idx99:
             _f99(f"#{_m.group(1)} declares a display but has no [hidden] rule — it cannot be hidden")
+    # THE RESULT CARDS ON A WIDE DESK (2026-09-14). Each section's cards in a
+    # grid measured against the result area, two columns when it is wide;
+    # what is not a card spans the row; the window is never the measure.
+    if "#result-area { container-type: inline-size; container-name: result; }" not in _idx99:
+        _f99("the result area is not the element the cards measure themselves against")
+    if "@container result (min-width: 1000px) { .rw-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }" not in _idx99:
+        _f99("the result cards do not step to two columns against the result area's width")
+    if ".rw-cards > :not(.card) { grid-column: 1 / -1; }" not in _idx99:
+        _f99("a status notice or an aside can be put in a column")
+    if '<div class="rw-cards">${bodyHtml}</div>' not in _idx99:
+        _f99("a section's cards are not wrapped in their own grid")
+    if "@media" in _idx99[_idx99.find(".rw-cards {"): _idx99.find(".rw-cards {") + 400]:
+        _f99("the result cards are keyed to the window, not the result area")
     # THE DISCLOSURE ARROW. A JavaScript escape inside a stylesheet is the
     # literal text u25BE, which is what he saw on the page.
     _content_decls = _re99.findall(r"content:\s*'[^']*'", _idx99)

@@ -92,13 +92,30 @@ const geom = () => {
       const bg = document.querySelector('#home-main .band-grid');
       const rail = document.getElementById('rail');
       const side = document.getElementById('side');
+      // the related-words cards: how many columns each section got, whether
+      // any prose line runs the whole pane, and whether reading order is the
+      // DOM order (a grid may not reorder)
+      const grids = Array.from(document.querySelectorAll('#result-area .rw-cards'));
+      const cols = grids.length ? getComputedStyle(grids[0]).gridTemplateColumns.split(' ').length : null;
+      const cards = Array.from(document.querySelectorAll('#result-area .rw-cards > .card'));
+      const widest = cards.reduce((m, c) => Math.max(m, c.getBoundingClientRect().width), 0);
+      let ordered = true;
+      for (let i = 1; i < cards.length; i++) {
+        const a = cards[i - 1].getBoundingClientRect(), b = cards[i].getBoundingClientRect();
+        if (b.top < a.top - 1 || (Math.abs(b.top - a.top) <= 1 && b.left < a.left)) { ordered = false; break; }
+      }
+      const spanning = Array.from(document.querySelectorAll('#result-area .rw-cards > :not(.card)'))
+        .every(el => el.getBoundingClientRect().width >= (el.parentElement.getBoundingClientRect().width - 2));
       return {head, bar, overlap: head && bar ? Math.round(head.r - bar.l) : null,
         page: Math.round(document.getElementById('page').getBoundingClientRect().width),
         work: Math.round(document.getElementById('work').getBoundingClientRect().width),
         railH: Math.round(rail.getBoundingClientRect().height),
         railCols: getComputedStyle(rail).flexDirection,
         sideShown: side ? getComputedStyle(side).display !== 'none' : null,
-        bands: bg ? getComputedStyle(bg).gridTemplateColumns : null};
+        bands: bg ? getComputedStyle(bg).gridTemplateColumns : null,
+        resultArea: Math.round(document.getElementById('result-area').getBoundingClientRect().width),
+        cardColumns: cols, cards: cards.length, widestCard: Math.round(widest),
+        readingOrderIsDomOrder: ordered, noticesSpanTheRow: spanning};
     })));
     console.log(name, 'errors:', JSON.stringify(errs.slice(0, 3)));
     await ctx.close();

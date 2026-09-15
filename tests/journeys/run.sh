@@ -196,6 +196,12 @@ done
 # stage C: colours and Download. Named because each is a way the surface could
 # quietly change what it never may: the default pair, the draft under a
 # recolour, the undo chain, the body of a download.
+# The result cards on a wide desk (2026-09-14): named individually because a
+# grid that quietly went back to one column, or quietly reordered, would
+# still pass every functional check.
+for need in "at 1440 wide each section lays its cards in two columns" "no card runs the whole pane" "reading order is the DOM order" "status notices and asides span the row"; do
+  grep -qF "ok   $need" "$JOURNEY_OUT/related.log" || { echo "== related: missing check: $need"; status=1; }
+done
 # The narrowing history (2026-09-14): named individually because the defect
 # was a FLAG dropped in a projection — the text survived, the history did
 # not — and a dropped check would hide exactly that.

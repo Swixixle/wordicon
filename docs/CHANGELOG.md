@@ -1,5 +1,28 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.35.4 — Related words on a wide desk: two columns per section
+
+Report 78 named this and did not fix it: the result area spans every band
+track, so on a 2560px desk a word card's prose ran two hundred characters to
+the line with most of the card empty — the 700px strip complaint inverted,
+the width occupied rather than used.
+
+Each section's cards now sit in a grid of their own: two columns when the
+**result area** is 1,000px or wider, one column below that — so a laptop
+split (a 688px result area) stays one column and a wide split or a 1440px
+Home gets two. The result area is the measuring element, not the window,
+for the same three reasons the bands stopped asking the window in v1.34.1.
+Section headings, the summary, the navigation, the explored-meaning card,
+status notices, the set-aside notes and a language's name all span the row;
+only cards take a column; sections are never mixed to fill space. Source
+order is unchanged, so reading order, tab order, every anchor, every card's
+index, saved-word targeting and the follow-up's place are exactly what they
+were. Measured at 1440×900 and 2560×1400 by the screenshot harness — one
+column in the 688px laptop split, two in the 1,248px wide split, widest card
+616px, reading order the DOM order — and asserted in the Related journey
+(131 checks, from 126). Sabotaging the measure back onto the window fails
+two named pins.
+
 ## v1.35.3 — Owner prose is taken whole or refused by name — everywhere
 
 Report 77 said that inside `/api/jobs` "sprout, recheck and archetype pass

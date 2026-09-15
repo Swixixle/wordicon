@@ -672,6 +672,16 @@
     body.ws-split #ws-divider { display: none; }
   }
   /* ---- the shelf ------------------------------------------------------ */
+  /* Related words on a wide desk (2026-09-14): a section's cards in two
+     columns when the RESULT AREA is wide, one column in a laptop split. The
+     area is the measuring element — the window is a bad proxy for it, for
+     the same three reasons the bands stopped asking the window. A card's
+     prose no longer runs two hundred characters to the line across a
+     2560px pane; nothing that is not a card is put in a column. */
+  #result-area { container-type: inline-size; container-name: result; }
+  .rw-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 16px; align-items: start; }
+  .rw-cards > :not(.card) { grid-column: 1 / -1; }
+  @container result (min-width: 1000px) { .rw-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   /* Check sources (2026-09-14): what was acquired, said first. Warning
      colour when nothing was; plain when something came back — and never
      the green of an accepted ruling, which this lane may not wear. */
@@ -5182,8 +5192,15 @@ function buildRefractHtml(res, opts) {
       ${refs.map((r, i) => rwTermCard(r, nCit, uid, i)).join('') || rwStatusHtml('Nothing came back for the languages named.', 'absent')}`;
   }
 
+  // Each section's cards sit in a grid of their own (his ruling,
+  // 2026-09-14): two columns when the result area is wide enough, one in a
+  // laptop split, measured against the RESULT AREA and never the window.
+  // Everything that is not a card — a status notice, an aside, a language
+  // name — spans the row. Source order is unchanged, so reading order,
+  // tab order, every anchor and every card's index are exactly what they
+  // were; sections are never mixed to fill space.
   const sec = (id, label, bodyHtml) =>
-    `<div class="section-label" id="rw-sec-${id}-${escapeHtml(uid)}" style="margin-top:16px">${label}</div>${bodyHtml}`;
+    `<div class="section-label" id="rw-sec-${id}-${escapeHtml(uid)}" style="margin-top:16px">${label}</div><div class="rw-cards">${bodyHtml}</div>`;
   // English sections. Their status is a statement about THIS pass.
   const englishStatus = (list, noun) => {
     if (asked === null) return rwStatusHtml(`Not checked — this comparison was made before the English ${noun} were part of the tool.`, 'absent');
