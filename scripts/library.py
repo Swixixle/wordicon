@@ -736,8 +736,10 @@ def make_crossing(kind: str, representation_id: str, start_path: str,
     got = retrieve_span(rep, start_path, start_offset, end_path, end_offset)
     if not got["ok"]:
         raise ValueError(got["why"])
-    owner_text = (owner_text or "").strip()[:2000]
-    if kind == "claim" and not owner_text:
+    # his own wording on a span: taken whole or refused by name, never cut;
+    # only the emptiness test strips
+    owner_text = cli.take_prose(owner_text, "owner_text")
+    if kind == "claim" and not owner_text.strip():
         raise ValueError("a claim needs your own wording — the source span is "
                          "the view, not the claim")
     span_ref = {"representation_id": representation_id,
@@ -880,7 +882,7 @@ def record_support_ruling(crossing_id: str, bearing: str, mode: str = None,
     row = {"type": "support_ruling", "crossing_id": crossing_id,
            "ruling_id": ruling_id, "bearing": bearing, "mode": mode,
            "origin": origin, "basis": clean_basis,
-           "reason": (reason or "").strip()[:500],
+           "reason": cli.take_prose(reason, "reason"),
            "proposal_trace_id": (proposal_trace_id or "")[:60],
            "supersedes_ruling_id": active if bearing != "rejected" else "",
            "at": _now()}
@@ -1584,8 +1586,10 @@ def make_media_crossing(kind: str, transcript_id: str, start_i: int,
     got = retrieve_media_span(tdoc, start_i, end_i)
     if not got["ok"]:
         raise ValueError(got["why"])
-    owner_text = (owner_text or "").strip()[:2000]
-    if kind == "claim" and not owner_text:
+    # his own wording on a span: taken whole or refused by name, never cut;
+    # only the emptiness test strips
+    owner_text = cli.take_prose(owner_text, "owner_text")
+    if kind == "claim" and not owner_text.strip():
         raise ValueError("a claim needs your own wording — the spoken span "
                          "is the view, not the claim")
     crossing_id = "mcross_" + hashlib.sha256(
@@ -1659,7 +1663,7 @@ def rule_media_claim(crossing_id: str, bearing: str, mode: str = None,
                (crossing_id + bearing + _now() + os.urandom(6).hex())
                .encode()).hexdigest()[:12],
            "crossing_id": crossing_id, "bearing": bearing, "mode": mode,
-           "origin": origin, "reason": (reason or "")[:500],
+           "origin": origin, "reason": cli.take_prose(reason, "reason"),
            "supersedes_ruling_id": prior, "at": _now()}
     with open(media_crossings_log(), "a") as f:
         f.write(json.dumps(row) + "\n")

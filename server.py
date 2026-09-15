@@ -1005,8 +1005,10 @@ def api_map_suggest_roads():
                                       "one you mean."]})
     defs = {}
     for c in cli.load_accepted_concepts():
+        # whole: this is what the road-suggester is SHOWN, and a cut
+        # definition is a different concept (2026-09-14)
         defs[cli._norm_title(c.get("name") or c.get("title") or "")] = \
-            (c.get("definition") or "")[:400]
+            (c.get("definition") or "")
     try:
         result = cli.run_suggest_roads(
             from_l, to_l, defs.get(cli._norm_title(from_l), ""),
@@ -1056,8 +1058,10 @@ def api_map_route_analyze():
         return jsonify({"error": "that route is too long to analyze in one run"}), 400
     defs = {}
     for c in cli.load_accepted_concepts():
+        # whole: this is what the road-suggester is SHOWN, and a cut
+        # definition is a different concept (2026-09-14)
         defs[cli._norm_title(c.get("name") or c.get("title") or "")] = \
-            (c.get("definition") or "")[:400]
+            (c.get("definition") or "")
     stops = []
     for s in stops_in:
         if not isinstance(s, dict):
@@ -1748,6 +1752,15 @@ def api_recovery():
     return jsonify(recovery.cases())
 
 
+@app.errorhandler(cli.ProseTooLong)
+def _prose_too_long(e):
+    """Owner prose over the limit is refused, never cut (his ruling,
+    2026-09-14). Raised inside the writers themselves — before a job, a
+    record or a model call exists — so no route can forget to check; every
+    one answers with the field, the actual count and the limit."""
+    return jsonify({"error": str(e), "field": e.field, "count": e.count, "limit": e.limit}), 400
+
+
 @app.route("/api/recovery/rule", methods=["POST"])
 def api_recovery_rule():
     """One owner ruling on one queued case. Accept and Revise carry the
@@ -1757,9 +1770,11 @@ def api_recovery_rule():
     data = request.get_json(force=True) or {}
     try:
         ruling = recovery.rule(str(data.get("queue_judgment_id") or ""), str(data.get("decision") or ""),
-                               definition=str(data.get("definition") or "")[:2000],
+                               definition=cli.take_prose(data.get("definition"), "definition"),
                                new_title=str(data.get("new_title") or "")[:160],
-                               note=str(data.get("note") or "")[:1000])
+                               note=cli.take_prose(data.get("note"), "note"))
+    except cli.ProseTooLong:
+        raise
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify({"ruled": True, "ruling": ruling, "open_count": len(recovery.open_cases())})
@@ -2487,7 +2502,7 @@ def api_encounter_switch_set():
     data = request.get_json(force=True) or {}
     if not isinstance(data.get("on"), bool):
         return jsonify({"error": "on must be true or false — nothing is inferred"}), 400
-    out = cli.set_encounter_recording(data["on"], by="owner", note=str(data.get("note") or "")[:200])
+    out = cli.set_encounter_recording(data["on"], by="owner", note=cli.take_prose(data.get("note"), "note"))
     out["state"] = cli.encounter_recording()
     return jsonify(out)
 
@@ -2532,7 +2547,7 @@ def api_epoch_begin():
         return jsonify({"error": "epoch must be development_and_calibration or ordinary_use"}), 400
     if epoch == cli.current_epoch():
         return jsonify({"error": f"the record is already in {epoch}"}), 400
-    row = cli.declare_epoch(epoch, declared_by="owner", note=str(data.get("note") or "")[:400])
+    row = cli.declare_epoch(epoch, declared_by="owner", note=cli.take_prose(data.get("note"), "note"))
     return jsonify({"declared": row, "epoch": cli.current_epoch()})
 
 
@@ -2761,7 +2776,9 @@ def api_clinic_disagree_rule():
     try:
         row = clinic.rule_disagreement(str(d.get("proposal_id") or ""),
                                         str(d.get("ruling") or ""),
-                                        note=str(d.get("note") or "")[:400])
+                                        note=cli.take_prose(d.get("note"), "note"))
+    except cli.ProseTooLong:
+        raise
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify(row)
@@ -2873,6 +2890,8 @@ def api_library_crossing():
             str(data.get("start_path") or ""), int(data.get("start_offset") or 0),
             str(data.get("end_path") or ""), int(data.get("end_offset") or 0),
             owner_text=str(data.get("owner_text") or ""))
+    except cli.ProseTooLong:
+        raise
     except (ValueError, TypeError) as e:
         return jsonify({"error": str(e)}), 400
     return jsonify(row)
@@ -3201,6 +3220,8 @@ def api_media_crossing():
             str(data.get("transcript_id") or ""),
             data.get("start_i"), data.get("end_i"),
             owner_text=str(data.get("owner_text") or ""))
+    except cli.ProseTooLong:
+        raise
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify(row)
@@ -3233,7 +3254,9 @@ def api_media_rule():
             str(data.get("bearing") or ""),
             (str(data.get("mode")) if data.get("mode") else None),
             origin=str(data.get("origin") or "owner"),
-            reason=str(data.get("reason") or "")[:500])
+            reason=str(data.get("reason") or ""))
+    except cli.ProseTooLong:
+        raise                      # refused by name, with the field — the handler answers
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify(row)
@@ -3255,8 +3278,10 @@ def api_library_support_rule():
             (str(data.get("mode")) if data.get("mode") else None),
             origin=str(data.get("origin") or "owner"),
             basis=[str(b)[:20] for b in (basis or [])][:8] or None,
-            reason=str(data.get("reason") or "")[:500],
+            reason=str(data.get("reason") or ""),
             proposal_trace_id=str(data.get("proposal_trace_id") or "")[:60])
+    except cli.ProseTooLong:
+        raise
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     return jsonify(row)
@@ -3401,17 +3426,25 @@ def api_create_job():
         original = data.get("original") or {}
         if not original.get("title") or not original.get("definition"):
             return jsonify({"error": "recheck requires original.title and original.definition"}), 400
-        original = {k: str(original.get(k, ""))[:1500] for k in
-                    ("title", "definition", "central_contradiction", "axiom",
-                     "plain_gloss", "concept_id")}
+        # whole or refused, by name — the [:1500] that was here is the cut
+        # report 77 wrongly said this branch did not have (2026-09-14)
+        original = {"title": str(original.get("title", ""))[:200],
+                    "definition": cli.take_prose(original.get("definition"), "definition"),
+                    "central_contradiction": cli.take_prose(original.get("central_contradiction"), "central_contradiction"),
+                    "axiom": cli.take_prose(original.get("axiom"), "axiom"),
+                    "plain_gloss": cli.take_prose(original.get("plain_gloss"), "plain_gloss"),
+                    "concept_id": str(original.get("concept_id", ""))[:64]}
         input_text = f"recheck: {original['title']}"
     elif mode == "archetype":
         original = data.get("original") or {}
         if not original.get("title") or not original.get("definition"):
             return jsonify({"error": "archetype requires original.title and original.definition"}), 400
-        original = {k: str(original.get(k, ""))[:1500] for k in
-                    ("title", "definition", "central_contradiction", "axiom",
-                     "plain_gloss", "concept_id")}
+        original = {"title": str(original.get("title", ""))[:200],
+                    "definition": cli.take_prose(original.get("definition"), "definition"),
+                    "central_contradiction": cli.take_prose(original.get("central_contradiction"), "central_contradiction"),
+                    "axiom": cli.take_prose(original.get("axiom"), "axiom"),
+                    "plain_gloss": cli.take_prose(original.get("plain_gloss"), "plain_gloss"),
+                    "concept_id": str(original.get("concept_id", ""))[:64]}
         input_text = f"archetype: {original['title']}"
     elif mode == "verify":
         c = data.get("candidate") or {}
@@ -3419,13 +3452,16 @@ def api_create_job():
             return jsonify({"error": "verify requires candidate.title and candidate.definition"}), 400
         verify_candidate = {
             "title": str(c.get("title", ""))[:200],
-            "definition": str(c.get("definition", ""))[:1200],
-            "central_contradiction": str(c.get("central_contradiction", ""))[:800],
-            "axiom": str(c.get("axiom", ""))[:400],
+            # the thing being verified, whole: a cut candidate is a different claim
+            "definition": cli.take_prose(c.get("definition"), "definition"),
+            "central_contradiction": cli.take_prose(c.get("central_contradiction"), "central_contradiction"),
+            "axiom": cli.take_prose(c.get("axiom"), "axiom"),
             "verdict": str(c.get("verdict", ""))[:20],
-            "hostile_read": str(c.get("hostile_read", ""))[:1200],
-            "redundancy_note": str(c.get("redundancy_note", ""))[:1200],
-            "source_fidelity_note": str(c.get("source_fidelity_note", ""))[:1200],
+            # Critique's own claims are what verify checks; cutting one would
+            # check a different claim than the one on the card
+            "hostile_read": cli.take_prose(c.get("hostile_read"), "hostile_read"),
+            "redundancy_note": cli.take_prose(c.get("redundancy_note"), "redundancy_note"),
+            "source_fidelity_note": cli.take_prose(c.get("source_fidelity_note"), "source_fidelity_note"),
             "anchor": str(c.get("anchor", ""))[:400],
             "background": str(c.get("background", ""))[:1200],
         }
@@ -3699,9 +3735,10 @@ def api_definition():
     leaving the owner to assume the checks still apply."""
     d = request.get_json(force=True) or {}
     title = str(d.get("title") or "").strip()[:200]
-    definition = str(d.get("definition") or "").strip()[:1500]
-    reason = str(d.get("reason") or "").strip()[:400]
-    if not title or not definition:
+    # as written — the store keeps it whole; only the emptiness test strips
+    definition = cli.take_prose(d.get("definition"), "definition")
+    reason = cli.take_prose(d.get("reason"), "reason")
+    if not title or not definition.strip():
         return jsonify({"error": "a word and a definition are required"}), 400
     out = cli.persist_definition_edit(title, definition, reason)
     if not out.get("changed"):
@@ -3743,10 +3780,10 @@ def api_bench_open():
     pieces around on a table."""
     data = request.get_json(force=True) or {}
     title = str(data.get("title") or "").strip()[:200]
-    definition = str(data.get("definition") or "").strip()[:1500]
+    definition = cli.take_prose(data.get("definition"), "definition")
     if not title:
         return jsonify({"error": "title is required"}), 400
-    if not definition:
+    if not definition.strip():
         # The six oldest Library entries are titles with nothing attached.
         # Say that, rather than letting the Bench invent a meaning to
         # break into parts.
@@ -3876,10 +3913,10 @@ def api_bench_keep():
     d = request.get_json(force=True) or {}
     parent = str(d.get("parent_title") or "").strip()[:200]
     word = str(d.get("word") or "").strip()[:80]
-    definition = str(d.get("definition") or "").strip()[:1500]
+    definition = cli.take_prose(d.get("definition"), "definition")
     if not word:
         return jsonify({"error": "which coin?"}), 400
-    if not definition:
+    if not definition.strip():
         return jsonify({"error": "This coin needs a definition in your words before it can be kept. "
                                  "The parent's definition is not offered, because the contract "
                                  "report above says which parts this build dropped — writing that "
@@ -4045,7 +4082,7 @@ def api_bench_library():
 def api_bench_build():
     data = request.get_json(force=True) or {}
     title = str(data.get("title") or "").strip()[:200]
-    definition = str(data.get("definition") or "").strip()[:1500]
+    definition = cli.take_prose(data.get("definition"), "definition")
     method = str(data.get("method") or "").strip()[:60] or "let Wordicon choose"
     materials = [str(m).strip()[:40] for m in (data.get("materials") or [])
                  if str(m).strip()][:cli.MAX_MATERIALS]
@@ -4110,7 +4147,7 @@ def api_bench_concept():
     sometimes never."""
     data = request.get_json(force=True) or {}
     title = str(data.get("title") or "").strip()[:200]
-    definition = str(data.get("definition") or "").strip()[:1500]
+    definition = cli.take_prose(data.get("definition"), "definition")
     ingredients = []
     for pn in (data.get("ingredients") or [])[:8]:
         if not isinstance(pn, dict) or not (pn.get("key") or "").strip():
@@ -4181,7 +4218,7 @@ def api_bench_correct():
     return jsonify(cli.record_bench_correction(
         str(d.get("title") or "")[:200], str(d.get("word") or "")[:80],
         str(d.get("part_key") or "")[:40], str(d.get("part_name") or "")[:80],
-        str(d.get("model_said") or "")[:20], owner, str(d.get("note") or "")[:600]))
+        str(d.get("model_said") or "")[:20], owner, cli.take_prose(d.get("note"), "note")))
 
 
 @app.route("/api/bench/corrections")

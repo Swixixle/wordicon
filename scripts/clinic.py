@@ -654,5 +654,5 @@ def rule_disagreement(proposal_id: str, ruling: str, note: str = "") -> dict:
         "proposal_id": proposal_id,
         "passage_a": p["passage_a"], "passage_b": p["passage_b"],
         "point": p.get("model_says", {}).get("point", ""),
-        "ruling": ruling, "note": (note or "")[:400],
+        "ruling": ruling, "note": cli.take_prose(note, "note"),
         "ruled_by": "owner", "at": cli._now()})

@@ -3506,6 +3506,268 @@ def _check_gloss_shown_and_kept(server, paired):
     return out
 
 
+def _check_no_silent_cut(server, paired):
+    """Owner prose is taken whole or refused by name — never cut — everywhere
+    (his ruling, 2026-09-14). Report 77 said recheck and archetype passed
+    their originals through unsliced; both cut at 1,500, as did the
+    definition record and four Bench routes, verify at 1,200, and owner
+    notes at 200–1,000. Each route family: a marker set beyond the OLD
+    cutoff reaches the job, the prompt or the record whole, and a value
+    over the one limit is refused with the field, the count and the limit
+    before a job, a record or a call exists. Then the inventory itself is
+    pinned: every remaining slice on a prose field in the two files is a
+    named label or preview, and anything else fails by line."""
+    out = []
+    import json as _json
+    MARK = "⟨END-MARK⟩"
+    LIMIT = cli.PROSE_MAX
+    def _long(n, mark=MARK):
+        # n code points in total, the marker at the very end, a line break
+        # and leading spaces so "as written" is tested and not only "as long"
+        body = "  x\n" + ("y" * (n - len(mark) - 5)) + "\n"
+        return body + mark
+    def _refused(rr, field, where):
+        b = rr.get_json() or {}
+        if rr.status_code != 400 or b.get("field") != field or b.get("limit") != LIMIT or not isinstance(b.get("count"), int):
+            out.append(f"CUT {where}: over the limit was not refused by name ({rr.status_code}): {b}")
+        elif "nothing was cut" not in b.get("error", "") and "shorten" not in b.get("error", ""):
+            out.append(f"CUT {where}: the refusal does not say what to do: {b.get('error')!r}")
+
+    with _isolated_store("no_silent_cut"):
+        c = paired(server.app.test_client())
+        real_gw = server.server_gateway
+        real_thread = server.threading.Thread
+        captured = []
+
+        class _Cap(cli.MockGateway):
+            def complete(self, prompt, **k):
+                captured.append(prompt)
+                return super().complete(prompt)
+            def complete_with_search(self, prompt, **k):
+                captured.append(prompt)
+                return super().complete_with_search(prompt, **k)
+        server.server_gateway = lambda: _Cap()
+
+        class _NoThread:
+            def __init__(self, *a, **k):
+                pass
+            def start(self):
+                pass
+        server.threading.Thread = _NoThread
+        try:
+            # ---- /api/jobs: recheck, archetype (the two the report got wrong), verify
+            for mode, key, old in (("recheck", "original", 1500), ("archetype", "original", 1500), ("verify", "verify_candidate", 1200)):
+                d = _long(old + 107)
+                body = {"mode": mode}
+                if mode == "verify":
+                    body["candidate"] = {"title": "T", "definition": d, "hostile_read": _long(1301)}
+                else:
+                    body["original"] = {"title": "T", "definition": d, "plain_gloss": _long(1601), "concept_id": "c1"}
+                n0 = len(server.JOBS)
+                rr = c.post("/api/jobs", json=body)
+                if rr.status_code != 200:
+                    out.append(f"CUT {mode}: a definition past the old cutoff was refused ({rr.status_code}): {rr.get_data(as_text=True)[:100]}")
+                    continue
+                q = server.JOBS[rr.get_json()["job_id"]][key]
+                if q.get("definition") != d:
+                    out.append(f"CUT {mode}: the queued definition is not what was sent ({len(q.get('definition', ''))} of {len(d)})")
+                if mode != "verify" and not q.get("plain_gloss", "").endswith(MARK):
+                    out.append(f"CUT {mode}: the queued gloss was cut")
+                if mode == "verify" and not q.get("hostile_read", "").endswith(MARK):
+                    out.append("CUT verify: the claim being verified was cut")
+                over = dict(body)
+                if mode == "verify":
+                    over["candidate"] = {"title": "T", "definition": _long(LIMIT + 1)}
+                else:
+                    over["original"] = {"title": "T", "definition": _long(LIMIT + 1)}
+                n1 = len(server.JOBS)
+                _refused(c.post("/api/jobs", json=over), "definition", mode)
+                if len(server.JOBS) != n1:
+                    out.append(f"CUT {mode}: a job exists for a refused definition")
+
+            # ---- the definition record
+            cli.ACCEPTED_CONCEPTS_PATH.write_text(_json.dumps([{"name": "Halyard Stasis", "definition": "old", "concept_id": "c_hs"}]))
+            d = _long(1607)
+            reason = _long(1001, "⟨REASON-MARK⟩")
+            rr = c.post("/api/definition", json={"title": "Halyard Stasis", "definition": d, "reason": reason})
+            if rr.status_code != 200 or not (rr.get_json() or {}).get("changed"):
+                out.append(f"CUT definition: a 1,607-character definition was not kept ({rr.status_code}): {rr.get_data(as_text=True)[:120]}")
+            else:
+                rows = _json.loads(cli.ACCEPTED_CONCEPTS_PATH.read_text())
+                row = next((r for r in rows if r.get("name") == "Halyard Stasis"), {})
+                if row.get("definition") != d:
+                    out.append(f"CUT definition: the shelf holds {len(row.get('definition', ''))} of {len(d)} — not as written")
+                hist = (row.get("definition_history") or [])
+                if not hist or hist[-1].get("reason") != reason:
+                    out.append("CUT definition: the reason for the edit was cut or lost")
+            before = cli.ACCEPTED_CONCEPTS_PATH.read_text()
+            _refused(c.post("/api/definition", json={"title": "Halyard Stasis", "definition": _long(LIMIT + 1)}), "definition", "definition")
+            _refused(c.post("/api/definition", json={"title": "Halyard Stasis", "definition": "fine", "reason": _long(LIMIT + 1)}), "reason", "definition reason")
+            if cli.ACCEPTED_CONCEPTS_PATH.read_text() != before:
+                out.append("CUT definition: a refused edit still changed the shelf")
+
+            # ---- the Bench: what the model is shown is the definition, whole.
+            # Open is the door every Bench lane passes through; build and
+            # concept need a confirmed contract before they run, so for them
+            # the proof is the refusal alone — by name, before any call.
+            captured.clear()
+            d = _long(1607)
+            rr = c.post("/api/bench/open", json={"title": "Halyard Stasis", "definition": d})
+            if rr.status_code != 200:
+                out.append(f"CUT /api/bench/open: a 1,607-character definition was refused ({rr.status_code}): {rr.get_data(as_text=True)[:100]}")
+            elif not any(MARK in pr for pr in captured):
+                out.append(f"CUT /api/bench/open: the model was not shown the whole definition ({len(captured)} prompt(s))")
+            for route in ("/api/bench/open", "/api/bench/build", "/api/bench/concept"):
+                captured.clear()
+                _refused(c.post(route, json={"title": "Halyard Stasis", "definition": _long(LIMIT + 1)}), "definition", route)
+                if captured:
+                    out.append(f"CUT {route}: a call was made for a refused definition")
+            _refused(c.post("/api/bench/keep", json={"parent_title": "Halyard Stasis", "word": "w", "definition": _long(LIMIT + 1)}), "definition", "/api/bench/keep")
+
+            # ---- owner notes: encounter switch, epoch, bench correction, recovery ruling, clinic ruling
+            note = _long(1001, "⟨NOTE-MARK⟩")
+            rr = c.post("/api/encounter/switch", json={"on": True, "note": note})
+            last = None
+            if cli.ENCOUNTER_SWITCH_LOG.exists():
+                rows = [_json.loads(l) for l in cli.ENCOUNTER_SWITCH_LOG.read_text(encoding="utf-8").splitlines() if l.strip()]
+                last = rows[-1] if rows else None
+            if rr.status_code != 200 or not last or last.get("note") != note:
+                out.append(f"CUT encounter: the note was cut or lost ({rr.status_code}): {(last or {}).get('note', '')[-40:]!r}")
+            _refused(c.post("/api/encounter/switch", json={"on": False, "note": _long(LIMIT + 1)}), "note", "encounter")
+            (cli.LOCAL_STATE / "epochs.jsonl").unlink(missing_ok=True)
+            rr = c.post("/api/epoch/begin", json={"epoch": "ordinary_use", "note": note})
+            if rr.status_code != 200 or ((rr.get_json() or {}).get("declared") or {}).get("note") != note:
+                out.append(f"CUT epoch: the note was cut or lost ({rr.status_code}): {rr.get_data(as_text=True)[:100]}")
+            _refused(c.post("/api/epoch/begin", json={"epoch": "development_and_calibration", "note": _long(LIMIT + 1)}), "note", "epoch")
+            rr = c.post("/api/bench/correct", json={"title": "Halyard Stasis", "word": "w", "part_key": "k", "part_name": "n",
+                                                    "model_said": "kept", "owner_says": "lost", "note": note})
+            if rr.status_code != 200 or (rr.get_json() or {}).get("note") != note:
+                out.append(f"CUT bench correction: the note was cut or lost ({rr.status_code}): {rr.get_data(as_text=True)[:100]}")
+            _refused(c.post("/api/bench/correct", json={"title": "T", "word": "w", "part_key": "k", "part_name": "n",
+                                                        "model_said": "kept", "owner_says": "lost", "note": _long(LIMIT + 1)}), "note", "bench correction")
+            # recovery: a queued title-only acceptance, ruled with a 2,107-character definition
+            cli.RECEIPTS_DIR.mkdir(parents=True, exist_ok=True)
+            with open(cli.JUDGMENTS_LOG, "a") as jf:
+                jf.write(_json.dumps({"id": "jdg_cut_rec", "object_type": "judgment", "decision": "accepted", "candidate_text": "Quiet Tariff Cut",
+                                      "originating_operation": "trace_cut_rec", "decision_source": "owner", "confidence": 1.0,
+                                      "review_status": "unreviewed", "scope": "local_to_concept"}) + "\n")
+            (cli.RECEIPTS_DIR / "receipt_trace_cut_rec.json").write_text(_json.dumps({
+                "trace_id": "trace_cut_rec", "receipt_id": "rcpt_trace_cut_rec", "operation": "forge", "created_at": "2026-08-24T10:00:00+00:00",
+                "candidates": [{"title": "Quiet Tariff Cut"}], "sources": [], "rejections": [], "engine_version": "cli-0.2.0",
+                "kernel_version": 1, "model_calls": [], "input_hash": "h"}))
+            (cli.LOCAL_STATE / "recovery_review_queue.jsonl").write_text(_json.dumps({
+                "title": "Quiet Tariff Cut", "trace": "trace_cut_rec", "judgment_id": "jdg_cut_rec", "status": "needs_owner_ruling",
+                "note": "accepted; no lexicon entry", "queued_at": "2026-09-01T00:00:00Z"}) + "\n")
+            d = _long(2107)
+            _refused(c.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cut_rec", "decision": "accept",
+                                                         "definition": _long(LIMIT + 1)}), "definition", "recovery")
+            rr = c.post("/api/recovery/rule", json={"queue_judgment_id": "jdg_cut_rec", "decision": "accept", "definition": d, "note": note})
+            if rr.status_code != 200:
+                out.append(f"CUT recovery: a 2,107-character definition was refused ({rr.status_code}): {rr.get_data(as_text=True)[:120]}")
+            else:
+                rows = _json.loads(cli.ACCEPTED_CONCEPTS_PATH.read_text()) if cli.ACCEPTED_CONCEPTS_PATH.exists() else []
+                row = next((r for r in rows if (r.get("name") or "") == "Quiet Tariff Cut"), {})
+                if row.get("definition") != d:
+                    out.append(f"CUT recovery: the shelf holds {len(row.get('definition', ''))} of {len(d)} — the ruling's definition was cut")
+            # clinic: a seeded disagreement proposal, ruled with a long note
+            import clinic as _clinic
+            _clinic.clinic_dir().mkdir(parents=True, exist_ok=True)
+            (_clinic.clinic_dir() / "proposals.jsonl").write_text(_json.dumps({
+                "proposal_id": "prop_cut", "kind": "disagreement", "passage_a": "pa", "passage_b": "pb",
+                "model_says": {"point": "they differ"}}) + "\n")
+            rr = c.post("/api/clinic/disagree/rule", json={"proposal_id": "prop_cut", "ruling": "accepted", "note": note})
+            if rr.status_code != 200 or (rr.get_json() or {}).get("note") != note:
+                out.append(f"CUT clinic: the ruling's note was cut or lost ({rr.status_code}): {rr.get_data(as_text=True)[:100]}")
+            _refused(c.post("/api/clinic/disagree/rule", json={"proposal_id": "prop_cut", "ruling": "accepted", "note": _long(LIMIT + 1)}), "note", "clinic")
+
+            # ---- the Library: his own wording on a span, whole
+            import library as _lib
+            ing = _lib.ingest(b"Readiness screening precedes every liberation attempt. A trial follows the screen.",
+                              "cut.txt", source="unit", title="Cut Notes")
+            ot = _long(2107, "⟨OWNER-MARK⟩")
+            rr = c.post("/api/library/crossing", json={"kind": "claim", "representation_id": ing["representation_id"],
+                                                       "start_path": "0.0.0", "start_offset": 0, "end_path": "0.0.0",
+                                                       "end_offset": 9, "owner_text": ot})
+            if rr.status_code != 200:
+                out.append(f"CUT crossing: a 2,107-character claim was refused ({rr.status_code}): {rr.get_data(as_text=True)[:120]}")
+            else:
+                got = rr.get_json() or {}
+                held = (got.get("crossing") or got).get("owner_text")
+                if held != ot:
+                    out.append(f"CUT crossing: the claim holds {len(held or '')} of {len(ot)} — cut or trimmed: keys {sorted(got)[:8]}")
+            _refused(c.post("/api/library/crossing", json={"kind": "claim", "representation_id": ing["representation_id"],
+                                                            "start_path": "0.0.0", "start_offset": 0, "end_path": "0.0.0",
+                                                            "end_offset": 9, "owner_text": _long(LIMIT + 1)}), "owner_text", "crossing")
+
+            # ---- CLI writers with no route of their own in this check
+            r = cli.record_warp_note("warp_cut", note)
+            if (r.get("note") or {}).get("note") != note:
+                out.append("CUT warp note: cut or trimmed")
+            try:
+                cli.record_warp_note("warp_cut", _long(LIMIT + 1))
+                out.append("CUT warp note: over the limit was accepted")
+            except cli.ProseTooLong as e:
+                if e.field != "note":
+                    out.append(f"CUT warp note: refused under the wrong name {e.field}")
+        finally:
+            server.server_gateway = real_gw
+            server.threading.Thread = real_thread
+
+    # ---- THE INVENTORY, PINNED. Every remaining slice on a prose field in the
+    # two files must be one of these named labels, previews or machine
+    # fields. A new one fails by line; a vanished one fails too, so the list
+    # cannot rot.
+    import re as _re
+    root = Path(cli.__file__).parent.parent
+    ALLOWED = {
+        "server.py": [
+            'f"related words: {original[\'definition\'][:120]}"',        # a run's label; the meaning goes whole
+            '"meaning": (src.get("definition") or "")[:200]',               # saved-comparison list preview
+            '"definition": (e.get("definition") or "")[:200]',              # Home's legacy bridge preview
+            '"reason": (j.get("reason") or "")[:160]',                      # Home's preview of a ruling's reason
+            '"definition": (entry.get("definition") or "")[:200]',          # Home's concept preview
+            '"label": (c.get("owner_text") or "")[:140]',                   # a claim's label, said so, ×2
+            '"definition": (d.get("definition") or "")[:200]',              # Library list preview
+        ],
+        "scripts/wordicon_cli.py": [
+            '"reason": (j.get("reason") or "")[:400]',                      # a legacy model-authored decision's reason, projected
+            'f"   concept: {(a.get(\'definition\') or \'\')[:220]}\\n"',   # prior attempts in a prompt — model prose
+            '"intended_passage": str(src.get("passage") or "")[:300]',      # a bookmark's preview; the run record holds the passage
+            '.get("definition") or "")[:90]})',                             # synth's neighbour preview
+            'frozen_flesh["definition"]).encode()).hexdigest()[:12]',       # a hash, not a text
+            'input_text = f"recheck of \'{title}\': {definition[:160]}"',      # a run's label
+            '"note": str(r.get("note") or "").strip()[:400],',              # settle_etymon: the reviewer's note — model prose
+            '{(c.get(\'definition\') or \'\')[:120]}',                    # neighbours in the archetype prompt — model prose
+            'label_meaning = " ".join((meaning or "").split())[:160]',      # a run's label; the meaning goes whole
+            'input_text = f"related words for the passage: {passage_text.strip()[:160]}"',   # a run's label
+            '"note": recorded["note"][:600]',                               # normalize_construction: a recorded (model) note
+            '"note": str(c.get("note") or "").strip()[:240]}',              # verify's own output
+            '"note": str(b.get("note") or "").strip()[:400],',              # a build's own note — model prose
+        ],
+        "scripts/library.py": [],
+        "scripts/clinic.py": [],
+        "scripts/recovery.py": [],
+    }
+    # the field word must belong to the sliced expression itself — not merely
+    # sit somewhere on the same line
+    pat = _re.compile(r"(definition|plain_gloss|\bnote\b|passage|owner_text|\bmeaning\b|\breason\b)[^,={}\n]{0,60}\[:\d+\]")
+    for rel, allowed in ALLOWED.items():
+        text = (root / rel).read_text(encoding="utf-8")
+        seen = {a: False for a in allowed}
+        for n, line in enumerate(text.split("\n"), 1):
+            if line.strip().startswith("#") or not pat.search(line):
+                continue
+            hit = next((a for a in allowed if a in line), None)
+            if hit is None:
+                out.append(f"CUT inventory: {rel}:{n} slices a prose field and is not a named label: {line.strip()[:110]}")
+            else:
+                seen[hit] = True
+        for a, ok_ in seen.items():
+            if not ok_:
+                out.append(f"CUT inventory: the allowed label {a[:60]!r} is gone from {rel} — the list is stale")
+    return out
+
+
 def _check_meaning_kept_whole(server, paired):
     """His meaning reaches the model and the record as he wrote it
     (his ruling, 2026-09-14): "silently changing your meaning isn't
@@ -5042,6 +5304,7 @@ def main() -> int:
     failures.extend(_check_word_sources_evidence(server, _paired))
     failures.extend(_check_narrowing_history(server, _paired))
     failures.extend(_check_gloss_shown_and_kept(server, _paired))
+    failures.extend(_check_no_silent_cut(server, _paired))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
     # simulate: identify_concepts tolerates absent key
@@ -13353,7 +13616,9 @@ console.log(out.join('\\n'));
     # a coin with no definition would be a title with nothing attached — the
     # six oldest entries in this lexicon are exactly that and the Bench
     # cannot open them at all
-    if "if not definition:" not in _keep:
+    # (2026-09-14: the definition is taken as written and only the emptiness
+    # test strips, so the guard reads `not definition.strip()`)
+    if "if not definition.strip():" not in _keep and "if not definition:" not in _keep:
         failures.append("a coin can be kept with no definition, minting an unopenable entry")
     # and copying the parent's definition would assert a meaning the
     # contract report on the same screen just denied
@@ -16660,7 +16925,11 @@ console.log(out.join('\\n'));
     if _srv94.count('"concept_id": str(original.get("concept_id") or "")[:64]') < 2:
         _f94("the sprout/refract routes stopped sanitizing the lane "
              "concept id")
-    if '"plain_gloss", "concept_id")}' not in _srv94:
+    # (2026-09-14: the whitelist comprehension became an explicit dict so the
+    # prose fields could be taken whole; the id is still sanitized by name)
+    _a94 = _srv94.find('"archetype requires original.title')
+    _arch94 = _srv94[_a94:_srv94.find('elif mode == "verify":', _a94)]
+    if '"concept_id": str(original.get("concept_id", ""))[:64]' not in _arch94:
         _f94("the archetype route whitelist dropped concept_id")
     _over94 = (Path(cli.__file__).parent.parent / "webapp"
                / "overworld.html").read_text()

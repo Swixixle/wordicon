@@ -219,10 +219,13 @@ def rule(queue_judgment_id: str, decision: str, definition: str = "", new_title:
         raise ValueError("that case is already unresolved — reopen it with Accept, Revise or Reject, or leave it")
     title = row.get("title") or ""
     trace = row.get("trace") or ""
-    definition = (definition or "").strip()
+    # the owner's definition and note, as written: whole, never cut, and
+    # not trimmed at the ends either — a stripped copy answers only the
+    # emptiness question (2026-09-14)
+    definition = cli.take_prose(definition, "definition")
     new_title = (new_title or "").strip()
-    note = (note or "").strip()
-    if decision in ("accept", "revise") and not definition:
+    note = cli.take_prose(note, "note")
+    if decision in ("accept", "revise") and not definition.strip():
         raise ValueError("Accept and Revise need a definition from you — none survives, and none is invented")
     if decision == "revise" and new_title == title:
         new_title = ""

@@ -1,5 +1,65 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.35.3 — Owner prose is taken whole or refused by name — everywhere
+
+Report 77 said that inside `/api/jobs` "sprout, recheck and archetype pass
+their `original` through unsliced". Recheck and archetype both cut the
+definition and the plain gloss at 1,500. The independent review reproduced
+both; so did this build, against the real routes with the runner replaced by
+a no-op. The report was wrong, and it was wrong in the paragraph whose whole
+purpose was to inventory where the limit still lives.
+
+The rule is application-wide now (his ruling, 14 September 2026): a
+definition, meaning, gloss, note, reason or passage he writes is taken whole
+or refused before a job, a record or a model call exists — by name, with the
+actual count and the one limit (`PROSE_MAX`, 4,000 code points, the unit the
+page counts) — and left where he typed it. One helper, `take_prose`, raises
+`ProseTooLong` inside the writers themselves, and one Flask handler turns
+that into a 400 carrying `field`, `count` and `limit`, so no route can forget
+to check and every route answers the same way. Only an emptiness test may
+strip; the value keeps its ends and its line breaks.
+
+**Before → after**, every site that sliced owner prose:
+
+| where | was | now |
+|---|---|---|
+| `/api/jobs` recheck — definition, contradiction, axiom, gloss | `[:1500]` | whole or refused |
+| `/api/jobs` archetype — the same four | `[:1500]` | whole or refused |
+| `/api/jobs` verify — candidate definition / contradiction / axiom; Critique's three claims | `[:1200]` / `[:800]` / `[:400]`; `[:1200]` | whole or refused |
+| `/api/definition` — definition, reason | `.strip()[:1500]`, `[:400]` | whole or refused |
+| `/api/bench/open`, `/build`, `/concept`, `/keep` — definition | `.strip()[:1500]` | whole or refused |
+| `/api/bench/correct` — note | `[:600]` | whole or refused |
+| `/api/recovery/rule` — definition, note | `[:2000]` then `.strip()`, `[:1000]` then `.strip()` | whole or refused |
+| `/api/clinic/disagree/rule` — note | `[:400]` (route and writer) | whole or refused |
+| `/api/encounter/switch`, `/api/epoch/begin` — note | `[:200]`, `[:400]` (route and writer) | whole or refused |
+| `/api/library/rule`, `/api/media/rule` — reason | `[:500]` (route and writer) | whole or refused |
+| `/api/library/crossing`, `/api/media/crossing` — owner_text | `.strip()[:2000]` | whole or refused |
+| Map: the two definitions the road-suggester is shown | `[:400]` | whole |
+| CLI writers: definition baseline, definition event, open-question status, warp note, definition-edit reason, bench correction, road declaration — note | `[:200]`–`[:600]` | whole or refused |
+
+What still shortens, and why each is allowed: a run's `input_text` label
+(`related words: …[:120]`, `recheck of …[:160]`), the Home, Library, inflight
+and saved-comparison list previews (`[:200]`, `[:160]`), a claim's label
+(`[:140]`, and the code says "label"), a bookmark's `intended_passage`
+preview (`[:300]`; the run record holds the passage), a definition hash
+(`[:12]`), and model-authored prose handed back into a prompt — prior
+attempts, neighbours, Critique's notes, a build's own note, an etymon
+reviewer's note. Each is a label, a preview, a machine field or the model's
+own words; none is ever model input standing in for his text. The suite pins
+that list by line: a new slice on a prose field fails, and a vanished entry
+fails too.
+
+Titles keep their 200-character cap and are recorded as handles, not prose;
+that is a decision he can overrule.
+
+Every route family is probed: a marker set past the old cutoff reaches the
+queued job, the prompt the model is shown, or the record — recheck,
+archetype, verify, the definition record, the Bench, the encounter switch,
+the epoch, a Bench correction, a recovery ruling, a Clinic ruling, a Library
+crossing, a warp note — and a value over the limit is refused by name with
+nothing written and no call made. Restoring recheck's cut fails four named
+checks.
+
 ## v1.35.2 — The plain gloss is shown, correctable, and safe across errors
 
 The review's third finding. The comparison panel showed and validated one

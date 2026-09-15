@@ -903,13 +903,49 @@ def current_epoch() -> str:
     return (rows[-1].get("epoch") if rows else "") or EPOCH_UNDECLARED
 
 
+# ---------------------------------------------------------------------------
+# OWNER PROSE IS TAKEN WHOLE OR REFUSED BY NAME — NEVER CUT (his ruling,
+# 2026-09-14, application-wide). Definitions, meanings, glosses, notes and
+# passages he writes used to meet a slice on their way into a record, a job
+# or a prompt: [:1500] on a definition at five routes, [:1200] at verify,
+# [:200]..[:1000] on notes — each silent, each changing what was kept or what
+# a model was shown without a word. One limit now, in one unit (code points,
+# the unit the page counts), and over it the write is refused before a job,
+# a record or a call exists, naming the field, the count and the limit, and
+# leaving the text where he typed it. A shortened DISPLAY label (a run's
+# input_text, a list preview) is still allowed, because the whole text
+# exists separately and the label is never model input.
+PROSE_MAX = 4000
+
+
+class ProseTooLong(ValueError):
+    """Refused, not cut. Carries the field, the actual count and the limit
+    so a route can say all three and a page can point at the right box."""
+    def __init__(self, field: str, count: int, limit: int):
+        self.field, self.count, self.limit = field, count, limit
+        shown = field.replace("_", " ")
+        super().__init__(f"the {shown} is {count} characters and the most this will take is "
+                         f"{limit} — shorten the {shown}; nothing was cut and nothing was written")
+
+
+def take_prose(value, field: str, limit: "int | None" = None) -> str:
+    """Return the owner's prose exactly as given, or raise ProseTooLong.
+    Only an emptiness test may strip; the value itself keeps its ends and
+    its line breaks."""
+    s = str(value or "")
+    cap = limit or PROSE_MAX
+    if len(s) > cap:
+        raise ProseTooLong(field, len(s), cap)
+    return s
+
+
 def declare_epoch(epoch: str, declared_by: str = "owner", note: str = "",
                   first_record_at: str = "") -> dict:
     """Append a declaration. The previous row is not touched: the record
     shows when each epoch began and who said so."""
     LOCAL_STATE.mkdir(exist_ok=True)
     row = {"object_type": "epoch", "epoch": epoch, "declared_at": _now(),
-           "declared_by": declared_by, "note": note}
+           "declared_by": declared_by, "note": take_prose(note, "note")}
     if first_record_at:
         row["first_record_at"] = first_record_at
     with epochs_path().open("a", encoding="utf-8") as f:
@@ -986,7 +1022,7 @@ def write_definition_baseline(note: str = "") -> dict:
     doc = {"kind": "definition_baseline.v1", "at": _now(),
            "n_entries": len(rows), "digest": _shelf_digest(rows),
            "known_events": [e.get("event_id", "") for e in load_definition_events()],
-           "note": (note or "")[:300], "epoch": current_epoch(),
+           "note": take_prose(note, "note"), "epoch": current_epoch(),
            "entries": [{"id": r.get("id", ""), "concept_id": r.get("concept_id", ""),
                         "name": r.get("name", ""), "definition": r.get("definition", "")}
                        for r in rows]}
@@ -1105,7 +1141,7 @@ def record_definition_event(kind: str, entry: dict, origin: str, judgment_id: st
            "definition": (entry.get("definition") or "") if kind == "defined" else "",
            "at": at or _now(), "origin": origin, "judgment_id": judgment_id or "",
            "supersedes": prior.get("event_id") or "", "epoch": current_epoch(),
-           "note": (note or "")[:300],
+           "note": take_prose(note, "note"),
            "entry": entry if kind == "defined" else None}
     for k, v in (extra or {}).items():
         row.setdefault(k, v)
@@ -1892,7 +1928,7 @@ def set_encounter_recording(on: bool, by: str = "owner", note: str = "") -> dict
         return {"changed": False, "on": state["on"], "reason": f"recording is already {'on' if on else 'off'}"}
     LOCAL_STATE.mkdir(exist_ok=True)
     row = {"object_type": "encounter_switch", "state": "on" if on else "off", "at": _now(),
-           "by": (by or "owner")[:40], "note": (note or "")[:200], "epoch": current_epoch()}
+           "by": (by or "owner")[:40], "note": take_prose(note, "note"), "epoch": current_epoch()}
     with ENCOUNTER_SWITCH_LOG.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
     return {"changed": True, "on": bool(on), "at": row["at"]}
@@ -2196,7 +2232,7 @@ def set_open_question_status(question_id: str, status: str, note: str = "") -> d
     if q.get("status") == status:
         return {"changed": False, "question_id": question_id, "status": status}
     row = {"object_type": "open_question_status", "question_id": question_id, "status": status,
-           "note": (note or "")[:300], "at": _now(), "epoch": current_epoch()}
+           "note": take_prose(note, "note"), "at": _now(), "epoch": current_epoch()}
     with OPEN_QUESTIONS_LOG.open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
     return {"changed": True, "question_id": question_id, "status": status, "at": row["at"]}
@@ -5770,7 +5806,7 @@ def record_warp_note(warp_id: str, note: str) -> dict:
     warp_id = (warp_id or "").strip()
     if not warp_id:
         return {"ok": False, "error": "no warp id"}
-    row = {"warp_id": warp_id, "note": (note or "").strip()[:400], "created_at": _now()}
+    row = {"warp_id": warp_id, "note": take_prose(note, "note"), "created_at": _now()}
     try:
         LOCAL_STATE.mkdir(exist_ok=True)
         with open(WARP_NOTES_LOG, "a") as f:
@@ -8645,7 +8681,7 @@ REFRACT_PASSAGE_MAX = 4000
 # refused, with both counts, before anything is spent. A stored concept
 # longer than this stays exactly as it is on the shelf; the pass takes a
 # shorter meaning given for that comparison, recorded as a narrowing.
-REFRACT_MEANING_MAX = 4000
+REFRACT_MEANING_MAX = PROSE_MAX
 
 # Which review actually ran. The comparison reviewer is the stage that is
 # shown his passage and his meaning, so it runs with NO search tool
@@ -9665,20 +9701,23 @@ def persist_definition_edit(title: str, definition: str, reason: str = "") -> di
         return {"changed": False, "why": "there is no lexicon yet"}
     rows = _load(ACCEPTED_CONCEPTS_PATH)
     want = title.strip().lower()
-    new = (definition or "").strip()
-    if not new:
+    # Taken as written — the ends and the line breaks are his. A stripped
+    # copy answers only two questions: is there a definition at all, and is
+    # it a different one from the sentence the word already carries.
+    new = take_prose(definition, "definition")
+    if not new.strip():
         return {"changed": False, "why": "a definition cannot be emptied"}
     for c in rows:
         if c.get("name", "").strip().lower() != want:
             continue
         old = (c.get("definition") or "").strip()
-        if old == new:
+        if old == new.strip():
             return {"changed": False, "why": "that is already what it says"}
         history = c.get("definition_history") or []
         if not history and old:
             history.append({"text": old, "source": "run", "at": c.get("accepted_at", ""),
                             "trace": c.get("accepted_from", "")})
-        history.append({"text": new, "source": "owner", "at": _now(), "reason": reason[:400]})
+        history.append({"text": new, "source": "owner", "at": _now(), "reason": take_prose(reason, "reason")})
         c["definition_history"] = history[-12:]
         c["definition"] = new
         c["definition_source"] = "owner"
@@ -9694,7 +9733,7 @@ def persist_definition_edit(title: str, definition: str, reason: str = "") -> di
         # could be rebuilt; on this path it was the only copy.
         try:
             record_definition_event("defined", c, origin="owner_edit",
-                                     note=(reason or "")[:300])
+                                     note=take_prose(reason, "reason"))
         except Exception:
             pass    # the record is best-effort; losing it must not lose his edit
         return {"changed": True, "was": old, "now": new,
@@ -11698,7 +11737,7 @@ def record_bench_correction(title: str, word: str, part_key: str, part_name: str
     row = {"at": _now(), "title": title, "word": word,
            "part_key": part_key, "part_name": part_name,
            "model_said": model_said, "owner_says": owner_says,
-           "note": (note or "")[:600]}
+           "note": take_prose(note, "note")}
     BENCH_CORRECTIONS.parent.mkdir(parents=True, exist_ok=True)
     with BENCH_CORRECTIONS.open("a") as f:
         f.write(json.dumps(row) + "\n")
@@ -12282,7 +12321,7 @@ def declare_road(a: dict, b: dict, verb: str, note: str,
     from (owner, or model with the proposal run's trace_id), ratified_by
     says whose ruling made it real — declaration must never erase origin."""
     verb = (verb or "").strip()[:120]
-    note = (note or "").strip()[:300]
+    note = take_prose(note, "note")
     if not verb:
         raise ValueError("a declared road needs a verb — how does A relate to B?")
     for n in (a, b):
