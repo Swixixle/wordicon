@@ -11827,6 +11827,12 @@ console.log(out.join('\\n'));
     _idx84 = (_pathlib.Path(cli.__file__).parent.parent / "webapp" / "index.html").read_text(encoding="utf-8")
     for _n84p, _w84p in (
             ('id="docs-body"', "no Documents card"),
+            # 2026-09-14: the promises live under a named disclosure with a
+            # short summary on the card's face — every one of them still here
+            ('id="docs-summary"', "the Documents card has no visible summary"),
+            ("stored intact, indexed\n    locally without a model call, and revised readings never overwrite earlier ones", "the summary does not say the three things"),
+            ('<details class="case" id="docs-promises"', "the promises are not under a disclosure"),
+            ("<summary>How documents are preserved</summary>", "the disclosure is not plainly named"),
             ("zero model calls</strong>", "the zero-model promise is unstated"),
             ("identical anchors", "determinism is unstated on the page"),
             ("never silently smoothed over", "extraction failure visibility unstated"),

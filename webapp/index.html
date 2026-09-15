@@ -1147,13 +1147,22 @@
       <span class="caret">▶</span>Documents
     </div>
     <div id="docs-body" style="display:none">
-    <p class="body muted" style="font-size:13.5px">Whole works, kept as themselves: a book, a
-    chapter, a saved news article. Bringing one in costs <strong>zero model calls</strong> — the
-    file is stored byte-intact, split deterministically into sections, paragraphs and sentences,
-    and indexed for exact search. Re-ingest the identical file under the same reader revisions and you get
-    identical anchors; that is a property the tests hold, not a hope — and a revised reader makes a
-    new immutable reading, never a rewrite. Anything the reader had to skip or could not
-    parse is written on the document's face, never silently smoothed over.</p>
+    <!-- The promises, whole, under a plainly named disclosure (his ruling,
+         2026-09-14): a short summary stays on the face of the card; the full
+         wording is a press away and is still the text the suite pins and the
+         constitution binds — a presentation change, not a removal. -->
+    <p class="body muted" id="docs-summary" style="font-size:13.5px">Documents are stored intact, indexed
+    locally without a model call, and revised readings never overwrite earlier ones.</p>
+    <details class="case" id="docs-promises" style="margin:0 0 6px">
+      <summary>How documents are preserved</summary>
+      <p class="body muted" style="font-size:13px">Whole works, kept as themselves: a book, a
+      chapter, a saved news article. Bringing one in costs <strong>zero model calls</strong> — the
+      file is stored byte-intact, split deterministically into sections, paragraphs and sentences,
+      and indexed for exact search. Re-ingest the identical file under the same reader revisions and you get
+      identical anchors; that is a property the tests hold, not a hope — and a revised reader makes a
+      new immutable reading, never a rewrite. Anything the reader had to skip or could not
+      parse is written on the document's face, never silently smoothed over.</p>
+    </details>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0">
       <input type="file" id="doc-file" accept=".epub,.html,.htm,.xhtml,.txt,.md" style="font-size:12px">
       <input class="note" id="doc-source" placeholder="where it came from (URL or note) — optional" style="margin:0;flex:1;min-width:180px">

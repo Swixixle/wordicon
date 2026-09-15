@@ -1,5 +1,19 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.35.5 — The Documents promises, under a plainly named disclosure
+
+The Library's Documents card opened with five sentences of promises — the
+longest block of prose on any main screen. Report 78 left it, arguing that
+every sentence is a promise the About panel binds to a clause, and cutting
+promises is not shortening explanation. His ruling: keep every word, move
+them. The card now says, on its face, *Documents are stored intact, indexed
+locally without a model call, and revised readings never overwrite earlier
+ones*; the complete wording sits beneath **How documents are preserved**,
+verbatim, still the text the suite pins (zero model calls, identical
+anchors, never silently smoothed over) and the constitution binds. A
+presentation change; nothing was deleted or weakened. Deleting the
+disclosure fails four named pins.
+
 ## v1.35.4 — Related words on a wide desk: two columns per section
 
 Report 78 named this and did not fix it: the result area spans every band
