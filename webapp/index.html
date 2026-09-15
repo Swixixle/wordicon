@@ -1253,7 +1253,7 @@
     <summary style="cursor:pointer;font-size:13px;color:var(--muted);font-weight:600">What is <span data-brand>Nikodemus</span>? — and proof</summary>
     <div style="margin-top:10px">
       <p class="foot" style="margin:0 0 10px"><a href="/anatomy">See the anatomy</a> — how the parts cooperate, challenge one another, stay constrained, and preserve history; dormant until you set it in motion.</p>
-      <p class="body" id="about-explanation">Nikodemus (formerly Wordicon) is a private environment for developing concepts beside your sources and your writing. It keeps your concepts, sources, and judgments separate, connected, and reviewable: nothing you ruled on is overwritten, nothing the model proposed is treated as your conclusion, and material it was forbidden to accept is refused before it is stored. It began as a word-coining tool; the forge is still inside.</p>
+      <p class="body" id="about-explanation">Nikodemus (formerly Wordicon) is a private environment for developing concepts beside your sources and your writing. It keeps your concepts, sources, and judgments separate, connected, and reviewable: nothing you ruled on is overwritten, nothing the model proposed is treated as your conclusion, and material it was forbidden to accept is refused before it is stored. It began as a word-coining tool; the forge is still inside. It is laid out as one desk — Write, Explore and Library on the left, the work in the middle at the width you have, and a panel beside the work that reads and never acts — and what you write reaches its record whole or is refused by name, never cut.</p>
       <div class="section-label">What it refuses to pretend</div>
       <p class="body muted" style="font-size:12.5px;margin:0 0 6px">Each line below is a
       <strong>verbatim excerpt</strong> of the clause it links to — not a summary of it. A
@@ -1269,6 +1269,9 @@
         <li><a class="canon-link" data-canon="what-it-is" href="/constitution#what-it-is">the critic advises and never decides</a></li>
         <li><a class="canon-link" data-canon="the-readers-three-aspects-kept-apart" href="/constitution#the-readers-three-aspects-kept-apart">The readers answer separately and stay separate: no conference, no verdict, no score, and nothing here combines them.</a></li>
         <li><a class="canon-link" data-canon="the-room-where-writing-happens" href="/constitution#the-room-where-writing-happens">Saved is an acknowledgement of the latest words, never a timer</a></li>
+        <li><a class="canon-link" data-canon="the-desk-three-zones-and-no-place-without-a-door" href="/constitution#the-desk-three-zones-and-no-place-without-a-door">The panel reads; it never acts.</a></li>
+        <li><a class="canon-link" data-canon="what-comes-back" href="/constitution#what-comes-back">A source the model names is a source named by the model, and stays so</a></li>
+        <li><a class="canon-link" data-canon="bringing-something-where-examination-starts" href="/constitution#bringing-something-where-examination-starts">Your prose is taken whole or refused by name — never cut.</a></li>
       </ul>
       <p class="body" style="margin-top:14px"><a href="/constitution"><strong>Read the full constitution</strong></a>
       — all five movements, whole, with a table of contents. That page is the law; this panel
@@ -7648,8 +7651,15 @@ function sizePlace() {
   try {
     const d = frame.contentDocument;
     if (d && d.body) {
-      const content = Math.ceil(Math.max(d.body.scrollHeight || 0,
-                                         (d.documentElement && d.documentElement.scrollHeight) || 0));
+      // The BODY's own box, never the document's scrollHeight: the latter
+      // is at least the frame's viewport, so once the frame was tall the
+      // measurement agreed with it and the frame stayed tall — two stable
+      // answers for one document, and which one you got depended on when
+      // the frame was first measured (found by measuring it three times,
+      // 2026-09-15). The body's box is the content, whatever the frame is.
+      const cs = d.defaultView ? d.defaultView.getComputedStyle(d.body) : null;
+      const mb = cs ? (parseFloat(cs.marginBottom) || 0) : 0;
+      const content = Math.ceil((d.body.offsetTop || 0) + (d.body.offsetHeight || 0) + mb);
       if (content > 0 && content < avail) h = content;
     }
   } catch (e) { /* not same-origin: it takes what is left, as it always did */ }
@@ -7660,15 +7670,27 @@ function sizePlace() {
 // A place that grows after it loads — the Bench when a word is opened —
 // must not then be cut off by the height measured a moment ago.
 let PLACE_OBS = null;
-function watchPlaceHeight() {
+function watchPlaceHeight(attempt) {
   const frame = document.getElementById('place-frame');
   if (!frame) return;
   if (PLACE_OBS) { try { PLACE_OBS.disconnect(); } catch (e) {} PLACE_OBS = null; }
   try {
     const d = frame.contentDocument;
-    if (!d || !d.body || typeof ResizeObserver === 'undefined') return;
+    if (typeof ResizeObserver === 'undefined') return;
+    // The document's body is not always there at the frame's load event —
+    // a place that builds itself from a fetch has an empty body for a
+    // moment — and an observer attached to nothing refits nothing, which
+    // left the frame at the whole window on some openings and at the
+    // document's height on others (measured, 2026-09-15). Wait for the
+    // body, then watch it and the root both.
+    if (!d || !d.body) {
+      if ((attempt || 0) < 20) setTimeout(() => watchPlaceHeight((attempt || 0) + 1), 50);
+      return;
+    }
     PLACE_OBS = new ResizeObserver(() => sizePlace());
     PLACE_OBS.observe(d.body);
+    if (d.documentElement) PLACE_OBS.observe(d.documentElement);
+    sizePlace();
   } catch (e) { /* cross-origin, or no observer: the load and resize hooks stand */ }
 }
 

@@ -1,5 +1,33 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.35.6 — The law says it, the front door shows it, and the frame measures itself once
+
+The constitution gains the sentence the last three entries enforce — *Your
+prose is taken whole or refused by name — never cut* — under *Bringing
+something*, and the What-is-Nikodemus panel excerpts it verbatim beside two
+more from this delivery: *The panel reads; it never acts* and *A source the
+model names is a source named by the model, and stays so*. The panel's
+opening paragraph now says what the desk is. The README gets a *What it
+looks like* section with five screenshots of the application running against
+the seeded fixtures — Home, writing beside a word comparison, the Library,
+the Bench inside the shell, Home on a wide desk — and its account of what is
+built and how it is tested catches up (twenty-five journeys; the two rules
+above). It stays under the front-door cap the suite holds it to.
+
+One defect found by measuring rather than looking: the embedded place frame
+had two stable heights for one document. Its content measure took the
+document's `scrollHeight`, which is never less than the frame's own
+viewport, so a frame that was tall when first measured agreed with itself
+and stayed tall — the Bench came out at 401px on some openings and at the
+whole remainder on others, invisibly, because the frame's background matches
+the page. The measure is the body's own box now, and the observer that
+refits a place that grows waits for that body to exist. Three runs of the
+screenshot harness agree at both sizes.
+
+The journey runner's named-check guard for the Related journey is updated to
+the evidence-state checks of v1.35.0, which had renamed the line it looked
+for.
+
 ## v1.35.5 — The Documents promises, under a plainly named disclosure
 
 The Library's Documents card opened with five sentences of promises — the

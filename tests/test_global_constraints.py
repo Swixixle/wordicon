@@ -18129,6 +18129,15 @@ console.log(out.join('\\n'));
         _f99("a section's cards are not wrapped in their own grid")
     if "@media" in _idx99[_idx99.find(".rw-cards {"): _idx99.find(".rw-cards {") + 400]:
         _f99("the result cards are keyed to the window, not the result area")
+    # THE EMBEDDED FRAME'S MEASURE (2026-09-15). The content height must come
+    # from the body's own box: the document's scrollHeight is at least the
+    # frame's viewport, so a frame that was once tall measured itself tall
+    # and stayed there — two stable answers for one document.
+    _sp99 = _idx99[_idx99.find("function sizePlace()"):_idx99.find("\n}\n", _idx99.find("function sizePlace()"))]
+    if "documentElement.scrollHeight" in _sp99:
+        _f99("sizePlace measures the document's scrollHeight, which agrees with whatever height the frame already has")
+    if "d.body.offsetHeight" not in _sp99:
+        _f99("sizePlace does not measure the embedded body's own box")
     # THE DISCLOSURE ARROW. A JavaScript escape inside a stylesheet is the
     # literal text u25BE, which is what he saw on the page.
     _content_decls = _re99.findall(r"content:\s*'[^']*'", _idx99)

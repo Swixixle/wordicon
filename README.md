@@ -23,6 +23,32 @@ The binding text is the constitution, served at `/constitution` when the app is
 running. It is versioned, and the test suite refuses to pass if a wing ships
 without amending it.
 
+## What it looks like
+
+One desk: a rail on the left (Write, Explore, Library, search, and every
+specialized workspace), the work in the middle at the width the window has,
+and a panel on the right that opens when there is something to keep beside the
+work.
+
+![Home at laptop width](docs/screenshots/desk-home.png)
+
+The writing room is the same blue-and-yellow notebook, at a readable paragraph
+width; a workup, a reading or a word comparison lands beside it, never in it.
+
+![Writing beside a word comparison](docs/screenshots/desk-writing-with-feedback.png)
+
+The Library lays its shelves across the desk; the Bench, like every workspace,
+opens inside the same shell, so a draft beside it keeps its caret and undo
+history.
+
+![The Library](docs/screenshots/desk-library.png)
+
+![The Bench inside the shell](docs/screenshots/desk-bench.png)
+
+![Home on a wide desk](docs/screenshots/desk-home-wide.png)
+
+Every image is the application running against synthetic fixtures.
+
 ## What is built today
 
 From [`docs/nikodemus-capability-census.md`](docs/nikodemus-capability-census.md)
@@ -34,8 +60,26 @@ without OCR; a Clinic where authorities stay separate; an Investigation Room
 that pulls from Open Case and EthicalAlt without merging them; Inquiry; a
 Bench for coinage when you want one; a Keeper with custody but no authority; an
 encrypted Vault that restores a verified past and regrows nothing; a Map of
-where the thinking has been; and Speak, which hears what you deliberately say
-to it and transcribes nothing on its own.
+where the thinking has been; Speak, which hears what you deliberately say to
+it and transcribes nothing on its own; three readers who read the text the
+room holds and answer apart; and Find related words, which takes a meaning
+you give it — or a passage you select — and returns English synonyms and
+antonyms, Latin and Ancient Greek with their periods, other languages and
+cultural comparisons, each result carrying Explore, Compare, Save and Check
+sources.
+
+Two rules held everywhere:
+
+- **What was acquired is said apart from what the model concluded.** A word
+  looked up in reference sources reports what the provider actually returned
+  first, and the model's finding second, as the model's own. A source the
+  model names stays "named by the model", and nothing in that lane wears a
+  proof-style badge.
+- **Your prose is taken whole or refused by name — never cut.** What you
+  write reaches the record, the job and the prompt exactly as written, or is
+  refused before any of those exist, with the field, the count and the limit
+  stated. What still shortens is a label or a preview, and the suite pins
+  that list by line.
 
 Boundaries worth knowing before you judge it:
 
@@ -83,9 +127,9 @@ you are arguing with, a paragraph of your own. Press Full workup for a passage w
 several ideas in it, or Run it for a single one.
 
 What comes back is a set of readings, each with its anchor in your text, a
-craft objection from the critic, and a check on whether the anchor actually
-licenses the claim. Nothing is saved until you rule. Reopen anything under
-Recent; "another round" retries briefed on what failed.
+craft objection from the critic, and a check on whether the anchor licenses
+the claim. Nothing is saved until you rule. Reopen anything under Recent;
+"another round" retries briefed on what failed.
 
 ## How its claims work
 
@@ -122,13 +166,15 @@ each named for the defect it prevents rather than the function it calls. It
 reports three outcomes: pass, fail, and **skipped**, because a check that did
 not run is not a check that passed.
 
-`bash tests/journeys/run.sh` — fifteen browser journeys in real Chromium and
-WebKit, for the things source review cannot see: rendered order, whether text
-is really text, what survives with a stylesheet removed.
+`bash tests/journeys/run.sh` — twenty-five browser journeys in real Chromium
+and WebKit (WebKit is the Safari-related requirement and is never substituted),
+for the things source review cannot see: rendered order, whether text is really
+text, what survives with a stylesheet removed, where the caret lands, what a
+page actually sends.
 
 Pins are sabotaged deliberately: break the behaviour, confirm the pin fails
 **by name** rather than by crashing. A check that cannot fail is not a check,
-and this suite has caught nine of its own that could not.
+and this suite has caught several of its own that could not.
 
 ## History and legacy names
 
