@@ -11,16 +11,22 @@
 // server's model gateway is poisoned, so the follow-up job is queued and
 // then fails at the model — which is exactly enough: the queued job row is
 // the server's record of what it received.
-const { BASE, DIR, ok, finish, launch, pairedContext } = require('./lib');
+const { BASE, DIR, ok, finish, pairedContext } = require('./lib');
+const { webkit } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 const IDS = JSON.parse(fs.readFileSync(path.join(DIR, 'related.json'), 'utf8'));
 
 (async () => {
-  const browser = await launch();
+  const browser = await webkit.launch();
   const ctx = await pairedContext(browser, { viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  // Which engine this actually is, asked of the browser rather than of the
+  // import line. The first version of this journey said WebKit in its own
+  // header and took lib's launcher, which is Chromium; the log now says.
+  ok(browser.browserType().name() === 'webkit',
+    'the narrowing is measured in WebKit, the engine the owner writes in: ' + browser.browserType().name());
   const cookieHeader = fs.readFileSync(path.join(DIR, 'cookie'), 'utf8').trim() + '=' + fs.readFileSync(path.join(DIR, 'token'), 'utf8').trim();
   const getJson = async u => { const r = await fetch(BASE + u, { headers: { Cookie: cookieHeader } }); return r.json(); };
 

@@ -1,5 +1,30 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.35.7 — The two new journeys run in the engine they said they ran in
+
+A correction to v1.35.1 and v1.35.2, which each announced "a new WebKit
+journey". `narrowing` and `gloss` said WebKit in their own headers and took
+`lib.launch()`, which is Chromium — so the plain-gloss panel, the one surface
+in this delivery whose selection, caret and retry behaviour is exactly what
+differs between engines, had been proven only where the owner does not write.
+Found on 2026-09-15 while checking the report's engine claim against the
+files rather than against the comments.
+
+Both journeys import WebKit and launch it themselves now, like `related`, and
+each asks the browser what it is and prints the answer as its first check —
+*the narrowing is measured in WebKit* / *the gloss panel is measured in
+WebKit* — so the log says, and `run.sh` requires those two lines by name.
+The suite gains `_check_journey_engines`: the eight WebKit journeys are a
+pinned list, each must import and launch WebKit itself and none may take
+lib's launcher; a journey outside the list that claims the engine in its
+header, or launches it, fails until it is listed and guarded; and
+`lib.launch()` must stay plainly Chromium, so a journey that takes it is a
+Chromium journey by construction. Three sabotages caught by name: the gloss
+journey put back on lib's launcher (the suite, two lines; and the journey's
+own log, *chromium*), and a journey outside the list claiming WebKit.
+
+Twenty-five journeys, 983 checks; eight in WebKit, seventeen in Chromium.
+
 ## v1.35.6 — The law says it, the front door shows it, and the frame measures itself once
 
 The constitution gains the sentence the last three entries enforce — *Your

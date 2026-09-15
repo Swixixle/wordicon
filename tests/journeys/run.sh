@@ -204,14 +204,16 @@ for need in "at 1440 wide each section lays its cards in two columns" "no card r
 done
 # The narrowing history (2026-09-14): named individually because the defect
 # was a FLAG dropped in a projection — the text survived, the history did
-# not — and a dropped check would hide exactly that.
-for need in "the outgoing request carries meaning_narrowed: true" "and the queued job records meaning_narrowed: true, as received" "the outgoing request carries meaning_narrowed: false" "reopening projects the recorded value, true, into what a follow-up will send"; do
+# not — and a dropped check would hide exactly that. The engine is named
+# because the first version of this journey said WebKit and ran Chromium.
+for need in "the narrowing is measured in WebKit" "the outgoing request carries meaning_narrowed: true" "and the queued job records meaning_narrowed: true, as received" "the outgoing request carries meaning_narrowed: false" "reopening projects the recorded value, true, into what a follow-up will send"; do
   grep -qF "ok   $need" "$JOURNEY_OUT/narrowing.log" || { echo "== narrowing: missing check: $need"; status=1; }
 done
 # The plain gloss (2026-09-14): named individually because each is a way the
 # gloss could quietly go wrong again — sent unshown, sent cut, dropped without
-# a press, or lost with the panel when a server error replaced it.
-for need in "the gloss has its own box and holds the whole value" "nothing is sent while the gloss is over the limit" "the request carries the shortened text once, as the meaning, and no hidden original gloss" "the request carries the meaning untouched and the gloss as shortened" "and records the gloss as narrowed for this comparison only" "the request carries the meaning and no gloss" "and records the omission as a choice" "the error is written beside the panel, and the panel is still there" "every typed field survived the error, line breaks included" "and so did the selection and the caret" "the retry sends the corrections exactly, without retyping"; do
+# a press, or lost with the panel when a server error replaced it. The
+# engine is named for the same reason as narrowing's.
+for need in "the gloss panel is measured in WebKit" "the gloss has its own box and holds the whole value" "nothing is sent while the gloss is over the limit" "the request carries the shortened text once, as the meaning, and no hidden original gloss" "the request carries the meaning untouched and the gloss as shortened" "and records the gloss as narrowed for this comparison only" "the request carries the meaning and no gloss" "and records the omission as a choice" "the error is written beside the panel, and the panel is still there" "every typed field survived the error, line breaks included" "and so did the selection and the caret" "the retry sends the corrections exactly, without retyping"; do
   grep -qF "ok   $need" "$JOURNEY_OUT/gloss.log" || { echo "== gloss: missing check: $need"; status=1; }
 done
 for need in "the room opens blue & yellow — background #0f2350, caret #ffd97d" "Aa holds Colours: the four presets, Background, Text and Reset to blue & yellow" "Paper recolours the room through custom properties" "and the draft, the selection and the scroll are exactly as they were" "a pair under 4.5:1 gets a hint that says the number and offers the reset" "Reset to blue & yellow hands the colours back to the stylesheet — no inline copy of the default" "undo after the colour changes still takes back the word typed before them" "the chosen colours are back after a reload" "the download panel says Download, with Text and Markdown, PDF, and everything" "the Text download is the body exactly — leading spaces, a tab, a blank paragraph, the trailing newline"; do

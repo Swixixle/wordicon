@@ -3506,6 +3506,60 @@ def _check_gloss_shown_and_kept(server, paired):
     return out
 
 
+def _check_journey_engines():
+    """A journey that says it runs in WebKit runs in WebKit. Found
+    2026-09-15, after report 79 was drafted: `narrowing` and `gloss` said
+    WebKit in their own headers — and the CHANGELOG and the report said so —
+    while both took lib's launcher, which is Chromium. So: every journey in
+    the pinned WebKit list imports WebKit itself and launches it; the three
+    that state their engine in the log keep doing so and run.sh keeps
+    requiring the line by name; no journey outside the list claims the
+    engine in its header or launches it; and lib's launcher stays plainly
+    Chromium, so a journey that takes it is a Chromium journey by
+    construction."""
+    out = []
+    jdir = Path(cli.__file__).parent.parent / "tests" / "journeys"
+    WEBKIT = {"deep", "moira", "notebook", "related", "resume", "room", "narrowing", "gloss"}
+    lib = (jdir / "lib.js").read_text(encoding="utf-8")
+    at = lib.find("async function launch()")
+    body = lib[at: lib.find("\n}\n", at)] if at != -1 else ""
+    if "chromium.launch(" not in body or "webkit" in body.lower():
+        out.append("ENGINE: lib.launch() is no longer plainly Chromium — every journey that takes "
+                   "it is counted here as a Chromium journey, and that count would be wrong")
+    run = (jdir / "run.sh").read_text(encoding="utf-8")
+    seen = set()
+    for f in sorted(jdir.glob("*.js")):
+        if f.name.startswith("_") or f.name == "lib.js":
+            continue
+        src = f.read_text(encoding="utf-8")
+        seen.add(f.stem)
+        head = "\n".join(src.splitlines()[:20])
+        claims = _re.search(r"\bWebKit\b", head) is not None
+        imports = "const { webkit } = require('playwright');" in src
+        launches = "webkit.launch(" in src
+        takes_lib = _re.search(r"const \{[^}]*\blaunch\b[^}]*\} = require\('./lib'\)", src) is not None \
+            or "await launch()" in src
+        if f.stem in WEBKIT:
+            if not (imports and launches):
+                out.append(f"ENGINE: tests/journeys/{f.name} must run in WebKit and does not import and launch it itself")
+            if takes_lib:
+                out.append(f"ENGINE: tests/journeys/{f.name} takes lib's launcher, which is Chromium")
+        elif claims or imports or launches:
+            out.append(f"ENGINE: tests/journeys/{f.name} claims or launches WebKit but is not in the pinned list — "
+                       "add it to the list here and to run.sh's guards, or take the claim out")
+    for missing in sorted(WEBKIT - seen):
+        out.append(f"ENGINE: tests/journeys/{missing}.js is gone")
+    for name, sentence in (("room", "the room is measured in WebKit"),
+                           ("narrowing", "the narrowing is measured in WebKit"),
+                           ("gloss", "the gloss panel is measured in WebKit")):
+        src = (jdir / f"{name}.js").read_text(encoding="utf-8") if (jdir / f"{name}.js").exists() else ""
+        if "browser.browserType().name() === 'webkit'" not in src or f"'{sentence}" not in src:
+            out.append(f"ENGINE: tests/journeys/{name}.js no longer asks the browser which engine it is and says so in its log")
+        if f'"{sentence}"' not in run:
+            out.append(f"ENGINE: run.sh does not require {name}'s log to say it ran in WebKit")
+    return out
+
+
 def _check_no_silent_cut(server, paired):
     """Owner prose is taken whole or refused by name — never cut — everywhere
     (his ruling, 2026-09-14). Report 77 said recheck and archetype passed
@@ -5304,6 +5358,7 @@ def main() -> int:
     failures.extend(_check_word_sources_evidence(server, _paired))
     failures.extend(_check_narrowing_history(server, _paired))
     failures.extend(_check_gloss_shown_and_kept(server, _paired))
+    failures.extend(_check_journey_engines())
     failures.extend(_check_no_silent_cut(server, _paired))
 
     # 6. a passage-only mock (no global constraint) degrades to empty string
