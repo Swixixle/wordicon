@@ -14,8 +14,10 @@ What it does, and only this:
     made by an exclusive mkdir; it never reuses one and never deletes
     anything — a previous preview's writing stays where it was, and a
     refused run makes nothing;
-  * with --from, refuses while that store's server holds its corpus lease,
-    then copies the store WITHOUT its vault configuration and history
+  * with --from, takes that store's corpus lease and HOLDS it for the whole
+    copy (refusing while a server holds it; refusing when it cannot be
+    checked; saying so when the source has none), and copies the store
+    WITHOUT its vault configuration and history
     (vault/), its pairing secret and sessions (auth/), its locks, its
     derived index and its search database, and copies every SQLite store
     through SQLite's own backup API so the copy is consistent;
@@ -34,6 +36,7 @@ script's.
 """
 import argparse
 import fcntl
+import json
 import os
 import pathlib
 import shutil
@@ -49,27 +52,43 @@ EXCLUDE_SUFFIXES = (".lock", "-journal", "-wal", "-shm")
 EXCLUDE_REL = {"library/search.db"}                    # rebuilt by the Library; never authority
 
 
-def _lease_held(root: pathlib.Path) -> str:
-    """Whether a live process holds this store's corpus lease (flock)."""
+def _hold_lease(root: pathlib.Path):
+    """Take the source store's corpus lease (the same flock a serving process
+    holds) and KEEP it for the whole copy — returned as an open descriptor
+    the caller closes in a finally, so no writer can start on the source
+    while the copy is being made (the review of 0f2db31, finding 2: the
+    earlier check took and released the lock before copying, and a second
+    writer could slip in between). Returns (fd, note):
+      (fd, "")        the lease is held by this process until fd is closed;
+      (None, note)    the source has no lease file at all — no serving
+                      process of this store has ever held one — and the
+                      copy proceeds without it, said so;
+    raises PreviewRefused when another process holds the lease, or when the
+    lease exists but cannot be checked (fail closed)."""
     p = root / "vault" / "lease"
     if not p.exists():
-        return ""
+        return None, "no lease file in the source (no server of this store has held one); nothing could be holding it"
     try:
         fd = os.open(p, os.O_RDWR)
-    except OSError:
-        return ""
+    except OSError as e:
+        raise PreviewRefused(3, f"refusing: the lease at {p} exists but cannot be checked ({e.__class__.__name__}: {e}) — not copying a store whose writers cannot be excluded")
     try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        holder = ""
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            holder = os.read(fd, 400).decode("utf-8", "replace").strip()
         except OSError:
-            try:
-                return p.read_text(encoding="utf-8").strip() or "another process"
-            except OSError:
-                return "another process"
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        return ""
-    finally:
+            pass
         os.close(fd)
+        raise PreviewRefused(3, f"refusing: the store at {root} is in use by {holder or 'another process'!r} — stop that server first, then run this again")
+    return fd, ""
+
+
+class PreviewRefused(Exception):
+    def __init__(self, rc: int, message: str):
+        super().__init__(message)
+        self.rc = rc
 
 
 def _allocate(root_dir: pathlib.Path, stamp: str = "") -> pathlib.Path:
@@ -155,23 +174,35 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     src = None
+    lease_fd, lease_note = None, ""
     if a.src:
         # every refusal comes BEFORE a directory is made, so a refused run leaves nothing behind
         src = pathlib.Path(a.src).expanduser().resolve()
         if not (src / "notebook.sqlite3").exists() and not (src / "accepted_concepts.json").exists():
             print(f"refusing: {src} does not look like a state root (no notebook.sqlite3 or accepted_concepts.json)")
             return 2
-        holder = _lease_held(src)
-        if holder:
-            print(f"refusing: the store at {src} is in use by {holder!r} — stop that server first, then run this again")
-            return 3
-    root = _allocate(pathlib.Path(a.root_dir))
-    if src is not None:
-        rep = _copy_store(src, root)
-        print(f"copied {rep['copied']} files from {src}")
-        print(f"  SQLite stores copied through the backup API: {', '.join(rep['sqlite_backup_api']) or 'none'}")
-        print(f"  left behind on purpose: {', '.join(rep['skipped']) or 'nothing'}")
-    else:
+        try:
+            lease_fd, lease_note = _hold_lease(src)     # held from here until the copy is complete
+        except PreviewRefused as e:
+            print(str(e))
+            return e.rc
+    try:
+        root = _allocate(pathlib.Path(a.root_dir))
+        if src is not None:
+            rep = _copy_store(src, root)
+            print(f"copied {rep['copied']} files from {src}" + (" — the source's lease was held throughout" if lease_fd is not None else f" — {lease_note}"))
+            print(f"  SQLite stores copied through the backup API: {', '.join(rep['sqlite_backup_api']) or 'none'}")
+            print(f"  left behind on purpose: {', '.join(rep['skipped']) or 'nothing'}")
+            (root / "preview-copy.json").write_text(json.dumps({"copied_from": str(src), "copied_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                                                "source_lease": ("held throughout the copy" if lease_fd is not None else lease_note),
+                                                                "sqlite_backup_api": rep["sqlite_backup_api"], "left_behind": rep["skipped"]}, indent=1) + "\n")
+    finally:
+        if lease_fd is not None:
+            try:
+                fcntl.flock(lease_fd, fcntl.LOCK_UN)
+            finally:
+                os.close(lease_fd)
+    if src is None:
         root.mkdir(parents=True, exist_ok=False)
         (root / "results").mkdir(); (root / "receipts").mkdir()
     print(f"preview root: {root}")

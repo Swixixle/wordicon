@@ -42,6 +42,20 @@ export function tabId() {
 
 function requestId() { return 'req_' + newId('').slice(0, 24) + '_' + Date.now().toString(36); }
 
+// Tab presence (the review of 0f2db31, finding 1): a recovery envelope from
+// another tab may belong to a tab that is still open and typing. Those words
+// are that tab's; this tab may list them, never take them over. A tab that
+// holds a document answers on this channel; no answer within PRESENCE_MS means
+// no live tab in this browser profile holds it (the recovery store is per
+// profile, so that is exactly the population that matters). Without the
+// API (an old engine, a harness) every foreign envelope counts as live — the
+// cautious side.
+const PRESENCE_CHANNEL = 'nikodemus.work.tabs.v1';
+const PRESENCE_MS = 300;
+function _channel() {
+  try { return typeof BroadcastChannel === 'function' ? new BroadcastChannel(PRESENCE_CHANNEL) : null; } catch (e) { return null; }
+}
+
 function _headOf(d) {
   return { doc_id: d.doc_id, revision: d.revision | 0, fingerprint: d.fingerprint || '', saved_at: d.saved_at || '', title: d.title || '',
            title_is_manual: !!d.title_is_manual, body: d.body, doc_json: d.doc_json || null };
@@ -54,7 +68,26 @@ export class DocumentSession {
     this.tab = tabId();
     this.blank();
     this.localState = { ok: true, why: '' };
+    this.otherDrafts = [];           // unsent copies of the open document held by OTHER tabs of this browser, each a distinct version, none of them touched
     adapter.onEdit(() => this.noteEdit());
+    this.presence = _channel();
+    if (this.presence) this.presence.onmessage = ev => {
+      const m = ev && ev.data;
+      if (m && m.ask && this.id && m.ask === this.id && m.from !== this.tab) { try { this.presence.postMessage({ have: this.id, tab: this.tab }); } catch (e) {} }
+    };
+  }
+
+  // Which other tabs of this browser hold this document right now.
+  async liveTabs(docId) {
+    if (!this.presence) return null;                 // unknown: the caller treats every foreign envelope as live
+    const seen = new Set();
+    const ch = _channel();
+    if (!ch) return null;
+    return new Promise(resolve => {
+      ch.onmessage = ev => { const m = ev && ev.data; if (m && m.have === docId && m.tab) seen.add(m.tab); };
+      try { ch.postMessage({ ask: docId, from: this.tab }); } catch (e) { ch.close(); resolve(null); return; }
+      setTimeout(() => { try { ch.close(); } catch (e) {} resolve(seen); }, PRESENCE_MS);
+    });
   }
 
   blank() {
@@ -64,6 +97,7 @@ export class DocumentSession {
     this.lastCheckpointAt = 0; this.pendingReason = ''; this.createdAt = '';
     this.rich = false;               // the committed head carries structure
     this.applications = [];          // {event_id, to_seq}: applied suggestions not yet in a committed revision
+    this.otherDrafts = []; this.takenFrom = null;   // other tabs' versions of the open document; the gone tab's envelope this editor was filled from
     this.editorSession = newId('es_');   // one per opening: a frozen scope names it, so a reopen is never mistaken for the same generation
   }
 
@@ -228,6 +262,12 @@ export class DocumentSession {
     }
     this.inflight = null; this.retries = 0; this.serverError = ''; this.errorClass = '';
     this.revision = d.revision | 0; this.fingerprint = d.fingerprint || ''; this.savedAt = d.saved_at || '';
+    if (this.takenFrom) {
+      // the words taken from a gone tab's envelope are in this revision now: that envelope is noted as
+      // carried here (kept, not deleted — a listing no longer offers it, and nothing is lost if the note is wrong)
+      const tf = this.takenFrom; this.takenFrom = null;
+      recovery.read(this.id, tf.tab_id).then(env => { if (env && (env.at || '') === tf.at) return recovery.write({ ...env, recovered_into: { doc_id: this.id, revision: this.revision, by: this.tab, at: new Date().toISOString() } }, { keepAt: true }); }).catch(() => {});
+    }
     if (d.rich) this.rich = true;
     this.ackSeq = inf.seq;
     if (inf.payload.checkpoint_reason) { this.lastCheckpointAt = Date.now(); if (this.pendingReason === inf.payload.checkpoint_reason) this.pendingReason = ''; }
@@ -319,26 +359,57 @@ export class DocumentSession {
     try { envs = (await recovery.forDocument(id)).filter(e => !e.abandoned); } catch (e) { envs = []; }   // no recovery store: nothing to recover from
     // an envelope with edits its tab never got acknowledged; older envelopes (no ack_seq) are judged by their text
     const unsent = e => (e.ack_seq === undefined ? e.body !== d.body : e.seq > e.ack_seq);
+    // exactly the saved head: the words, the structure AND the title as saved — an unsaved
+    // rename with the same words is not the head (the review of 0f2db31)
     const holdsHead = e => {
       if (e.body !== d.body) return false;
+      if ((e.title || '') !== (d.title || '') || !!e.title_is_manual !== !!d.title_is_manual) return false;
       const headStructure = d.doc_json ? canonicalString(d.doc_json) : (e.structure ? canonicalString(parsePlain(d.body)) : null);
       const envStructure = e.structure ? canonicalString(e.structure) : null;
       return headStructure === envStructure;
     };
-    let newer = envs.filter(unsent).sort((a, b) => (b.at || '').localeCompare(a.at || ''))[0] || null;
-    let unreconciled = null;                         // an envelope kept whole beside a head it does not descend from
-    if (newer && newer.base_revision !== d.revision) {
-      const res = await this.reconcile(newer, d);    // never throws; never discards
-      if (res.kind === 'rebased') newer = res.envelope;
-      else { unreconciled = newer; newer = null; }
+    const sameVersion = (a, b) => a.body === b.body && (a.title || '') === (b.title || '') && !!a.title_is_manual === !!b.title_is_manual
+      && (a.structure ? canonicalString(a.structure) : null) === (b.structure ? canonicalString(b.structure) : null);
+    // This tab's own envelope (a reload) is the one that may become its editor.
+    // Every other tab's unsent envelope is a version of its own: listed, kept
+    // whole, never overwritten and never marked consumed by being seen here.
+    // Only an envelope whose tab is gone (no live tab of this browser answers
+    // for it) may be brought into an EMPTY editor — and even then it is left
+    // in place until the words it held are on the server.
+    const mine = envs.find(e => e.tab_id === this.tab) || null;
+    const foreign = envs.filter(e => e.tab_id !== this.tab && unsent(e) && !holdsHead(e) && !e.recovered_into);
+    let live = null;
+    if (foreign.length) { try { live = await this.liveTabs(id); } catch (e) { live = null; } }
+    const isLive = e => live === null ? true : live.has(e.tab_id);
+    let chosen = null, unreconciled = null, takenFrom = null;
+    if (mine && unsent(mine)) {
+      chosen = mine;
+    } else if (!(mine && unsent(mine))) {
+      // no words of this tab's own: the newest envelope of a tab that is gone may fill the editor
+      const dead = foreign.filter(e => !isLive(e)).sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+      if (dead.length) { chosen = dead[0]; takenFrom = dead[0]; }
     }
-    if (newer && holdsHead(newer)) newer = null;     // exactly the head: nothing to recover, and reopening must not become a rewrite
+    if (chosen && chosen.base_revision !== d.revision) {
+      const res = await this.reconcile(chosen, d);   // never throws; never discards
+      if (res.kind === 'rebased') chosen = res.envelope;
+      else { unreconciled = chosen; chosen = null; }
+    }
+    if (chosen && holdsHead(chosen)) chosen = null;   // exactly the head: nothing to recover, and reopening must not become a rewrite
     const localState = this.localState;
     this.blank();
     Object.assign(this, { id: d.doc_id, title: d.title || '', title_is_manual: !!d.title_is_manual, revision: d.revision | 0,
       fingerprint: d.fingerprint || '', savedAt: d.saved_at || '', origin: d.origin || '', status: 'saved', localState,
       lastCheckpointAt: Date.now(), createdAt: d.created_at || '', rich: !!d.doc_json });
     this.saveIdentity();
+    const shown = unreconciled || chosen;
+    // the other tabs' versions, each distinct from the head and from what this editor now holds
+    this.otherDrafts = foreign
+      .filter(e => e !== takenFrom && !(shown && sameVersion(e, shown)))
+      .sort((a, b) => (b.at || '').localeCompare(a.at || ''))
+      .map(e => ({ doc_id: id, tab_id: e.tab_id, at: e.at || '', body: e.body, structure: e.structure || null, title: e.title || '', title_is_manual: !!e.title_is_manual,
+                   base_revision: e.base_revision | 0, base_fingerprint: e.base_fingerprint || '', doc_schema: e.doc_schema || null, projection_version: e.projection_version || null,
+                   live: isLive(e), words: (e.body || '').split(/\s+/).filter(Boolean).length }));
+    this.takenFrom = takenFrom ? { tab_id: takenFrom.tab_id, at: takenFrom.at || '' } : null;
     if (unreconciled) {
       // both versions stand: the head on the server, these words in the editor
       // and in this tab's envelope (an envelope from another tab is left as it
@@ -355,20 +426,72 @@ export class DocumentSession {
       if (this.hooks.onOpened) this.hooks.onOpened(this);
       return true;
     }
-    if (newer) {
-      this.adapter.setText(newer.body, { structure: newer.structure || null });
-      this.title = newer.title || this.title; this.title_is_manual = !!newer.title_is_manual;
-      try { if (newer.selection) this.adapter.setSelection(newer.selection.start, newer.selection.end, newer.selection.direction); if (newer.scroll && this.adapter.setScroll) this.adapter.setScroll(newer.scroll); } catch (e) {}
+    if (chosen) {
+      this.adapter.setText(chosen.body, { structure: chosen.structure || null });
+      this.title = chosen.title || this.title; this.title_is_manual = !!chosen.title_is_manual;
+      try { if (chosen.selection) this.adapter.setSelection(chosen.selection.start, chosen.selection.end, chosen.selection.direction); if (chosen.scroll && this.adapter.setScroll) this.adapter.setScroll(chosen.scroll); } catch (e) {}
       this.seq = 1; this.status = 'pending'; this.record(); this.flush(); this.recovered = true;
-      // an envelope from another tab now lives in this tab's editor and envelope:
-      // it is marked taken, so a later reopening does not offer it a second time
-      if (newer.tab_id && newer.tab_id !== this.tab) { try { await recovery.write({ ...newer, abandoned: true, taken_by: this.tab, taken_at: new Date().toISOString() }); } catch (e) {} }
+      // a gone tab's envelope now lives in this tab's editor and envelope too; it is left
+      // in place (not abandoned, not taken) and noted as recovered by this tab, so the
+      // version is still there if this tab dies before its save lands
+      if (takenFrom) { try { await recovery.write({ ...takenFrom, recovered_by: this.tab, recovered_at: new Date().toISOString() }, { keepAt: true }); } catch (e) {} }
     } else {
       this.adapter.setText(d.body, { structure: d.doc_json || null });
       this.recovered = false; this.record();
     }
     this.renderStatus();
     if (this.hooks.onOpened) this.hooks.onOpened(this);
+    return true;
+  }
+
+  // ---- the other tabs' versions: each independently recoverable, none combined ------
+  //
+  // "Open as a new document" puts that version on the server under its own id
+  // (nothing here is replaced); "Restore here" is offered only when this
+  // editor holds nothing unsent, and puts the version into this editor without
+  // touching the other tab's envelope; "Delete this copy" is the owner's
+  // explicit press, and says that a tab still open keeps its own words.
+  async openOtherDraftAsNew(i) {
+    const o = this.otherDrafts[i];
+    if (!o) return false;
+    await this.newDocument('', 'recovered-copy');
+    this.adapter.setText(o.body || '', { structure: o.structure || null });
+    this.title = o.title; this.title_is_manual = !!o.title_is_manual;
+    this.seq = 1; this.status = 'pending'; this.record();
+    await this.flush('open');
+    // the version is on the server under its own id now: its envelope (of the document it came
+    // from) is noted as recovered into that document — still not deleted, so a tab that is
+    // in fact alive loses nothing, and a listing no longer offers it
+    try {
+      const env = await recovery.read(o.doc_id, o.tab_id);
+      if (env && (env.at || '') === o.at) await recovery.write({ ...env, recovered_into: { doc_id: this.id, at: new Date().toISOString(), by: this.tab } }, { keepAt: true });
+    } catch (e) {}
+    if (this.hooks.onOpened) this.hooks.onOpened(this);
+    return true;
+  }
+  async restoreOtherDraftHere(i) {
+    const o = this.otherDrafts[i];
+    if (!o) return false;
+    if (this.seq !== this.ackSeq || this.status === 'conflict') return false;   // this editor holds unsent words of its own: not replaced
+    if (o.base_revision !== this.revision) return false;                        // based on another revision: open it as a new document instead
+    this.adapter.setText(o.body || '', { structure: o.structure || null });
+    this.title = o.title; this.title_is_manual = !!o.title_is_manual;
+    this.seq += 1; this.status = 'pending'; this.recovered = true;
+    this.otherDrafts = this.otherDrafts.filter((x, j) => j !== i);
+    this.record(); this.renderStatus();
+    await this.flush();
+    if (this.hooks.onOpened) this.hooks.onOpened(this);
+    return true;
+  }
+  async discardOtherDraft(i) {
+    const o = this.otherDrafts[i];
+    if (!o) return false;
+    try {
+      const env = await recovery.read(this.id, o.tab_id);
+      if (env) await recovery.write({ ...env, abandoned: true, discarded_by: this.tab, discarded_at: new Date().toISOString() }, { keepAt: true });
+    } catch (e) { return false; }
+    this.otherDrafts = this.otherDrafts.filter((x, j) => j !== i);
+    this.renderStatus();
     return true;
   }
 

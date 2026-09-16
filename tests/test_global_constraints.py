@@ -1677,6 +1677,148 @@ def _check_preview_isolation(server):
     return out
 
 
+def _check_preview_inheritance(server, paired):
+    """The review of 0f2db31, finding 2. A preview on a COPIED store inherits
+    that store's queued work; startup must not dispatch it (the original's
+    owner never pressed Start here), while keeping its identity, provenance
+    and events; a press — Start another attempt — may run a clearly linked
+    attempt. Proven both ways: without the preview guard the copied queued
+    job IS handed to the job creator at startup (the hazard); with it,
+    nothing is handed over, the operation stays queued and says it is
+    inherited and paused. Then the copy's lease: held by the copying
+    process for the whole copy (a second writer cannot take it meanwhile,
+    and can afterwards); a source without a lease file is copied and said
+    so; a lease that cannot be checked refuses, leaving nothing behind."""
+    import fcntl as _fc, importlib, importlib.util as _ilu, io as _io, json as _json, os as _os2, tempfile as _tf, contextlib as _ctx
+    import actions as ac, operations as ops
+    out = []
+    REPO = Path(__file__).resolve().parents[1]
+    spec = _ilu.spec_from_file_location("preview_script", REPO / "scripts" / "preview.py"); pv = _ilu.module_from_spec(spec); spec.loader.exec_module(pv)
+    tmp = Path(_tf.mkdtemp(prefix="wordicon_inherit_"))
+    src = tmp / "src"; src.mkdir()
+    saved_env = _os2.environ.get("WORDICON_PREVIEW")
+    real_dispatching, real_create = server._dispatching, server._create_job_from
+    captured = []
+
+    class _R:
+        def __init__(self, d): self.d = d
+        def get_json(self): return self.d
+
+    def fake_create(payload, op_id=None):
+        captured.append({"op_id": op_id, "mode": payload.get("mode")})
+        return (_R({"job_id": op_id, "dispatched": True, "status": "queued"}), 200)
+
+    try:
+        state_root.apply(src)
+        (src / "results").mkdir(); (src / "receipts").mkdir()
+        # a queued job that was reserved and never dispatched (the dispatcher was not held at the time)
+        rec = ac.prepare("explore.forge", {"kind": "description", "text": "an inherited probe, fixture text", "title": "probe"}, {}, server.server_gateway)
+        server._dispatching = lambda: False
+        c = paired(server.app.test_client())
+        r = c.post("/api/operations", json={"prepared_id": rec["prepared_id"], "request_key": "rk_inherit_1"})
+        server._dispatching = real_dispatching
+        d = r.get_json() or {}
+        op = d.get("operation_id", "")
+        if r.status_code != 200 or d.get("status") != "queued" or d.get("dispatched") is not False or not op:
+            return [f"G-inherit: could not seed a queued, undispatched job: {r.status_code} {d}"]
+        # ---- the guard OFF (documented absence): the copied job is handed to the job creator at startup ----
+        plain = tmp / "plain-copy" / "state"
+        pv._copy_store(src, plain)
+        state_root.apply(plain)
+        _os2.environ.pop("WORDICON_PREVIEW", None)
+        server._create_job_from = fake_create
+        captured.clear()
+        s0 = server._ops_startup()
+        if s0.get("resumed") != [op] or [x["op_id"] for x in captured] != [op]:
+            out.append(f"G-inherit: without the guard the copied queued job was NOT resumed at startup — the hazard this check exists for could not be shown: {s0} {captured}")
+        # ---- the guard ON: nothing dispatched; the operation stays queued, inherited and paused, with its events ----
+        copy = tmp / "preview-copy" / "state"
+        pv._copy_store(src, copy)
+        state_root.apply(copy)
+        _os2.environ["WORDICON_PREVIEW"] = "1"
+        captured.clear()
+        s1 = server._ops_startup()
+        row = ops.get(op)
+        if s1.get("resumed") or captured or s1.get("inherited_paused") != [op] or not row or row["status"] != "queued" or "Inherited by this preview" not in (row.get("local_state") or ""):
+            out.append(f"G-inherit: a preview dispatched or altered an inherited queued job at startup: {s1} captured {captured} row {(row or {}).get('status')} {(row or {}).get('local_state')}")
+        evs = ops.events(op)
+        if not any(e["kind"] == "note" and (e.get("detail") or {}).get("preview_inherited") for e in evs) or not any(e["kind"] == "reserved" for e in evs):
+            out.append("G-inherit: the inherited operation does not carry the note that says so beside its original events")
+        if row and row.get("request_key") != "rk_inherit_1" or (row or {}).get("prepared_id") != rec["prepared_id"]:
+            out.append("G-inherit: the inherited operation lost its identity (request key, proposal)")
+        s1b = server._ops_startup()                       # a second startup of the same preview: still paused, still nothing dispatched
+        if s1b.get("resumed") or captured:
+            out.append("G-inherit: a second preview startup dispatched the inherited job")
+        # a press: Start another attempt makes a NEW, linked operation and dispatches that one
+        c2 = paired(server.app.test_client())
+        r2 = c2.post(f"/api/operations/{op}/attempts", json={"request_key": "rk_inherit_attempt_1"})
+        d2 = r2.get_json() or {}
+        if r2.status_code != 200 or d2.get("retry_parent") != op or d2.get("operation_id") == op or [x["op_id"] for x in captured] != [d2.get("operation_id")]:
+            out.append(f"G-inherit: a press did not make one linked attempt of the inherited operation: {r2.status_code} {d2} captured {captured}")
+        if ops.get(op)["status"] != "queued":
+            out.append("G-inherit: the press changed the inherited operation itself instead of making a linked attempt")
+        # ---- the lease is held for the whole copy ----
+        _os2.environ.pop("WORDICON_PREVIEW", None)
+        state_root.apply(src)
+        import notebook as _nbk
+        _nbk.save("doc_inherit_1", title="", title_is_manual=False, body="a document so the source looks like a store", base_revision=0, base_fingerprint="", request_id="req_inherit_1")
+        (src / "vault").mkdir(exist_ok=True); (src / "vault" / "lease").write_text("")
+        during, after = [], []
+        real_copy = pv._copy_store
+
+        def probe_copy(a, b):
+            fd = _os2.open(src / "vault" / "lease", _os2.O_RDWR)
+            try:
+                _fc.flock(fd, _fc.LOCK_EX | _fc.LOCK_NB); during.append("acquired"); _fc.flock(fd, _fc.LOCK_UN)
+            except OSError:
+                during.append("refused")
+            finally:
+                _os2.close(fd)
+            return real_copy(a, b)
+
+        pv._copy_store = probe_copy
+        try:
+            with _ctx.redirect_stdout(_io.StringIO()) as buf:
+                rc = pv.main(["--from", str(src), "--no-serve", "--root-dir", str(tmp / "lease-previews"), "--port", "8433"])
+        finally:
+            pv._copy_store = real_copy
+        fd = _os2.open(src / "vault" / "lease", _os2.O_RDWR)
+        try:
+            _fc.flock(fd, _fc.LOCK_EX | _fc.LOCK_NB); after.append("acquired"); _fc.flock(fd, _fc.LOCK_UN)
+        except OSError:
+            after.append("refused")
+        finally:
+            _os2.close(fd)
+        if rc != 0 or during != ["refused"] or after != ["acquired"] or "lease was held throughout" not in buf.getvalue():
+            out.append(f"G-inherit: the source lease is not held for the whole copy: rc {rc} during {during} after {after}")
+        mani = sorted((tmp / "lease-previews").glob("preview-*/state/preview-copy.json"))
+        if not mani or "held throughout" not in _json.loads(mani[-1].read_text()).get("source_lease", ""):
+            out.append("G-inherit: the copy's manifest does not record how the source lease was handled")
+        # a source without a lease file: copied, and said so
+        (src / "vault" / "lease").unlink()
+        with _ctx.redirect_stdout(_io.StringIO()) as buf2:
+            rc2 = pv.main(["--from", str(src), "--no-serve", "--root-dir", str(tmp / "nolease-previews"), "--port", "8433"])
+        if rc2 != 0 or "no lease file in the source" not in buf2.getvalue():
+            out.append(f"G-inherit: a source without a lease file is not copied with the absence said: rc {rc2} {buf2.getvalue()[-200:]}")
+        # a lease that cannot be checked: refused, nothing made
+        (src / "vault" / "lease").mkdir()
+        with _ctx.redirect_stdout(_io.StringIO()) as buf3:
+            rc3 = pv.main(["--from", str(src), "--no-serve", "--root-dir", str(tmp / "bad-previews"), "--port", "8433"])
+        if rc3 != 3 or "cannot be checked" not in buf3.getvalue() or (tmp / "bad-previews").exists():
+            out.append(f"G-inherit: a lease that cannot be checked did not refuse and leave nothing: rc {rc3} {buf3.getvalue()[-200:]}")
+    finally:
+        server._dispatching = real_dispatching; server._create_job_from = real_create
+        if saved_env is None:
+            _os2.environ.pop("WORDICON_PREVIEW", None)
+        else:
+            _os2.environ["WORDICON_PREVIEW"] = saved_env
+        state_root.apply(_SCRATCH)
+    src_js = (REPO / "webapp" / "work" / "results.js").read_text(encoding="utf-8")
+    if "Inherited" not in src_js:
+        out.append("G-inherit: the result card does not show an inherited, paused operation as such")
+    return out
+
+
 # ---- block 123: Carry Back ---------------------------------------------------
 #
 # The bridge from a workup to the writing room. A carry means "this may be
@@ -7200,6 +7342,135 @@ def _check_producer_contracts():
     return out
 
 
+def _check_investigation_correlation(server, paired):
+    """The review of 0f2db31, 3a and 3b. (a) An investigation interrupted
+    after its dispatch intent and before any end event: the record's
+    reconciliation makes it unknown, and the investigation view says
+    delivery UNKNOWN with the upstream id from the intent — never "not
+    sent" — through the authenticated route. (b) A reply for another
+    record is never followed: an Open Case start answered with case B for
+    a request about case A, an EthicalAlt start whose identification names
+    another brand, a snapshot for case B (or a different handle) signed by
+    the CORRECT fixture key, a snapshot whose signed payload names no case
+    — each kept as evidence, its signature validity and its request
+    identity two separate facts, the mismatch named, the result never
+    presented as the requested verified record."""
+    import base64 as _b64, hashlib as _hl, importlib, json as _json, os as _os2, tempfile as _tf
+    import operations as ops, federation as fed
+    pr = importlib.import_module("producers")
+    out = []
+    REPO = Path(__file__).resolve().parents[1]
+    PF = REPO / "tests" / "fixtures" / "producers"
+    tmp = Path(_tf.mkdtemp(prefix="wordicon_corr_"))
+    state_root.apply(tmp)
+    real_request = pr._request
+    try:
+        (tmp / "results").mkdir(); (tmp / "receipts").mkdir()
+        # ---- (a) interrupted after the intent ----
+        row, _ = ops.reserve(request_key="rk_corr_a", kind="investigation", execution={"adapter": "adapter/x", "spec": {"producer": "open_case", "kind": "start", "case_id": "a" * 8}}, config={}, action_id="investigate.opencase.start")
+        op_a = row["op_id"]
+        ops.claim(op_a, server.OPS_DISPATCHER.token)
+        ops.mark(op_a, "running", local_state="Sending to Open Case", event_kind="stage", detail={"stage": "start"})
+        ops.event(op_a, "stage_intent", stage="POST /api/v1/cases/aaaaaaaa/investigate", upstream_id="aaaaaaaa", detail={"producer": "open_case"})
+        ops.reconcile("dispatcher-after-restart", cli.RESULTS_DIR, cli.RECEIPTS_DIR)
+        c = paired(server.app.test_client())
+        g = c.get("/api/operations/" + op_a).get_json() or {}
+        inv = g.get("investigation") or {}
+        if g.get("status") != "unknown" or inv.get("delivery") != "unknown" or "not sent" in (inv.get("start") or "") or inv.get("outcome") != "unknown" or inv.get("upstream_id") != "aaaaaaaa":
+            out.append(f"3a: an intent without an end must read as delivery unknown with its upstream id, never 'not sent': {g.get('status')} {inv}")
+        # ---- (b) wrong-record replies, with the transport replaced by synthetic answers ----
+        fed.register_connector("oc-corr", "open_case", "https://open-case.example.org", display="Open Case (corr)", credential_ref="env:NIK_CORR_KEY", by="suite")
+        fed.pin_key("oc-corr", (PF / "open_case.snapshot.pub.spki.b64").read_text().strip(), label="snapshot fixture key", by="suite")
+        fed.register_connector("ea-corr", "ethicalalt", "https://ethicalalt.example.org", display="EthicalAlt (corr)", by="suite")
+        _os2.environ["NIK_CORR_KEY"] = "open_case_" + "c" * 64
+        for cid in ("oc-corr", "ea-corr"):
+            pr.rule_live_start(cid, True, note="suite: synthetic transport", by="suite")
+        case_a, case_b = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        def synthetic(reply, status=200):
+            def _req(connector, method, path, body, auth="none"):
+                raw = _json.dumps(reply).encode("utf-8")
+                return {"ok": True, "status": status, "json": reply, "raw": raw, "bytes": len(raw), "elapsed_s": 0.01, "delivery": "delivered"}
+            return _req
+        # an Open Case start answered for case B
+        spec = pr.prepare("open_case", f"{case_a} exemplar Some Person")
+        row, _ = ops.reserve(request_key="rk_corr_b1", kind="investigation", execution={"adapter": "adapter/x", "spec": spec}, config={}, action_id="investigate.opencase.start")
+        ops.claim(row["op_id"], server.OPS_DISPATCHER.token)
+        pr._request = synthetic({"case_id": case_b, "subject_searched": "Some Person", "evidence_entries_created": 2, "signals": []})
+        try:
+            pr.start(row["op_id"], spec, "nk_corr_b1")
+            out.append("3b: a start answered with another case id was followed as if it were the requested case")
+        except pr.AdapterError as e:
+            if e.outcome != "answered_wrong_record" or e.delivery != "delivered" or "another record" not in str(e):
+                out.append(f"3b: a wrong-case start reply is not named as such: {e.outcome} {e.delivery} {e}")
+        if not pr.artifact_bytes(row["op_id"], "start-reply.json"):
+            out.append("3b: the wrong-case reply's bytes were not kept as evidence")
+        if not any(e["kind"] == "note" and (e.get("detail") or {}).get("wrong_record") for e in ops.events(row["op_id"])):
+            out.append("3b: the record does not note the wrong-record reply")
+        # an EthicalAlt start whose identification names another brand
+        spec_e = pr.prepare("ethicalalt", "Exemplar Holdings")
+        row_e, _ = ops.reserve(request_key="rk_corr_b2", kind="investigation", execution={"adapter": "adapter/x", "spec": spec_e}, config={}, action_id="investigate.ethicalalt.start")
+        ops.claim(row_e["op_id"], server.OPS_DISPATCHER.token)
+        pr._request = synthetic({"identification": {"object": "Other Corp", "brand": "Other Corp"}, "investigation": {"brand_slug": "other-corp", "brand": "Other Corp"}, "version": "v1"})
+        try:
+            pr.start(row_e["op_id"], spec_e, "nk_corr_b2")
+            out.append("3b: an EthicalAlt reply identifying another brand was followed")
+        except pr.AdapterError as e:
+            if e.outcome != "answered_wrong_record":
+                out.append(f"3b: a wrong-brand reply is not named as such: {e.outcome} {e}")
+        # a snapshot for case B, signed by the CORRECT fixture key, for a request about case A; then a different handle; then no case at all
+        from cryptography.hazmat.primitives.serialization import load_der_private_key
+        import jcs as _jcs
+        priv = load_der_private_key(_b64.b64decode((PF / "open_case.snapshot.key.pkcs8.b64").read_text().strip()), password=None)
+        def packed_for(case_id, handle, label, with_case=True):
+            payload = {"case": ({"id": case_id, "title": "T"} if with_case else {}), "entries": [], "snapshot": {"snapshot_number": 1, "taken_by": handle, "label": label, "entry_count": 0, "taken_at": "2026-09-16T00:00:00+00:00"}}
+            digest = _hl.sha256(_jcs.canonicalize(payload)).hexdigest()
+            return _json.dumps({"content_hash": digest, "signature": _b64.b64encode(priv.sign(digest.encode("utf-8"))).decode(), "payload": payload}, separators=(",", ":"), sort_keys=True)
+        spec_s = pr.prepare("open_case", f"{case_a} exemplar after the filing", kind="snapshot")
+        conn = fed.get_connector("oc-corr")
+        cases = [("wrong case", packed_for(case_b, "exemplar", "after the filing"), case_b, "case"), ("wrong handle", packed_for(case_a, "someoneelse", "after the filing"), case_a, "taken_by"),
+                 ("wrong label", packed_for(case_a, "exemplar", "other label"), case_a, "label"), ("no case", packed_for("", "exemplar", "after the filing", with_case=False), case_a, "case")]
+        for name, packed, cfid, word in cases:
+            row_s, _ = ops.reserve(request_key="rk_corr_s_" + name.replace(" ", "_"), kind="investigation", execution={"adapter": "adapter/x", "spec": spec_s}, config={}, action_id="investigate.opencase.snapshot")
+            ops.claim(row_s["op_id"], server.OPS_DISPATCHER.token)
+            reply = {"snapshot": {"id": "snap_" + name.replace(" ", "_"), "case_file_id": cfid, "snapshot_number": 1, "taken_by": "exemplar", "entry_count": 0, "signed_hash": packed, "share_url": "", "label": "after the filing"}, "signature_check": {"valid": True}, "case": {"id": cfid}}
+            pr._request = synthetic(reply)
+            if name == "wrong case":
+                try:
+                    pr.start(row_s["op_id"], spec_s, "nk_s")
+                    out.append("3b: a snapshot reply whose envelope names another case was followed")
+                except pr.AdapterError as e:
+                    if e.outcome != "answered_wrong_record":
+                        out.append(f"3b: the wrong-case snapshot envelope is not named as such: {e.outcome}")
+                # and the SIGNED payload alone, as if the envelope had lied the other way: verified signature, wrong record
+                res = pr.retrieve(row_s["op_id"], spec_s, "snap_x", reply={"snapshot": {"signed_hash": packed}})
+            else:
+                started = pr.start(row_s["op_id"], spec_s, "nk_s")
+                res = pr.retrieve(row_s["op_id"], spec_s, started["object_id"], reply=started["reply"])
+            ver = res.get("verification") or {}
+            corr = ver.get("correlation") or {}
+            if not ver.get("ok") or corr.get("matches_request") is not False or res.get("outcome") != "verified_signature_wrong_record" or word not in (corr.get("why") or ""):
+                out.append(f"3b ({name}): a correctly signed snapshot for another record must verify AND be named as not the requested record: ok={ver.get('ok')} outcome={res.get('outcome')} corr={corr}")
+        # the good case still verifies and matches
+        row_g, _ = ops.reserve(request_key="rk_corr_s_good", kind="investigation", execution={"adapter": "adapter/x", "spec": spec_s}, config={}, action_id="investigate.opencase.snapshot")
+        ops.claim(row_g["op_id"], server.OPS_DISPATCHER.token)
+        good = packed_for(case_a, "exemplar", "after the filing")
+        pr._request = synthetic({"snapshot": {"id": "snap_good", "case_file_id": case_a, "snapshot_number": 1, "taken_by": "exemplar", "entry_count": 0, "signed_hash": good, "share_url": "", "label": "after the filing"}, "signature_check": {"valid": True}, "case": {"id": case_a}})
+        started = pr.start(row_g["op_id"], spec_s, "nk_g")
+        res = pr.retrieve(row_g["op_id"], spec_s, started["object_id"], reply=started["reply"])
+        if res.get("outcome") != "verified" or not (res.get("verification") or {}).get("correlation", {}).get("matches_request"):
+            out.append(f"3b: the matching snapshot no longer verifies as the requested record: {res.get('outcome')} {(res.get('verification') or {}).get('correlation')}")
+        # what the investigation view says about a verified-but-wrong record: verified (the signature) and the mismatch, both
+        ops.mark(row_g["op_id"], "complete", result_ref={"upstream_id": case_a, "object_id": "snap_good", "verification": {**res["verification"], "correlation": {"matches_request": False, "why": "the signed payload's case is 'b', not the case asked for"}}, "kind": "snapshot"})
+        st = pr.status(ops.get(row_g["op_id"]))
+        if not st.get("verified") or "not the record that was requested" not in st.get("receipt", "") or (st.get("correlation") or {}).get("matches_request") is not False:
+            out.append(f"3b: the view does not keep signature validity and request identity as two facts: {st.get('verified')} {st.get('receipt')!r}")
+    finally:
+        pr._request = real_request
+        _os2.environ.pop("NIK_CORR_KEY", None)
+        state_root.apply(_SCRATCH)
+    return out
+
+
 def _check_investigation_adapters(server, paired):
     """Slice F, corrected after the review of 6e5b59c (finding 3). Each
     instrument has an adapter that declares the contract it was built
@@ -7262,7 +7533,7 @@ def _check_investigation_adapters(server, paired):
         # a deployed (https) connector: in test mode too, start waits for the owner's ruling, which names the revision
         fed.register_connector("ea-deployed", "ethicalalt", "https://ethicalalt.example.org", display="EthicalAlt (deployed)", by="suite")
         r2 = pr.readiness("ethicalalt", "start")
-        if r2["available"] or not r2["configured"] or r2["deployment_verified"] or "runs the pinned revision 1a71460" not in r2["reason"] or r2.get("contract_verified") != "source":
+        if r2["available"] or not r2["configured"] or r2["deployment_verified"] or "waits for your authorization" not in r2["reason"] or "1a71460" not in r2["reason"] or r2.get("contract_verified") != "source":
             out.append(f"F: a deployed connector without a ruling must not be startable, and the reason names the pinned revision: {r2}")
         if not pr.readiness("ethicalalt", "lookup")["available"]:
             out.append("F: lookup on a configured, enabled connector should be available")
@@ -7273,7 +7544,7 @@ def _check_investigation_adapters(server, paired):
         # a ruling made against another revision does not carry over a re-pin
         fed._append(fed.connectors_log(), {"kind": "live_start", "connector_id": "ea-deployed", "enabled": True, "note": "older", "by": "suite", "revision": "0" * 40})
         r3b = pr.readiness("ethicalalt", "start")
-        if r3b["available"] or "recorded against revision 0000000" not in r3b["reason"]:
+        if r3b["available"] or "recorded against revision 0000000" not in r3b["reason"] or "asked for again" not in r3b["reason"]:
             out.append(f"F: a ruling recorded against another revision must not enable starting at this one: {r3b}")
         pr.rule_live_start("ea-deployed", False, note="withdrawn", by="suite")
         if pr.readiness("ethicalalt", "start")["available"]:
@@ -7546,8 +7817,10 @@ def _check_investigation_adapters(server, paired):
     src = (Path(__file__).resolve().parents[1] / "webapp" / "work" / "investigate.js").read_text(encoding="utf-8")
     if "2 of 4" in src or "innerHTML" in src:
         out.append("F: investigate.js carries a fixture constant or innerHTML")
-    if "runs the pinned revision" not in src or "not served by" not in src:
-        out.append("F: investigate.js does not word the ruling as 'runs the pinned revision' or say the package contract is not served by main")
+    if "Authorize live use" not in src or "verifies nothing by itself" not in src or "not served by" not in src or "belongs to whoever set the connector up" not in src:
+        out.append("F: investigate.js does not word the control as the owner's authorization (with the technical check named as the implementer's), or does not say the package contract is not served by main")
+    if re.search(r"ct\.revision\b(?!_date)", src.split("facts.push(['Contract'", 1)[1].split("\n", 1)[0]):
+        out.append("F: the Investigate card prints the commit identifier on its face instead of in the disclosure")
     rsrc = (Path(__file__).resolve().parents[1] / "webapp" / "work" / "results.js").read_text(encoding="utf-8")
     if "sent nothing" in rsrc and "r.data.sent" not in rsrc:
         out.append("F: results.js says recovery sent nothing without reading whether it did")
@@ -7702,8 +7975,10 @@ def main() -> int:
     failures.extend(_check_work_index(server, _paired))
     failures.extend(_check_producer_contracts())
     failures.extend(_check_investigation_adapters(server, _paired))
+    failures.extend(_check_investigation_correlation(server, _paired))
     failures.extend(_check_vault_sqlite())
     failures.extend(_check_preview_isolation(server))
+    failures.extend(_check_preview_inheritance(server, _paired))
     failures.extend(_check_map_focus_routes(server, _paired))
     failures.extend(_check_moira_routes(server, _paired))
     failures.extend(_check_notebook_b(server, _paired))

@@ -248,7 +248,8 @@ export class Results {
     // the operation's own recorded reason first (an investigation says what was delivered and what is not known); the recovery table's sentence when there is none
     if (t.status === 'unknown') card.appendChild(el('div', { class: 'warn small-text', text: 'Outcome unknown — ' + (d.error || (rec && rec.why) || 'the server was interrupted; it may still have run. Nothing was sent again.') }));
     if (t.status === 'failed') card.appendChild(el('div', { class: 'warn small-text', text: 'Failed — ' + (d.error || 'no reason was recorded') + '.' }));
-    if (t.status === 'queued' && d.progress && /dispatcher/.test(d.progress)) card.appendChild(el('div', { class: 'warn small-text', text: d.progress }));
+    if (t.status === 'queued' && d.progress && /dispatcher|Inherited/.test(d.progress)) card.appendChild(el('div', { class: 'warn small-text', text: d.progress }));
+    if (t.status === 'queued' && d.progress && /Inherited/.test(d.progress)) card.appendChild(el('div', { class: 'row' }, [el('button', { class: 'btn small', type: 'button', text: 'Start another attempt', title: 'A new operation under a new key, linked to this inherited one; it runs here on this press', onclick: () => this.anotherAttempt(t) })]));
     if (rec && rec.sent_evidence && ['failed', 'unknown', 'queued'].includes(t.status)) card.appendChild(el('div', { class: 'muted small-text', text: rec.sent_evidence + '.' }));
     if (['failed', 'unknown', 'queued'].includes(t.status) && t.kind === 'job') {
       card.appendChild(el('div', { class: 'row' }, [
@@ -264,17 +265,26 @@ export class Results {
       card.appendChild(el('div', { class: 'kv', text: 'Producer: ' + (d.producer || '—') + (inv.upstream_id ? ' · upstream id ' + inv.upstream_id : '') }));
       card.appendChild(el('div', { class: 'kv', text: (isSnapshot ? 'Snapshot request: ' : 'Start: ') + (inv.start || 'not sent') + (inv.delivery ? ' · delivery: ' + inv.delivery.replace(/_/g, ' ') : '') }));
       if (said.length) card.appendChild(el('div', { class: 'kv muted small-text', text: 'The producer says — ' + said.join(' · ') }));
-      if (!isSnapshot) card.appendChild(el('div', { class: 'kv', text: 'Kept from the producer: ' + (inv.artifact || 'not retrieved') }));
-      card.appendChild(el('div', { class: 'kv', text: (isSnapshot ? 'Signed snapshot: ' : 'Signed receipt: ') + (inv.receipt || 'none') + ' — a valid signature says the bytes are the producer’s under the key you pinned, not that the research is true' }));
+      if (!isSnapshot) card.appendChild(el('div', { class: 'kv', text: 'Kept from the producer: ' + (inv.artifact_summary || inv.artifact || 'not retrieved') }));
+      card.appendChild(el('div', { class: 'kv', text: (isSnapshot ? 'Signed snapshot: ' : 'Signed receipt: ') + (inv.receipt_summary || inv.receipt || 'none') + '. A valid signature says the bytes are the producer’s under the key you pinned — not that the research is true.' }));
       if (inv.kept && inv.kept.length) card.appendChild(el('div', { class: 'row' }, inv.kept.map(k => el('span', { class: 'chip', title: 'sha256 ' + k.sha256, text: k.name + ' · ' + k.bytes + ' bytes' }))));
       if (['failed', 'unknown'].includes(t.status)) card.appendChild(el('div', { class: 'row' }, [
         el('button', { class: 'btn small', type: 'button', text: 'Check status / recover result', title: 'Reads the record; if the start was answered and the signed record is missing, reads the producer again by id (and asks EthicalAlt for the receipt again — a write it stores); never starts again; says what it sent', onclick: () => this.recover(t) }),
         el('button', { class: 'btn small', type: 'button', text: 'Start another attempt', title: 'A new operation under a new key; the producer is asked again', onclick: () => this.anotherAttempt(t) }),
       ]));
-      if (t.status === 'complete' && !inv.verified && !isSnapshot && inv.start === 'ok') card.appendChild(el('div', { class: 'row' }, [
-        el('button', { class: 'btn small', type: 'button', text: 'Ask for the signed record again', title: 'Reads the producer again by id and, for EthicalAlt, asks for the receipt again (a write it stores); never starts again; says what it sent', onclick: () => this.recover(t) }),
+      // what can follow a completed but unsigned result is the producer's, not a generic retry (the review of 0f2db31, 3c):
+      // EthicalAlt issues a receipt on request (a write it stores); Open Case signs nothing on a read — a signed snapshot is its own proposal
+      if (t.status === 'complete' && !inv.verified && !isSnapshot && inv.start === 'ok' && d.producer === 'ethicalalt') card.appendChild(el('div', { class: 'row' }, [
+        el('button', { class: 'btn small', type: 'button', text: 'Ask EthicalAlt for the receipt again', title: 'Reads the export again by its slug and asks for the receipt again — a write the producer stores; never starts again; says what it sent', onclick: () => this.recover(t) }),
       ]));
-      card.appendChild(el('details', {}, [el('summary', { text: 'Details' }), el('div', { class: 'small-text muted', text: `operation ${t.id} · snapshot ${d.snapshot_id || '—'}${rec ? ' · ' + rec.dispatch_intents + ' dispatch intent' + (rec.dispatch_intents === 1 ? '' : 's') + ' recorded, ' + rec.dispatch_ends + ' ended' : ''}${inv.receipt_id ? ' · receipt id ' + inv.receipt_id : ''}${inv.kept && inv.kept.length ? ' · kept: ' + inv.kept.map(k => k.name + ' sha256 ' + k.sha256).join(', ') : ''} · ${inv.package_contract || ''}` })]));
+      if (t.status === 'complete' && !inv.verified && !isSnapshot && inv.start === 'ok' && d.producer === 'open_case') {
+        const spec = d.spec || {};
+        card.appendChild(el('div', { class: 'row' }, [
+          spec.case_id && spec.handle && this.hooks.prepareAction ? el('button', { class: 'btn small', type: 'button', text: 'Take a signed snapshot…', title: 'A separate act on the producer (a snapshot row, a re-signed case file, a credit to your handle): proposed first, nothing runs until Start', onclick: () => this.hooks.prepareAction('investigate.opencase.snapshot', { kind: 'description', text: spec.case_id + ' ' + spec.handle, title: 'Open Case snapshot' }) }) : null,
+          el('button', { class: 'btn small', type: 'button', text: 'Read the report again', title: 'GET the case report again — a read the producer counts as a view and may follow with its own refresh; signs nothing; never starts again', onclick: () => this.recover(t) }),
+        ]));
+      }
+      card.appendChild(el('details', {}, [el('summary', { text: 'Details' }), el('div', { class: 'small-text muted', text: `operation ${t.id} · snapshot ${d.snapshot_id || '—'}${rec ? ' · ' + rec.dispatch_intents + ' dispatch intent' + (rec.dispatch_intents === 1 ? '' : 's') + ' recorded, ' + rec.dispatch_ends + ' ended' : ''}${inv.receipt_id ? ' · receipt id ' + inv.receipt_id : ''} · signed record: ${inv.receipt || 'none'} · kept: ${inv.artifact || '—'}${inv.kept && inv.kept.length ? ' · ' + inv.kept.map(k => k.name + ' sha256 ' + k.sha256).join(', ') : ''}${inv.correlation && inv.correlation.checked ? ' · identity checked: ' + inv.correlation.checked : ''} · ${inv.package_contract || ''}` })]));
     }
     if (t.kind === 'reading' && d.reading) {
       const v = d.reading;

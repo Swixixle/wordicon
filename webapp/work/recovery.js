@@ -41,12 +41,15 @@ export function available() {
 }
 
 // Writes the envelope; resolves only when the transaction has completed.
-export async function write(envelope) {
+// `at` is the moment the WORDS were written; a note added to an envelope by
+// another tab (carried, discarded) passes keepAt so the envelope keeps its
+// own time and its place in any ordering by time.
+export async function write(envelope, opts = {}) {
   const db = await open();
   return new Promise((resolve, reject) => {
     let tx;
     try { tx = db.transaction(STORE, 'readwrite'); } catch (e) { reject(e); return; }
-    const rec = { ...envelope, key: envelope.doc_id + '|' + envelope.tab_id, at: new Date().toISOString() };
+    const rec = { ...envelope, key: envelope.doc_id + '|' + envelope.tab_id, at: (opts.keepAt && envelope.at) ? envelope.at : new Date().toISOString() };
     tx.objectStore(STORE).put(rec);
     tx.oncomplete = () => resolve(rec);
     tx.onerror = () => reject(tx.error || new Error('the recovery write failed'));

@@ -58,13 +58,13 @@ export class Investigate {
     const facts = [];
     facts.push(['Connector', rdS.configured ? (rdS.connector_id + (rdS.enabled ? ' · enabled' : ' · disabled')) : (p.connector_kind ? 'none registered' : 'none can be declared yet')]);
     if (p.connector_kind) {
-      facts.push(['Contract', ct ? ('pinned from the producer’s source at ' + String(ct.revision || '').slice(0, 7) + ' (' + (ct.branch || 'main') + ', ' + (ct.revision_date || '') + ') — source-verified, not deployment-verified') : (rdS.contract || '—')]);
+      facts.push(['Contract', ct ? ('read from the producer’s own source (' + (ct.revision_date || '') + ') — what it serves is known from its code, not from a deployment; the routes and the revision are in “The contract, as pinned” below') : (rdS.contract || '—')]);
       facts.push(['Credential', rdS.credential || 'not required']);
       facts.push(['Last check', (rdS.last_check || 'never tried') + (rdS.last_success_at ? ' · last success ' + whenOf(rdS.last_success_at) : '')]);
       facts.push(['Look up', rdL.available ? 'available' : (rdL.reason || 'not available')]);
       facts.push(['Start', rdS.start_available ? ('available' + (rdS.fixture_only ? ' — ' + rdS.reason : '')) : (rdS.reason || 'not available')]);
       facts.push(['Cost', 'unknown here — the producer’s own calls are billed on its side; nothing is priced by this workspace']);
-      facts.push(['Deployment runs the pinned revision', rdS.deployment_verified ? ('yes — ruled by ' + ((rdS.live_start_ruling || {}).by || 'owner') + (rdS.live_start_ruling && rdS.live_start_ruling.note ? ': ' + rdS.live_start_ruling.note : '')) : 'not ruled — the contract is read from the producer’s source; whether this connector’s deployment runs that revision has not been recorded']);
+      facts.push(['Live use', rdS.deployment_verified ? ('enabled by your authorization' + (rdS.live_start_ruling && rdS.live_start_ruling.note ? ' — ' + rdS.live_start_ruling.note : '')) : 'not enabled — a real investigation through this connector waits for your authorization below; until then only the fixture producer can be started']);
     } else {
       facts.push(['Why', rdS.reason || p.why_unavailable || '—']);
     }
@@ -103,18 +103,20 @@ export class Investigate {
       }
       if (!ok) card.appendChild(el('div', { class: 'muted small-text', text: 'Start: ' + (start.readiness ? start.readiness.reason : 'not available') }));
       if (rdS.configured && !rdS.deployment_verified) {
-        const det = el('details', {}, [el('summary', { text: 'Record that this deployment runs the pinned revision (owner)' })]);
-        const note = el('input', { type: 'text', placeholder: 'how you established that the deployment runs ' + String((ct || {}).revision || '').slice(0, 7) + ' (kept in the record)', class: 'inv-subject' });
-        det.appendChild(el('div', { class: 'muted small-text', text: 'Starting live is enabled only by your ruling that this connector’s deployment runs the revision the contract was read from' + (ct ? ' (' + String(ct.revision).slice(0, 7) + ', ' + ct.revision_date + ')' : '') + '. This records the ruling with that revision; it verifies nothing by itself, and a later re-pin does not inherit it.' }));
-        det.appendChild(el('div', { class: 'row' }, [note, el('button', { class: 'btn small', type: 'button', text: 'Record: the deployment runs the pinned revision', onclick: async () => {
-          if (!note.value.trim()) { toast('Say how you established it — the ruling carries the note.'); return; }
+        // the owner authorizes use; the technical check that the deployment runs the revision the contract was
+        // read from is the implementer's work, named in the note — the owner is never asked to certify a revision
+        const det = el('details', {}, [el('summary', { text: 'Enable live investigations through this connector (owner)' })]);
+        const note = el('input', { type: 'text', placeholder: 'who checked this deployment against the pinned contract, and when (kept in the record)', class: 'inv-subject' });
+        det.appendChild(el('div', { class: 'muted small-text', text: 'This records your authorization to use this connector for real investigations, and nothing else: it verifies nothing by itself. The technical check — that the deployment serves the contract the adapter was read from — belongs to whoever set the connector up; name them in the note. If the contract is re-read from a later revision, this authorization is asked for again.' }));
+        det.appendChild(el('div', { class: 'row' }, [note, el('button', { class: 'btn small', type: 'button', text: 'Authorize live use', onclick: async () => {
+          if (!note.value.trim()) { toast('Name who checked the deployment and when — the authorization carries the note.'); return; }
           const r = await postJSON('/api/connectors/' + encodeURIComponent(rdS.connector_id) + '/live-start', { enabled: true, note: note.value.trim() });
-          toast(r.ok ? 'Recorded. Starting is enabled for this connector by your ruling.' : ('Not recorded: ' + (r.data.error || r.status)));
+          toast(r.ok ? 'Recorded. Live investigations through this connector are enabled by your authorization.' : ('Not recorded: ' + (r.data.error || r.status)));
           this.render();
         } })]));
         card.appendChild(det);
       } else if (rdS.deployment_verified) {
-        card.appendChild(el('div', { class: 'row' }, [el('button', { class: 'btn small', type: 'button', text: 'Withdraw the ruling', onclick: async () => { const r = await postJSON('/api/connectors/' + encodeURIComponent(rdS.connector_id) + '/live-start', { enabled: false, note: 'withdrawn' }); toast(r.ok ? 'Withdrawn; starting is disabled again.' : 'Not changed'); this.render(); } })]));
+        card.appendChild(el('div', { class: 'row' }, [el('button', { class: 'btn small', type: 'button', text: 'Withdraw the authorization', onclick: async () => { const r = await postJSON('/api/connectors/' + encodeURIComponent(rdS.connector_id) + '/live-start', { enabled: false, note: 'withdrawn' }); toast(r.ok ? 'Withdrawn; live use is disabled again.' : 'Not changed'); this.render(); } })]));
       }
     } else if (start && start.kind === 'view') {
       card.appendChild(el('div', { class: 'muted small-text', text: start.readiness ? start.readiness.reason : '' }));

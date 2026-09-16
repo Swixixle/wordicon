@@ -20,8 +20,8 @@ const editor = new EditorSwitch({ onNotice: t => toast(t, 6000), onSwitch: () =>
 editor.mount(document.getElementById('editor-host'));
 
 const session = new DocumentSession(editor, {
-  onStatus: s => renderHeader(s),
-  onOpened: s => { renderHeader(s); showPage('work'); renderToolbar(); if (s.recovered) toast('Opened with unsent changes recovered from this browser (newer than the saved copy).'); },
+  onStatus: s => { renderHeader(s); renderDrafts(s); },
+  onOpened: s => { renderHeader(s); renderDrafts(s); showPage('work'); renderToolbar(); if (s.recovered) toast('Opened with unsent changes recovered from this browser (newer than the saved copy).'); },
   onConflict: s => renderConflict(s),
   onApplicationCommitted: () => { results.render(); },
 });
@@ -30,6 +30,7 @@ const layout = new Layout(shell, { focusEditor: () => editor.focus() });
 const places = new Places({ onOpen: () => { hideViews(); document.getElementById('place-view').hidden = false; }, onClose: () => showPage(currentPage) });
 const applier = new Applier(session, editor, { onRecorded: () => {} });
 const results = new Results(session, layout, places, { onPlace: () => {}, onActivity: () => renderActivity(), applyControls: (t, text) => applier.controls(t, text),
+  prepareAction: (id, subject) => actions.prepare(id, subject),
   labelOf: id => (actions.byId[id] && actions.byId[id].label) || (id || '').replace(/^legacy:\/api\/jobs:/, 'a run: ') });
 const actions = new Actions(session, layout, places, results, { onPlace: () => {} });
 const yourwork = new YourWork(session, places, {
@@ -77,6 +78,30 @@ function renderHeader(s) {
     m.classList.remove('warn');
   }
   document.title = (window.BRAND && window.BRAND.name || 'Nikodemus') + ' — ' + (currentPage === 'work' ? s.displayTitle() : t.textContent);
+}
+
+// Other tabs' unsaved copies of the open document (the review of 0f2db31, finding 1):
+// each is a version of its own, kept whole; it can become a new document, or fill this
+// editor when this editor holds nothing unsent; deleting one is an explicit press.
+function renderDrafts(s) {
+  const bar = document.getElementById('drafts-bar');
+  const list = s.otherDrafts || [];
+  if (!list.length) { bar.hidden = true; bar.textContent = ''; return; }
+  bar.textContent = '';
+  bar.appendChild(el('div', { class: 'small-text', text: list.length + ' unsaved cop' + (list.length === 1 ? 'y' : 'ies') + ' of this document from ' + (list.length === 1 ? 'another tab' : 'other tabs') + ' of this browser — kept whole, not combined with what is here. Each can become its own document.' }));
+  list.forEach((o, i) => {
+    const canRestore = s.seq === s.ackSeq && s.status !== 'conflict' && o.base_revision === s.revision;
+    const row = el('div', { class: 'draft-row', dataset: { tab: o.tab_id } }, [
+      el('span', { class: 'chip', text: (o.live ? 'still open in another tab' : 'that tab is gone') }),
+      el('span', { class: 'muted small-text', text: whenOf(o.at) + ' · ' + o.words + ' word' + (o.words === 1 ? '' : 's') + (o.title_is_manual && o.title ? ' · titled “' + o.title + '”' : '') + ' · based on revision ' + o.base_revision }),
+      el('span', { class: 'small-text', text: '“' + (o.body || '').trim().replace(/\s+/g, ' ').slice(0, 90) + ((o.body || '').trim().length > 90 ? '…' : '') + '”' }),
+      el('button', { class: 'btn small', type: 'button', text: 'Open as a new document', title: 'This version becomes its own document on the server; nothing here is replaced', onclick: () => session.openOtherDraftAsNew(i) }),
+      canRestore ? el('button', { class: 'btn small', type: 'button', text: 'Restore here', title: 'Puts this version into the editor (which holds nothing unsent); the other tab keeps its own copy', onclick: () => session.restoreOtherDraftHere(i) }) : null,
+      el('button', { class: 'btn small', type: 'button', text: 'Delete this copy', title: o.live ? 'Removes the copy from this browser’s recovery; the tab that is still open keeps its own words' : 'Removes the copy from this browser’s recovery', onclick: () => { if (confirm('Delete this unsaved copy from this browser’s recovery? ' + (o.live ? 'The tab that is still open keeps its own words.' : 'It is the only copy of these words.'))) session.discardOtherDraft(i).then(() => renderDrafts(session)); } }),
+    ]);
+    bar.appendChild(row);
+  });
+  bar.hidden = false;
 }
 
 function renderConflict(s) {
@@ -238,13 +263,14 @@ function renderHelp() {
   const lines = [
     'Write in the blue surface. It saves by itself; the header says when, and counts the words of this draft.',
     'Formatting: bold ⌘B, italic ⌘I, headings, bulleted and numbered lists (⇧⌘8, ⇧⌘9; Tab and ⇧Tab indent and outdent inside a list; Enter on an empty item leaves the list), quotes and links, from the bar or the keys. Enter starts a paragraph; ⇧Enter breaks a line inside one. ⌘F finds and replaces in the draft.',
+    'If another tab of this browser holds unsaved words for the document you open, they are listed above the draft as separate copies — kept whole, never combined with what is here, never taken over by being seen: each can become its own document, fill an empty editor, or be deleted by your press. A tab that reopens gets its own unsaved words back; a tab that is gone can have its words brought into an empty editor.',
     'Your words are kept exactly. The plain text that tools read and that exports carry is the text you see; headings, emphasis, lists and links are kept beside it and never sent to a model. A document with characters this editor cannot hold (a carriage return, a control character) opens in plain text, kept exactly, with formatting off.',
     'Pasting keeps paragraphs, headings, lists, quotes, bold, italic and links; anything else arrives as text and the paste says so. ⇧⌘V pastes as plain text.',
     'Tools (left) holds the destinations and every feature in plain words, grouped. Results (right) holds results, readers’ feedback, revision notes and sources. Each side has its own Hide; the header brings them back.',
     'Select words and press ⌘. (or use the selection menu) to act on exactly those words. Nothing runs until you press Start on the proposal, which says what leaves this machine and what it costs.',
     'A result made from a selection can be put into the draft — Insert below the selection, or Replace the selection — only while the draft is as it was when the result was made; otherwise you choose the target again. An application is one undo step (⌘Z).',
     'Ask ⌘K finds a tool by name — related words, feedback, analyze, map — and takes a plain request like “investigate Exemplar Holdings”, whose rest becomes what the tool is asked about. It proposes; it never runs by itself.',
-    'Investigate shows the four instruments and, for each, what the record says: the connector, the contract pinned from the producer’s source at a named revision, the credential, the last check, whether a lookup or a start is available, the cost (unknown here — billed on the producer’s side), and whether you have recorded that the deployment runs that revision. A start is a proposal first; it sends one request to the producer, then keeps what the producer serves byte for byte — EthicalAlt: its unsigned export and a signed receipt (a write the producer stores), Open Case: the case report (a read the producer counts); a signed snapshot of a case is a separate act, disclosed as the mutation it is. A valid signature means the bytes are the producer’s under the key you pinned, not that the research is true. The rooms’ signed package import is not served by either producer’s main at the pinned revisions.',
+    'Investigate shows the four instruments and, for each, what the record says: the connector, the contract pinned from the producer’s source at a named revision, the credential, the last check, whether a lookup or a start is available, the cost (unknown here — billed on the producer’s side), and whether you have authorized live use (the technical check that a deployment serves the pinned contract is the implementer’s, named in the note; you authorize use). A start is a proposal first; it sends one request to the producer, then keeps what the producer serves byte for byte — EthicalAlt: its unsigned export and a signed receipt (a write the producer stores), Open Case: the case report (a read the producer counts); a signed snapshot of a case is a separate act, disclosed as the mutation it is. A valid signature means the bytes are the producer’s under the key you pinned, not that the research is true. The rooms’ signed package import is not served by either producer’s main at the pinned revisions.',
     'Focus hides the sides and the secondary controls; Exit focus brings back what was open.',
     'Document ▾: New, Rename, Duplicate, Open another, Versions (⌘S makes a checkpoint; a version can be restored as a new revision — nothing is rewritten), Make a plain copy, Export (text is visibly plain; Markdown and Word (.docx) keep the structure; Print for PDF).',
     'Undo is the editor’s own for this sitting. Checkpoints and the recovery copy in this browser are what persist; they are not continuous undo.',

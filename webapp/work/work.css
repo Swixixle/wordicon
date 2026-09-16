@@ -227,3 +227,8 @@ details > summary { cursor: pointer; color: var(--write-panel-ink); font-size: 1
 .concept-list { display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow: auto; margin-top: 8px; }
 .concept-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .concept-row .btn { flex-shrink: 0; }
+
+/* unsaved copies of the open document held by other tabs: listed above the draft, each with its own ways out; nothing here combines prose */
+.drafts-bar { margin: 8px 16px 0; padding: 8px 12px; border: 1px solid var(--bad); border-radius: 8px; background: var(--card); color: var(--text); font-size: 13px; }
+.drafts-bar .draft-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 4px 0; }
+.drafts-bar .draft-row .btn { flex-shrink: 0; }

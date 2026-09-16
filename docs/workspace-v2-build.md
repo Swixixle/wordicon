@@ -80,6 +80,16 @@ The living contract of the workspace build (authorized 2026-09-16; the instructi
 
 **D38 — Word export is built on the server from the saved structure (completeness).** Minimal OOXML, no library; the export names the revision it carries and the menu settles a pending save first (bounded) so the file is the head as saved. A concept-subject action is chosen from the shelf as ruled (`GET /api/concepts`), never guessed from the draft. Your work and Investigate keep internals (action ids, store counts, generations, contract text) in disclosures and say what decides on the card.
 
+**D39 — a tab's own envelope is the only one that may become its editor; every other tab's version is listed, never taken (the review of 0f2db31, finding 1).** Timestamp order is not permission to discard a draft: two tabs with different unsent words are two versions, each reopenable on its own (as a new document, or into an editor that holds nothing unsent), and an envelope from a live tab is never modified by another tab. Only a gone tab's envelope (no live tab answers for it on the presence channel) may fill an empty editor, and it is left in place until its words are in an acknowledged revision. The head equality includes the title and its manual flag. Reason: the recovery store's per-tab key promised that distinct tabs never overwrite each other's only copy; the caller broke the promise by choosing the newest and writing it everywhere.
+
+**D40 — a preview dispatches nothing it inherited (finding 2).** Copied queued operations keep their identity and events and are marked inherited and paused; a press makes a linked attempt. Reason: the original's owner never pressed Start in the preview, and two roots running the same queued work would run it twice.
+
+**D41 — the copy holds the source's lease throughout, and fails closed (finding 2).** A lease that cannot be checked refuses; a source without one is copied and said so. Reason: a lock taken and released before the copy protects nothing.
+
+**D42 — a reply is correlated with the request before any id in it is followed; a signed record's identity is a fact beside its signature (3a–3c).** An intent without an end is delivery unknown. A reply for another record is kept as evidence and named, never followed. What a producer does not sign is said to be unchecked. Recovery controls are the producer's own acts, never a generic retry that silently becomes a mutation.
+
+**D43 — the owner authorizes use; the implementer verifies deployments (§4).** The control reads "Authorize live use" and records who checked the deployment against the pinned contract; the card's face carries no commit identifier or key id — those live in the disclosures.
+
 ## Parity checklist
 
 Status words: **reached** (a labelled control in the shell reaches it and a test proves it), **inside** (opens inside the shell as the existing page, with return), **legacy** (reachable only through "The previous interface" under More tools), **pending** (not yet wired; the slice that will).

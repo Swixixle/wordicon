@@ -3916,6 +3916,7 @@ def _run_investigation(op_id: str, spec: dict) -> None:
                 ops.mark(op_id, status_word, last_error=str(e),
                          local_state={"not_sent": "Not sent", "refused": "Delivered; refused by the producer",
                                       "error_after_delivery": "Delivered; the producer answered with an error — whether it ran is not known",
+                                      "answered_wrong_record": "Delivered; the producer answered for ANOTHER record — kept as evidence, not followed; what it did with the request is not known",
                                       "unknown": "Sent; no answer came back"}.get(e.outcome, "Failed"),
                          producer_state={"nothing_sent": e.nothing_sent, "outcome": e.outcome, "delivery": e.delivery})
                 return
@@ -3928,10 +3929,14 @@ def _run_investigation(op_id: str, spec: dict) -> None:
             ref = _investigation_result_ref(started, art)
             ver = art.get("verification") if isinstance(art.get("verification"), dict) else {}
             if art.get("ok"):
-                if ver.get("ok"):
+                corr = ver.get("correlation") if isinstance(ver.get("correlation"), dict) else {}
+                if ver.get("ok") and corr.get("matches_request") is False:
+                    word = "Complete — a signed record verified under the pinned key, but NOT the record requested: " + str(corr.get("why") or "")[:160] + "; kept as evidence"
+                elif ver.get("ok"):
                     word = "Complete — the signed record verified under the pinned key; the bytes are kept"
                 elif art.get("receipt") is None and started.get("kind") != "snapshot":
-                    word = "Complete — the producer's artifact is kept (unsigned); no signed record: " + str(ver.get("why") or "")[:160]
+                    ident = ((art.get("artifact") or {}).get("identity_check") or "")
+                    word = "Complete — the producer's artifact is kept (unsigned); no signed record: " + str(ver.get("why") or "")[:160] + ((" · " + ident) if ident else "")
                 else:
                     word = "Complete — kept; the signed record did NOT verify: " + str(ver.get("why") or "")[:160]
                 ops.mark(op_id, "complete", local_state=word, result_ref=ref)
@@ -3953,7 +3958,8 @@ def _shape_investigation_view(op: dict) -> dict:
             "producer": (ex.get("spec") or {}).get("producer") or (op.get("config") or {}).get("producer", ""), "progress": op.get("local_state"),
             "error": op.get("last_error"), "created_at": op.get("created_at"), "updated_at": op.get("updated_at"), "finished_at": op.get("finished_at"),
             "prepared_id": op.get("prepared_id"), "snapshot_id": op.get("snapshot_id"), "result_ref": op.get("result_ref"), "producer_state": op.get("producer_state"),
-            "investigation": st, "request_key": op.get("request_key"), "retry_parent": op.get("retry_parent"), "events_count": op.get("events_count")}
+            "investigation": st, "request_key": op.get("request_key"), "retry_parent": op.get("retry_parent"), "events_count": op.get("events_count"),
+            "spec": {k: v for k, v in ((ex.get("spec") or {}).items()) if k in ("producer", "kind", "case_id", "handle", "brand", "subject_name", "label")}}
 
 
 def _shape_job_view(op: dict, job: dict | None) -> dict:
@@ -4289,7 +4295,8 @@ def api_operation_attempt(op_id):
     op = ops.get(op_id)
     if op is None:
         return jsonify({"error": "no operation with that id"}), 404
-    if op["status"] in ("queued", "claimed", "running"):
+    inherited = op["status"] == "queued" and vault.preview_mode() and _inherited_by_preview(op["op_id"])
+    if op["status"] in ("queued", "claimed", "running") and not inherited:
         return jsonify({"error": "this operation is still queued or running; another attempt would be a second run of the same request", "nothing_was_sent": True}), 409
     if not op.get("prepared_id"):
         return jsonify({"error": "this operation was not started from a proposal; start it again from where it was started", "nothing_was_sent": True}), 409
@@ -6166,6 +6173,18 @@ def _ops_startup() -> dict:
     if not dispatching:
         summary["left_queued"] = [o["op_id"] for o in ops.queued()]
         return summary
+    if vault.preview_mode():
+        # the review of 0f2db31, finding 2: a preview on a COPIED store inherits that store's queued work.
+        # Those operations keep their identity, provenance and events, but this process does not dispatch
+        # them by itself — the original's owner never pressed Start here. Each is left queued, said to be
+        # inherited and paused; "Start another attempt" makes a clearly linked preview attempt on a press.
+        summary["inherited_paused"] = []
+        for op in ops.queued():
+            if not _inherited_by_preview(op["op_id"]):
+                ops.mark(op["op_id"], None, local_state="Inherited by this preview from the copied store — paused, not dispatched; Start another attempt runs it here on your press",
+                         event_kind="note", detail={"preview_inherited": True, "at": _now_iso(), "root": str(cli.LOCAL_STATE)})
+            summary["inherited_paused"].append(op["op_id"])
+        return summary
     for op in ops.queued("job"):
         pid = op.get("prepared_id")
         prepared = actions.load_prepared(pid) if pid else None
@@ -6207,13 +6226,23 @@ def _ops_startup() -> dict:
     return summary
 
 
+def _inherited_by_preview(op_id: str) -> bool:
+    """Whether a preview process marked this operation as inherited from the
+    store it was copied from (an event in the record, never memory)."""
+    try:
+        return any(e["kind"] == "note" and (e.get("detail") or {}).get("preview_inherited") for e in ops.events(op_id))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def ops_startup_report() -> dict:
     """The serving process's startup reconciliation, said out loud; then the
     Your work index catches up with the record and keeps reconciling the
     file stores on a timer (slice E)."""
     summary = _ops_startup()
     print(f"[operations] startup: reconciled {len(summary['reconciled'])}, resumed {len(summary['resumed'])}, "
-          f"left queued {len(summary['left_queued'])} (dispatching: {summary['dispatching']})")
+          f"left queued {len(summary['left_queued'])} (dispatching: {summary['dispatching']})"
+          + (f"; PREVIEW: {len(summary['inherited_paused'])} inherited operation(s) left paused, none dispatched" if "inherited_paused" in summary else ""))
     try:
         h = workindex.refresh()
         print(f"[work index] {h.get('population', '')}" + (f" — incomplete: {h.get('incomplete')}" if h.get("incomplete") else ""))

@@ -517,7 +517,8 @@ const NAME = 'editor-' + ENGINE;
   const srv20b = await getDoc(id20);
   ok(srv20b.body === 'Saved alpha committed UNSENT BETA' && srv20b.revision === rev20 + 2, 'and saved as the next revision — no duplicate, nothing combined by guesswork');
 
-  // 21. formatting only after the cut reply, opened in a FRESH tab: the other tab's envelope is reconciled and then marked taken
+  // 21. formatting only after the cut reply, opened in a FRESH tab after the first tab is GONE: the gone tab's
+  //     envelope is reconciled and brought into the empty editor, and left in place (noted as carried, never abandoned)
   await fresh();
   await page.keyboard.type('Bold later');
   await settledOn();
@@ -530,6 +531,7 @@ const NAME = 'editor-' + ENGINE;
   await page.waitForTimeout(250);
   await stopRetry();
   await page.unroute(docUrl(id21));
+  await page.goto('about:blank');                                           // the first tab is gone: no live tab answers for its envelope
   const tab2 = await ctx.newPage();
   tab2.on('pageerror', e => errs.push('tab two (21): ' + String(e.message)));
   await tab2.goto(BASE + '/work'); await tab2.waitForSelector('.pm-editor');
@@ -537,12 +539,17 @@ const NAME = 'editor-' + ENGINE;
   await tab2.evaluate(id => window.__work.session.open(id), id21);
   await settledOrConflict(tab2);
   const st21 = await tab2.evaluate(() => JSON.stringify(window.__work.editor.getStructure()));
-  ok((await tab2.evaluate(() => window.__work.editor.getText())) === 'Bold later words' && st21.includes('"strong"') && (await tab2.evaluate(() => window.__work.session.recovered)) === true, 'a fresh tab reconciles the first tab’s envelope (the committed words acknowledged, the bold recovered) and saves it');
+  ok((await tab2.evaluate(() => window.__work.editor.getText())) === 'Bold later words' && st21.includes('"strong"') && (await tab2.evaluate(() => window.__work.session.recovered)) === true, 'a fresh tab reconciles the gone tab’s envelope (the committed words acknowledged, the bold recovered) and saves it');
   const srv21 = await getDoc(id21);
   ok(srv21.revision === rev21 + 2 && srv21.rich && JSON.stringify(srv21.doc_json).includes('"strong"'), 'the head carries the formatting as the next revision');
-  const envs21 = await envelopesOf(id21);
-  ok(envs21.some(e => e.abandoned) && !envs21.some(e => !e.abandoned && e.base !== srv21.revision && e.seq > e.ack), 'the first tab’s envelope is marked taken, so it will not be offered again');
+  await tab2.waitForTimeout(400);
+  const envs21 = await tab2.evaluate(async id => { const r = await import('/work/recovery.js'); return (await r.forDocument(id)).map(e => ({ tab: e.tab_id, abandoned: !!e.abandoned, carried: !!e.recovered_into, by: e.recovered_by || '' })); }, id21);
+  ok(!envs21.some(e => e.abandoned) && envs21.some(e => e.carried && e.by), 'the gone tab’s envelope is left in place — never abandoned — and noted as carried into the saved revision: ' + JSON.stringify(envs21));
+  ok((await tab2.evaluate(() => window.__work.session.otherDrafts.length)) === 0, 'and it is not offered again as a separate copy');
   await tab2.close();
+  await page.goto(BASE + '/work'); await page.waitForSelector('.pm-editor');
+  await page.waitForFunction(() => !!(window.__work && window.__work.session), null, { timeout: 10000, polling: 100 });
+  await page.waitForTimeout(400);
 
   // 22. the committed save's reply is lost AND the head moved on afterwards: both versions are kept, nothing combined
   await fresh();
@@ -570,6 +577,145 @@ const NAME = 'editor-' + ENGINE;
   await settledOn();
   const kept22 = (await sess()).id;
   ok(kept22 !== id22 && (await getDoc(kept22)).body === 'Ours first committed then more' && (await getDoc(id22)).body === 'Ours first committed — elsewhere', 'Keep mine as a new document: both versions are on the server under their own ids');
+
+  // ---- the review of 0f2db31, finding 1: two tabs of this browser, each with its OWN unsent words ----
+  // A tab's own envelope fills its editor on reload; another tab's version is listed beside the draft, kept whole,
+  // never overwritten and never marked consumed by being seen — in whichever order the two were written.
+  const blockSaves = p => p.route(docUrl(idShared), route => route.request().method() === 'PUT' ? route.abort('failed') : route.continue());
+  const stopRetryOn = p => p.evaluate(() => { const s = window.__work.session; if (s.retryTimer) clearTimeout(s.retryTimer); s.retryTimer = null; if (s.timer) clearTimeout(s.timer); s.timer = null; });
+  const boot = async p => { await p.goto(BASE + '/work'); await p.waitForSelector('.pm-editor'); await p.waitForFunction(() => !!(window.__work && window.__work.session && window.__work.session.id), null, { timeout: 10000, polling: 100 }); };
+  const drafts = p => p.evaluate(() => (window.__work.session.otherDrafts || []).map(o => ({ tab: o.tab_id, body: o.body, title: o.title, live: o.live, words: o.words })));
+  const envSnap = (p, id) => p.evaluate(async id => { const r = await import('/work/recovery.js'); return (await r.forDocument(id)).map(e => ({ tab: e.tab_id, body: e.body, title: e.title, abandoned: !!e.abandoned, carried: !!e.recovered_into })); }, id);
+
+  // 23. distinct unsent words in two live tabs; A reopens after B typed later (B's envelope is the newer one)
+  await fresh();
+  await page.keyboard.type('Saved alpha');
+  await settledOn();
+  const idShared = (await sess()).id;
+  const tabA = await page.evaluate(() => window.__work.session.tab);
+  await blockSaves(page);
+  await page.keyboard.type(' MY UNSENT WORDS');
+  await page.waitForFunction(() => window.__work.session.status === 'local', null, { timeout: 8000, polling: 50 });
+  await stopRetryOn(page);
+  const tabB = await ctx.newPage();
+  tabB.on('pageerror', e => errs.push('tab B (23): ' + String(e.message)));
+  await boot(tabB);
+  await tabB.evaluate(id => window.__work.session.open(id), idShared);
+  await tabB.waitForTimeout(600);
+  const dB0 = await drafts(tabB);
+  ok((await tabB.evaluate(() => window.__work.editor.getText())) === 'Saved alpha' && dB0.length === 1 && /MY UNSENT WORDS/.test(dB0[0].body) && dB0[0].live === true && dB0[0].tab === tabA, 'a second tab opens the saved head, and lists the first tab’s unsent words as a copy that is still open elsewhere — it does not take them: ' + JSON.stringify(dB0));
+  ok(!(await tabB.isHidden('#drafts-bar')) && /1 unsaved copy of this document from another tab/.test(await tabB.textContent('#drafts-bar')) && /still open in another tab/.test(await tabB.textContent('#drafts-bar')), 'the bar above the draft says so');
+  await blockSaves(tabB);
+  await tabB.click('.pm-editor'); await tabB.keyboard.press('End'); await tabB.keyboard.type(' OTHER TAB WORDS');
+  await tabB.waitForFunction(() => window.__work.session.status === 'local', null, { timeout: 8000, polling: 50 });
+  await stopRetryOn(tabB);
+  await tabB.waitForTimeout(300);                                            // B's envelope is now the newer of the two
+  await page.unroute(docUrl(idShared));
+  await page.reload(); await page.waitForSelector('.pm-editor'); await page.waitForTimeout(900);
+  await settledOrConflict(page);
+  const dA = await drafts(page);
+  ok((await text()) === 'Saved alpha MY UNSENT WORDS' && (await sess()).status === 'saved', 'tab A reopens with ITS OWN unsent words, though tab B’s envelope is newer — and saves them: ' + JSON.stringify(await text()));
+  ok(dA.length === 1 && /OTHER TAB WORDS/.test(dA[0].body) && dA[0].live === true, 'tab B’s version is listed in A, whole, marked as still open elsewhere: ' + JSON.stringify(dA));
+  const envsA = await envSnap(page, idShared);
+  ok(envsA.find(e => e.tab !== tabA && /OTHER TAB WORDS/.test(e.body) && !e.abandoned && !e.carried) !== undefined, 'B’s envelope was neither overwritten, abandoned nor marked carried by A’s reopening: ' + JSON.stringify(envsA));
+  // each version can be reopened: B's copy becomes its own document from A, and B's own reload still holds B's words
+  await page.click('#drafts-bar button:has-text("Open as a new document")');
+  await settledOn();
+  const idB = (await sess()).id;
+  ok(idB !== idShared && (await getDoc(idB)).body === 'Saved alpha OTHER TAB WORDS' && (await getDoc(idShared)).body === 'Saved alpha MY UNSENT WORDS', 'B’s version is a document of its own on the server; A’s words stand as the shared document’s head — nothing combined');
+  await tabB.unroute(docUrl(idShared));
+  await tabB.reload(); await tabB.waitForSelector('.pm-editor'); await tabB.waitForTimeout(900);
+  await tabB.evaluate(id => window.__work.session.open(id), idShared);         // the browser's "last document" is now A's new one; B goes back to the shared one
+  await settledOrConflict(tabB);
+  const bAfter = await tabB.evaluate(() => ({ text: window.__work.editor.getText(), status: window.__work.session.status, id: window.__work.session.id }));
+  ok(bAfter.id === idShared && bAfter.text === 'Saved alpha OTHER TAB WORDS' && bAfter.status === 'conflict', 'tab B reopens with ITS OWN words (older than A’s save now): the head moved under them, so both are kept as a named conflict, nothing lost: ' + JSON.stringify(bAfter));
+  await tabB.close();
+
+  // 24. a newer foreign envelope that equals a head made by a save whose reply was lost, beside this tab's own unsent words
+  await fresh();
+  await page.keyboard.type('Head words');
+  await settledOn();
+  const id24 = (await sess()).id;
+  const rev24 = (await sess()).revision;
+  const tabC = await ctx.newPage();
+  tabC.on('pageerror', e => errs.push('tab C (24): ' + String(e.message)));
+  await boot(tabC);
+  await tabC.evaluate(id => window.__work.session.open(id), id24);
+  await tabC.waitForTimeout(500);
+  await page.route(docUrl(id24), route => route.request().method() === 'PUT' ? route.abort('failed') : route.continue());
+  await page.click('.pm-editor'); await page.keyboard.press('End'); await page.keyboard.type(' mine unsent');
+  await page.waitForFunction(() => window.__work.session.status === 'local', null, { timeout: 8000, polling: 50 });
+  await stopRetryOn(page);
+  let leftC = 1;
+  await tabC.route(docUrl(id24), async route => { if (route.request().method() === 'PUT' && leftC > 0) { leftC -= 1; await route.fetch(); await route.abort('failed'); } else { await route.continue(); } });
+  await tabC.click('.pm-editor'); await tabC.keyboard.press('End'); await tabC.keyboard.type(' theirs committed');
+  await tabC.waitForFunction(() => window.__work.session.status === 'local', null, { timeout: 8000, polling: 50 });
+  await stopRetryOn(tabC);
+  await tabC.waitForTimeout(300);
+  ok((await getDoc(id24)).revision === rev24 + 1 && (await getDoc(id24)).body === 'Head words theirs committed', 'the other tab’s save committed (its reply cut): its envelope now equals the head');
+  await page.unroute(docUrl(id24));
+  await page.reload(); await page.waitForSelector('.pm-editor'); await page.waitForTimeout(1000);
+  await settledOrConflict(page);
+  ok((await text()) === 'Head words mine unsent' && (await sess()).status === 'conflict', 'this tab’s own unsent words are in its editor, kept beside the moved head as a named conflict — not replaced by the newer envelope that merely equals the head');
+  await page.click('#results-body button:has-text("Keep mine as a new document")');
+  await settledOn();
+  ok((await getDoc((await sess()).id)).body === 'Head words mine unsent' && (await getDoc(id24)).body === 'Head words theirs committed', 'both versions are on the server under their own ids');
+  await tabC.close();
+
+  // 25. formatting-only divergence between two tabs: the same words, bold here, italic there — two versions, both kept
+  await fresh();
+  await page.keyboard.type('Same words');
+  await settledOn();
+  const id25 = (await sess()).id;
+  const tabD = await ctx.newPage();
+  tabD.on('pageerror', e => errs.push('tab D (25): ' + String(e.message)));
+  await boot(tabD);
+  await tabD.evaluate(id => window.__work.session.open(id), id25);
+  await tabD.waitForTimeout(500);
+  await page.route(docUrl(id25), route => route.request().method() === 'PUT' ? route.abort('failed') : route.continue());
+  await select(0, 4); await page.keyboard.press('ControlOrMeta+b');
+  await page.waitForFunction(() => window.__work.session.status === 'local', null, { timeout: 8000, polling: 50 });
+  await stopRetryOn(page);
+  await tabD.route(docUrl(id25), route => route.request().method() === 'PUT' ? route.abort('failed') : route.continue());
+  await tabD.evaluate(() => { window.__work.editor.focus(); window.__work.editor.setSelection(5, 10); }); await tabD.keyboard.press('ControlOrMeta+i');
+  await tabD.waitForFunction(() => window.__work.session.status === 'local', null, { timeout: 8000, polling: 50 });
+  await stopRetryOn(tabD);
+  await page.unroute(docUrl(id25));
+  await page.reload(); await page.waitForSelector('.pm-editor'); await page.waitForTimeout(900);
+  await settledOrConflict(page);
+  const st25 = await page.evaluate(() => JSON.stringify(window.__work.editor.getStructure()));
+  const d25 = await drafts(page);
+  ok((await text()) === 'Same words' && st25.includes('"strong"') && !st25.includes('"em"') && d25.length === 1 && JSON.stringify(d25[0]).length > 0, 'the bold version (this tab’s own) is in the editor; the italic version is listed as the other tab’s copy — a formatting-only difference is a distinct version: ' + JSON.stringify(d25.map(x => x.words)));
+  await tabD.close();
+
+  // 26. an unsaved rename: the same words with a new manual title is NOT the saved head — it is recovered, and a title-only foreign version is listed
+  await fresh();
+  await page.keyboard.type('Titled words');
+  await settledOn();
+  const id26 = (await sess()).id;
+  await page.route(docUrl(id26), route => route.request().method() === 'PUT' ? route.abort('failed') : route.continue());
+  await page.evaluate(() => window.__work.session.rename('My unsaved new title'));
+  await page.waitForFunction(() => window.__work.session.status === 'local', null, { timeout: 8000, polling: 50 });
+  await stopRetryOn(page);
+  await page.unroute(docUrl(id26));
+  await page.reload(); await page.waitForSelector('.pm-editor'); await page.waitForTimeout(900);
+  await settledOrConflict(page);
+  const s26 = await page.evaluate(() => ({ title: window.__work.session.title, manual: window.__work.session.title_is_manual, status: window.__work.session.status, recovered: window.__work.session.recovered }));
+  ok(s26.title === 'My unsaved new title' && s26.manual === true && s26.recovered === true && (await getDoc(id26)).title === 'My unsaved new title', 'the unsaved rename is recovered and saved — an envelope with the head’s words but another title is not the head: ' + JSON.stringify(s26));
+  const tabE = await ctx.newPage();
+  tabE.on('pageerror', e => errs.push('tab E (26): ' + String(e.message)));
+  await boot(tabE);
+  await tabE.evaluate(id => window.__work.session.open(id), id26);
+  await tabE.waitForTimeout(500);
+  await tabE.route(docUrl(id26), route => route.request().method() === 'PUT' ? route.abort('failed') : route.continue());
+  await tabE.evaluate(() => window.__work.session.rename('A title from the other tab'));
+  await tabE.waitForFunction(() => window.__work.session.status === 'local', null, { timeout: 8000, polling: 50 });
+  await stopRetryOn(tabE);
+  await page.reload(); await page.waitForSelector('.pm-editor'); await page.waitForTimeout(900);
+  await settledOrConflict(page);
+  const d26 = await drafts(page);
+  ok((await page.evaluate(() => window.__work.session.title)) === 'My unsaved new title' && d26.length === 1 && d26[0].title === 'A title from the other tab', 'a title-only version from another tab is listed as its own copy, and this tab keeps its title: ' + JSON.stringify(d26));
+  await tabE.close();
 
   ok(errs.length === 0, 'no page errors across the editor journey: ' + JSON.stringify(errs));
   await browser.close();

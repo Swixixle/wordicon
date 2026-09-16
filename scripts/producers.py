@@ -362,15 +362,15 @@ def readiness(producer: str, wants: str) -> dict:
         out["start_available"] = out["available"] = True
         out["reason"] = ""
     elif ruling.get("enabled") and ruling.get("revision") and ruling.get("revision") != ct.get("revision"):
-        out["reason"] = (f"starting is disabled: your ruling was recorded against revision {str(ruling.get('revision'))[:7]}, and the contract is now pinned at "
-                         f"{str(ct.get('revision'))[:7]} — record it again if the deployment runs this revision")
+        out["reason"] = (f"live use is not enabled: your authorization was recorded against revision {str(ruling.get('revision'))[:7]}, and the contract was since re-read "
+                         f"at {str(ct.get('revision'))[:7]} — it is asked for again")
     elif testmode.active() and c.get("dev_loopback"):
         out["start_available"] = out["available"] = True
         out["reason"] = "test mode: a declared development connector on loopback (the fixture producer)"
         out["fixture_only"] = True
     else:
-        out["reason"] = (f"starting is disabled until you record that this deployment runs the pinned revision {str(ct.get('revision'))[:7]}: the contract is "
-                         "read from the producer's source, not proven against this connector's deployment — record the ruling on the connector to enable it")
+        out["reason"] = (f"live use is not enabled: a real investigation through this connector waits for your authorization, recorded on the connector "
+                         f"(the contract was read from the producer's source at {str(ct.get('revision'))[:7]}; checking that the deployment serves it is the implementer's work, named in the note)")
     return out
 
 
@@ -778,25 +778,48 @@ def start(op_id: str, spec: dict, session_id: str) -> dict:
               detail={"outcome": "ok", "delivery": "delivered", "status": r.get("status"), "elapsed_s": r.get("elapsed_s"), "reply_kept": kept})
     federation._record_attempt(c["connector_id"], "ok", "start answered", ok=True, object_id=upstream, http_status=r.get("status"))
     reply = r["json"] if isinstance(r["json"], dict) else {}
+    # the review of 0f2db31 (3b): a reply is correlated with the REQUEST before its ids are followed. A reply that
+    # names another record is kept as evidence and never followed; what the producer did with the request is then
+    # not known (it may have acted on the other record), and the operation says so.
+    correlation = {"matches_request": True, "why": ""}
     if producer == "ethicalalt":
         inv = reply.get("investigation") if isinstance(reply.get("investigation"), dict) else None
-        object_id = str((inv or {}).get("brand_slug") or "")
+        ident = reply.get("identification") if isinstance(reply.get("identification"), dict) else {}
+        asked = " ".join(str(spec.get("brand") or "").split()).lower()
+        echoed = " ".join(str(ident.get("brand") or ident.get("object") or "").split()).lower()
+        if echoed and asked and echoed != asked:
+            correlation = {"matches_request": False, "why": f"the reply's identification names {echoed!r}, not the brand asked for", "checked": "identification.brand (unsigned)"}
+        else:
+            correlation["checked"] = "identification.brand echoes the request (unsigned); the export's and the receipt's brand_slug are checked when read"
+        object_id = str((inv or {}).get("brand_slug") or "") if correlation["matches_request"] else ""
         producer_state = {"identification_tier": reply.get("identification_tier"), "version": reply.get("version"), "response_ms": reply.get("response_ms"),
                           "investigation": ("present: brand_slug " + object_id if object_id else ("present, no brand_slug" if inv else "null — the producer found nothing to profile")),
                           "brand": (inv or {}).get("brand")}
     elif kind == "snapshot":
         snap = reply.get("snapshot") if isinstance(reply.get("snapshot"), dict) else {}
         object_id = str(snap.get("id") or "")
+        if str(snap.get("case_file_id") or "").lower() != str(spec.get("case_id") or "").lower():
+            correlation = {"matches_request": False, "why": f"the reply's snapshot belongs to case {str(snap.get('case_file_id') or '?')!r}, not the case asked for", "checked": "snapshot.case_file_id (unsigned envelope); the signed payload is checked when verified"}
         producer_state = {"snapshot_number": snap.get("snapshot_number"), "entry_count": snap.get("entry_count"), "taken_at": snap.get("taken_at"),
                           "share_url": snap.get("share_url"), "signature_check": reply.get("signature_check")}
     else:
-        object_id = str(reply.get("case_id") or spec.get("case_id") or "")
+        got = str(reply.get("case_id") or "")
+        if got.lower() != str(spec.get("case_id") or "").lower():
+            correlation = {"matches_request": False, "why": f"the reply names case {got or '?'!r}, not the case asked for", "checked": "case_id (unsigned)"}
+        else:
+            correlation["checked"] = "case_id echoes the request (unsigned); the report names its case when read; a signed identity comes only from a snapshot"
+        object_id = str(spec.get("case_id") or "") if correlation["matches_request"] else ""
         producer_state = {k: reply.get(k) for k in ("sources_checked", "cache_hits", "evidence_entries_created", "signals_detected", "signals_unresolved",
                                                      "required_sources_ready", "required_sources_missing") if k in reply}
         if reply.get("errors"):
             producer_state["errors"] = len(reply["errors"]) if isinstance(reply["errors"], list) else str(reply["errors"])[:200]
+    producer_state["correlation"] = correlation
+    if not correlation["matches_request"]:
+        ops.event(op_id, "note", stage=stage, upstream_id=upstream, detail={"wrong_record": True, "correlation": correlation, "reply_kept": kept})
+        raise AdapterError(f"the producer answered, but for another record — {correlation['why']}; the reply is kept as evidence and not followed; "
+                           "what the producer did with the request is not known", 502, nothing_sent=False, outcome="answered_wrong_record", delivery="delivered")
     return {"upstream_id": upstream, "producer_state": producer_state, "object_id": object_id, "reply_keys": sorted(reply.keys())[:30],
-            "reply_kept": kept, "kind": kind, "reply": reply}
+            "reply_kept": kept, "kind": kind, "reply": reply, "correlation": correlation}
 
 
 def retrieve(op_id: str, spec: dict, object_id: str, reply: dict | None = None) -> dict:
@@ -813,7 +836,12 @@ def retrieve(op_id: str, spec: dict, object_id: str, reply: dict | None = None) 
     if spec.get("kind") == "snapshot":
         packed = (((reply or {}).get("snapshot") or {}).get("signed_hash")) if isinstance(reply, dict) else None
         ver = verify_open_case_signed_hash(packed, c) if packed else {"ok": False, "why": "the reply carries no signed_hash", "method": "open_case.snapshot"}
-        out.update({"ok": True, "receipt": {"name": "snapshot-reply.json", "what": "the snapshot reply (signed_hash inside)"}, "verification": ver, "outcome": "verified" if ver.get("ok") else "kept_unverified"})
+        # signature validity and request/record identity are two facts: the SIGNED payload names its case, the
+        # handle that took the snapshot and the label — each compared to what was asked (the review of 0f2db31, 3b)
+        ver["correlation"] = _oc_snapshot_correlation(packed, spec)
+        good = bool(ver.get("ok")) and ver["correlation"]["matches_request"]
+        out.update({"ok": True, "receipt": {"name": "snapshot-reply.json", "what": "the snapshot reply (signed_hash inside)"}, "verification": ver,
+                    "outcome": "verified" if good else ("verified_signature_wrong_record" if ver.get("ok") else "kept_unverified")})
         ops.event(op_id, "result", upstream_id=object_id, detail={"verification": ver, "artifact": "snapshot-reply.json"})
         return out
     if not object_id:
@@ -860,17 +888,48 @@ def retrieve(op_id: str, spec: dict, object_id: str, reply: dict | None = None) 
         ops.event(op_id, "stage_end", stage=stage, upstream_id=object_id, outcome="ok", detail={"outcome": "ok", "delivery": "delivered", "status": rr.get("status"), "kept": rk})
         ver = verify_ethicalalt_receipt(rr["json"] if isinstance(rr["json"], dict) else {}, c)
         ver["correlation"] = _ea_correlation(ver, op_id, object_id)
+        good = bool(ver.get("ok")) and ver["correlation"]["matches_request"]
         out.update({"ok": True, "receipt": {**rk, "signed": True, "cached": ver.get("cached"), "receipt_id": ver.get("receipt_id")}, "verification": ver,
-                    "outcome": "verified" if ver.get("ok") else "kept_unverified"})
+                    "outcome": "verified" if good else ("verified_signature_wrong_record" if ver.get("ok") else "kept_unverified")})
         ops.event(op_id, "result", upstream_id=object_id, detail={"artifact": kept, "receipt": rk, "verification": {k: v for k, v in ver.items() if k != "correlation"}, "correlation": ver["correlation"]})
         return out
     # Open Case: the report is the artifact; the signed snapshot is a separate action
     rep = r["json"] if isinstance(r["json"], dict) else {}
     out["artifact"]["summary"] = {k: rep.get(k) for k in ("case_id", "title", "subject_name", "status", "evidence_count", "signal_count") if k in rep}
+    named = str(rep.get("case_id") or "")
+    out["artifact"]["case_matches"] = (named.lower() == object_id.lower()) if named else None     # unsigned: the report's own case_id, or nothing to check
+    out["artifact"]["identity_check"] = ("the report names its case_id and it is the one asked for" if out["artifact"]["case_matches"] else
+                                         ("the report names case " + named + ", NOT the one asked for" if named else "the report is unsigned and names no case_id: its identity cannot be checked here"))
     out.update({"ok": True, "receipt": None, "verification": {"ok": False, "why": "no signed record: the report is unsigned; a signed snapshot is a separate act (Take a signed snapshot)", "method": ""},
                 "outcome": "report_kept"})
     ops.event(op_id, "result", upstream_id=object_id, detail={"artifact": kept, "receipt": None, "verification": out["verification"]})
     return out
+
+
+def _oc_snapshot_correlation(packed, spec: dict) -> dict:
+    """The signed payload of an Open Case snapshot (seal_case_bundle +
+    snapshot{...}) names the case, the handle and the label. Compared to the
+    request; a valid signature on another record is said to be that."""
+    try:
+        obj = json.loads(packed) if isinstance(packed, str) else (packed or {})
+        payload = obj.get("payload") if isinstance(obj, dict) else None
+    except (ValueError, TypeError):
+        payload = None
+    if not isinstance(payload, dict):
+        return {"matches_request": False, "why": "the signed payload could not be read, so the record's identity is unknown", "checked": "signed payload"}
+    case = payload.get("case") if isinstance(payload.get("case"), dict) else {}
+    snap = payload.get("snapshot") if isinstance(payload.get("snapshot"), dict) else {}
+    want_case, want_handle, want_label = str(spec.get("case_id") or "").lower(), str(spec.get("handle") or ""), str(spec.get("label") or "")
+    got_case, got_handle, got_label = str(case.get("id") or "").lower(), str(snap.get("taken_by") or ""), str(snap.get("label") or "")
+    problems = []
+    if got_case != want_case:
+        problems.append(f"the signed payload's case is {got_case or '?'!r}, not the case asked for")
+    if got_handle != want_handle:
+        problems.append(f"the signed payload's taken_by is {got_handle!r}, not the handle asked for")
+    if got_label != want_label:
+        problems.append(f"the signed payload's label is {got_label!r}, not the label asked for")
+    return {"matches_request": not problems, "why": "; ".join(problems), "case_id_matches": got_case == want_case, "handle_matches": got_handle == want_handle,
+            "label_matches": got_label == want_label, "checked": "the SIGNED payload's case.id, snapshot.taken_by and snapshot.label against the request"}
 
 
 def _ea_correlation(ver: dict, op_id: str, slug: str) -> dict:
@@ -885,7 +944,10 @@ def _ea_correlation(ver: dict, op_id: str, slug: str) -> dict:
                  "its investigation_id" + (" is this operation's" if inv_ok else (" is " + (repr(ver.get("investigation_id")) if ver.get("investigation_id") else "absent") + ", not this operation's")))
     else:
         by_id = "investigation_id is this operation's" if inv_ok else ("investigation_id is " + (repr(ver.get("investigation_id")) if ver.get("investigation_id") else "absent") + ", not this operation's")
-    return {"subject_slug_matches": slug_ok, "investigation_id_matches": inv_ok, "cached": bool(ver.get("cached")), "by_id": by_id,
+    matches = slug_ok and (inv_ok or bool(ver.get("cached")))
+    why = "" if matches else ("the receipt's SIGNED subject.brand_slug is not the slug investigated" if not slug_ok else "the receipt's investigation_id is not this operation's and the producer did not say it was cached")
+    return {"matches_request": matches, "why": why, "subject_slug_matches": slug_ok, "investigation_id_matches": inv_ok, "cached": bool(ver.get("cached")), "by_id": by_id,
+            "checked": "the SIGNED subject.brand_slug and investigation_id against the request (a cached receipt carries an earlier request's id, said so)",
             "incidents_hash": "covers the profile's deep-research incidents the producer built the receipt from — not the export kept here, which cannot reproduce it"}
 
 
@@ -897,18 +959,27 @@ def status(op: dict) -> dict:
     evs = ops.events(op["op_id"])
     ref = op.get("result_ref") or {}
     pst = op.get("producer_state") or {}
-    starts = [e for e in evs if e["kind"] == "stage_end" and e["stage"].startswith("POST") and "/receipt/" not in e["stage"]]
+    is_start = lambda e: e["stage"].startswith("POST") and "/receipt/" not in e["stage"]
+    intents = [e for e in evs if e["kind"] == "stage_intent" and is_start(e)]
+    starts = [e for e in evs if e["kind"] == "stage_end" and is_start(e)]
     gets = [e for e in evs if e["kind"] == "stage_end" and e["stage"].startswith("GET")]
     receipts = [e for e in evs if e["kind"] == "stage_end" and "/receipt/" in e["stage"]]
     last_start = starts[-1] if starts else None
-    delivery = (last_start["detail"].get("delivery") if last_start else None) or pst.get("delivery") or ("not_sent" if not starts else "delivered")
-    if last_start is None:
-        start_word = "not sent"
-    elif last_start["outcome"] == "ok":
-        start_word = "ok"
+    # the review of 0f2db31 (3a): an intent recorded without its end is a request that left the
+    # boundary and whose outcome was never recorded — delivery UNKNOWN, never "not sent"
+    open_intent = intents[-1] if intents and len(intents) > len(starts) else None
+    if last_start is None and open_intent is not None:
+        delivery, start_word = "unknown", "no answer recorded (interrupted after the request left)"
     else:
-        start_word = {"delivered": "refused" if last_start["detail"].get("outcome") in ("unauthorized", "not_found", "refused") else "error after delivery",
-                      "unknown": "no answer", "not_sent": "not sent"}.get(delivery, last_start["detail"].get("outcome", "error"))
+        delivery = (last_start["detail"].get("delivery") if last_start else None) or pst.get("delivery") or ("not_sent" if not starts else "delivered")
+        if last_start is None:
+            start_word = "not sent"
+        elif last_start["outcome"] == "ok":
+            start_word = "ok"
+        else:
+            start_word = {"delivered": "refused" if last_start["detail"].get("outcome") in ("unauthorized", "not_found", "refused") else "error after delivery",
+                          "unknown": "no answer", "not_sent": "not sent"}.get(delivery, last_start["detail"].get("outcome", "error"))
+    upstream = ref.get("upstream_id") or (last_start["upstream_id"] if last_start else "") or (open_intent["upstream_id"] if open_intent else "")
     ver = ref.get("verification") if isinstance(ref.get("verification"), dict) else None
     if ver and ver.get("ok"):
         receipt = f"signature verified ({ver.get('method', '')}) under the pinned key {str(ver.get('key_id', ''))[:28]}…"
@@ -930,8 +1001,27 @@ def status(op: dict) -> dict:
     else:
         artifact = "not retrieved"
     kept = [x for x in (ref.get("kept") or []) if x]
-    return {"upstream_id": ref.get("upstream_id") or (last_start["upstream_id"] if last_start else ""),
-            "start": start_word, "delivery": delivery, "outcome": (pst.get("outcome") or ("ok" if start_word == "ok" else start_word)),
+    corr = (ver or {}).get("correlation") if isinstance(ver, dict) else None
+    if isinstance(corr, dict) and corr.get("matches_request") is False:
+        receipt += " — BUT it is not the record that was requested: " + str(corr.get("why") or "the identity in the signed record differs from the request")
+    # the plain words for the card (the review of 0f2db31, §4): what it means, without the method or the key id — those stay in details
+    kind_word = "snapshot" if (ref.get("kind") == "snapshot") else "receipt"
+    if ver and ver.get("ok") and isinstance(corr, dict) and corr.get("matches_request") is False:
+        receipt_summary = f"signed correctly, but NOT for what was asked — {corr.get('why') or 'another record'}; kept as evidence"
+    elif ver and ver.get("ok"):
+        receipt_summary = f"verified under the key you pinned — the {kind_word} for this request" + ("; the producer reused an earlier receipt for the same incidents (cached)" if isinstance(corr, dict) and corr.get("cached") else "")
+    elif ver and ver.get("unsigned"):
+        receipt_summary = "unsigned — the producer issued it without a signing key; nothing vouches for it"
+    elif ver:
+        receipt_summary = "not verified — " + str(ver.get("why") or "unverified")
+    else:
+        receipt_summary = "none"
+    artifact_summary = (f"{art.get('what', 'artifact')} ({art.get('bytes', 0)} bytes)" + ("" if art.get("slug_matches") in (None, True) else " — NOT the one investigated")
+                        + ((" — " + art["identity_check"]) if art.get("identity_check") and art.get("case_matches") is not True else "")) if art else artifact
+    return {"upstream_id": upstream, "receipt_summary": receipt_summary, "artifact_summary": artifact_summary,
+            "start": start_word, "delivery": delivery,
+            "outcome": (pst.get("outcome") if last_start is not None or open_intent is None else "unknown") or ("ok" if start_word == "ok" else start_word),
+            "correlation": corr or (ref.get("start_correlation") if isinstance(ref.get("start_correlation"), dict) else None),
             "artifact": artifact, "receipt": receipt, "verified": bool(ver and ver.get("ok")),
             "receipt_id": (ref.get("receipt") or {}).get("receipt_id", "") if isinstance(ref.get("receipt"), dict) else "",
             "kept": kept or [x for x in (ref.get("artifact"), ref.get("receipt"), ref.get("reply_kept")) if isinstance(x, dict) and x.get("sha256")],
