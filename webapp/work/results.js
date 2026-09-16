@@ -5,6 +5,7 @@
 // A finished operation raises the count on the header control and never
 // opens a closed side or moves the caret.
 import { getJSON, postJSON, el, whenOf, toast, requestKey } from './util.js';
+import { Notes } from './notes.js';
 
 const POLL_MS = 1500;
 const STATE_WORDS = { queued: 'Queued', running: 'Running', done: 'Done', complete: 'Done', failed: 'Failed', unknown: 'Outcome unknown' };
@@ -20,6 +21,12 @@ export class Results {
     this.notice = null;
     this.custom = null;
     this.proposal = null;
+    // slice J: his own notes, a separate object with its own store. Built once
+    // and re-attached on every render so the caret and the undo stack in the
+    // note box survive tab switches and panel toggles.
+    this.mine = new Notes(session, { onCount: () => this.renderNotesTabLabel() });
+    this.notesHost = document.getElementById('notes-host');
+    if (this.notesHost) this.mine.render(this.notesHost);     // mounted once, for the life of the page
     this.bindTabs();
     this.pollTimer = 0;
   }
@@ -30,6 +37,18 @@ export class Results {
     }
     document.getElementById('activity-btn').addEventListener('click', () => { this.showTab('results'); this.layout.setResults(true); });
   }
+  renderNotesTabLabel() {
+    const t = document.querySelector('#results-tabs .tab[data-tab="notes"]');
+    if (!t) return;
+    const n = this.mine.count();
+    t.textContent = n ? 'Notes · ' + n : 'Notes';
+  }
+
+  // The document the note surface belongs beside. Called on open and on every
+  // status change; setDocument itself is a no-op when the id has not moved,
+  // and flushes unsent words before it changes anything.
+  syncNotesDocument() { this.mine.setDocument(this.session.id || ''); }
+
   showTab(name) {
     this.tab = name;
     for (const t of document.querySelectorAll('#results-tabs .tab')) { const on = t.dataset.tab === name; t.classList.toggle('on', on); t.setAttribute('aria-selected', String(on)); }
@@ -180,6 +199,7 @@ export class Results {
   // ---- rendering ---------------------------------------------------------------
   render() {
     const b = this.body; b.textContent = '';
+    if (this.notesHost) this.notesHost.hidden = (this.tab !== 'notes');
     if (this.tab === 'results') this.renderResults(b);
     else if (this.tab === 'feedback') this.renderFeedback(b);
     else if (this.tab === 'notes') this.renderNotes(b);
@@ -368,20 +388,97 @@ export class Results {
     }
   }
 
+  // Two kinds of writing, kept apart because the record keeps them apart:
+  // HIS notes (scripts/notes.py, owner_authored) first, then the carried
+  // ones (scripts/carry.py), which are the model's words travelling under
+  // “may be useful while revising” and can be annotated in his own voice.
   async renderNotes(b) {
-    b.appendChild(el('div', { class: 'lbl', text: 'Revision notes' }));
-    const r = await getJSON('/api/carries');
-    if (!r.ok) { b.appendChild(el('div', { class: 'warn', text: 'Notes could not be listed.' })); return; }
+    // his own notes are already on screen in #notes-host, which is never torn
+    // down; only the carried list below is rebuilt here
+    if (this.mine.rebuild) this.mine.paint();
+    b.appendChild(el('div', { class: 'lbl', text: 'Carried from runs' }));
+    b.appendChild(el('div', { class: 'muted small-text', text: 'Not your words — text a run produced, carried here. It means “may be useful while revising” and nothing more: not accepted, not supported, not verified.' }));
+    let r;
+    try { r = await getJSON('/api/carries'); }
+    catch (err) { r = { ok: false, data: {} }; }
+    if (!r.ok) { b.appendChild(el('div', { class: 'warn', text: 'The carried notes could not be listed. Nothing was lost; this is a read.' })); return; }
     const items = r.data.carries || [];
-    b.appendChild(el('div', { class: 'muted small-text', text: 'A note means “may be useful while revising” and nothing more — not accepted, not supported, not verified.' }));
-    if (!items.length) { b.appendChild(el('div', { class: 'muted small-text', text: 'No revision notes yet. Add to revision notes is offered on a result.' })); return; }
-    for (const c of items) {
-      b.appendChild(el('div', { class: 'card op' }, [
-        el('div', { text: c.excerpt || '(no excerpt)' }),
-        el('div', { class: 'muted small-text', text: `${c.standing || ''} · from run ${(c.trace_id || '').slice(0, 18)} · ${whenOf(c.recorded_at || c.at)}` }),
-        c.note ? el('div', { class: 'kv', text: 'Note: ' + c.note }) : null,
+    if (!items.length) { b.appendChild(el('div', { class: 'muted small-text', text: 'Nothing carried yet. “Add to revision notes” is offered on a result.' })); return; }
+    for (const c of items) b.appendChild(this.carryCard(c));
+  }
+
+  // The standing is a RECORD OF FACTS, not a string: rendering it into a
+  // template made it read “[object Object]” and hid what the record held.
+  // Each field is printed in plain words; a flag that is false is silence,
+  // because the record says nothing there and neither should the page.
+  standingWords(standing) {
+    const s = (standing && typeof standing === 'object') ? standing : {};
+    const said = [];
+    if (s.route) said.push('route: ' + s.route);
+    if (s.anchor_fit) said.push('anchor fit: ' + s.anchor_fit);
+    if (s.friction_verdict) said.push('critique: ' + s.friction_verdict);
+    if (s.invented === true) said.push('written by the model, not taken from your text');
+    if (s.unverified === true) said.push('unverified');
+    if (s.provider_returned === true) said.push('a provider returned it');
+    if (s.contradicted === true) said.push('contradicts its anchor');
+    if (s.recall_only === true) said.push('from the model’s recall only');
+    return said;
+  }
+
+  // A run reference only when the record holds one. The old line read the
+  // trace from the wrong path (it lives under source.trace_id), so every
+  // carry said “from run” and named nothing. A missing run is now stated,
+  // never inferred from a title or from anything else on the card.
+  runLine(c) {
+    const id = ((c.source && c.source.trace_id) || '').trim();
+    return id ? 'from run ' + id : 'the originating run is not recorded for this one';
+  }
+
+  carryCard(c) {
+    const words = this.standingWords(c.standing);
+    const card = el('div', { class: 'card op' }, [
+      el('div', { text: c.excerpt || '(no excerpt)' }),
+      el('div', { class: 'muted small-text', text: (words.length ? words.join(' · ') : 'no standing recorded') + ' · ' + this.runLine(c) + ' · ' + whenOf(c.at) }),
+    ]);
+    if (c.note) card.appendChild(el('div', { class: 'kv note-mine', text: 'Your note: ' + c.note }));
+    card.appendChild(this.carryAnnotate(c));
+    return card;
+  }
+
+  // His annotation on a carried item. It is added BESIDE the carried text and
+  // never replaces it: the excerpt above is untouched, the note is stored as
+  // its own appended event, and the page labels it as his.
+  carryAnnotate(c) {
+    const wrap = el('div', { class: 'note-annotate' });
+    const open = () => {
+      wrap.textContent = '';
+      const ta = el('textarea', { class: 'note-box', rows: '3', 'aria-label': 'Your note on this carried text',
+                                  placeholder: 'Your note on this — kept beside it, never over it.' });
+      ta.value = c.note || '';
+      const status = el('div', { class: 'note-status muted small-text' });
+      const save = async () => {
+        status.textContent = 'Saving…'; status.className = 'note-status muted small-text';
+        let r;
+        try { r = await postJSON('/api/carry/' + encodeURIComponent(c.carry_id) + '/note', { note: ta.value }); }
+        catch (err) { r = { ok: false, data: { error: String(err && err.message || err) } }; }
+        if (!r.ok) {
+          status.textContent = 'Not saved: ' + ((r.data && r.data.error) || 'the save did not reach the server') + ' Your words are here — press Save again.';
+          status.className = 'note-status warn';
+          return;
+        }
+        c.note = ta.value;
+        status.textContent = 'Saved to the record, beside the carried text.';
+        this.render();
+      };
+      wrap.append(ta, status, el('div', { class: 'row note-acts' }, [
+        el('button', { class: 'btn small', type: 'button', text: 'Save my note', onclick: save }),
+        el('button', { class: 'btn small', type: 'button', text: 'Close', onclick: () => { wrap.textContent = ''; wrap.appendChild(opener()); } }),
       ]));
-    }
+      ta.focus();
+    };
+    const opener = () => el('button', { class: 'linkish', type: 'button', text: c.note ? 'Edit my note' : 'Add my own note', onclick: open });
+    wrap.appendChild(opener());
+    return wrap;
   }
 
   async renderSources(b) {

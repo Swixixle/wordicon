@@ -19,9 +19,10 @@ const editor = new EditorSwitch({ onNotice: t => toast(t, 6000), onSwitch: () =>
   onConvert: async () => { if (await session.convertLineEndings()) toast('Line endings converted to LF; the document as it stood is kept as a version. You can edit and format it now.', 6000); } });
 editor.mount(document.getElementById('editor-host'));
 
+var syncNotesDoc = null;                  // set below, once Results exists
 const session = new DocumentSession(editor, {
-  onStatus: s => { renderHeader(s); renderDrafts(s); },
-  onOpened: s => { renderHeader(s); renderDrafts(s); showPage('work'); renderToolbar(); if (s.recovered) toast('Opened with unsent changes recovered from this browser (newer than the saved copy).'); },
+  onStatus: s => { renderHeader(s); renderDrafts(s); if (syncNotesDoc) syncNotesDoc(); },
+  onOpened: s => { renderHeader(s); renderDrafts(s); showPage('work'); renderToolbar(); if (syncNotesDoc) syncNotesDoc(); if (s.recovered) toast('Opened with unsent changes recovered from this browser (newer than the saved copy).'); },
   onConflict: s => renderConflict(s),
   onApplicationCommitted: () => { results.render(); },
 });
@@ -32,6 +33,7 @@ const applier = new Applier(session, editor, { onRecorded: () => {} });
 const results = new Results(session, layout, places, { onPlace: () => {}, onActivity: () => renderActivity(), applyControls: (t, text) => applier.controls(t, text),
   prepareAction: (id, subject) => actions.prepare(id, subject),
   labelOf: id => (actions.byId[id] && actions.byId[id].label) || (id || '').replace(/^legacy:\/api\/jobs:/, 'a run: ') });
+syncNotesDoc = () => results.syncNotesDocument();
 const actions = new Actions(session, layout, places, results, { onPlace: () => {} });
 const yourwork = new YourWork(session, places, {
   onOpenDocument: () => showPage('work'),
@@ -271,6 +273,7 @@ function renderHelp() {
     'A result made from a selection can be put into the draft — Insert below the selection, or Replace the selection — only while the draft is as it was when the result was made; otherwise you choose the target again. An application is one undo step (⌘Z).',
     'Ask ⌘K finds a tool by name — related words, feedback, analyze, map — and takes a plain request like “investigate Exemplar Holdings”, whose rest becomes what the tool is asked about. It proposes; it never runs by itself.',
     'Investigate shows the four instruments and, for each, what the record says: the connector, the contract pinned from the producer’s source at a named revision, the credential, the last check, whether a lookup or a start is available, the cost (unknown here — billed on the producer’s side), and whether you have authorized live use (the technical check that a deployment serves the pinned contract is the implementer’s, named in the note; you authorize use). A start is a proposal first; it sends one request to the producer, then keeps what the producer serves byte for byte — EthicalAlt: its unsigned export and a signed receipt (a write the producer stores), Open Case: the case report (a read the producer counts); a signed snapshot of a case is a separate act, disclosed as the mutation it is. A valid signature means the bytes are the producer’s under the key you pinned, not that the research is true. The rooms’ signed package import is not served by either producer’s main at the pinned revisions.',
+    'Notes (in Results) is your own writing beside the work: a box at the top, your earlier notes on this document folded underneath. They are saved as you type — the panel says whether a note is in this browser only or on the record — and they are kept apart from the carried list below, which is text a run produced. Undo inside the note box is the box’s own and never touches the draft. A note that cannot reach the server stays in the box with a Retry; if the same note changed in another tab, nothing is overwritten and you choose. You can add a note of your own to a carried item too — it sits beside that text, never over it.',
     'Focus hides the sides and the secondary controls; Exit focus brings back what was open.',
     'Document ▾: New, Rename, Duplicate, Open another, Versions (⌘S makes a checkpoint; a version can be restored as a new revision — nothing is rewritten), Make a plain copy, Export (text is visibly plain; Markdown and Word (.docx) keep the structure; Print for PDF).',
     'Undo is the editor’s own for this sitting. Checkpoints and the recovery copy in this browser are what persist; they are not continuous undo.',
