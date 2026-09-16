@@ -3569,6 +3569,15 @@ def _check_journey_engines():
                        "add it to the list here and to run.sh's guards, or take the claim out")
     for missing in sorted(WEBKIT - seen):
         out.append(f"ENGINE: tests/journeys/{missing}.js is gone")
+    # slice C: a journey that runs in BOTH engines takes the engine from
+    # JOURNEY_ENGINE, launches exactly that one, asks the browser which it
+    # is, and run.sh runs it once per engine and requires both logs
+    for name in ("editor",):
+        src = (jdir / f"{name}.js").read_text(encoding="utf-8") if (jdir / f"{name}.js").exists() else ""
+        if "playwright[ENGINE].launch()" not in src or "browser.browserType().name() === ENGINE" not in src or "process.env.JOURNEY_ENGINE" not in src:
+            out.append(f"ENGINE: tests/journeys/{name}.js must launch the engine JOURNEY_ENGINE names and say which it got")
+        if "for eng in chromium webkit; do" not in run or f'JOURNEY_ENGINE="$eng" node {name}.js' not in run or f'"$JOURNEY_OUT"/{name}-chromium.log' not in run or f'"$JOURNEY_OUT"/{name}-webkit.log' not in run:
+            out.append(f"ENGINE: run.sh does not run {name}.js in both engines and count both logs")
     for name, sentence in (("room", "the room is measured in WebKit"),
                            ("narrowing", "the narrowing is measured in WebKit"),
                            ("gloss", "the gloss panel is measured in WebKit"),
@@ -5480,6 +5489,250 @@ def _check_workspace_registry(server, paired):
     return out
 
 
+def _check_document_contract(server, paired):
+    """Slice C. The exact text and the structure are one versioned document
+    (instructions §7). Proven on the store in a throwaway root, on the
+    shared golden vectors, and through the routes: the Python side
+    reproduces every vector (projection, canonical JSON, fingerprint v2,
+    position map, plain round trip) and the pinned editor bundle is the one
+    the hash file names; the v2 migration is additive and idempotent on an
+    empty, a legacy and a current store; a structured save is validated and
+    projected by the server and refused on mismatch, an unsupported schema,
+    an unsafe link or malformed JSON; a formatting-only edit moves the
+    revision under the versioned fingerprint while a v1 fingerprint is never
+    rehashed; two identical documents share a fingerprint and keep distinct
+    ids; a body-only save (an old client, with or without an explicit null)
+    cannot flatten a structured head, and the database itself refuses an
+    older binary's body-only write and structureless checkpoint; a restore
+    is a new revision that keeps every version; a plain copy is a new
+    document; applications are events linked to the result and marked
+    committed by the save that carries them; a snapshot names the editor
+    session it was frozen in."""
+    import importlib, json as _json, hashlib as _hl, sqlite3 as _sq, tempfile as _tf
+    out = []
+    REPO = Path(__file__).resolve().parents[1]
+    ds = importlib.import_module("document_schema")
+    nbk = importlib.import_module("notebook")
+    _sn = importlib.import_module("snapshots")
+    # 1. the golden vectors and the pinned bundle
+    vec_path = REPO / "tests" / "fixtures" / "projection_vectors.json"
+    vectors = _json.loads(vec_path.read_text(encoding="utf-8"))
+    if vectors.get("schema") != ds.SCHEMA_VERSION or vectors.get("projection") != ds.PROJECTION_VERSION or len(vectors.get("vectors", [])) < 18:
+        out.append(f"C: the vector file does not carry schema {ds.SCHEMA_VERSION} / projection {ds.PROJECTION_VERSION} with 18 vectors")
+    for v in vectors.get("vectors", []):
+        canon = ds.validate(v["doc"])
+        body = ds.project(canon)
+        why = []
+        if body != v["body"]:
+            why.append("body")
+        if ds.canonical(canon) != v["canonical"]:
+            why.append("canonical")
+        if ds.fingerprint_v2("", False, body, canon, ds.SCHEMA_VERSION, ds.PROJECTION_VERSION) != v["fp2"]:
+            why.append("fp2")
+        if ds.position_map(canon) != v["map"]:
+            why.append("map")
+        if len(ds.leaf_blocks(canon)) != v["leaf_count"]:
+            why.append("leaves")
+        if ds.project(ds.validate(ds.parse_plain(body))) != body:
+            why.append("round_trip_plain")
+        if why:
+            out.append(f"C: vector {v['name']!r} does not reproduce: {','.join(why)}")
+    six = ds.project(ds.validate({"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "A"}]}, {"type": "paragraph"}, {"type": "paragraph"}, {"type": "paragraph", "content": [{"type": "text", "text": "B"}]}]}))
+    if six != "A\n\n\n\n\n\nB":
+        out.append(f"C: leaf blocks A,'','',B must project to A + six LF + B: {six!r}")
+    for body in ("A\nB", "A\n\nB", "A\n", "", "\n", "a\tb  ", "x🙂y\r"):
+        okc, _ = ds.convertible(body)
+        if "\r" in body:
+            if okc:
+                out.append("C: a carriage return is reported convertible")
+            continue
+        if ds.project(ds.validate(ds.parse_plain(body))) != body:
+            out.append(f"C: plain import does not round-trip {body!r}")
+    if len(ds.parse_plain("A\nB")["content"]) != 1 or len(ds.parse_plain("A\n\nB")["content"]) != 2:
+        out.append("C: A\\nB must be one paragraph with a hard break and A\\n\\nB two paragraphs")
+    bundle = REPO / "webapp" / "work" / "vendor" / "prosemirror.js"
+    pinned = next((ln.split()[1] for ln in (REPO / "docs" / "editor-bundle.sha256").read_text(encoding="utf-8").splitlines() if ln.startswith("sha256 ")), "")
+    if not pinned or _hl.sha256(bundle.read_bytes()).hexdigest() != pinned:
+        out.append("C: webapp/work/vendor/prosemirror.js is not the bundle docs/editor-bundle.sha256 pins")
+    for name in ("document.js", "editor_pm.js", "editors.js", "apply.js"):
+        src = (REPO / "webapp" / "work" / name).read_text(encoding="utf-8")
+        if "cdn." in src or "https://unpkg" in src:
+            out.append(f"C: webapp/work/{name} reaches for a CDN")
+    # 2. the store, in a throwaway root
+    tmp = Path(_tf.mkdtemp(prefix="wordicon_docs_"))
+    state_root.apply(tmp)
+    try:
+        dbp = nbk.db_path()
+        # a legacy (v1) store: the v1 tables, one plain document, then the migration twice
+        dbp.parent.mkdir(parents=True, exist_ok=True)
+        legacy = _sq.connect(str(dbp))
+        legacy.executescript("""
+            CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE documents (doc_id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', title_is_manual INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL, saved_at TEXT NOT NULL, origin TEXT NOT NULL DEFAULT '');
+            CREATE TABLE save_requests (request_id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, fingerprint TEXT NOT NULL, revision INTEGER NOT NULL, saved_at TEXT NOT NULL);
+            CREATE TABLE checkpoints (checkpoint_id TEXT PRIMARY KEY, doc_id TEXT NOT NULL, revision INTEGER NOT NULL, reason TEXT NOT NULL, title TEXT NOT NULL, title_is_manual INTEGER NOT NULL, body TEXT NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE (doc_id, revision, reason));
+            INSERT INTO meta VALUES ('schema', '1');
+        """)
+        fp1 = nbk.fingerprint("", False, "legacy words\n")
+        legacy.execute("INSERT INTO documents VALUES ('doc_legacy_01', '', 0, 'legacy words\n', 3, ?, 't0', 't1', 'web')", (fp1,))
+        legacy.execute("INSERT INTO checkpoints VALUES ('ckp_legacy_01', 'doc_legacy_01', 3, 'save', '', 0, 'legacy words\n', ?, 't1')", (fp1,))
+        legacy.commit(); legacy.close()
+        c1 = nbk._connect(); c1.close()
+        c2 = nbk._connect()
+        cols = {r[1] for r in c2.execute("PRAGMA table_info(documents)").fetchall()}
+        meta = c2.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone()[0]
+        c2.close()
+        if not {"doc_json", "doc_schema", "projection_version", "fp_version"} <= cols or meta != str(nbk.SCHEMA_VERSION):
+            out.append(f"C: the migration did not add the structure columns idempotently (cols {sorted(cols)}, schema {meta})")
+        lg = nbk.get("doc_legacy_01")
+        if not lg or lg["rich"] or lg["fp_version"] != 1 or lg["fingerprint"] != fp1 or lg["body"] != "legacy words\n":
+            out.append(f"C: the legacy document was not preserved as it stood after the migration: {lg}")
+        # a plain save keeps the v1 fingerprint form; a structured save moves to v2
+        a1 = nbk.save("doc_legacy_01", title="", title_is_manual=False, body="legacy words\nmore", base_revision=3, base_fingerprint=fp1, request_id="req_c_legacy_1")
+        if a1["fp_version"] != 1 or a1["rich"] or not a1["fingerprint"].startswith("fp_"):
+            out.append(f"C: a plain save rehashed the document into the new fingerprint form: {a1}")
+        rich_doc = {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "legacy", "marks": [{"type": "strong"}]}, {"type": "text", "text": " words"}, {"type": "hard_break"}, {"type": "text", "text": "more"}]}]}
+        a2 = nbk.save("doc_legacy_01", title="", title_is_manual=False, body="legacy words\nmore", base_revision=a1["revision"], base_fingerprint=a1["fingerprint"], request_id="req_c_legacy_2", doc_json=rich_doc, doc_schema=1, projection_version=1)
+        cps = nbk.list_checkpoints("doc_legacy_01")
+        evs = nbk.list_events("doc_legacy_01")
+        if not a2["rich"] or a2["fp_version"] != 2 or not a2["fingerprint"].startswith("fp2_") or a2["revision"] != a1["revision"] + 1:
+            out.append(f"C: the first structured save (formatting only) did not move the revision under a v2 fingerprint: {a2}")
+        if not any(c["reason"] == "migration" and c["revision"] == a1["revision"] and not c["rich"] for c in cps):
+            out.append(f"C: the plain head was not checkpointed as it stood before its conversion: {cps}")
+        if not any(e["kind"] == "format_converted" and e["detail"].get("from") == "plain" for e in evs):
+            out.append(f"C: the conversion was not recorded as an event: {evs}")
+        if any(c["revision"] == 3 and c["fingerprint"] != fp1 for c in cps):
+            out.append("C: a historical checkpoint's fingerprint was rehashed")
+        head = nbk.get("doc_legacy_01")
+        # refusals: body-only against a structured head (an old client), explicit None, mismatch, unsupported schema, unsafe link, malformed
+        def refused(kind, **kw):
+            try:
+                nbk.save("doc_legacy_01", title="", title_is_manual=False, base_revision=head["revision"], base_fingerprint=head["fingerprint"], **kw)
+                out.append(f"C: {kind} was accepted")
+                return None
+            except nbk.NotebookError as e:
+                return e
+        e = refused("a body-only save against a structured head", body="legacy words\nmore x", request_id="req_c_flat_1")
+        if e and (e.status != 422 or e.error_class != "structure_would_be_lost" or e.head is None):
+            out.append(f"C: the body-only refusal is not 422 structure_would_be_lost with the head: {e and (e.status, e.error_class)}")
+        e = refused("an explicit doc_json None against a structured head", body="legacy words\nmore y", request_id="req_c_flat_2", doc_json=None, doc_schema=None, projection_version=None)
+        if e and e.error_class != "structure_would_be_lost":
+            out.append("C: an explicit null structure is not refused as structure_would_be_lost")
+        e = refused("a structure that does not project to its text", body="other", request_id="req_c_mm", doc_json=rich_doc, doc_schema=1, projection_version=1)
+        if e and (e.status != 422 or e.error_class != "projection_mismatch"):
+            out.append(f"C: a projection mismatch is not 422 projection_mismatch: {e and (e.status, e.error_class)}")
+        e = refused("an unsupported schema version", body="legacy words\nmore", request_id="req_c_sch", doc_json=rich_doc, doc_schema=7, projection_version=1)
+        if e and (e.status != 422 or e.error_class != "schema_unsupported"):
+            out.append(f"C: an unsupported schema is not 422 schema_unsupported: {e and (e.status, e.error_class)}")
+        bad_link = {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "x", "marks": [{"type": "link", "attrs": {"href": "javascript:alert(1)"}}]}]}]}
+        e = refused("an unsafe link", body="x", request_id="req_c_link", doc_json=bad_link, doc_schema=1, projection_version=1)
+        if e and (e.status != 400 or e.error_class != "unsafe_link"):
+            out.append(f"C: an unsafe link is not 400 unsafe_link: {e and (e.status, e.error_class)}")
+        e = refused("malformed structure", body="x", request_id="req_c_mal", doc_json={"type": "doc", "content": [{"type": "code_block", "content": []}]}, doc_schema=1, projection_version=1)
+        if e and e.status != 400:
+            out.append(f"C: a malformed structure is not a 400: {e and (e.status, e.error_class)}")
+        if nbk.get("doc_legacy_01")["revision"] != head["revision"]:
+            out.append("C: a refused save moved the head")
+        # the database itself refuses an older binary
+        raw = nbk._connect()
+        for sql, args, what in (
+            ("UPDATE documents SET body = ?, revision = revision + 1, fingerprint = 'x' WHERE doc_id = 'doc_legacy_01'", ("rewritten by an old binary",), "an old binary's body-only update of a structured head"),
+            ("INSERT INTO checkpoints (checkpoint_id, doc_id, revision, reason, title, title_is_manual, body, fingerprint, created_at) VALUES ('ckp_oldbin', 'doc_legacy_01', 99, 'save', '', 0, ?, 'x', 'now')", (head["body"],), "an old binary's structureless checkpoint of a structured head"),
+        ):
+            try:
+                raw.execute(sql, args)
+                out.append(f"C: the database accepted {what}")
+            except _sq.IntegrityError:
+                pass
+        raw.close()
+        if nbk.get("doc_legacy_01")["body"] != head["body"]:
+            out.append("C: the old-binary write went through after all")
+        # identical documents: one fingerprint, two ids
+        for did in ("doc_twin_0001", "doc_twin_0002"):
+            nbk.save(did, title="Twin", title_is_manual=True, body="the same words", base_revision=0, base_fingerprint="", request_id="req_c_" + did, doc_json=ds.parse_plain("the same words"), doc_schema=1, projection_version=1)
+        t1, t2 = nbk.get("doc_twin_0001"), nbk.get("doc_twin_0002")
+        if t1["fingerprint"] != t2["fingerprint"] or t1["doc_id"] == t2["doc_id"] or len([d for d in nbk.list_documents()["documents"] if d["doc_id"].startswith("doc_twin_")]) != 2:
+            out.append("C: two identical documents must share a fingerprint and stay two documents")
+        # restore: a plain checkpoint over a structured head, then a structured checkpoint back
+        cp_plain = next(c for c in cps if c["revision"] == 3)
+        r1 = nbk.restore("doc_legacy_01", checkpoint_id=cp_plain["checkpoint_id"], base_revision=head["revision"], base_fingerprint=head["fingerprint"], request_id="req_c_restore_1")
+        after = nbk.get("doc_legacy_01")
+        cps2 = nbk.list_checkpoints("doc_legacy_01")
+        if r1["revision"] != head["revision"] + 1 or after["body"] != "legacy words\n" or not after["rich"] or after["doc_json"] != ds.parse_plain("legacy words\n"):
+            out.append(f"C: restoring a plain checkpoint over a structured head did not make a new structured revision of the old text: {r1} {after and after['body']!r}")
+        if not any(c["reason"] == "restore" and c["revision"] == head["revision"] and c["rich"] for c in cps2) or not any(c["revision"] == 3 for c in cps2):
+            out.append("C: the restore did not keep the head it replaced (with structure) and the restored checkpoint")
+        if not any(e["kind"] == "restored" for e in nbk.list_events("doc_legacy_01")):
+            out.append("C: the restore is not an event")
+        cp_rich = next(c for c in cps2 if c["reason"] == "restore")
+        r2 = nbk.restore("doc_legacy_01", checkpoint_id=cp_rich["checkpoint_id"], base_revision=after["revision"], base_fingerprint=after["fingerprint"], request_id="req_c_restore_2")
+        back = nbk.get("doc_legacy_01")
+        if back["doc_json"] != ds.validate(rich_doc) or back["body"] != "legacy words\nmore":
+            out.append("C: restoring a structured checkpoint did not bring the structure back whole")
+        try:
+            nbk.restore("doc_legacy_01", checkpoint_id=cp_rich["checkpoint_id"], base_revision=1, base_fingerprint="stale", request_id="req_c_restore_3")
+            out.append("C: a restore over a moved head was accepted")
+        except nbk.NotebookError as e2:
+            if e2.status != 409:
+                out.append(f"C: a restore over a moved head is not a 409: {e2.status}")
+        # plain copy: a new plain document; the original keeps its structure
+        pc = nbk.plain_copy("doc_legacy_01", request_id="req_c_plaincopy")
+        copy = nbk.get(pc["doc_id"])
+        if pc["doc_id"] == "doc_legacy_01" or copy["rich"] or copy["body"] != back["body"] or not nbk.get("doc_legacy_01")["rich"]:
+            out.append("C: a plain copy must be a new plain document with the exact text, leaving the original structured")
+        if not any(e["kind"] == "plain_copy" and e["detail"].get("from_doc_id") == "doc_legacy_01" for e in nbk.list_events(pc["doc_id"])):
+            out.append("C: the plain copy is not an event on the new document")
+        # applications: an event linked to the result, committed by a later save
+        app = nbk.record_application("doc_legacy_01", result_ref={"operation_id": "job_x", "snapshot_id": "snap_y"}, kind="replace", from_revision=back["revision"], from_seq=4, to_seq=5, range_={"start": 0, "end": 6, "units": "utf16"})
+        ev = next(e for e in nbk.list_events("doc_legacy_01") if e["event_id"] == app["event_id"])
+        if ev["detail"].get("committed_revision") is not None or ev["detail"]["result"]["operation_id"] != "job_x":
+            out.append(f"C: an unsaved application must be recorded as uncommitted and linked to its result: {ev}")
+        if not nbk.mark_application_committed("doc_legacy_01", app["event_id"], back["revision"] + 1) or nbk.mark_application_committed("doc_legacy_01", "ev_nonesuch", 9):
+            out.append("C: marking an application committed does not work as it should")
+        try:
+            nbk.record_application("doc_legacy_01", result_ref={}, kind="merge", from_revision=1, from_seq=1, to_seq=2, range_={})
+            out.append("C: an unknown application kind was accepted")
+        except nbk.NotebookError:
+            pass
+        # a snapshot names the editor session it was frozen in
+        snap = _sn.make(kind="selection", text="cat", doc_id="doc_legacy_01", revision=1, seq=2, range_={"start": 4, "end": 7}, editor_session="es_abc")
+        if snap.get("editor_session") != "es_abc" or _sn.summary(snap).get("editor_session") != "es_abc":
+            out.append("C: the snapshot does not carry the editor session")
+    finally:
+        state_root.apply(_SCRATCH)
+    # 3. through the routes, with the paired client
+    c = server.app.test_client()
+    paired(c)
+    r = c.put("/api/notebook/documents/doc_route_rich_1", json={"title": "", "title_is_manual": False, "body": "Route words", "base_revision": 0, "base_fingerprint": "", "request_id": "req_c_route_1",
+                                                               "doc_json": {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Route", "marks": [{"type": "strong"}]}, {"type": "text", "text": " words"}]}]}, "doc_schema": 1, "projection_version": 1})
+    d = r.get_json() or {}
+    if r.status_code != 201 or not d.get("rich") or not d.get("fingerprint", "").startswith("fp2_"):
+        out.append(f"C: a structured save through the route did not create a structured document: {r.status_code} {d}")
+    g = c.get("/api/notebook/documents/doc_route_rich_1").get_json() or {}
+    if not g.get("rich") or g.get("doc_json", {}).get("content", [{}])[0].get("content", [{}])[0].get("marks") != [{"type": "strong"}]:
+        out.append("C: reading the document does not return its canonical structure")
+    r2 = c.put("/api/notebook/documents/doc_route_rich_1", json={"title": "", "title_is_manual": False, "body": "Route words flattened", "base_revision": d["revision"], "base_fingerprint": d["fingerprint"], "request_id": "req_c_route_2", "doc_json": None})
+    if r2.status_code != 422 or (r2.get_json() or {}).get("error_class") != "structure_would_be_lost":
+        out.append(f"C: through the route, an explicit null structure against a structured head is not 422 structure_would_be_lost: {r2.status_code} {r2.get_json()}")
+    r3 = c.put("/api/notebook/documents/doc_route_rich_1", json={"title": "", "title_is_manual": False, "body": "x", "base_revision": d["revision"], "base_fingerprint": d["fingerprint"], "request_id": "req_c_route_3", "doc_json": [1, 2]})
+    if r3.status_code != 400:
+        out.append(f"C: a doc_json that is not an object is not a 400: {r3.status_code}")
+    ev = c.get("/api/notebook/documents/doc_route_rich_1/events").get_json() or {}
+    if not ev.get("population") or not any(e["kind"] == "format_converted" for e in ev.get("events", [])):
+        out.append(f"C: the events route does not list the conversion with its population: {ev}")
+    pc = c.post("/api/notebook/documents/doc_route_rich_1/plain-copy", json={"request_id": "req_c_route_pc"})
+    if pc.status_code != 201 or (pc.get_json() or {}).get("from_doc_id") != "doc_route_rich_1":
+        out.append(f"C: the plain-copy route did not make a copy: {pc.status_code} {pc.get_json()}")
+    ap = c.post("/api/notebook/documents/doc_route_rich_1/applications", json={"kind": "insert", "result": {"operation_id": "job_r"}, "from_revision": 1, "from_seq": 1, "to_seq": 2, "range": {"start": 0, "end": 5, "units": "utf16"}})
+    eid = (ap.get_json() or {}).get("event_id", "")
+    cm = c.post(f"/api/notebook/documents/doc_route_rich_1/applications/{eid}/committed", json={"committed_revision": 2})
+    if ap.status_code != 201 or not eid or cm.status_code != 200:
+        out.append(f"C: the application routes do not record and commit: {ap.status_code} {cm.status_code}")
+    if c.post("/api/notebook/documents/doc_route_rich_1/applications/ev_none/committed", json={"committed_revision": 2}).status_code != 404:
+        out.append("C: committing an unknown application is not a 404")
+    return out
+
+
 def main() -> int:
     failures = FAILURES
     # block 113, hoisted: pure checks on a pure function, before anything
@@ -5618,6 +5871,7 @@ def main() -> int:
         failures.append("server did not pass global_constraints through")
     failures.extend(_check_test_mode_fails_closed(server))
     failures.extend(_check_workspace_registry(server, _paired))
+    failures.extend(_check_document_contract(server, _paired))
     failures.extend(_check_map_focus_routes(server, _paired))
     failures.extend(_check_moira_routes(server, _paired))
     failures.extend(_check_notebook_b(server, _paired))

@@ -51,13 +51,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import wordicon_cli as cli  # noqa: E402
+import document_schema as ds  # noqa: E402  (workspace-v2 slice C: schema v1, projection v1, the versioned fingerprint)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2   # v2 (workspace-v2 slice C): structure beside the exact text, additively
 DB_NAME = "notebook.sqlite3"
 BUSY_TIMEOUT_S = 5.0
 ID_RX = re.compile(r"^[A-Za-z0-9_\-]{8,64}$")
 TITLE_MAX = 200
-REASONS = ("save", "new", "interval", "replace", "open", "migration", "recovery")
+REASONS = ("save", "new", "interval", "replace", "open", "migration", "recovery", "restore")
+EVENT_KINDS = ("format_converted", "restored", "plain_copy", "applied")
 UNTITLED = "Untitled"
 
 
@@ -65,10 +67,11 @@ class NotebookError(Exception):
     """A request the store refuses. `status` is the HTTP status the route
     answers with; `head` (on a conflict) is the current document."""
 
-    def __init__(self, message: str, status: int = 400, head: dict | None = None):
+    def __init__(self, message: str, status: int = 400, head: dict | None = None, error_class: str = ""):
         super().__init__(message)
         self.status = status
         self.head = head
+        self.error_class = error_class
 
 
 # ---- the file ---------------------------------------------------------------
@@ -122,7 +125,42 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at      TEXT NOT NULL,
             UNIQUE (doc_id, revision, reason)
         );
-        INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', '{SCHEMA_VERSION}');
+        CREATE TABLE IF NOT EXISTS document_events (
+            event_id    TEXT PRIMARY KEY,
+            doc_id      TEXT NOT NULL,
+            kind        TEXT NOT NULL,
+            revision    INTEGER,
+            detail      TEXT NOT NULL DEFAULT '',
+            created_at  TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS document_events_doc ON document_events (doc_id, created_at);
+        INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', '1');
+    """)
+    # v2, additive and idempotent: the structure beside the exact text, on the
+    # head and on every checkpoint, with its versions; the fingerprint's own
+    # version so a v1 fingerprint is never rehashed in place.
+    for table in ("documents", "checkpoints"):
+        have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        for col, decl in (("doc_json", "TEXT"), ("doc_schema", "INTEGER"), ("projection_version", "INTEGER"),
+                          ("fp_version", "INTEGER NOT NULL DEFAULT 1")):
+            if col not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    conn.execute("UPDATE meta SET value = ? WHERE key = 'schema' AND CAST(value AS INTEGER) < ?",
+                 (str(SCHEMA_VERSION), SCHEMA_VERSION))
+    # The guard against a binary that does not know the structure: an older
+    # notebook.py updates body/revision/fingerprint and leaves doc_json as it
+    # was, which would make the structure lie about the text; and it would
+    # checkpoint a structured head without its structure. Both are refused
+    # by the database itself, so rolling the code back cannot corrupt what
+    # the new code wrote — the old code can still read every document.
+    conn.executescript("""
+        CREATE TRIGGER IF NOT EXISTS documents_keep_structure BEFORE UPDATE OF body ON documents
+        WHEN OLD.doc_json IS NOT NULL AND NEW.body IS NOT OLD.body AND NEW.doc_json IS OLD.doc_json
+        BEGIN SELECT RAISE(ABORT, 'this document carries structure; a body-only write would leave the structure describing other text — refused'); END;
+        CREATE TRIGGER IF NOT EXISTS checkpoints_keep_structure BEFORE INSERT ON checkpoints
+        WHEN NEW.doc_json IS NULL AND (SELECT doc_json FROM documents WHERE doc_id = NEW.doc_id) IS NOT NULL
+             AND (SELECT body FROM documents WHERE doc_id = NEW.doc_id) IS NEW.body
+        BEGIN SELECT RAISE(ABORT, 'a checkpoint of a structured head must carry its structure — refused'); END;
     """)
 
 
@@ -188,8 +226,14 @@ def _doc_dict(row, with_body: bool = True) -> dict:
         "saved_at": row["saved_at"],
         "origin": row["origin"],
     }
+    keys = row.keys()
+    d["doc_schema"] = int(row["doc_schema"]) if "doc_schema" in keys and row["doc_schema"] is not None else None
+    d["projection_version"] = int(row["projection_version"]) if "projection_version" in keys and row["projection_version"] is not None else None
+    d["fp_version"] = int(row["fp_version"]) if "fp_version" in keys and row["fp_version"] is not None else 1
+    d["rich"] = bool("doc_json" in keys and row["doc_json"])
     if with_body:
         d["body"] = row["body"]
+        d["doc_json"] = json.loads(row["doc_json"]) if d["rich"] else None
     else:
         body = row["body"] or ""
         first = next((" ".join(l.split()) for l in body.splitlines() if l.strip()), "")
@@ -258,11 +302,13 @@ def list_checkpoints(doc_id: str) -> list[dict]:
     try:
         rows = conn.execute(
             "SELECT checkpoint_id, doc_id, revision, reason, title, title_is_manual, fingerprint, "
-            "created_at, length(body) AS chars FROM checkpoints WHERE doc_id = ? "
+            "created_at, length(body) AS chars, (doc_json IS NOT NULL) AS rich, doc_schema, projection_version "
+            "FROM checkpoints WHERE doc_id = ? "
             "ORDER BY revision DESC, created_at DESC", (doc_id,)).fetchall()
         return [{"checkpoint_id": r["checkpoint_id"], "doc_id": r["doc_id"], "revision": int(r["revision"]),
                  "reason": r["reason"], "title": r["title"], "title_is_manual": bool(r["title_is_manual"]),
-                 "fingerprint": r["fingerprint"], "created_at": r["created_at"], "chars": int(r["chars"])}
+                 "fingerprint": r["fingerprint"], "created_at": r["created_at"], "chars": int(r["chars"]),
+                 "rich": bool(r["rich"]), "doc_schema": r["doc_schema"], "projection_version": r["projection_version"]}
                 for r in rows]
     finally:
         conn.close()
@@ -279,7 +325,10 @@ def get_checkpoint(doc_id: str, checkpoint_id: str) -> dict | None:
             return None
         return {"checkpoint_id": r["checkpoint_id"], "doc_id": r["doc_id"], "revision": int(r["revision"]),
                 "reason": r["reason"], "title": r["title"], "title_is_manual": bool(r["title_is_manual"]),
-                "body": r["body"], "fingerprint": r["fingerprint"], "created_at": r["created_at"]}
+                "body": r["body"], "fingerprint": r["fingerprint"], "created_at": r["created_at"],
+                "doc_json": json.loads(r["doc_json"]) if r["doc_json"] else None,
+                "doc_schema": r["doc_schema"], "projection_version": r["projection_version"],
+                "fp_version": r["fp_version"] if r["fp_version"] is not None else 1}
     finally:
         conn.close()
 
@@ -302,16 +351,78 @@ def _insert_checkpoint(conn, row, reason: str, now: str) -> dict:
     cid = "ckp_" + uuid.uuid4().hex[:20]
     conn.execute(
         "INSERT INTO checkpoints (checkpoint_id, doc_id, revision, reason, title, title_is_manual, body, "
-        "fingerprint, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "fingerprint, created_at, doc_json, doc_schema, projection_version, fp_version) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (cid, row["doc_id"], row["revision"], reason, row["title"], row["title_is_manual"],
-         row["body"], row["fingerprint"], now))
+         row["body"], row["fingerprint"], now, row["doc_json"], row["doc_schema"], row["projection_version"],
+         row["fp_version"] if row["fp_version"] is not None else 1))
     return {"checkpoint_id": cid, "revision": int(row["revision"]), "reason": reason,
             "created_at": now, "created": True}
 
 
+def _event(conn, doc_id: str, kind: str, revision, detail: dict, now: str) -> str:
+    assert kind in EVENT_KINDS
+    eid = "ev_" + uuid.uuid4().hex[:20]
+    conn.execute("INSERT INTO document_events (event_id, doc_id, kind, revision, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                 (eid, doc_id, kind, revision, json.dumps(detail, ensure_ascii=False, sort_keys=True), now))
+    return eid
+
+
+def list_events(doc_id: str, limit: int = 100) -> list[dict]:
+    _check_id(doc_id, "document id")
+    conn = _connect()
+    try:
+        rows = conn.execute("SELECT * FROM document_events WHERE doc_id = ? ORDER BY created_at DESC LIMIT ?",
+                            (doc_id, int(limit))).fetchall()
+        out = []
+        for r in rows:
+            try:
+                detail = json.loads(r["detail"] or "{}")
+            except json.JSONDecodeError:
+                detail = {}
+            out.append({"event_id": r["event_id"], "doc_id": r["doc_id"], "kind": r["kind"], "revision": r["revision"],
+                        "detail": detail, "created_at": r["created_at"]})
+        return out
+    finally:
+        conn.close()
+
+
+def _structure_in(body: str, doc_json, doc_schema, projection_version):
+    """Validate an incoming structure against its exact text. Returns
+    (canonical_json_text or None, schema, projection, fingerprint_version)."""
+    if doc_json is None:
+        return None, None, None, 1
+    if not isinstance(doc_json, dict):
+        raise NotebookError("doc_json must be an object (the document's structure)", 400, error_class="schema_invalid")
+    if doc_schema is None or projection_version is None:
+        raise NotebookError("a structured save names doc_schema and projection_version", 400, error_class="schema_invalid")
+    if not isinstance(doc_schema, int) or isinstance(doc_schema, bool) or not isinstance(projection_version, int) or isinstance(projection_version, bool):
+        raise NotebookError("doc_schema and projection_version are integers", 400, error_class="schema_invalid")
+    try:
+        canon_doc = ds.validate(doc_json, doc_schema)
+        projected = ds.project(canon_doc, projection_version)
+    except ds.SchemaError as e:
+        status = 422 if e.error_class in ("schema_unsupported", "projection_unsupported") else 400
+        raise NotebookError(str(e), status, error_class=e.error_class)
+    if projected != body:
+        raise NotebookError("the structure does not project to the exact text sent with it — nothing was saved; "
+                            f"the projection differs at code point {_first_diff(projected, body)}",
+                            422, error_class="projection_mismatch")
+    return ds.canonical(canon_doc), doc_schema, projection_version, 2
+
+
+def _first_diff(a: str, b: str) -> int:
+    n = min(len(a), len(b))
+    for i in range(n):
+        if a[i] != b[i]:
+            return i
+    return n
+
+
 def save(doc_id: str, *, title: str, title_is_manual: bool, body: str, base_revision: int,
          base_fingerprint: str, request_id: str, checkpoint_reason: str | None = None,
-         origin: str = "") -> dict:
+         origin: str = "", doc_json=None, doc_schema=None, projection_version=None,
+         flatten_marker=None) -> dict:
     """One save, one transaction. Creates at revision 1 when base_revision is
     0 and the document is absent; otherwise updates only when the base
     revision AND fingerprint match the head. A repeat of an accepted
@@ -330,7 +441,11 @@ def save(doc_id: str, *, title: str, title_is_manual: bool, body: str, base_revi
             raise NotebookError(f"unknown checkpoint reason {checkpoint_reason!r}", 400)
     origin = _check_text(origin or "", "origin", 100)
     title_is_manual = bool(title_is_manual)
-    fp = fingerprint(title, title_is_manual, body)
+    doc_text, sch, proj, fpv = _structure_in(body, doc_json, doc_schema, projection_version)
+    # the one fingerprint for the whole document: v2 covers the structure and
+    # its versions; a plain document keeps the v1 form so nothing old is rehashed
+    fp = ds.fingerprint_v2(title, title_is_manual, body, json.loads(doc_text), sch, proj) if doc_text is not None \
+        else fingerprint(title, title_is_manual, body)
     now = _now()
 
     conn = _connect()
@@ -350,26 +465,45 @@ def save(doc_id: str, *, title: str, title_is_manual: bool, body: str, base_revi
                         "head_revision": int(head["revision"]) if head else None}
             head = conn.execute("SELECT * FROM documents WHERE doc_id = ?", (doc_id,)).fetchone()
             checkpoint = None
+            events = []
             if head is None:
                 if base_revision != 0:
                     raise NotebookError("no such document — a new one is created from base_revision 0", 404)
                 conn.execute(
                     "INSERT INTO documents (doc_id, title, title_is_manual, body, revision, fingerprint, "
-                    "created_at, saved_at, origin) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)",
-                    (doc_id, title, int(title_is_manual), body, fp, now, now, origin))
+                    "created_at, saved_at, origin, doc_json, doc_schema, projection_version, fp_version) "
+                    "VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (doc_id, title, int(title_is_manual), body, fp, now, now, origin, doc_text, sch, proj, fpv))
                 revision, created = 1, True
+                if doc_text is not None:
+                    events.append(_event(conn, doc_id, "format_converted", 1, {"from": "new", "to_schema": sch, "projection": proj}, now))
             else:
                 if int(head["revision"]) != base_revision or head["fingerprint"] != base_fingerprint:
                     raise NotebookError("the document has changed since this copy was taken — nothing was "
                                         "overwritten; the current head is returned", 409, head=_head_dict(head))
+                # a body-only save may not flatten a rich head: headings, emphasis,
+                # lists and links would vanish in silence. A deliberate plain copy
+                # is a new document (plain_copy); this save is refused by name.
+                if doc_text is None and head["doc_json"]:
+                    raise NotebookError("this document carries structure (headings, emphasis, lists or links) that a "
+                                        "plain-text save would silently drop — nothing was saved. Open it in the "
+                                        "structured editor, or make a plain copy as a new document.",
+                                        422, head=_head_dict(head), error_class="structure_would_be_lost")
                 if head["fingerprint"] == fp:
                     revision, created = int(head["revision"]), False     # nothing changed: no bump
                 else:
                     revision, created = int(head["revision"]) + 1, False
+                    if doc_text is not None and not head["doc_json"]:
+                        # the first structured save of a plain document: the plain head
+                        # is checkpointed as it stood, and the conversion is an event
+                        _insert_checkpoint(conn, head, "migration", now)
+                        events.append(_event(conn, doc_id, "format_converted", revision,
+                                             {"from": "plain", "from_revision": int(head["revision"]), "to_schema": sch, "projection": proj}, now))
                     conn.execute(
                         "UPDATE documents SET title = ?, title_is_manual = ?, body = ?, revision = ?, "
-                        "fingerprint = ?, saved_at = ? WHERE doc_id = ?",
-                        (title, int(title_is_manual), body, revision, fp, now, doc_id))
+                        "fingerprint = ?, saved_at = ?, doc_json = ?, doc_schema = ?, projection_version = ?, fp_version = ? "
+                        "WHERE doc_id = ?",
+                        (title, int(title_is_manual), body, revision, fp, now, doc_text, sch, proj, fpv, doc_id))
             conn.execute(
                 "INSERT INTO save_requests (request_id, doc_id, fingerprint, revision, saved_at) "
                 "VALUES (?, ?, ?, ?, ?)", (request_id, doc_id, fp, revision, now))
@@ -382,7 +516,115 @@ def save(doc_id: str, *, title: str, title_is_manual: bool, body: str, base_revi
             raise
         return {"doc_id": doc_id, "request_id": request_id, "revision": revision, "fingerprint": fp,
                 "saved_at": now, "created": created, "repeated": False, "checkpoint": checkpoint,
-                "head_revision": revision}
+                "head_revision": revision, "rich": doc_text is not None, "fp_version": fpv, "events": events}
+    finally:
+        conn.close()
+
+
+def restore(doc_id: str, *, checkpoint_id: str, base_revision: int, base_fingerprint: str, request_id: str) -> dict:
+    """A checkpoint becomes the head as a NEW revision — history is never
+    rewritten, the checkpoint stays. Structure comes back whole; a plain
+    checkpoint restores a plain head. The head must be where the caller
+    thinks it is (409 otherwise), and the head as it stands is checkpointed
+    first with reason 'restore'."""
+    cp = get_checkpoint(doc_id, checkpoint_id)
+    if cp is None:
+        raise NotebookError("no such checkpoint", 404)
+    conn = _connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            head = conn.execute("SELECT * FROM documents WHERE doc_id = ?", (doc_id,)).fetchone()
+            if head is None:
+                raise NotebookError("no such document", 404)
+            if int(head["revision"]) != base_revision or head["fingerprint"] != base_fingerprint:
+                raise NotebookError("the document has changed since this copy was taken — nothing was restored", 409, head=_head_dict(head))
+            _insert_checkpoint(conn, head, "restore", _now())
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.close()
+    doc_json, sch, proj = cp.get("doc_json"), cp.get("doc_schema"), cp.get("projection_version")
+    if doc_json is None and head["doc_json"]:
+        # a plain checkpoint over a rich head: nothing is lost by giving the
+        # restored text its paragraphs, and the rich head was checkpointed
+        # above; a body the schema cannot hold is refused by name instead
+        ok, why = ds.convertible(cp["body"])
+        if not ok:
+            raise NotebookError(f"this checkpoint is plain text the structured schema cannot hold ({why}); "
+                                "make a plain copy instead of restoring over a structured document", 422,
+                                error_class="structure_would_be_lost")
+        doc_json, sch, proj = ds.parse_plain(cp["body"]), ds.SCHEMA_VERSION, ds.PROJECTION_VERSION
+    ack = save(doc_id, title=cp["title"], title_is_manual=cp["title_is_manual"], body=cp["body"],
+               base_revision=base_revision, base_fingerprint=base_fingerprint, request_id=request_id,
+               doc_json=doc_json, doc_schema=sch, projection_version=proj, origin="restore")
+    conn = _connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        _event(conn, doc_id, "restored", ack["revision"], {"checkpoint_id": checkpoint_id, "from_revision": cp["revision"]}, _now())
+        conn.execute("COMMIT")
+    finally:
+        conn.close()
+    ack["restored_from"] = checkpoint_id
+    return ack
+
+
+def plain_copy(doc_id: str, *, request_id: str) -> dict:
+    """A deliberate plain-text copy: a NEW document with the exact body and
+    no structure. The original keeps its id and its structure."""
+    src = get(doc_id)
+    if src is None:
+        raise NotebookError("no such document", 404)
+    new_id_ = new_id()
+    ack = save(new_id_, title=src["title"], title_is_manual=src["title_is_manual"], body=src["body"],
+               base_revision=0, base_fingerprint="", request_id=request_id, origin="plain-copy")
+    conn = _connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        _event(conn, new_id_, "plain_copy", ack["revision"], {"from_doc_id": doc_id, "from_revision": src["revision"]}, _now())
+        conn.execute("COMMIT")
+    finally:
+        conn.close()
+    ack["from_doc_id"] = doc_id
+    return ack
+
+
+def record_application(doc_id: str, *, result_ref: dict, kind: str, from_revision, from_seq, to_seq, range_: dict, committed_revision=None) -> dict:
+    """Application of a textual suggestion to the draft, as its own event
+    linked to the immutable result and the document versions. An unsaved
+    local application has committed_revision None; the save that carries it
+    is recorded when it commits (see mark_application_committed)."""
+    _check_id(doc_id, "document id")
+    if kind not in ("insert", "replace", "undo", "redo"):
+        raise NotebookError("kind must be insert, replace, undo or redo", 400)
+    conn = _connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        eid = _event(conn, doc_id, "applied", committed_revision,
+                     {"kind": kind, "result": result_ref, "from_revision": from_revision, "from_seq": from_seq,
+                      "to_seq": to_seq, "range": range_, "committed_revision": committed_revision}, _now())
+        conn.execute("COMMIT")
+        return {"event_id": eid}
+    finally:
+        conn.close()
+
+
+def mark_application_committed(doc_id: str, event_id: str, committed_revision: int) -> bool:
+    conn = _connect()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        r = conn.execute("SELECT detail FROM document_events WHERE event_id = ? AND doc_id = ? AND kind = 'applied'", (event_id, doc_id)).fetchone()
+        if not r:
+            conn.execute("ROLLBACK")
+            return False
+        detail = json.loads(r["detail"] or "{}")
+        detail["committed_revision"] = int(committed_revision)
+        conn.execute("UPDATE document_events SET detail = ?, revision = ? WHERE event_id = ?",
+                     (json.dumps(detail, ensure_ascii=False, sort_keys=True), int(committed_revision), event_id))
+        conn.execute("COMMIT")
+        return True
     finally:
         conn.close()
 

@@ -23,7 +23,10 @@
           <button role="menuitem" data-doc="duplicate" type="button">Duplicate</button>
           <button role="menuitem" data-doc="open" type="button">Open another…</button>
           <button role="menuitem" data-doc="versions" type="button">Versions</button>
-          <button role="menuitem" data-doc="export" type="button">Export as text</button>
+          <button role="menuitem" data-doc="plaincopy" type="button">Make a plain copy</button>
+          <button role="menuitem" data-doc="export-text" type="button">Export as text (.txt, plain)</button>
+          <button role="menuitem" data-doc="export-md" type="button">Export as Markdown (.md)</button>
+          <button role="menuitem" data-doc="print" type="button">Print / PDF</button>
           <button role="menuitem" data-doc="archive" type="button">Archive</button>
         </div>
       </div>
@@ -55,6 +58,17 @@
 
     <main id="center" class="center">
       <section id="work-view" class="view work-view">
+        <div id="findbar" class="findbar" role="search" aria-label="Find and replace in the draft" hidden>
+          <input id="find-input" type="text" placeholder="Find in the draft" aria-label="Find">
+          <span id="find-count" class="muted small-text" aria-live="polite"></span>
+          <button id="find-prev" class="btn small" type="button" title="Previous (⇧Enter)">↑</button>
+          <button id="find-next" class="btn small" type="button" title="Next (Enter)">↓</button>
+          <label class="small-text muted"><input id="find-case" type="checkbox"> Match case</label>
+          <input id="replace-input" type="text" placeholder="Replace with" aria-label="Replace with">
+          <button id="find-replace" class="btn small" type="button">Replace</button>
+          <button id="find-replace-all" class="btn small" type="button">Replace all</button>
+          <button id="find-close" class="btn small" type="button" aria-label="Close find">✕</button>
+        </div>
         <div id="editor-host" class="editor-host"></div>
         <div id="sel-popover" class="popover" hidden role="menu" aria-label="On your selection"></div>
         <section id="stacked" class="stacked" hidden aria-label="Results below the draft">

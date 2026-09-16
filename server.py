@@ -1538,6 +1538,8 @@ def _nbk_error(e: "nbk.NotebookError"):
     body = {"error": str(e)}
     if e.head is not None:
         body["head"] = e.head
+    if getattr(e, "error_class", ""):
+        body["error_class"] = e.error_class   # slice C: a refusal says which kind it is, apart from a moved head
     return jsonify(body), e.status
 
 
@@ -1582,14 +1584,86 @@ def api_notebook_put(doc_id):
     reason = data.get("checkpoint_reason")
     if reason is not None and not isinstance(reason, str):
         return jsonify({"error": "checkpoint_reason must be text"}), 400
+    # slice C: the structure rides with the exact text. A key that is present
+    # but null is a body-only save (an old client sending JSON null cannot
+    # flatten a rich head either — the refusal is by the head's structure,
+    # not by the presence of a key).
+    doc_json = data.get("doc_json")
+    if doc_json is not None and not isinstance(doc_json, dict):
+        return jsonify({"error": "doc_json must be an object", "error_class": "schema_invalid"}), 400
     try:
         ack = nbk.save(doc_id, title=data.get("title", ""), title_is_manual=bool(data.get("title_is_manual", False)),
                        body=data.get("body", ""), base_revision=base_rev,
                        base_fingerprint=data.get("base_fingerprint", "") or "", request_id=data.get("request_id", ""),
-                       checkpoint_reason=reason, origin=str(data.get("origin") or "")[:100])
+                       checkpoint_reason=reason, origin=str(data.get("origin") or "")[:100],
+                       doc_json=doc_json, doc_schema=data.get("doc_schema"), projection_version=data.get("projection_version"))
     except nbk.NotebookError as e:
         return _nbk_error(e)
     return jsonify(ack), (201 if ack.get("created") else 200)
+
+
+@app.route("/api/notebook/documents/<doc_id>/restore", methods=["POST"])
+def api_notebook_restore(doc_id):
+    """A checkpoint becomes a new revision of the same document; nothing is
+    rewritten. Slice C."""
+    data = request.get_json(silent=True) or {}
+    base_rev = data.get("base_revision", 0)
+    if isinstance(base_rev, bool) or not isinstance(base_rev, int):
+        return jsonify({"error": "base_revision must be an integer"}), 400
+    try:
+        ack = nbk.restore(doc_id, checkpoint_id=str(data.get("checkpoint_id") or ""), base_revision=base_rev,
+                          base_fingerprint=str(data.get("base_fingerprint") or ""), request_id=str(data.get("request_id") or ""))
+    except nbk.NotebookError as e:
+        return _nbk_error(e)
+    return jsonify(ack)
+
+
+@app.route("/api/notebook/documents/<doc_id>/plain-copy", methods=["POST"])
+def api_notebook_plain_copy(doc_id):
+    """A deliberate plain-text copy as a NEW document; the original keeps its
+    id and its structure. Slice C."""
+    data = request.get_json(silent=True) or {}
+    try:
+        ack = nbk.plain_copy(doc_id, request_id=str(data.get("request_id") or ""))
+    except nbk.NotebookError as e:
+        return _nbk_error(e)
+    return jsonify(ack), 201
+
+
+@app.route("/api/notebook/documents/<doc_id>/events")
+def api_notebook_events(doc_id):
+    try:
+        return jsonify({"events": nbk.list_events(doc_id), "population": "every recorded event of this document, newest first"})
+    except nbk.NotebookError as e:
+        return _nbk_error(e)
+
+
+@app.route("/api/notebook/documents/<doc_id>/applications", methods=["POST"])
+def api_notebook_application(doc_id):
+    """Application of a textual suggestion to the draft, recorded as its own
+    event linked to the immutable result and the document versions — never
+    by rewriting the result. Slice C."""
+    data = request.get_json(silent=True) or {}
+    kind = str(data.get("kind") or "")
+    rng = data.get("range") if isinstance(data.get("range"), dict) else {}
+    try:
+        out = nbk.record_application(doc_id, result_ref={k: str(v)[:120] for k, v in (data.get("result") or {}).items() if isinstance(k, str)},
+                                     kind=kind, from_revision=data.get("from_revision"), from_seq=data.get("from_seq"),
+                                     to_seq=data.get("to_seq"), range_={k: rng.get(k) for k in ("start", "end", "units") if k in rng},
+                                     committed_revision=data.get("committed_revision"))
+    except nbk.NotebookError as e:
+        return _nbk_error(e)
+    return jsonify(out), 201
+
+
+@app.route("/api/notebook/documents/<doc_id>/applications/<event_id>/committed", methods=["POST"])
+def api_notebook_application_committed(doc_id, event_id):
+    data = request.get_json(silent=True) or {}
+    rev = data.get("committed_revision")
+    if isinstance(rev, bool) or not isinstance(rev, int):
+        return jsonify({"error": "committed_revision must be an integer"}), 400
+    ok = nbk.mark_application_committed(doc_id, event_id, rev)
+    return jsonify({"ok": ok}), (200 if ok else 404)
 
 
 @app.route("/api/notebook/documents/<doc_id>/checkpoints")

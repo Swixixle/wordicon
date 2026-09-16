@@ -381,7 +381,8 @@ def prepare(action_id: str, subject: dict, inputs: dict, server_gateway) -> dict
                               revision=(subject or {}).get("revision"), seq=(subject or {}).get("seq"),
                               range_=rng if isinstance(rng, dict) else None,
                               units=str((subject or {}).get("units") or "codepoint"),
-                              title=str((subject or {}).get("title") or ""))
+                              title=str((subject or {}).get("title") or ""),
+                              editor_session=str((subject or {}).get("editor_session") or ""))
         snapshots.write(snap)
     elif kind == "concept":
         c = (subject or {}).get("concept") or {}

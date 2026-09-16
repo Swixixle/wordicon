@@ -49,7 +49,7 @@ def canonical(rec: dict) -> str:
 def make(*, kind: str, text: str, doc_id: str = "", revision: int | None = None, seq: int | None = None,
          range_: dict | None = None, units: str = "codepoint", structure: dict | None = None,
          doc_schema: int | None = None, projection_version: int | None = None, input_kind: str = "text",
-         title: str = "") -> dict:
+         title: str = "", editor_session: str = "") -> dict:
     """Build the record without writing it. `text` is the exact text the
     action will receive; for a selection it is the slice, and `range_` says
     where in the document (start/end in `units`) it was taken from."""
@@ -63,6 +63,7 @@ def make(*, kind: str, text: str, doc_id: str = "", revision: int | None = None,
         "doc_id": str(doc_id or ""),
         "revision": int(revision) if isinstance(revision, int) and not isinstance(revision, bool) else None,
         "seq": int(seq) if isinstance(seq, int) and not isinstance(seq, bool) else None,
+        "editor_session": str(editor_session or "")[:64],
         "range": ({"start": int(range_["start"]), "end": int(range_["end"]), "units": units}
                   if isinstance(range_, dict) and "start" in range_ and "end" in range_ else None),
         "title": str(title or "")[:200],
@@ -128,7 +129,8 @@ def summary(rec: dict) -> dict:
     t = rec.get("text") or ""
     head = t.strip().replace("\n", " ")
     return {"snapshot_id": rec.get("snapshot_id"), "kind": rec.get("kind"), "doc_id": rec.get("doc_id"),
-            "revision": rec.get("revision"), "seq": rec.get("seq"), "range": rec.get("range"),
+            "revision": rec.get("revision"), "seq": rec.get("seq"), "editor_session": rec.get("editor_session") or "",
+            "range": rec.get("range"),
             "chars": rec.get("chars"), "words": rec.get("words"), "text_sha256": rec.get("text_sha256"),
             "head": head[:80] + ("…" if len(head) > 80 else ""), "input_kind": rec.get("input_kind"),
             "created_at": rec.get("created_at")}

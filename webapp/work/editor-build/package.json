@@ -1,0 +1,19 @@
+{
+  "name": "nikodemus-editor-build",
+  "private": true,
+  "description": "Builds webapp/work/vendor/prosemirror.js — the pinned ProseMirror bundle the structured editor loads locally. Run `npm ci && npm run build`; the suite asserts the bundle's SHA-256 against docs/editor-bundle.sha256.",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "prosemirror-commands": "1.7.2",
+    "prosemirror-history": "1.5.0",
+    "prosemirror-keymap": "1.2.3",
+    "prosemirror-model": "1.25.11",
+    "prosemirror-schema-list": "1.5.1",
+    "prosemirror-state": "1.4.4",
+    "prosemirror-transform": "1.12.1",
+    "prosemirror-view": "1.42.3"
+  }
+}

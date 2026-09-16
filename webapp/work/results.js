@@ -18,6 +18,7 @@ export class Results {
     this.selected = null;         // operation id or trace id whose card is open
     this.unseen = 0;
     this.notice = null;
+    this.custom = null;
     this.proposal = null;
     this.bindTabs();
     this.pollTimer = 0;
@@ -49,7 +50,11 @@ export class Results {
   // ---- proposal and notices --------------------------------------------------
   showProposal(prepared, action, handlers) { this.proposal = { prepared, action, handlers }; this.notice = null; this.showTab('results'); }
   clearProposal() { this.proposal = null; this.render(); }
-  showNotice(text, choices = []) { this.notice = { text, choices }; this.showTab('results'); }
+  showNotice(text, choices = []) { this.notice = { text, choices }; this.custom = null; this.showTab('results'); }
+  // an element the shell built (Versions, for one) shown at the top of Results until dismissed
+  showCustom(element) { this.custom = element; this.notice = null; this.showTab('results'); }
+  // a debounced re-render of the results tab, for freshness lines after edits
+  refresh() { clearTimeout(this._refresh); this._refresh = setTimeout(() => { if (this.tab === 'results') this.render(); }, 350); }
 
   // ---- tracking an operation started here ------------------------------------
   track(started, prepared) {
@@ -97,12 +102,16 @@ export class Results {
   }
 
   // ---- freshness: the snapshot against the draft now ---------------------------
+  // Freshness is the editor session and the local sequence — the content's
+  // own generation — never the server revision: the writer's own autosave
+  // acknowledgment moves the revision without changing a word, and must
+  // not make a capture stale (§7). A reopen is a new editor session.
   freshness(prepared) {
     const s = prepared && prepared.disclosure && prepared.disclosure.scope;
     if (!s || !s.doc_id) return { fresh: null, text: '' };
     const same = this.session.id === s.doc_id;
     if (!same) return { fresh: false, text: 'From another document.' };
-    const unchanged = this.session.revision === s.revision && this.session.seq === s.seq;
+    const unchanged = (!s.editor_session || this.session.editorSession === s.editor_session) && this.session.seq === s.seq;
     return unchanged ? { fresh: true, text: 'The draft hasn’t changed since.' }
                      : { fresh: false, text: 'This draft changed. Review the earlier version before applying changes.' };
   }
@@ -124,6 +133,7 @@ export class Results {
       n.appendChild(el('button', { class: 'btn small', type: 'button', text: 'Dismiss', onclick: () => { this.notice = null; this.render(); } }));
       b.appendChild(n);
     }
+    if (this.custom) { const c = el('div', { class: 'card' }, [this.custom, el('button', { class: 'btn small', type: 'button', text: 'Close', onclick: () => { this.custom = null; this.render(); } })]); b.appendChild(c); }
     if (this.proposal) b.appendChild(this.proposalCard(this.proposal));
     const sel = this.selected && this.tracked.get(this.selected);
     if (sel) b.appendChild(this.resultCard(sel));
@@ -142,6 +152,7 @@ export class Results {
       el('div', { class: 'kv', text: `Tool: ${action.label}${action.mode ? ' · ' + action.mode : ''} · calls: ${d.calls}` }),
       el('div', { class: 'kv', text: `Leaves this machine: ${d.leaves_this_machine.fields.join(', ')} — to ${d.leaves_this_machine.recipient === 'model' ? (lane.external ? 'a live model (' + (lane.model || lane.lane) + ')' : 'no one: the mock lane makes no provider request') : d.leaves_this_machine.recipient}.` }),
       el('div', { class: 'kv', text: `Cost: ${d.cost}.` }),
+      sc.kind === 'selection' || sc.kind === 'document' ? el('div', { class: 'kv', text: 'Sent as text only: the exact words; headings, emphasis, lists and links are not sent.' }) : null,
       d.available ? null : el('div', { class: 'warn', text: 'Not available now: ' + d.reason }),
     ]);
     const row = el('div', { class: 'row' }, [
@@ -150,7 +161,9 @@ export class Results {
     ]);
     card.appendChild(row);
     card.appendChild(el('details', {}, [el('summary', { text: 'Details' }), el('div', { class: 'small-text muted', text: `proposal ${prepared.prepared_id} · snapshot ${sc.snapshot_id || '—'} · text sha256 ${(sc.text_sha256 || '').slice(0, 16)}…` })]));
-    const esc = e => { if (e.key === 'Escape') { document.removeEventListener('keydown', esc); handlers.onClose(); } };
+    if (this._esc) document.removeEventListener('keydown', this._esc);     // one listener however often the card is redrawn
+    const esc = e => { if (e.key === 'Escape') { document.removeEventListener('keydown', esc); this._esc = null; handlers.onClose(); } };
+    this._esc = esc;
     document.addEventListener('keydown', esc);
     setTimeout(() => { const s = card.querySelector('.btn.primary'); if (s && !s.disabled) s.focus(); }, 0);
     return card;
@@ -183,6 +196,15 @@ export class Results {
     if (t.kind === 'job' && ['done', 'complete'].includes(t.status)) {
       const titles = d.titles || [];
       if (titles.length) card.appendChild(el('div', { class: 'kv', text: `${titles.length} candidate${titles.length === 1 ? '' : 's'}: ${titles.slice(0, 5).join(' · ')}${titles.length > 5 ? ' …' : ''}` }));
+      // a candidate word is a textual suggestion for the words it was made
+      // from: Insert below / Replace, guarded (apply.js). Only for a result
+      // made from a selection — a whole-draft result has no place to go.
+      const candidates = Array.from(new Set([...titles, ...(d.groups || []).flatMap(g => g.titles || [])].filter(Boolean)));
+      if (candidates.length && p && p.disclosure.scope && p.disclosure.scope.kind === 'selection' && this.hooks.applyControls) {
+        const det = el('details', { class: 'apply-block' }, [el('summary', { text: 'Put a candidate into the draft (' + candidates.length + ' candidate' + (candidates.length === 1 ? '' : 's') + ')' })]);
+        for (const title of candidates.slice(0, 8)) det.appendChild(el('div', { class: 'kv apply-row' }, [el('span', { class: 'chip', text: title }), this.hooks.applyControls(t, title)]));
+        card.appendChild(det);
+      }
       for (const g of (d.groups || [])) {
         card.appendChild(el('div', { class: 'kv' }, [
           el('span', { text: (g.label || 'a concept') + (g.titles && g.titles.length ? ' — ' + g.titles.slice(0, 3).join(' · ') : '') }),

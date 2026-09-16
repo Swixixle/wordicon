@@ -5,9 +5,9 @@
 // flight and its request id bound to its exact payload, the local recovery
 // envelope, and the conflict state. The editor is an ADAPTER the session
 // talks to through a small interface (getText, setText, onEdit,
-// getSelection, focus, getScroll/setScroll, supportsFormatting); the
-// session never reaches into the editor's DOM, and the editor never talks
-// to the server.
+// getSelection, focus, getScroll/setScroll, getStructure,
+// supportsFormatting); the session never reaches into the editor's DOM,
+// and the editor never talks to the server.
 //
 // The semantics are the notebook client's (webapp/index.html, stage B),
 // carried over whole: one write in flight per document and newer content
@@ -15,8 +15,16 @@
 // lost reply is recognised by the store; a reply for a superseded request
 // cannot speak for newer text; 409 keeps both copies and stops automatic
 // saving until the owner chooses; a checkpoint reason rides the next save.
+//
+// Structure (slice C): the exact text and the structure are ONE versioned
+// document. A save carries doc_json/doc_schema/projection_version when the
+// editor holds structure and either the document is already structured or
+// an edit has been made since it was opened — opening a plain document
+// never rewrites it (§7). The server validates the structure and computes
+// the projection itself; a mismatch is refused, and the refusal is shown.
 import { getJSON, postJSON, newId, autoTitle } from './util.js';
 import * as recovery from './recovery.js';
+import { canonicalString } from '/work/document.js';
 
 const IDLE_MS = 750, MAX_WAIT_MS = 2000, RETRY_MS = [2000, 5000, 15000, 30000];
 const INTERVAL_CHECKPOINT_MS = 5 * 60 * 1000;
@@ -36,7 +44,7 @@ function requestId() { return 'req_' + newId('').slice(0, 24) + '_' + Date.now()
 export class DocumentSession {
   constructor(adapter, hooks = {}) {
     this.adapter = adapter;
-    this.hooks = hooks;              // onStatus(session), onOpened(session), onConflict(session)
+    this.hooks = hooks;              // onStatus(session), onOpened(session), onConflict(session), onApplicationCommitted(event)
     this.tab = tabId();
     this.blank();
     this.localState = { ok: true, why: '' };
@@ -46,8 +54,11 @@ export class DocumentSession {
   blank() {
     this.id = ''; this.title = ''; this.title_is_manual = false; this.revision = 0; this.fingerprint = ''; this.origin = '';
     this.seq = 0; this.sentSeq = 0; this.ackSeq = 0; this.savedAt = ''; this.inflight = null; this.timer = null; this.firstEditAt = 0;
-    this.status = 'idle'; this.serverError = ''; this.conflict = null; this.retryTimer = null; this.retries = 0;
+    this.status = 'idle'; this.serverError = ''; this.errorClass = ''; this.conflict = null; this.retryTimer = null; this.retries = 0;
     this.lastCheckpointAt = 0; this.pendingReason = ''; this.createdAt = '';
+    this.rich = false;               // the committed head carries structure
+    this.applications = [];          // {event_id, to_seq}: applied suggestions not yet in a committed revision
+    this.editorSession = newId('es_');   // one per opening: a frozen scope names it, so a reopen is never mistaken for the same generation
   }
 
   // ---- identity in this browser -------------------------------------------
@@ -62,20 +73,29 @@ export class DocumentSession {
   displayTitle() { return this.title_is_manual && this.title.trim() ? this.title : autoTitle(this.body()); }
   sentTitle() { return this.title_is_manual ? this.title : ''; }
 
+  // The structure a save carries, or null: the editor's structure once the
+  // document is structured on the server or an edit has been made here.
+  structureToSend() {
+    if (!this.adapter.getStructure) return null;
+    const s = this.adapter.getStructure();
+    if (!s) return null;
+    return (this.rich || this.seq > 0) ? s : null;
+  }
+
   // The reference an action freezes: document, committed revision, local
   // generation, and the selection in UTF-16 (the adapter's unit) — the
   // caller converts to code points for the snapshot.
   ref() {
     if (!this.id) return null;
     const sel = this.adapter.getSelection();
-    return { id: this.id, seq: this.seq, revision: this.revision, fingerprint: this.fingerprint, selection: sel };
+    return { id: this.id, seq: this.seq, revision: this.revision, fingerprint: this.fingerprint, editorSession: this.editorSession, selection: sel };
   }
 
   // ---- the recovery envelope ------------------------------------------------
   async record() {
     if (!this.id) return;
     const env = {
-      doc_id: this.id, tab_id: this.tab, seq: this.seq, body: this.body(), title: this.title, title_is_manual: this.title_is_manual,
+      doc_id: this.id, tab_id: this.tab, seq: this.seq, ack_seq: this.ackSeq, body: this.body(), title: this.title, title_is_manual: this.title_is_manual,
       base_revision: this.revision, base_fingerprint: this.fingerprint,
       structure: this.adapter.getStructure ? this.adapter.getStructure() : null,
       doc_schema: this.adapter.docSchema || null, projection_version: this.adapter.projectionVersion || null,
@@ -119,14 +139,20 @@ export class DocumentSession {
     if (reason) this.pendingReason = reason;
     if (this.inflight) return;
     if (this.conflict) return;
+    if (this.adapter.isComposing && this.adapter.isComposing()) {   // a composition (IME, dead key) completes first
+      if (this.timer) clearTimeout(this.timer);
+      this.timer = setTimeout(() => { this.timer = null; this.flush(); }, 300);
+      return;
+    }
     const seq = this.seq;
     if (seq === this.ackSeq && !this.pendingReason) return;
     this.firstEditAt = 0;
     const payload = { title: this.sentTitle(), title_is_manual: this.title_is_manual, body: this.body(),
                       base_revision: this.revision, base_fingerprint: this.fingerprint, request_id: requestId(),
                       origin: this.origin || 'work' };
-    if (this.adapter.getStructure && this.adapter.getStructure()) {
-      payload.doc_json = this.adapter.getStructure();
+    const structure = this.structureToSend();
+    if (structure) {
+      payload.doc_json = structure;
       payload.doc_schema = this.adapter.docSchema; payload.projection_version = this.adapter.projectionVersion;
     }
     if (this.pendingReason) payload.checkpoint_reason = this.pendingReason;
@@ -136,6 +162,14 @@ export class DocumentSession {
     await this.record();                                   // the pending request is on disk BEFORE it is sent
     this.status = 'saving'; this.renderStatus();
     await this.send();
+  }
+
+  // waits for the save in flight (if any), then flushes what is pending
+  async settle(reason) {
+    for (let i = 0; i < 200 && this.inflight; i++) await new Promise(r => setTimeout(r, 50));
+    await this.flush(reason);
+    for (let i = 0; i < 200 && this.inflight; i++) await new Promise(r => setTimeout(r, 50));
+    return !this.inflight && this.seq === this.ackSeq;
   }
 
   async send() {
@@ -154,23 +188,25 @@ export class DocumentSession {
     if (this.inflight !== inf) return;                      // an older reply cannot speak for newer text
     if (r.status === 409) {
       this.inflight = null; this.retries = 0;
-      this.conflict = { head: d.head || null, mine: inf.payload.body, at: new Date().toISOString() };
+      this.conflict = { head: d.head || null, mine: inf.payload.body, mineStructure: inf.payload.doc_json || null, at: new Date().toISOString() };
       this.status = 'conflict'; this.record(); this.renderStatus();
       if (this.hooks.onConflict) this.hooks.onConflict(this);
       return;
     }
     if (!r.ok || d.error) {
       if (r.status >= 500) { this.retryLater(d.error || ('HTTP ' + r.status)); return; }
-      this.inflight = null; this.retries = 0; this.serverError = d.error || ('HTTP ' + r.status);
+      this.inflight = null; this.retries = 0; this.serverError = d.error || ('HTTP ' + r.status); this.errorClass = d.error_class || '';
       this.status = 'failed'; this.record(); this.renderStatus();
       return;
     }
-    this.inflight = null; this.retries = 0; this.serverError = '';
+    this.inflight = null; this.retries = 0; this.serverError = ''; this.errorClass = '';
     this.revision = d.revision | 0; this.fingerprint = d.fingerprint || ''; this.savedAt = d.saved_at || '';
+    if (d.rich) this.rich = true;
     this.ackSeq = inf.seq;
     if (inf.payload.checkpoint_reason) { this.lastCheckpointAt = Date.now(); if (this.pendingReason === inf.payload.checkpoint_reason) this.pendingReason = ''; }
     if (!this.lastCheckpointAt) this.lastCheckpointAt = Date.now();
     this.saveIdentity(); this.record();
+    this.commitApplications(inf.seq, this.revision);
     if (this.seq !== this.ackSeq || this.pendingReason) { this.status = 'pending'; this.renderStatus(); this.flush(); }
     else { this.status = 'saved'; this.renderStatus(); }
   }
@@ -188,6 +224,20 @@ export class DocumentSession {
     if (this.retryTimer) { clearTimeout(this.retryTimer); this.retryTimer = null; }
     if (this.inflight) { this.status = 'saving'; this.renderStatus(); this.send(); }
     else { this.status = 'pending'; this.flush('save'); }
+  }
+
+  // ---- applied suggestions: local until the save that carries them commits ------
+  noteApplication(event, toSeq) {
+    if (event && event.event_id) this.applications.push({ event_id: event.event_id, to_seq: typeof toSeq === 'number' ? toSeq : this.seq });
+  }
+  commitApplications(ackedSeq, revision) {
+    const due = this.applications.filter(a => a.to_seq <= ackedSeq);
+    this.applications = this.applications.filter(a => a.to_seq > ackedSeq);
+    for (const a of due) {
+      postJSON('/api/notebook/documents/' + encodeURIComponent(this.id) + '/applications/' + encodeURIComponent(a.event_id) + '/committed', { committed_revision: revision })
+        .then(r => { if (r.ok && this.hooks.onApplicationCommitted) this.hooks.onApplicationCommitted({ event_id: a.event_id, revision }); })
+        .catch(() => {});
+    }
   }
 
   // ---- what the header says ----------------------------------------------------
@@ -208,27 +258,62 @@ export class DocumentSession {
   renderStatus() { if (this.hooks.onStatus) this.hooks.onStatus(this); }
 
   // ---- open / new / conflict ways out ------------------------------------------
-  async open(id) {
+  async open(id, opts = {}) {
     if (!id) return false;
-    if (id === this.id) return true;
+    if (id === this.id && !opts.reload) return true;
     await this.flush();
     const r = await getJSON('/api/notebook/documents/' + encodeURIComponent(id));
+    if (r.status === 404) return this.openUnsaved(id);
     if (!r.ok || r.data.error) return false;
     const d = r.data;
     let newer = null;
-    try {
-      const envs = await recovery.forDocument(id);
-      newer = envs.filter(e => e.base_revision === d.revision && e.body !== d.body).sort((a, b) => (b.at || '').localeCompare(a.at || ''))[0] || null;
-    } catch (e) { /* no recovery store: nothing to recover from */ }
+    if (!opts.reload) {
+      try {
+        const envs = await recovery.forDocument(id);
+        // an envelope with edits this tab never got acknowledged, based on the
+        // head as it stands; older envelopes (no ack_seq) are judged by their text
+        const unsent = e => (e.ack_seq === undefined ? e.body !== d.body : e.seq > e.ack_seq);
+        newer = envs.filter(e => e.base_revision === d.revision && !e.abandoned && unsent(e)).sort((a, b) => (b.at || '').localeCompare(a.at || ''))[0] || null;
+        if (newer && newer.body === d.body && d.doc_json && newer.structure && canonicalString(newer.structure) === canonicalString(d.doc_json)) newer = null;
+      } catch (e) { /* no recovery store: nothing to recover from */ }
+    }
     const localState = this.localState;
     this.blank();
     Object.assign(this, { id: d.doc_id, title: d.title || '', title_is_manual: !!d.title_is_manual, revision: d.revision | 0,
       fingerprint: d.fingerprint || '', savedAt: d.saved_at || '', origin: d.origin || '', status: 'saved', localState,
-      lastCheckpointAt: Date.now(), createdAt: d.created_at || '' });
+      lastCheckpointAt: Date.now(), createdAt: d.created_at || '', rich: !!d.doc_json });
     this.saveIdentity();
-    this.adapter.setText(newer ? newer.body : d.body, { structure: d.doc_json || null });
-    if (newer) { this.seq = 1; this.status = 'pending'; this.record(); this.flush(); this.recovered = true; }
-    else { this.recovered = false; this.record(); }
+    if (newer) {
+      this.adapter.setText(newer.body, { structure: newer.structure || null });
+      this.title = newer.title || this.title; this.title_is_manual = !!newer.title_is_manual;
+      try { if (newer.selection) this.adapter.setSelection(newer.selection.start, newer.selection.end, newer.selection.direction); if (newer.scroll && this.adapter.setScroll) this.adapter.setScroll(newer.scroll); } catch (e) {}
+      this.seq = 1; this.status = 'pending'; this.record(); this.flush(); this.recovered = true;
+    } else {
+      this.adapter.setText(d.body, { structure: d.doc_json || null });
+      this.recovered = false; this.record();
+    }
+    this.renderStatus();
+    if (this.hooks.onOpened) this.hooks.onOpened(this);
+    return true;
+  }
+
+  // A document the server never received (the tab closed before its first
+  // save landed) lives only in this browser's recovery store: it is reopened
+  // from there, whole, and saved.
+  async openUnsaved(id) {
+    let env = null;
+    try {
+      const envs = await recovery.forDocument(id);
+      env = envs.filter(e => (e.base_revision | 0) === 0 && !e.abandoned && (e.body || (e.structure && e.seq > 0))).sort((a, b) => (b.at || '').localeCompare(a.at || ''))[0] || null;
+    } catch (e) { env = null; }
+    if (!env) return false;
+    const localState = this.localState;
+    this.blank();
+    Object.assign(this, { id, title: env.title || '', title_is_manual: !!env.title_is_manual, origin: 'work', localState, createdAt: env.at || '' });
+    this.saveIdentity();
+    this.adapter.setText(env.body || '', { structure: env.structure || null });
+    try { if (env.selection) this.adapter.setSelection(env.selection.start, env.selection.end, env.selection.direction); } catch (e) {}
+    this.seq = 1; this.status = 'pending'; this.recovered = true; this.record(); this.flush();
     this.renderStatus();
     if (this.hooks.onOpened) this.hooks.onOpened(this);
     return true;
@@ -245,13 +330,23 @@ export class DocumentSession {
     this.adapter.focus();
   }
 
+  // a copy of this document as a new one, structure and all
+  async duplicate() {
+    const text = this.body(), structure = this.adapter.getStructure ? this.adapter.getStructure() : null;
+    if (this.id && (text.trim() || this.revision)) await this.flush('new');
+    this.adopt(newId('doc_'), 'duplicate');
+    this.adapter.setText(text, { structure });
+    this.seq = 1; this.status = 'pending'; this.record(); await this.flush('open');
+    this.renderStatus();
+    if (this.hooks.onOpened) this.hooks.onOpened(this);
+  }
+
   async keepMineAsNew() {
-    const mine = this.conflict ? this.conflict.mine : this.body();
-    const current = this.body();
-    const text = current !== mine && this.seq > this.sentSeq ? current : mine;
+    // the editor already holds mine — text, structure and undo history stay where they are
+    const title = this.title, manual = this.title_is_manual;
     this.conflict = null;
     this.adopt(newId('doc_'), 'conflict-copy');
-    this.adapter.setText(text, { structure: null });
+    this.title = title; this.title_is_manual = manual;
     this.seq = 1; this.status = 'pending'; this.record();
     await this.flush('save');
     if (this.hooks.onOpened) this.hooks.onOpened(this);
@@ -260,10 +355,10 @@ export class DocumentSession {
   async openSaved() {
     const head = this.conflict && this.conflict.head;
     if (!head) return;
-    try { await recovery.write({ doc_id: this.id, tab_id: this.tab + '.abandoned.' + Date.now().toString(36), seq: this.seq, body: this.body(), title: this.title, title_is_manual: this.title_is_manual, base_revision: this.revision, base_fingerprint: this.fingerprint, abandoned: true }); } catch (e) {}
+    try { await recovery.write({ doc_id: this.id, tab_id: this.tab + '.abandoned.' + Date.now().toString(36), seq: this.seq, ack_seq: this.ackSeq, body: this.body(), title: this.title, title_is_manual: this.title_is_manual, base_revision: this.revision, base_fingerprint: this.fingerprint, structure: this.adapter.getStructure ? this.adapter.getStructure() : null, abandoned: true }); } catch (e) {}
     this.conflict = null;
     this.revision = head.revision | 0; this.fingerprint = head.fingerprint || ''; this.savedAt = head.saved_at || '';
-    this.title = head.title || ''; this.title_is_manual = !!head.title_is_manual;
+    this.title = head.title || ''; this.title_is_manual = !!head.title_is_manual; this.rich = !!head.doc_json;
     this.adapter.setText(head.body || '', { structure: head.doc_json || null });
     this.seq = 0; this.ackSeq = 0; this.status = 'saved'; this.saveIdentity(); this.record(); this.renderStatus();
   }
@@ -274,4 +369,37 @@ export class DocumentSession {
   }
 
   async checkpoint(reason = 'save') { await this.flush(reason); }
+
+  // A disclosed conversion: CR and CRLF become LF, the document becomes one
+  // the structured editor holds, and the save that carries it makes the
+  // server keep the plain head as it stood (a 'migration' checkpoint) and
+  // record the conversion as an event.
+  async convertLineEndings() {
+    if (!this.id) return false;
+    const text = this.body().replace(/\r\n?/g, '\n');
+    this.adapter.setText(text, { structure: null });
+    this.seq += 1; this.record(); this.renderStatus();
+    await this.flush();
+    return true;
+  }
+
+  // ---- versions: restore as a new revision; a deliberate plain copy ---------------
+  async restoreCheckpoint(checkpointId) {
+    if (!this.id) return { ok: false, error: 'no document' };
+    const settled = await this.settle();
+    if (!settled) return { ok: false, error: 'the draft is not saved yet — nothing was restored' };
+    const r = await postJSON('/api/notebook/documents/' + encodeURIComponent(this.id) + '/restore',
+      { checkpoint_id: checkpointId, base_revision: this.revision, base_fingerprint: this.fingerprint, request_id: requestId() });
+    if (!r.ok) return { ok: false, error: r.data.error || ('HTTP ' + r.status), error_class: r.data.error_class || '' };
+    await this.open(this.id, { reload: true });
+    return { ok: true, ack: r.data };
+  }
+  async plainCopy() {
+    if (!this.id) return { ok: false, error: 'no document' };
+    await this.settle();
+    const r = await postJSON('/api/notebook/documents/' + encodeURIComponent(this.id) + '/plain-copy', { request_id: requestId() });
+    if (!r.ok) return { ok: false, error: r.data.error || ('HTTP ' + r.status) };
+    await this.open(r.data.doc_id);
+    return { ok: true, ack: r.data };
+  }
 }

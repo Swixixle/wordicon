@@ -101,7 +101,35 @@ details > summary { cursor: pointer; color: var(--write-panel-ink); font-size: 1
 .plain-editor { flex: 1 1 auto; min-height: 380px; width: 100%; background: transparent; border: 0; outline: none; resize: none; color: var(--write-ink); caret-color: var(--write-ink); font: inherit; font-size: 19px; line-height: 1.65; padding: 0; }
 .plain-editor::selection { background: var(--write-ink); color: var(--write-bg); }
 .plain-editor::placeholder { color: var(--write-faint); }
+.plain-editor.readonly { color: var(--write-panel-ink); }
 .editor-note { color: var(--write-faint); font-size: 12px; margin-top: 10px; }
+
+/* ---- the structured editor (slice C): the same blue, the same yellow ---- */
+.pm-holder { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 380px; }
+.pm-editor { flex: 1 1 auto; min-height: 380px; outline: none; color: var(--write-ink); caret-color: var(--write-ink); font: inherit; font-size: 19px; line-height: 1.65;
+  position: relative; word-wrap: break-word; white-space: pre-wrap; white-space: break-spaces; -webkit-font-variant-ligatures: none; font-variant-ligatures: none; font-feature-settings: "liga" 0; }
+.pm-editor ::selection { background: var(--write-ink); color: var(--write-bg); }
+.pm-editor p { margin: 0 0 1em 0; }
+.pm-editor p:last-child { margin-bottom: 0; }
+.pm-editor h1, .pm-editor h2, .pm-editor h3 { color: var(--write-ink); margin: 0.6em 0 0.4em 0; line-height: 1.25; font-weight: 700; }
+.pm-editor h1 { font-size: 1.6em; } .pm-editor h2 { font-size: 1.35em; } .pm-editor h3 { font-size: 1.15em; }
+.pm-editor ul, .pm-editor ol { margin: 0 0 1em 0; padding-left: 1.6em; }
+.pm-editor li { position: relative; }
+.pm-editor li p { margin-bottom: 0.3em; }
+.pm-editor blockquote { margin: 0 0 1em 0; padding-left: 14px; border-left: 3px solid var(--write-faint); color: var(--write-ink); }
+.pm-editor a { color: var(--accent); text-decoration: underline; }
+.pm-editor strong { font-weight: 700; } .pm-editor em { font-style: italic; }
+.pm-editor.ProseMirror-hideselection *::selection { background: transparent; }
+.pm-editor.ProseMirror-hideselection { caret-color: transparent; }
+.pm-editor .ProseMirror-selectednode { outline: 2px solid var(--accent); }
+.pm-editor p.is-empty:first-child::before { content: attr(data-placeholder); color: var(--write-faint); pointer-events: none; float: left; height: 0; }
+.toolbar .fmt { min-width: 30px; justify-content: center; }
+.toolbar .fmt.on { background: var(--hover); border-color: var(--accent); color: var(--write-ink); }
+.findbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 6px 14px; background: var(--ground); border-bottom: 1px solid var(--line); }
+.findbar input[type="text"] { background: var(--write-panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; font-size: 13px; min-width: 160px; }
+.apply { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.apply-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 3px 0; }
+.apply-block > summary { padding: 4px 0; }
 .page-view { padding: 18px 22px; background: var(--write-panel); overflow: auto; gap: 12px; }
 .page-view h1 { font-size: 20px; margin: 0 0 8px 0; }
 .place-view { background: var(--ground); }

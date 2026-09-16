@@ -26,17 +26,30 @@ The living contract of the workspace build (authorized 2026-09-16; the instructi
 
 **D11 — chrome colours.** Two values are new for the shell and not tokens in `webapp/index.html`: `--ground #0a1733` (the writing blue, darker, so the writing surface is the brightest blue on screen) and `--line #2b4a86` (borders, grips). Everything else is the application's own palette. Subject to a contrast pass in slice G.
 
+**D12 — the structure is validated and projected by the server; the exact text is the contract (slice C).** A structured save carries `body` and `doc_json`; the server validates the schema, computes projection v1 itself and refuses a mismatch. The fingerprint (v2) covers body, title fields, canonical structure and both versions; a formatting-only edit is a revision. A v1 fingerprint is never rehashed. Reason: tools and search read the exact text; the structure must never be able to say something the text does not.
+
+**D13 — a plain document is never rewritten by opening it (slice C).** The structured editor shows a plain document as paragraphs (the plain import) but the session sends structure only once the document is structured on the server or an edit was made here; the first structured save checkpoints the plain head (`migration`) and records `format_converted`. A document the schema cannot hold — carriage returns, a control character — opens in the plain editor: read-only and exact for carriage returns (a textarea normalizes them) with a disclosed conversion, editable for other control characters. Reason: an ordinary read must not change record history; CRLF must not be normalized in silence.
+
+**D14 — compatibility runs both ways (slice C).** An old client's body-only save against a structured head is refused by name (`structure_would_be_lost`, an explicit null included) and its own UI shows the refusal; an older binary is refused by the database itself (triggers on `documents` and `checkpoints`) so a rollback keeps the rich columns and content intact while still reading every document. No generic `flatten: true`. A deliberate plain copy is a new document.
+
+**D15 — the pinned bundle (slice C).** ProseMirror is built from `webapp/work/editor-build` (pinned lock file, esbuild, unminified, deterministic) into `webapp/work/vendor/prosemirror.js`; `docs/editor-bundle.sha256` pins it and the suite asserts it. No CDN, no network at load. Reason: the writing surface must work with the network off, and what runs must be what was reviewed.
+
+**D16 — application is guarded by the capture, not by the text (slice C).** A candidate word from a selection-scope result may be inserted below or replace the selection only while the document, the editor session and the local sequence are those of the capture and the words at the range hash to the captured words; a stale result keeps its snapshot and applies only to a target chosen again. The application is one history step; it is an `applied` event linked to the operation and marked committed by the save that carries it; undo and redo of it are events too. Freshness on a card is the editor session and sequence, never the server revision (the writer's own acknowledgment does not make a capture stale). Only candidate words from a selection-scope result offer Apply; no other result type manufactures one.
+
+**D17 — exports say what they are (slice C).** Text export is the exact projection and says what a .txt does not carry; Markdown is serialized from the structure; Print/PDF renders the structure. DOCX is not built (its plan is not in the repository).
+
 ## Parity checklist
 
 Status words: **reached** (a labelled control in the shell reaches it and a test proves it), **inside** (opens inside the shell as the existing page, with return), **legacy** (reachable only through "The previous interface" under More tools), **pending** (not yet wired; the slice that will).
 
 | Capability (register family) | Current entry / store | In the shell | Status | Proof |
 |---|---|---|---|---|
-| Writing: draft, autosave, first-line title, reopen | `/api/notebook/*`, `notebook.sqlite3` | Work — the editor; header title and save state | reached (plain text) | `work.js` §2, §11 |
-| Rename, duplicate, versions (checkpoints), export as text | notebook routes | Document ▾ menu | reached (versions list; restore-as-new pending C) | `work.js`; C |
+| Writing: draft, autosave, first-line title, reopen, word count | `/api/notebook/*`, `notebook.sqlite3` | Work — the structured editor (the plain editor for documents the schema cannot hold) | reached | `work.js` §2, §11; `editor.js` §2, §4, §9 |
+| Rename, duplicate (structure kept), versions with restore-as-new, plain copy, export as text / Markdown / Print | notebook routes; `/restore`, `/plain-copy` | Document ▾ menu | reached | `editor.js` §10, §12; suite `_check_document_contract` |
 | Archive | new flag (slice E) | Document ▾ → Archive | pending (E) | — |
-| Formatting, find/replace, structured export | — | header toolbar | pending (C) | — |
-| Conflict: keep both, mine as new / open saved | notebook 409 | a notice in Results with the two ways out | reached | notebook journey (legacy); `work.js` pending case E21 (C) |
+| Formatting (bold, italic, H1–H3, lists, quote, link), find/replace | structure beside the text | header toolbar and keys; ⌘F | reached | `editor.js` §5–§7 |
+| Applying a candidate word to the draft | `/applications` events | a result card made from a selection | reached (guarded) | `editor.js` §8 |
+| Conflict: keep both, mine as new / open saved | notebook 409 | a notice in Results with the two ways out | reached | notebook journey (legacy); the shell's own two-tab case is owed to G |
 | Get feedback (three readers) | `/api/moira/readings` | On this draft → Get feedback; selection menu | reached | `work.js` §8 |
 | Analyze this passage (decompose) | `/api/jobs` mode decompose | On this draft; selection menu | reached | `work.js` §4 |
 | Find related words (refract) | mode refract | Explore; selection menu | reached (selection / description / concept) | `work.js` §3, §9 |

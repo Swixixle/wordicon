@@ -33,10 +33,10 @@ export class Actions {
     const text = this.session.body();
     if (sel && sel.text && sel.text.trim()) {
       return { kind: 'selection', text: sel.text, doc_id: ref ? ref.id : '', revision: ref ? ref.revision : null, seq: ref ? ref.seq : null,
-               range: { start: sel.cp.start, end: sel.cp.end }, units: 'codepoint', title: this.session.displayTitle() };
+               editor_session: ref ? ref.editorSession : '', range: { start: sel.cp.start, end: sel.cp.end }, units: 'codepoint', title: this.session.displayTitle() };
     }
     return { kind: 'document', text, doc_id: ref ? ref.id : '', revision: ref ? ref.revision : null, seq: ref ? ref.seq : null,
-             title: this.session.displayTitle() };
+             editor_session: ref ? ref.editorSession : '', title: this.session.displayTitle() };
   }
 
   // ---- Tools ---------------------------------------------------------------
@@ -86,6 +86,7 @@ export class Actions {
 
   async prepare(actionId, subjectOverride) {
     const a = this.byId[actionId];
+    if (this.session.adapter.isComposing && this.session.adapter.isComposing()) { toast('Finish the character being composed first — the capture waits for it.'); return; }
     const subject = subjectOverride || this.subjectNow();
     if (!subject.text || !subject.text.trim()) { toast('Nothing is written or selected yet.'); return; }
     const r = await postJSON('/api/actions/prepare', { action_id: actionId, subject, inputs: {} });

@@ -9,6 +9,14 @@
 // runs. The scratch server for this journey runs with the MOCK lane (a
 // canned fixture, no provider, test mode refusing every socket), because the
 // loop needs a run to complete through the one job path.
+//
+// Slice C: the editor is the structured editor (ProseMirror), not a
+// textarea. Old check → new check: `.plain-editor` (the element) →
+// `.pm-editor`; `t.setSelectionRange(a, b)` → `__work.editor.setSelection(a,
+// b)`; `t.value` / `inputValue` → `__work.editor.getText()` (the exact
+// projection the server verifies); `t.selectionStart/End` →
+// `__work.editor.getSelection()`; `activeElement === t` →
+// `__work.editor.hasFocus()`. The behaviours protected are the same.
 const { BASE, DIR, ok, finish, pairedContext } = require('./lib');
 const { webkit } = require('playwright');
 const fs = require('fs');
@@ -24,20 +32,22 @@ const path = require('path');
   page.on('request', r => { if (r.method() !== 'GET') posts.push(r.method() + ' ' + new URL(r.url()).pathname); });
 
   await page.goto(BASE + '/work');
-  await page.waitForSelector('.plain-editor');
+  await page.waitForSelector('.pm-editor');
   await page.waitForTimeout(600);
   ok(errs.length === 0, 'no page errors on /work: ' + JSON.stringify(errs));
+  await page.evaluate(() => window.__work.session.newDocument(''));   // a fresh document, whatever the store holds
+  await page.waitForTimeout(200);
 
   // 1. the writing surface is the app's own blue and yellow
-  const colours = await page.evaluate(() => { const t = document.querySelector('.plain-editor'); const cs = getComputedStyle(t); const host = getComputedStyle(document.getElementById('editor-host')); return { ink: cs.color, caret: cs.caretColor, bg: host.backgroundColor }; });
+  const colours = await page.evaluate(() => { const t = document.querySelector('.pm-editor'); const cs = getComputedStyle(t); const host = getComputedStyle(document.getElementById('editor-host')); return { ink: cs.color, caret: cs.caretColor, bg: host.backgroundColor }; });
   ok(colours.bg === 'rgb(15, 35, 80)', 'the writing surface is #0f2350: ' + colours.bg);
   ok(colours.ink === 'rgb(255, 217, 125)', 'the writing is #ffd97d: ' + colours.ink);
 
   // 2. write; autosave; the title is the first line; a reload brings it back
-  await page.click('.plain-editor');
+  await page.click('.pm-editor');
   const line1 = 'He threw it once, cleanly, and the room laughed.';
   await page.keyboard.type(line1);
-  await page.keyboard.press('Enter'); await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');                     // a paragraph break (the textarea needed two Enters; the projection is the same two LF)
   await page.keyboard.type('Nobody said so, but the throw was the point.');
   await page.waitForFunction(() => /Saved/.test(document.getElementById('doc-meta').textContent), null, { timeout: 8000, polling: 200 }).catch(() => {});
   const meta = await page.textContent('#doc-meta');
@@ -46,23 +56,24 @@ const path = require('path');
   const docId = await page.evaluate(() => window.__work.session.id);
   const stored = await (await page.request.get(BASE + '/api/notebook/documents/' + docId)).json();
   ok(stored.body === line1 + '\n\nNobody said so, but the throw was the point.', 'the notebook holds the exact text, line breaks included');
+  ok(stored.rich === true && stored.doc_json && stored.doc_json.content.length === 2 && stored.fingerprint.startsWith('fp2_'), 'and the structure beside it (two paragraphs), under the versioned fingerprint');
   ok(!posts.some(p => /\/api\/(jobs|operations)/.test(p)), 'typing posted nothing to /api/jobs or /api/operations: ' + JSON.stringify(posts));
   ok(posts.some(p => /^PUT \/api\/notebook\/documents\//.test(p)), 'typing did save (a PUT to the notebook)');
 
   // 3. select words; ⌘. opens the menu below them with three routes and More; a proposal spends nothing
-  await page.evaluate(() => { const t = document.querySelector('.plain-editor'); t.focus(); t.setSelectionRange(24, 47); });
+  await page.evaluate(() => { window.__work.editor.focus(); window.__work.editor.setSelection(24, 47); });
   await page.keyboard.press('ControlOrMeta+.');
   await page.waitForSelector('#sel-popover:not([hidden])');
   const routes = await page.$$eval('#sel-popover .route', els => els.map(e => e.textContent.trim()));
   ok(routes.length === 3 && /Get feedback/.test(routes[0]) && /Analyze this passage/.test(routes[1]) && /Find related words/.test(routes[2]), 'the selection menu offers three plain routes: ' + JSON.stringify(routes));
   ok(/More/.test(await page.textContent('#sel-popover .more')), 'and a More line naming the rest');
-  const selRectOk = await page.evaluate(() => { const pop = document.getElementById('sel-popover').getBoundingClientRect(); const ta = document.querySelector('.plain-editor').getBoundingClientRect(); return pop.top > ta.top; });
+  const selRectOk = await page.evaluate(() => { const pop = document.getElementById('sel-popover').getBoundingClientRect(); const ta = document.querySelector('.pm-editor').getBoundingClientRect(); return pop.top > ta.top; });
   ok(selRectOk, 'the menu opens below the selected words, not over the top of the draft');
   const before = posts.length;
   await page.click('#sel-popover .route:nth-child(4)');   // Find related words (head + 3 routes)
   await page.waitForSelector('#proposal-card');
   const prop = await page.textContent('#proposal-card');
-  const selWords = await page.evaluate(() => { const t = document.querySelector('.plain-editor'); return t.value.slice(24, 47).trim().split(/\s+/).length; });
+  const selWords = await page.evaluate(() => window.__work.editor.getText().slice(24, 47).trim().split(/\s+/).length);
   ok(new RegExp('your selection — ' + selWords + ' words').test(prop) && /sent exactly as selected/.test(prop), 'the proposal names the exact scope (' + selWords + ' words): ' + prop.slice(0, 120));
   ok(/mock lane makes no provider request/.test(prop), 'the mock lane says no provider request, no charge — never "local"');
   ok(!/\blocal\b/i.test(prop.replace(/locally/g, '')), 'the proposal never labels model work "local"');
@@ -73,7 +84,7 @@ const path = require('path');
   ok(!posts.some(p => p === 'POST /api/operations'), 'and nothing was started');
 
   // 4. Analyze this passage on the whole draft → Start → a fixture result → the card says where it came from and that the draft has not changed
-  await page.evaluate(() => { const t = document.querySelector('.plain-editor'); t.setSelectionRange(0, 0); });
+  await page.evaluate(() => window.__work.editor.setSelection(0, 0));
   await page.click('button[data-action="analyze.decompose"]');
   await page.waitForSelector('#proposal-card');
   ok(/the whole draft/.test(await page.textContent('#proposal-card')), 'with nothing selected the scope is the whole draft');
@@ -94,21 +105,20 @@ const path = require('path');
   const snapFile = path.join(process.env.JOURNEY_STATE || path.join(DIR, 'state'), 'snapshots', op.snapshot_id + '.json');
   ok(fs.existsSync(snapFile), 'the snapshot is on disk: ' + op.snapshot_id);
   // typing after the run: the card says the draft changed
-  await page.click('.plain-editor'); await page.keyboard.press('End'); await page.keyboard.type(' More.');
-  await page.waitForTimeout(300);
-  await page.evaluate(() => window.__work.results.render());
+  await page.click('.pm-editor'); await page.keyboard.press('End'); await page.keyboard.type(' More.');
+  await page.waitForTimeout(600);   // the results tab re-renders itself after an edit
   ok(/This draft changed\. Review the earlier version before applying changes\./.test(await page.textContent('#results-body')), 'after typing, the card says the draft changed and to review the earlier version');
 
   // 5. hiding and showing the sides never touches the editor
-  await page.evaluate(() => { const t = document.querySelector('.plain-editor'); t.__marker = 'same-element'; t.focus(); t.setSelectionRange(3, 9); });
+  await page.evaluate(() => { const t = document.querySelector('.pm-editor'); t.__marker = 'same-element'; window.__work.editor.focus(); window.__work.editor.setSelection(3, 9); });
   await page.click('#tools-toggle'); await page.click('#results-toggle'); await page.click('#tools-toggle'); await page.click('#results-toggle');
-  const same = await page.evaluate(() => { const t = document.querySelector('.plain-editor'); return { marker: t.__marker, sel: [t.selectionStart, t.selectionEnd], n: document.querySelectorAll('.plain-editor').length }; });
+  const same = await page.evaluate(() => { const t = document.querySelector('.pm-editor'); const s = window.__work.editor.getSelection(); return { marker: t.__marker, sel: [s.start, s.end], n: document.querySelectorAll('.pm-editor').length }; });
   ok(same.marker === 'same-element' && same.n === 1, 'the editor element survived four toggles');
   ok(same.sel[0] === 3 && same.sel[1] === 9, 'the selection survived the toggles: ' + JSON.stringify(same.sel));
-  await page.click('.plain-editor');
+  await page.evaluate(() => window.__work.editor.focus());
   await page.keyboard.press('ControlOrMeta+z');
   await page.waitForTimeout(200);
-  const afterUndo = await page.inputValue('.plain-editor');
+  const afterUndo = await page.evaluate(() => window.__work.editor.getText());
   ok(!/ More\.$/.test(afterUndo), 'undo still works after the toggles (the last typing came back out)');
   ok((await page.getAttribute('#shell', 'data-tools')) === 'open' && (await page.getAttribute('#shell', 'data-results')) === 'open', 'both sides are open again');
 
@@ -133,11 +143,11 @@ const path = require('path');
   await page.click('#results-toggle');
   ok(await page.isVisible('#stacked'), 'Results is a section below the draft');
   ok(await page.isHidden('#results'), 'and not a side');
-  const editorH = await page.evaluate(() => document.querySelector('.plain-editor').getBoundingClientRect().height);
+  const editorH = await page.evaluate(() => document.querySelector('.pm-editor').getBoundingClientRect().height);
   ok(editorH >= 300, 'the draft keeps its height (' + Math.round(editorH) + 'px)');
   await page.click('#back-to-writing');
   await page.waitForTimeout(200);
-  ok(await page.evaluate(() => document.activeElement === document.querySelector('.plain-editor')), 'Back to writing puts the caret back in the draft');
+  ok(await page.evaluate(() => window.__work.editor.hasFocus()), 'Back to writing puts the caret back in the draft');
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(300);
   ok((await page.getAttribute('#shell', 'data-narrow')) === 'no', 'back at 1440 the sides are sides again');
@@ -159,7 +169,7 @@ const path = require('path');
 
   // 9. Ask proposes; it never runs. With nothing selected, a words-only tool says so instead of guessing a subject
   const before9 = posts.filter(p => p === 'POST /api/operations').length;
-  await page.evaluate(() => { const t = document.querySelector('.plain-editor'); t.focus(); t.setSelectionRange(0, 0); });
+  await page.evaluate(() => { window.__work.editor.focus(); window.__work.editor.setSelection(0, 0); });
   await page.keyboard.press('ControlOrMeta+k');
   await page.waitForSelector('#ask:not([hidden])');
   await page.fill('#ask-input', 'related words');
@@ -168,7 +178,7 @@ const path = require('path');
   await page.waitForTimeout(500);
   ok(/select them first/.test(await page.textContent('#results-body')), 'with nothing selected, Find related words asks for a selection instead of inventing one');
   ok(posts.filter(p => p === 'POST /api/operations').length === before9, 'and started nothing');
-  await page.evaluate(() => { const t = document.querySelector('.plain-editor'); t.focus(); t.setSelectionRange(24, 47); });
+  await page.evaluate(() => { window.__work.editor.focus(); window.__work.editor.setSelection(24, 47); });
   await page.keyboard.press('ControlOrMeta+k');
   await page.waitForSelector('#ask:not([hidden])');
   await page.fill('#ask-input', 'related words');
@@ -187,7 +197,7 @@ const path = require('path');
   ok(!posts.some(p => /\/api\/jobs$/.test(p) && posts.indexOf(p) > before9), 'opening the Map started nothing');
   await page.click('#place-back');
   ok(await page.isHidden('#place-view'), 'Back to writing closes the place');
-  ok(await page.evaluate(() => document.querySelector('.plain-editor').__marker === 'same-element'), 'the editor element survived the Map round trip');
+  ok(await page.evaluate(() => document.querySelector('.pm-editor').__marker === 'same-element'), 'the editor element survived the Map round trip');
 
   // 10. Your work and Investigate
   await page.click('a[data-page="yourwork"]');
@@ -209,10 +219,10 @@ const path = require('path');
 
   // 11. reload: the same document, the same text, the header says so
   await page.reload();
-  await page.waitForSelector('.plain-editor');
+  await page.waitForSelector('.pm-editor');
   await page.waitForTimeout(800);
   ok(await page.evaluate(() => window.__work.session.id) === docId, 'a reload reopens the same document');
-  ok(/^He threw it once/.test(await page.inputValue('.plain-editor')), 'with its text');
+  ok(/^He threw it once/.test(await page.evaluate(() => window.__work.editor.getText())), 'with its text');
 
   ok(errs.length === 0, 'no page errors across the workspace journey: ' + JSON.stringify(errs));
   await browser.close();
