@@ -18,6 +18,9 @@ The root [`README.md`](../README.md) is the front door. This is the map.
 - [`CHANGELOG.md`](./CHANGELOG.md) — every block that shipped, what it
   repaired, and what it deliberately refused to do. The most honest single
   account of how the thing got here.
+- [`screenshots/workspace-v2/index.json`](./screenshots/workspace-v2/index.json)
+  — the workspace as it renders, Chromium and WebKit, fixtures only, at the
+  commit the index names; every shot measured for overflow and page errors.
 
 ## Laws and epistemic contracts
 

@@ -1,9 +1,11 @@
 {
- "taken_on": "the dev scratch server on the mock lane, fixtures only (tests/journeys/fixtures.py), by the screenshot pass of slice G",
+ "taken_on": "the dev scratch server on the mock lane, fixtures only (tests/journeys/fixtures.py), by tests/slice_g/shots.js at commit fff87d3db6be23f39b40b348709b606f76b9581f (workspace-v2 slice I); the 40–43 views by tests/slice_g/shots_drafts.js at the same commit",
+ "commit": "fff87d3db6be23f39b40b348709b606f76b9581f",
  "kept_here": [
   "chromium-01-tools-open-results-closed.png",
   "chromium-02-selection-menu.png",
   "chromium-03-proposal.png",
+  "chromium-04-both-open-result.png",
   "chromium-05-apply-controls.png",
   "chromium-06-results-only.png",
   "chromium-07-both-hidden.png",
@@ -11,13 +13,20 @@
   "chromium-10-readers-feedback.png",
   "chromium-11-result-unknown.png",
   "chromium-12-investigate.png",
+  "chromium-12b-investigate-contract.png",
   "chromium-14-result-error.png",
+  "chromium-14b-result-complete.png",
   "chromium-16-place-source-reading.png",
   "chromium-18-yourwork.png",
   "chromium-20-help.png",
+  "chromium-22-versions.png",
   "chromium-33-zoom150-results-below.png",
   "chromium-35-phone.png",
-  "webkit-04-both-open-result.png"
+  "chromium-40-drafts-bar-other-tab-live.png",
+  "chromium-41-drafts-bar-after-reload-own-words-kept.png",
+  "chromium-43-investigate-live-use.png",
+  "webkit-04-both-open-result.png",
+  "webkit-41-drafts-bar-after-reload-own-words-kept.png"
  ],
  "every_shot_measured": [
   {
@@ -48,7 +57,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "selected words and the selection menu (\u2318.) \u2014 nothing has run"
+   "note": "selected words and the selection menu (⌘.) — nothing has run"
   },
   {
    "engine": "chromium",
@@ -63,7 +72,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "the proposal: what leaves, to whom, the lane, the cost \u2014 nothing runs until Start"
+   "note": "the proposal: what leaves, to whom, the lane, the cost — nothing runs until Start"
   },
   {
    "engine": "chromium",
@@ -93,7 +102,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "the result\u2019s application controls: Insert below / Replace, offered only while the target holds"
+   "note": "the result’s application controls: Insert below / Replace, offered only while the target holds"
   },
   {
    "engine": "chromium",
@@ -168,7 +177,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "the three readers\u2019 feedback, each on its own, no verdict"
+   "note": "the three readers’ feedback, each on its own, no verdict"
   },
   {
    "engine": "chromium",
@@ -228,7 +237,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "an investigation in flight: Running \u00b7 Sending to EthicalAlt"
+   "note": "an investigation in flight: Running · Sending to EthicalAlt"
   },
   {
    "engine": "chromium",
@@ -243,7 +252,52 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "a failed investigation (the fixture producer answered 500): a known failure, named"
+   "note": "an investigation the fixture producer answered with a 500 after delivery: outcome UNKNOWN — delivered; whether it accepted or ran the work is not known; nothing sent again"
+  },
+  {
+   "engine": "chromium",
+   "name": "14b-result-complete",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "a complete investigation: start ok · delivered; the unsigned export kept (bytes, sha256); the receipt verified under the pinned key, correlated by investigation id; the three replies as chips"
+  },
+  {
+   "engine": "chromium",
+   "name": "12b-investigate-contract",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the contract disclosure: the producer’s revision, each route with its file:line, auth, reply and side effects, and the package route NOT served by main"
+  },
+  {
+   "engine": "chromium",
+   "name": "25-concept-picker",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Re-check this concept: the shelf as ruled, one press proposes; nothing is sent until Start"
   },
   {
    "engine": "chromium",
@@ -333,7 +387,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "Help, with the workspace\u2019s rule and its door"
+   "note": "Help, with the workspace’s rule and its door"
   },
   {
    "engine": "chromium",
@@ -348,7 +402,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "the document menu: New, Rename, Duplicate, Open another, Versions, plain copy, exports, Archive"
+   "note": "the document menu: New, Rename, Duplicate, Open another, Versions, plain copy, exports (text, Markdown, Word, print), Archive"
   },
   {
    "engine": "chromium",
@@ -408,7 +462,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "1920\u00d71080, both sides open"
+   "note": "1920×1080, both sides open"
   },
   {
    "engine": "chromium",
@@ -483,7 +537,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "150% zoom (1440 px window): measured narrow \u2014 Tools is a drawer, Results a section below"
+   "note": "150% zoom (1440 px window): measured narrow — Tools is a drawer, Results a section below"
   },
   {
    "engine": "chromium",
@@ -604,6 +658,66 @@
    "overflow": false,
    "errors": [],
    "note": "narrow: Tools as a drawer over the writing, with its own close"
+  },
+  {
+   "engine": "chromium",
+   "name": "40-drafts-bar-other-tab-live",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "off",
+   "overflow": null,
+   "errors": [],
+   "note": "a second tab opens the saved head and lists the first tab's unsent words as a copy still open elsewhere"
+  },
+  {
+   "engine": "chromium",
+   "name": "41-drafts-bar-after-reload-own-words-kept",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "off",
+   "overflow": null,
+   "errors": [],
+   "note": "the first tab reopened with its own unsent words kept and saved; the other tab's version listed whole"
+  },
+  {
+   "engine": "chromium",
+   "name": "42-drafts-bar-other-tab-gone",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "off",
+   "overflow": null,
+   "errors": [],
+   "note": "the same after the other tab closed — its copy stays listed, marked gone"
+  },
+  {
+   "engine": "chromium",
+   "name": "43-investigate-live-use",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": null,
+   "errors": [],
+   "note": "the Investigate instruments with the Live use fact and the Authorize live use control (not measured for overflow; taken by shots_drafts.js)"
   },
   {
    "engine": "webkit",
@@ -633,7 +747,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "selected words and the selection menu (\u2318.) \u2014 nothing has run"
+   "note": "selected words and the selection menu (⌘.) — nothing has run"
   },
   {
    "engine": "webkit",
@@ -648,7 +762,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "the proposal: what leaves, to whom, the lane, the cost \u2014 nothing runs until Start"
+   "note": "the proposal: what leaves, to whom, the lane, the cost — nothing runs until Start"
   },
   {
    "engine": "webkit",
@@ -678,7 +792,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "the result\u2019s application controls: Insert below / Replace, offered only while the target holds"
+   "note": "the result’s application controls: Insert below / Replace, offered only while the target holds"
   },
   {
    "engine": "webkit",
@@ -753,7 +867,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "the three readers\u2019 feedback, each on its own, no verdict"
+   "note": "the three readers’ feedback, each on its own, no verdict"
   },
   {
    "engine": "webkit",
@@ -813,7 +927,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "an investigation in flight: Running \u00b7 Sending to EthicalAlt"
+   "note": "an investigation in flight: Running · Sending to EthicalAlt"
   },
   {
    "engine": "webkit",
@@ -828,7 +942,52 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "a failed investigation (the fixture producer answered 500): a known failure, named"
+   "note": "an investigation the fixture producer answered with a 500 after delivery: outcome UNKNOWN — delivered; whether it accepted or ran the work is not known; nothing sent again"
+  },
+  {
+   "engine": "webkit",
+   "name": "14b-result-complete",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "a complete investigation: start ok · delivered; the unsigned export kept (bytes, sha256); the receipt verified under the pinned key, correlated by investigation id; the three replies as chips"
+  },
+  {
+   "engine": "webkit",
+   "name": "12b-investigate-contract",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the contract disclosure: the producer’s revision, each route with its file:line, auth, reply and side effects, and the package route NOT served by main"
+  },
+  {
+   "engine": "webkit",
+   "name": "25-concept-picker",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Re-check this concept: the shelf as ruled, one press proposes; nothing is sent until Start"
   },
   {
    "engine": "webkit",
@@ -918,7 +1077,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "Help, with the workspace\u2019s rule and its door"
+   "note": "Help, with the workspace’s rule and its door"
   },
   {
    "engine": "webkit",
@@ -933,7 +1092,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "the document menu: New, Rename, Duplicate, Open another, Versions, plain copy, exports, Archive"
+   "note": "the document menu: New, Rename, Duplicate, Open another, Versions, plain copy, exports (text, Markdown, Word, print), Archive"
   },
   {
    "engine": "webkit",
@@ -993,7 +1152,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "1920\u00d71080, both sides open"
+   "note": "1920×1080, both sides open"
   },
   {
    "engine": "webkit",
@@ -1068,7 +1227,7 @@
    "focus": "off",
    "overflow": false,
    "errors": [],
-   "note": "150% zoom (1440 px window): measured narrow \u2014 Tools is a drawer, Results a section below"
+   "note": "150% zoom (1440 px window): measured narrow — Tools is a drawer, Results a section below"
   },
   {
    "engine": "webkit",
@@ -1189,6 +1348,66 @@
    "overflow": false,
    "errors": [],
    "note": "narrow: Tools as a drawer over the writing, with its own close"
+  },
+  {
+   "engine": "webkit",
+   "name": "40-drafts-bar-other-tab-live",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "off",
+   "overflow": null,
+   "errors": [],
+   "note": "a second tab opens the saved head and lists the first tab's unsent words as a copy still open elsewhere"
+  },
+  {
+   "engine": "webkit",
+   "name": "41-drafts-bar-after-reload-own-words-kept",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "off",
+   "overflow": null,
+   "errors": [],
+   "note": "the first tab reopened with its own unsent words kept and saved; the other tab's version listed whole"
+  },
+  {
+   "engine": "webkit",
+   "name": "42-drafts-bar-other-tab-gone",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "off",
+   "overflow": null,
+   "errors": [],
+   "note": "the same after the other tab closed — its copy stays listed, marked gone"
+  },
+  {
+   "engine": "webkit",
+   "name": "43-investigate-live-use",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": null,
+   "errors": [],
+   "note": "the Investigate instruments with the Live use fact and the Authorize live use control (not measured for overflow; taken by shots_drafts.js)"
   }
  ]
 }

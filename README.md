@@ -25,29 +25,43 @@ without amending it.
 
 ## What it looks like
 
-One desk: a rail on the left (Write, Explore, Library, search, and every
-specialized workspace), the work in the middle at the width the window has,
-and a panel on the right that opens when there is something to keep beside the
-work.
+The writing workspace at `/work` (the beta, commit `fff87d3`): the draft on
+the blue surface at paragraph width, Tools left, Results right, either side
+hidden with a press. Nothing on the sides can insert or replace a word.
 
-![Home at laptop width](docs/screenshots/desk-home.png)
+![The workspace: draft, Tools, Results](docs/screenshots/workspace-v2/chromium-01-tools-open-results-closed.png)
 
-The writing room is the same blue-and-yellow notebook, at a readable paragraph
-width; a workup, a reading or a word comparison lands beside it, never in it.
+Select words and press ⌘. — the menu acts on exactly those words; nothing
+has run yet.
 
-![Writing beside a word comparison](docs/screenshots/desk-writing-with-feedback.png)
+![The selection menu](docs/screenshots/workspace-v2/chromium-02-selection-menu.png)
 
-The Library lays its shelves across the desk; the Bench, like every workspace,
-opens inside the same shell, so a draft beside it keeps its caret and undo
-history.
+Every action is a proposal first — what leaves this machine, to whom, at what
+cost — and nothing runs until you press Start.
 
-![The Library](docs/screenshots/desk-library.png)
+![A proposal, before Start](docs/screenshots/workspace-v2/chromium-03-proposal.png)
 
-![The Bench inside the shell](docs/screenshots/desk-bench.png)
+A result lands beside the draft, never in it, and says what it is — here a
+producer's signed receipt, verified under the key you pinned: the bytes are
+theirs, which is not the same as the research being true.
 
-![Home on a wide desk](docs/screenshots/desk-home-wide.png)
+![A result beside the draft](docs/screenshots/workspace-v2/chromium-14b-result-complete.png)
 
-Every image is the application running against synthetic fixtures.
+Your work searches everything kept — writing, runs, readers, concepts,
+operations; every count names its population.
+
+![Your work](docs/screenshots/workspace-v2/chromium-18-yourwork.png)
+
+Another tab's unsaved words are listed above the draft, whole, never combined
+with what is here.
+
+![Another tab's unsaved copy, listed](docs/screenshots/workspace-v2/chromium-41-drafts-bar-after-reload-own-words-kept.png)
+
+![Phone width](docs/screenshots/workspace-v2/chromium-35-phone.png)
+
+The older desk at `/` (Write, Explore, Library, Bench) is still there. Every
+image is the application on synthetic fixtures; the measured set, Chromium and
+WebKit, is under [`docs/screenshots/workspace-v2/`](docs/screenshots/workspace-v2/index.json).
 
 ## What is built today
 
@@ -62,11 +76,9 @@ Bench for coinage when you want one; a Keeper with custody but no authority; an
 encrypted Vault that restores a verified past and regrows nothing; a Map of
 where the thinking has been; Speak, which hears what you deliberately say to
 it and transcribes nothing on its own; three readers who read the text the
-room holds and answer apart; and Find related words, which takes a meaning
-you give it — or a passage you select — and returns English synonyms and
-antonyms, Latin and Ancient Greek with their periods, other languages and
-cultural comparisons, each result carrying Explore, Compare, Save and Check
-sources.
+room holds and answer apart; and Find related words — synonyms, antonyms,
+Latin and Ancient Greek with their periods, other languages — each result
+carrying Explore, Compare, Save and Check sources.
 
 Two rules held everywhere:
 
@@ -83,15 +95,14 @@ Two rules held everywhere:
 
 Boundaries worth knowing before you judge it:
 
-- It does not claim to beat a plain prompt. There is a bench for that question
-  and the bench has not answered it.
-- Search results from a provider are **leads**, not verification. A claim
-  becomes verified only when a source is admitted through Nikodemus and tied to
-  an exact anchor.
-- Six judgments in the record were made by a model rather than by the owner,
-  and are marked as such rather than quietly counted.
-- It is single-owner and local. There is no multi-user model, and the LAN gate
-  is an access lock, not encrypted transport.
+- It does not claim to beat a plain prompt; the bench for that question has
+  not answered it.
+- Provider search results are **leads**, not verification. A claim is verified
+  only when a source is admitted through Nikodemus and tied to an exact anchor.
+- Six judgments in the record were made by a model, not the owner, and are
+  marked as such rather than quietly counted.
+- Single-owner and local. No multi-user model; the LAN gate is an access lock,
+  not encrypted transport.
 
 ## Run it locally
 
@@ -112,24 +123,24 @@ ANTHROPIC_API_KEY=your-own-key
 WORDICON_MODEL=your-model-slug
 ```
 
-It serves on `http://127.0.0.1:8420`, loopback only. `WORDICON_LAN=1 python
-server.py` opens it to your own network and prints a pairing code for a phone.
-Jobs run in the background: the terminal and the machine have to stay awake for
-a submitted run to finish, though the phone can be closed.
+It serves on `http://127.0.0.1:8420`, loopback only; `WORDICON_LAN=1` opens it
+to your own network with a pairing code for a phone. Jobs run in the
+background: the terminal and the machine must stay awake for a run to finish.
 
 Without an API key it still runs — the offline gateway is deterministic and
 proves the pipeline rather than the prose.
 
 ## First use
 
-Type into the box on the home page: a feeling you have no word for, a passage
-you are arguing with, a paragraph of your own. Press Full workup for a passage with
-several ideas in it, or Run it for a single one.
+Open `/work` and write a paragraph. Select some of it, press ⌘., pick Get
+feedback or Analyze this passage, read the proposal, press Start. What comes
+back is a set of readings, each with its anchor in your text, a craft
+objection from the critic, and a check on whether the anchor licenses the
+claim. Nothing is saved until you rule. Find it again under Your work.
 
-What comes back is a set of readings, each with its anchor in your text, a
-craft objection from the critic, and a check on whether the anchor licenses
-the claim. Nothing is saved until you rule. Reopen anything under Recent;
-"another round" retries briefed on what failed.
+To try a candidate build without touching your data: `python3 scripts/preview.py`
+serves it on its own empty root (fixtures, port 8421); `--from <state root>`
+serves a consistent copy of an existing store instead.
 
 ## How its claims work
 
@@ -142,10 +153,10 @@ Four things are kept apart on purpose, and the interface never merges them:
 - **Your ruling** — the only thing that settles anything. Append-only, so
   changes of mind are kept rather than overwritten.
 
-Every run leaves a receipt under its own trace id, and every real request the
-run made is recorded — which component, which stage, how long, what came back,
-and whether it failed. A partial run says so before anything else on the page,
-and no count on that page speaks for the components that never ran.
+Every run leaves a receipt under its own trace id, and every real request it
+made is recorded — component, stage, duration, what came back, whether it
+failed. A partial run says so first, and no count speaks for components that
+never ran.
 
 ## Documentation
 
@@ -166,15 +177,12 @@ each named for the defect it prevents rather than the function it calls. It
 reports three outcomes: pass, fail, and **skipped**, because a check that did
 not run is not a check that passed.
 
-`bash tests/journeys/run.sh` — twenty-five browser journeys in real Chromium
-and WebKit (WebKit is the Safari-related requirement and is never substituted),
-for the things source review cannot see: rendered order, whether text is really
-text, what survives with a stylesheet removed, where the caret lands, what a
-page actually sends.
+`bash tests/journeys/run.sh` — browser journeys in real Chromium and WebKit
+(never substituted), for what source review cannot see: rendered order,
+whether text is really text, where the caret lands, what a page actually sends.
 
 Pins are sabotaged deliberately: break the behaviour, confirm the pin fails
-**by name** rather than by crashing. A check that cannot fail is not a check,
-and this suite has caught several of its own that could not.
+**by name** rather than by crashing. A check that cannot fail is not a check.
 
 ## History and legacy names
 
