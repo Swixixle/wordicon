@@ -114,10 +114,19 @@ const NAME = 'notes-' + ENGINE;
   await page.click('.notes-mine button:has-text("Start another note")');
   await page.waitForTimeout(250);
   ok(await page.inputValue('#note-compose') === '', 'Start another note leaves an empty box and the finished one below');
-  await page.route('**/api/notes**', r => r.abort('failed'));
+  // The sabotage pass found the first shape of this check could not fail:
+  // aborting outright means the server never saw the save, so no retry could
+  // duplicate anything. The real hazard is a save that LANDS and whose reply
+  // is lost — so the request is let through and only then failed.
+  await page.route('**/api/notes**', async r => {
+    if (r.request().method() === 'POST') { try { await r.fetch(); } catch (e) { /* the server still saw it */ } }
+    await r.abort('failed');
+  });
   await page.click('#note-compose'); await page.keyboard.type('Words written while the server was unreachable.');
   await waitStatus(page, /Not saved/);
   ok(/press Retry/.test(await status(page)), 'a refused save says so and says the words are still here: ' + JSON.stringify((await status(page)).slice(0, 90)));
+  const landed = (await notesOf(page, docB)).filter(n => /server was unreachable/.test(n.body)).length;
+  ok(landed === 1, 'the save reached the record even though the page was told it failed — the duplicate hazard is live: ' + landed);
   ok(await page.inputValue('#note-compose') === 'Words written while the server was unreachable.', 'the refused save left every word in the box');
   const keptId = await page.evaluate(() => window.__work.results.mine.editors.get(window.__work.results.mine.composeScope()).requestId);
   ok(!!keptId, 'the request id is held for the retry');
@@ -130,7 +139,7 @@ const NAME = 'notes-' + ENGINE;
   ok(await page.inputValue('#note-compose') === 'Words written while the server was unreachable.', 'the unsent words came back from this browser after a reload: ' + JSON.stringify(await page.inputValue('#note-compose')));
   ok(/not saved to the record yet|Not saved/.test(await status(page)), 'and the page says they are not on the record yet: ' + JSON.stringify((await status(page)).slice(0, 80)));
   const sameId = await page.evaluate(() => window.__work.results.mine.editors.get(window.__work.results.mine.composeScope()).requestId);
-  ok(sameId === keptId, 'the recovered words carry the SAME request id, so the retry cannot make a duplicate: ' + JSON.stringify([keptId, sameId]));
+  ok(!!sameId && sameId === keptId, 'the recovered words came back with the request id they were last sent under (the mechanism; the guarantee it exists for is the next check): ' + JSON.stringify([keptId, sameId]));
   await page.unroute('**/api/notes**');
   await page.evaluate(() => window.__work.results.mine.flush(window.__work.results.mine.composeScope()));
   await waitStatus(page, /Saved to the record/);
@@ -159,14 +168,19 @@ const NAME = 'notes-' + ENGINE;
 
   await page.click('#note-compose');
   await page.keyboard.press('ControlOrMeta+End'); await page.keyboard.type(' — and edited in tab A.');
-  await waitStatus(page, /changed somewhere else/, 12000);
-  ok(/Nothing was overwritten/.test(await status(page)), 'tab A is told the note moved and that nothing was overwritten: ' + JSON.stringify((await status(page)).slice(0, 80)));
+  // settle on ANY outcome first: a check that hangs instead of failing by name
+  // is not a check, and the sabotage pass proved this one used to hang
+  await waitStatus(page, /changed somewhere else|Saved to the record|Not saved/, 12000);
+  const settled = await status(page);
+  ok(/changed somewhere else/.test(settled) && /Nothing was overwritten/.test(settled),
+     'tab A is told the note moved and that nothing was overwritten: ' + JSON.stringify(settled.slice(0, 80)));
   ok(/edited in tab A/.test(await page.inputValue('#note-compose')), 'tab A still holds every word it typed: ' + JSON.stringify((await page.inputValue('#note-compose')).slice(-30)));
   ok(/The other version reads/.test(await page.textContent('.notes-mine .note-acts')), 'and it is shown what the other version says rather than having it applied');
   const serverNow = (await notesOf(page, docB)).find(n => n.note_id === target.note_id);
   ok(/edited in tab B/.test(serverNow.body) && !/edited in tab A/.test(serverNow.body), 'tab B’s save stands on the record, unharmed by tab A’s refused one');
-  await page.click('.notes-mine button:has-text("Keep mine as a new note")');
-  await waitStatus(page, /Saved to the record/, 12000);
+  const keepMine = page.locator('.notes-mine button:has-text("Keep mine as a new note")');
+  if (await keepMine.count()) { await keepMine.click(); await waitStatus(page, /Saved to the record/, 12000); }
+  else ok(false, 'no way to keep his own version was offered after the conflict');
   const both = await notesOf(page, docB);
   ok(both.some(n => /edited in tab A/.test(n.body)) && both.some(n => /edited in tab B/.test(n.body)),
      'both versions are on the record under their own ids — nothing combined, nothing lost: ' + JSON.stringify(both.map(n => n.body.slice(-22))));

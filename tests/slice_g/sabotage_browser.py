@@ -59,15 +59,40 @@ MUTATIONS = [
      "old": "    if (!e.pending || !e.pending.payload || !e.pending.request_id) return { kind: 'kept', why: 'no request to resend' };",
      "new": "    return { kind: 'kept', why: 'sabotaged' };",
      "expect": "after the reload every later word is in the editor"},
+    # ---- slice J: the note surface. Each of these is a way his words could be
+    # lost or duplicated, and each must fail the check that exists to catch it.
+    {"name": "mint a fresh request id on every attempt instead of reusing the one that failed", "file": "webapp/work/notes.js",
+     "old": "    if (!e.requestId) { e.requestId = requestKey(); await this.keep(e).catch(() => {}); }",
+     "new": "    e.requestId = requestKey(); await this.keep(e).catch(() => {});",
+     "journey": "notes.js",
+     # the id equality alone survives this mutation (the envelope carries
+     # whatever id the editor last held); what cannot survive it is the
+     # guarantee the id exists FOR — one note, not two
+     "expect": "the retry made exactly one note, not two"},
+    {"name": "do not put a note in this browser before the server acknowledges it", "file": "webapp/work/notes.js",
+     "old": "    if (!recovery.available()) throw new Error('no local store');",
+     "new": "    return;",
+     "journey": "notes.js",
+     "expect": "the unsent words came back from this browser after a reload"},
+    {"name": "send a note edit without the revision it was made against", "file": "webapp/work/notes.js",
+     "old": "                           { body, base_revision: e.baseRevision, request_id: e.requestId }, 'PUT');",
+     "new": "                           { body, base_revision: 0, request_id: e.requestId }, 'PUT');",
+     "journey": "notes.js",
+     "expect": "tab A is told the note moved and that nothing was overwritten"},
+    {"name": "interpolate the standing object instead of reading its fields", "file": "webapp/work/results.js",
+     "old": "    const said = [];\n    if (s.route)",
+     "new": "    const said = [String(standing)];\n    if (s.route)",
+     "journey": "notes.js",
+     "expect": "no standing renders as [object Object]"},
 ]
 
 
-def run_journey(tag):
+def run_journey(tag, journey="editor.js"):
     env = {**os.environ, "JOURNEY_DIR": str(DEV), "JOURNEY_STATE": str(DEV / "state"), "JOURNEY_OUT": str(DEV / "out"),
            "JOURNEY_PORT": PORT, "JOURNEY_ENGINE": ENGINE}
     log = SC / f"sabotage-browser-{tag}.log"
     with open(log, "w") as fh:
-        subprocess.run(["node", "editor.js"], cwd=str(REPO / "tests" / "journeys"), stdout=fh, stderr=subprocess.STDOUT, env=env, timeout=900)
+        subprocess.run(["node", journey], cwd=str(REPO / "tests" / "journeys"), stdout=fh, stderr=subprocess.STDOUT, env=env, timeout=900)
     return log.read_text(encoding="utf-8")
 
 
@@ -85,7 +110,7 @@ def main():
             continue
         path.write_text(src.replace(m["old"], m["new"], 1), encoding="utf-8")
         try:
-            out = run_journey(f"m{i}")
+            out = run_journey(f"m{i}", m.get("journey", "editor.js"))
         finally:
             path.write_text(src, encoding="utf-8")   # the file as it was before the mutation, uncommitted work included
         fails = [l[5:] for l in out.splitlines() if l.startswith("FAIL ")]
