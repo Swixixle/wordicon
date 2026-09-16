@@ -24,9 +24,10 @@
 // the projection itself; a mismatch is refused, and the refusal is shown.
 import { getJSON, postJSON, newId, autoTitle } from './util.js';
 import * as recovery from './recovery.js';
-import { canonicalString } from '/work/document.js';
+import { canonicalString, parsePlain } from '/work/document.js';
 
 const IDLE_MS = 750, MAX_WAIT_MS = 2000, RETRY_MS = [2000, 5000, 15000, 30000];
+const SWITCH_WAIT_MS = 4000;     // how long a document switch waits for the save in flight before the envelope carries the rest
 const INTERVAL_CHECKPOINT_MS = 5 * 60 * 1000;
 const DOC_KEY = 'nikodemus.work.doc.v1';
 const TAB_KEY = 'nikodemus.work.tab.v1';
@@ -95,7 +96,7 @@ export class DocumentSession {
   async record() {
     if (!this.id) return;
     const env = {
-      doc_id: this.id, tab_id: this.tab, seq: this.seq, ack_seq: this.ackSeq, body: this.body(), title: this.title, title_is_manual: this.title_is_manual,
+      doc_id: this.id, tab_id: this.tab, editor_session: this.editorSession, seq: this.seq, ack_seq: this.ackSeq, body: this.body(), title: this.title, title_is_manual: this.title_is_manual,
       base_revision: this.revision, base_fingerprint: this.fingerprint,
       structure: this.adapter.getStructure ? this.adapter.getStructure() : null,
       doc_schema: this.adapter.docSchema || null, projection_version: this.adapter.projectionVersion || null,
@@ -157,19 +158,37 @@ export class DocumentSession {
     }
     if (this.pendingReason) payload.checkpoint_reason = this.pendingReason;
     else if (this.lastCheckpointAt && Date.now() - this.lastCheckpointAt > INTERVAL_CHECKPOINT_MS) payload.checkpoint_reason = 'interval';
-    this.inflight = { request_id: payload.request_id, seq, payload, ctl: (typeof AbortController === 'function') ? new AbortController() : null };
+    this.inflight = { request_id: payload.request_id, seq, payload, doc_id: this.id, editor_session: this.editorSession, ctl: (typeof AbortController === 'function') ? new AbortController() : null };
     this.sentSeq = seq;
     await this.record();                                   // the pending request is on disk BEFORE it is sent
     this.status = 'saving'; this.renderStatus();
     await this.send();
   }
 
-  // waits for the save in flight (if any), then flushes what is pending
-  async settle(reason) {
-    for (let i = 0; i < 200 && this.inflight; i++) await new Promise(r => setTimeout(r, 50));
+  // waits for the save in flight (if any), then flushes what is pending,
+  // each wait bounded: a server that does not answer cannot hold the room
+  async settle(reason, maxWaitMs = 10000) {
+    const until = Date.now() + maxWaitMs;
+    while (this.inflight && Date.now() < until) await new Promise(r => setTimeout(r, 50));
     await this.flush(reason);
-    for (let i = 0; i < 200 && this.inflight; i++) await new Promise(r => setTimeout(r, 50));
+    while (this.inflight && Date.now() < until) await new Promise(r => setTimeout(r, 50));
     return !this.inflight && this.seq === this.ackSeq;
+  }
+
+  // A reply that arrives after this session moved to another document (or
+  // was reopened) cannot speak for the editor — but it can still repair the
+  // envelope of the document it belongs to: the words that request carried
+  // are acknowledged, the head it made is the new base, and anything typed
+  // after the send stays unsent against that base. Only the envelope of the
+  // same editor session is touched; a reopening has its own.
+  async lateAck(inf, d) {
+    try {
+      const env = await recovery.read(inf.doc_id, this.tab);
+      if (!env || env.editor_session !== inf.editor_session || env.base_revision !== inf.payload.base_revision) return;
+      const fixed = { ...env, ack_seq: Math.max(env.ack_seq | 0, inf.seq), base_revision: d.revision | 0, base_fingerprint: d.fingerprint || '' };
+      if (env.pending && env.pending.request_id === inf.request_id) fixed.pending = null;
+      await recovery.write(fixed);
+    } catch (e) { /* the envelope stays as it was: unsent words remain unsent */ }
   }
 
   async send() {
@@ -185,7 +204,10 @@ export class DocumentSession {
       this.retryLater('the server could not be reached');
       return;
     }
-    if (this.inflight !== inf) return;                      // an older reply cannot speak for newer text
+    if (this.inflight !== inf) {                            // an older reply cannot speak for newer text
+      if (r.ok && d && !d.error && r.status === 200) this.lateAck(inf, d);
+      return;
+    }
     if (r.status === 409) {
       this.inflight = null; this.retries = 0;
       this.conflict = { head: d.head || null, mine: inf.payload.body, mineStructure: inf.payload.doc_json || null, at: new Date().toISOString() };
@@ -228,7 +250,12 @@ export class DocumentSession {
 
   // ---- applied suggestions: local until the save that carries them commits ------
   noteApplication(event, toSeq) {
-    if (event && event.event_id) this.applications.push({ event_id: event.event_id, to_seq: typeof toSeq === 'number' ? toSeq : this.seq });
+    if (!(event && event.event_id)) return;
+    const to = typeof toSeq === 'number' ? toSeq : this.seq;
+    this.applications.push({ event_id: event.event_id, to_seq: to });
+    // noted after the save that carried it was already acknowledged (the
+    // record's reply came second): that acknowledgment's revision commits it
+    if (to <= this.ackSeq) this.commitApplications(this.ackSeq, this.revision);
   }
   commitApplications(ackedSeq, revision) {
     const due = this.applications.filter(a => a.to_seq <= ackedSeq);
@@ -243,11 +270,14 @@ export class DocumentSession {
   // ---- what the header says ----------------------------------------------------
   statusText() {
     const clock = this.savedAt ? new Date(this.savedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+    // a browser that refused the recovery write keeps no copy: the room says
+    // so beside every state, never claiming a copy it does not have
+    const local = this.localState && this.localState.ok === false ? ' · this browser keeps no recovery copy' : '';
     switch (this.status) {
-      case 'idle': return this.id ? (clock ? 'Saved ' + clock : 'Not saved yet') : 'New';
-      case 'pending': return 'Unsaved changes';
-      case 'saving': return 'Saving…';
-      case 'saved': return clock ? 'Saved ' + clock : 'Saved';
+      case 'idle': return (this.id ? (clock ? 'Saved ' + clock : 'Not saved yet') : 'New') + local;
+      case 'pending': return 'Unsaved changes' + local;
+      case 'saving': return 'Saving…' + local;
+      case 'saved': return (clock ? 'Saved ' + clock : 'Saved') + local;
       case 'local': return 'Saved locally · waiting for the server' + (this.serverError ? ' (' + this.serverError + ')' : '');
       case 'nolocal': return 'Couldn’t save — not on the server, and this browser refused to keep a copy' + (this.localState.why ? ' (' + this.localState.why + ')' : '');
       case 'failed': return 'Couldn’t save: ' + (this.serverError || 'refused');
@@ -261,7 +291,7 @@ export class DocumentSession {
   async open(id, opts = {}) {
     if (!id) return false;
     if (id === this.id && !opts.reload) return true;
-    await this.flush();
+    if (this.id) await this.settle(undefined, SWITCH_WAIT_MS);   // the save in flight lands and the pending words go before the switch
     const r = await getJSON('/api/notebook/documents/' + encodeURIComponent(id));
     if (r.status === 404) return this.openUnsaved(id);
     if (!r.ok || r.data.error) return false;
@@ -274,7 +304,14 @@ export class DocumentSession {
         // head as it stands; older envelopes (no ack_seq) are judged by their text
         const unsent = e => (e.ack_seq === undefined ? e.body !== d.body : e.seq > e.ack_seq);
         newer = envs.filter(e => e.base_revision === d.revision && !e.abandoned && unsent(e)).sort((a, b) => (b.at || '').localeCompare(a.at || ''))[0] || null;
-        if (newer && newer.body === d.body && d.doc_json && newer.structure && canonicalString(newer.structure) === canonicalString(d.doc_json)) newer = null;
+        // an envelope that holds exactly the head — the same words and the same
+        // structure (for a plain head, the structure its words parse to) — has
+        // nothing to recover: reopening it must not become a rewrite
+        if (newer && newer.body === d.body) {
+          const headStructure = d.doc_json ? canonicalString(d.doc_json) : (newer.structure ? canonicalString(parsePlain(d.body)) : null);
+          const envStructure = newer.structure ? canonicalString(newer.structure) : null;
+          if (headStructure === envStructure) newer = null;
+        }
       } catch (e) { /* no recovery store: nothing to recover from */ }
     }
     const localState = this.localState;
@@ -320,7 +357,7 @@ export class DocumentSession {
   }
 
   async newDocument(text = '', origin = 'new') {
-    if (this.id && (this.body().trim() || this.revision)) await this.flush('new');
+    if (this.id && (this.body().trim() || this.revision)) await this.settle('new', SWITCH_WAIT_MS);
     this.adopt(newId('doc_'), origin);
     this.adapter.setText(text || '', { structure: null });
     if (text) { this.seq = 1; this.status = 'pending'; this.record(); await this.flush('open'); }
@@ -333,7 +370,7 @@ export class DocumentSession {
   // a copy of this document as a new one, structure and all
   async duplicate() {
     const text = this.body(), structure = this.adapter.getStructure ? this.adapter.getStructure() : null;
-    if (this.id && (text.trim() || this.revision)) await this.flush('new');
+    if (this.id && (text.trim() || this.revision)) await this.settle('new', SWITCH_WAIT_MS);
     this.adopt(newId('doc_'), 'duplicate');
     this.adapter.setText(text, { structure });
     this.seq = 1; this.status = 'pending'; this.record(); await this.flush('open');

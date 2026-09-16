@@ -328,6 +328,159 @@ const NAME = 'editor-' + ENGINE;
   ok(t13.words >= 20000 && t13.edit < 250 && t13.project < 250 && t13.payload < 250, 'a ' + t13.words + '-word draft: an edit with its handlers ' + t13.edit.toFixed(1) + ' ms, the projection ' + t13.project.toFixed(1) + ' ms, the save payload (' + Math.round(t13.bytes / 1024) + ' KB) ' + t13.payload.toFixed(1) + ' ms');
   await noSave();
 
+  // ---- slice G: the races and failures the instructions name (§11, "Races", "Safe application", "Recovery failure") ----
+  const sess = () => page.evaluate(() => { const s = window.__work.session; return { id: s.id, seq: s.seq, ackSeq: s.ackSeq, inflight: !!s.inflight, inflightSeq: s.inflight ? s.inflight.seq : null, status: s.status, revision: s.revision, recovered: s.recovered, applications: s.applications.length }; });
+  const docUrl = id => BASE + '/api/notebook/documents/' + id;
+  const hold = (id, ms) => page.route(docUrl(id), async route => { await new Promise(r => setTimeout(r, ms)); await route.continue(); });
+  const settledOn = () => page.waitForFunction(() => { const s = window.__work.session; return !s.inflight && s.seq === s.ackSeq && s.status === 'saved'; }, null, { timeout: 15000, polling: 100 });
+
+  // 14. the editor's own last check: the words at the target must be the words the suggestion was made for, even when it is asked directly
+  await fresh();
+  await page.keyboard.type('The cat sat.');
+  const r14 = await page.evaluate(() => window.__work.editor.applyText({ start: 4, end: 7, expect: 'dog', text: 'ZZ', mode: 'replace' }));
+  ok(r14 && r14.ok === false && (await text()) === 'The cat sat.', 'the editor’s own last check refuses a target whose words are not the words the suggestion was made for, and writes nothing: ' + JSON.stringify(r14));
+
+  // 15. a slow save acknowledgment, more typing during it, then a switch to another document: every word lands before the switch, and reopening recovers nothing because there is nothing to recover
+  await fresh();
+  await page.keyboard.type('Slow words');
+  await settledOn();
+  const id15 = (await sess()).id;
+  await hold(id15, 1500);
+  await page.keyboard.type(' one');
+  await page.waitForFunction(() => window.__work.session.inflight !== null, null, { timeout: 5000, polling: 50 });
+  await page.keyboard.type(' two');
+  const mid15 = await sess();
+  ok(mid15.inflight && mid15.seq > mid15.inflightSeq, 'more words were typed while the save was in flight (seq ' + mid15.seq + ' > the request’s ' + mid15.inflightSeq + ')');
+  const other15 = 'doc_other15' + Date.now().toString(36);
+  await put(other15, { title: '', title_is_manual: false, body: 'Other document.', base_revision: 0, base_fingerprint: '', request_id: 'req_seed_o15_' + Date.now() });
+  const t15 = Date.now();
+  await page.evaluate(id => window.__work.session.open(id), other15);
+  const took15 = Date.now() - t15;
+  ok((await sess()).id === other15 && (await text()) === 'Other document.', 'the switch happened (' + took15 + ' ms: it waited for the held save and sent the rest)');
+  const d15 = await getDoc(id15);
+  ok(d15.body === 'Slow words one two', 'every word typed before the switch is on the server — the held save’s and the words typed during it: ' + JSON.stringify(d15.body));
+  await page.unroute(docUrl(id15));
+  await page.evaluate(id => window.__work.session.open(id), id15);
+  await page.waitForTimeout(400);
+  const back15 = await sess();
+  ok((await text()) === 'Slow words one two' && back15.recovered === false && back15.status === 'saved' && (await getDoc(id15)).revision === d15.revision, 'reopening it recovers nothing and rewrites nothing: the envelope held exactly the head (revision ' + d15.revision + ' stands)');
+
+  // 16. a reply that arrives after the switch stopped waiting still repairs the envelope it belongs to: the words it carried are acknowledged against the head it made, the words typed after it stay unsent and are recovered on reopening
+  await fresh();
+  await page.keyboard.type('Late reply');
+  await settledOn();
+  const id16 = (await sess()).id;
+  await hold(id16, 6500);
+  await page.keyboard.type(' alpha');
+  await page.waitForFunction(() => window.__work.session.inflight !== null, null, { timeout: 5000, polling: 50 });
+  await page.keyboard.type(' beta');
+  await page.waitForTimeout(200);
+  const t16 = Date.now();
+  await page.evaluate(id => window.__work.session.open(id), other15);
+  const took16 = Date.now() - t16;
+  ok(took16 >= 3500 && took16 < 6000 && (await sess()).id === other15, 'the switch waited its bound for the held save and then went on rather than holding the room (' + took16 + ' ms)');
+  await page.waitForTimeout(7000 - took16 + 800);
+  await page.unroute(docUrl(id16));
+  const d16 = await getDoc(id16);
+  ok(d16.body === 'Late reply alpha', 'the held save landed after the switch: the server holds the words that request carried and not the words typed after it: ' + JSON.stringify(d16.body));
+  const env16 = await page.evaluate(async id => { const r = await import('/work/recovery.js'); const envs = await r.forDocument(id); return envs.filter(e => !e.abandoned)[0] || null; }, id16);
+  ok(env16 && env16.base_revision === d16.revision && env16.ack_seq < env16.seq && env16.body === 'Late reply alpha beta' && !env16.pending, 'the late reply repaired its envelope: based on the head it made, its own words acknowledged, the words typed after it still unsent, no request pending: ' + JSON.stringify(env16 && { base: env16.base_revision, head: d16.revision, seq: env16.seq, ack: env16.ack_seq }));
+  await page.evaluate(id => window.__work.session.open(id), id16);
+  await settledOn();
+  ok((await text()) === 'Late reply alpha beta' && (await getDoc(id16)).body === 'Late reply alpha beta' && (await sess()).recovered === true, 'reopening it recovers the words typed after the send, from the envelope, and saves them');
+
+  // 17. two tabs on one document: the second tab's save moves the head; the first tab's save is refused (409); both copies are kept and the choice is the owner's
+  await fresh();
+  await page.keyboard.type('Shared draft');
+  await settledOn();
+  const id17 = (await sess()).id;
+  const page2 = await ctx.newPage();
+  page2.on('pageerror', e => errs.push('tab two: ' + String(e.message)));
+  await page2.goto(BASE + '/work');
+  await page2.waitForSelector('.pm-editor');
+  await page2.evaluate(id => window.__work.session.open(id), id17);
+  await page2.waitForTimeout(300);
+  ok((await page2.evaluate(() => window.__work.session.tab)) !== (await page.evaluate(() => window.__work.session.tab)), 'the second tab has its own tab id, so the two envelopes never overwrite each other');
+  await page2.click('.pm-editor');
+  await page2.keyboard.press('End');
+  await page2.keyboard.type(' from tab two');
+  await page2.waitForFunction(() => { const s = window.__work.session; return !s.inflight && s.seq === s.ackSeq && s.status === 'saved'; }, null, { timeout: 15000, polling: 100 });
+  ok((await getDoc(id17)).body === 'Shared draft from tab two', 'the second tab saved: the head moved');
+  await page.click('.pm-editor');
+  await page.keyboard.press('End');
+  await page.keyboard.type(' from tab one');
+  await page.waitForFunction(() => window.__work.session.status === 'conflict', null, { timeout: 8000, polling: 100 });
+  ok(/Saved elsewhere since this copy was opened/.test(await page.textContent('#doc-meta')) && /Nothing was overwritten/.test(await page.textContent('#results-body')), 'the first tab’s save is refused and the room says so, with the choice beside the draft');
+  ok((await getDoc(id17)).body === 'Shared draft from tab two' && (await text()) === 'Shared draft from tab one', 'nothing was overwritten: the head is the second tab’s and the first tab still holds its own words');
+  await page.click('#results-body button:has-text("Keep mine as a new document")');
+  await settledOn();
+  const idKept = (await sess()).id;
+  ok(idKept !== id17 && (await getDoc(idKept)).body === 'Shared draft from tab one' && (await getDoc(id17)).body === 'Shared draft from tab two', 'Keep mine as a new document: both copies are on the server under their own ids');
+  await page2.close();
+
+  // 18. an application while a save is in flight, then its undo: the reply to the older save cannot commit the application; the save that carries it commits it; the undo lands as the next revision
+  await fresh();
+  await page.keyboard.type('The cat sat here.');
+  await settledOn();
+  const id18 = (await sess()).id;
+  await select(4, 7);
+  await page.click('button[data-action="analyze.decompose"]');
+  await page.waitForSelector('#proposal-card');
+  await page.click('#proposal-card .btn.primary');
+  await page.waitForFunction(() => document.querySelector('#results-body .state.good') !== null, null, { timeout: 60000, polling: 200 });
+  await page.waitForTimeout(400);
+  await page.click('.apply-block > summary');
+  await page.waitForSelector('.apply-row .btn', { timeout: 5000 });
+  const cand18 = await page.textContent('.apply-row .chip');
+  await hold(id18, 1500);
+  await page.evaluate(() => { window.__work.session.checkpoint('save'); });          // a save in flight (held) that does not change the words
+  await page.waitForFunction(() => window.__work.session.inflight !== null, null, { timeout: 5000, polling: 50 });
+  await page.click('.apply-row .btn:has-text("Replace the selection")');
+  await page.waitForTimeout(150);
+  const mid18 = await sess();
+  ok((await text()) === 'The ' + cand18 + ' sat here.' && mid18.inflight && mid18.applications === 1, 'the candidate was applied while the older save was still in flight, and the application is not yet committed');
+  await settledOn();
+  await page.waitForTimeout(400);
+  await page.unroute(docUrl(id18));
+  const ev18a = (await (await page.request.get(docUrl(id18) + '/events')).json()).events.filter(e => e.kind === 'applied');
+  const rep18 = ev18a.find(e => e.detail.kind === 'replace');
+  ok(rep18 && typeof rep18.detail.committed_revision === 'number' && rep18.detail.committed_revision === (await sess()).revision, 'the save that carried the application committed it, at the revision it made: ' + (rep18 && rep18.detail.committed_revision));
+  await page.evaluate(() => window.__work.editor.focus());
+  await page.keyboard.press('ControlOrMeta+z');
+  await page.waitForTimeout(150);
+  ok((await text()) === 'The cat sat here.', 'one undo takes the application back');
+  await settledOn();
+  await page.waitForTimeout(400);
+  const ev18b = (await (await page.request.get(docUrl(id18) + '/events')).json()).events.filter(e => e.kind === 'applied');
+  const und18 = ev18b.find(e => e.detail.kind === 'undo');
+  ok(und18 && und18.detail.committed_revision === rep18.detail.committed_revision + 1 && (await getDoc(id18)).body === 'The cat sat here.', 'the undo is recorded and committed as the next revision, and the head holds the words before the application');
+
+  // 19. a browser whose storage refuses: the room never claims a copy it does not have; the server save still lands; with the server gone it says the words are nowhere but this page
+  const ctx19 = await pairedContext(browser, { viewport: { width: 1440, height: 900 } });
+  await ctx19.addInitScript(() => { Object.defineProperty(window, 'indexedDB', { get() { throw new Error('storage is unavailable'); } }); });
+  const page19 = await ctx19.newPage();
+  const errs19 = [];
+  page19.on('pageerror', e => errs19.push(String(e.message)));
+  await page19.goto(BASE + '/work');
+  await page19.waitForSelector('.pm-editor');
+  await page19.evaluate(() => window.__work.session.newDocument(''));      // a fresh context reopens the record's latest document otherwise
+  await page19.waitForTimeout(150);
+  await page19.click('.pm-editor');
+  await page19.keyboard.type('Nowhere but here');
+  await page19.waitForFunction(() => { const s = window.__work.session; return !s.inflight && s.seq === s.ackSeq && s.status === 'saved'; }, null, { timeout: 15000, polling: 100 });
+  const id19 = await page19.evaluate(() => window.__work.session.id);
+  const meta19 = await page19.textContent('#doc-meta');
+  const d19 = await getDoc(id19);
+  ok(/Saved \d/.test(meta19) && /keeps no recovery copy/.test(meta19) && d19.body === 'Nowhere but here', 'with storage refusing, the server save lands and the header says this browser keeps no recovery copy: ' + JSON.stringify(meta19) + ' · server: ' + JSON.stringify(d19.body) + ' id ' + id19);
+  await page19.route(docUrl(id19), route => route.abort());
+  await page19.keyboard.type(' and gone');
+  await page19.waitForFunction(() => window.__work.session.status === 'nolocal', null, { timeout: 8000, polling: 100 });
+  const meta19b = await page19.textContent('#doc-meta');
+  const d19b = await getDoc(id19);
+  ok(/refused to keep a copy/.test(meta19b) && !/Saved locally/.test(meta19b) && d19b.body === 'Nowhere but here', 'with the server gone as well, the room says the words are not on the server and this browser kept no copy — never "saved locally" — and the last complete copy stands on the server: ' + JSON.stringify(meta19b) + ' · server: ' + JSON.stringify(d19b.body));
+  ok(errs19.length === 0, 'no page errors with storage unavailable: ' + JSON.stringify(errs19));
+  await ctx19.close();
+
   ok(errs.length === 0, 'no page errors across the editor journey: ' + JSON.stringify(errs));
   await browser.close();
   finish(NAME);

@@ -81,9 +81,12 @@ export class Applier {
     }
   }
   note(kind, a) {
+    // the edit handlers ran before this one, so the session's seq already
+    // counts the undo or redo: the save that carries it commits this event
+    const toSeq = this.session.seq;
     postJSON('/api/notebook/documents/' + encodeURIComponent(this.session.id) + '/applications', {
-      kind, result: { ...a.result, application_event: a.event_id }, from_revision: this.session.revision, from_seq: this.session.seq, to_seq: this.session.seq, range: {},
-    }).catch(() => {});
+      kind, result: { ...a.result, application_event: a.event_id }, from_revision: this.session.revision, from_seq: toSeq, to_seq: toSeq, range: {},
+    }).then(rec => { if (rec.ok && rec.data.event_id) this.session.noteApplication(rec.data, toSeq); }).catch(() => {});
   }
 
   // The controls a result card offers for one textual suggestion: the two

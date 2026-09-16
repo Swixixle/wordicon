@@ -6310,6 +6310,19 @@ def _check_investigation_adapters(server, paired):
             r = pr.post_json({**c_dep, "enabled": True}, bad, {"brand": "x"})
             if r.get("ok") or r.get("outcome") != "origin_refused":
                 out.append(f"F: a path that leaves the origin was not refused: {bad} → {r}")
+        # slice G (sabotage pass): the three paths above are all refused by the
+        # PATH test alone, so removing the origin comparison went unnoticed.
+        # A connector row whose base URL no longer matches its recorded origin
+        # (a tampered or mis-edited record) passes the path test and must be
+        # refused by the origin comparison — and refused before any socket:
+        # the guard's refusal log must not grow.
+        import testmode as _tm_o
+        n_denied = len(_tm_o.denied())
+        r = pr.post_json({**c_dep, "enabled": True, "base_url": "https://evil.example.org"}, "/api/investigate", {"brand": "x"})
+        if r.get("ok") or r.get("outcome") != "origin_refused":
+            out.append(f"F: a connector whose base URL leaves its recorded origin was not refused by the origin comparison: {r}")
+        if len(_tm_o.denied()) != n_denied:
+            out.append("F: the origin refusal came after a socket attempt (the guard refused it), not before")
         # the fixture producer on loopback, declared as development: the whole flow
         srv, port = mock_producer.start(0)
         import testmode as _tm
