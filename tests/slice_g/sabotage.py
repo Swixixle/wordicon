@@ -96,7 +96,7 @@ MUTATIONS = [
     {"name": "verify the receipt over Python's json.dumps instead of the producer's stableStringify", "file": "scripts/producers.py",
      "old": "        message = stable_stringify(body).encode(\"utf-8\", \"surrogatepass\")",
      "new": "        message = json.dumps(body, sort_keys=True, separators=(\",\", \":\"), ensure_ascii=False).encode(\"utf-8\", \"surrogatepass\")",
-     "check": "_check_producer_contracts", "expect": "does not verify under the pinned key"},
+     "check": "_check_producer_contracts", "expect": "the canonicalizer is not the producer's"},
     {"name": "skip the content hash of an Open Case snapshot", "file": "scripts/producers.py",
      "old": "    if digest != str(obj.get(\"content_hash\")):\n        out[\"why\"] = \"content_hash does not match the canonical payload (the bytes changed, or the hash was forged)\"\n        return out",
      "new": "    if False:\n        out[\"why\"] = \"content_hash does not match the canonical payload (the bytes changed, or the hash was forged)\"\n        return out",
