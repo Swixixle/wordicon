@@ -17,6 +17,7 @@ Branch: `workspace-v2`, cut from `17894e3` (main = origin/main on 2026-09-16). D
 | G — parity, accessibility, failure testing, delivery | done | 288ef64, 2e2ff24, 6e5b59c | suite exit 0 with `_check_workspace_law`, `_check_vault_sqlite`, `_check_dispatch_concurrency`; `editor.js` 83 checks per engine; `work.js` 107 checks; the sabotage pass (19 mutations, all caught); the screenshot pass (78 shots, no overflow, no page error); the rehearsal |
 | H — the review of 6e5b59c: preservation, isolation, the producers' real contracts, completeness | done | e8deb5a…0f2db31 | suite exit 0 with `_check_preview_isolation`, `_check_gate_mint_race`, `_check_producer_contracts`, `_check_docx_export`, `_check_concept_picker`; `editor.js` §20–§22 in both engines; `work.js` with the corrected Investigate section; the sabotage pass (27 mutations) |
 | I — the review of 0f2db31: multi-tab recovery, preview inheritance and the copy lease, delivery wording and result correlation | done | (this commit) | suite exit 0 with `_check_preview_inheritance`, `_check_investigation_correlation`; `editor.js` §21–§26 in both engines; the sabotage pass (32 server, 10 browser) |
+| J — his own notes beside the work: a per-document scratchpad with the draft's protection, annotations on carried text, and the standing/provenance repairs | done | (this commit) | suite exit 0 with `_check_owner_notes`; `notes.js` 41 checks in Chromium and 41 in WebKit, each named in `run.sh` |
 
 ## Slice A — what was built
 
@@ -96,6 +97,38 @@ The reviewer's three findings and the completeness items, each fixed and pinned:
 - **The save contract.** `save_requests` gains a versioned request fingerprint (document, content fingerprint, base, checkpoint reason, origin, structure presence): the same request id with the same words but another intent is refused by name (`request_intent_differs`); rows from before the column compare by content as they did.
 - **The gate's mint race** (observed in G): `ensure_master()` mints by exclusive create (a whole temp file linked into place; a filesystem without hard links falls back to `O_EXCL`); twenty threads and eight processes racing on an absent secret agree on one and every session issued verifies; a short or empty secret is refused rather than used; rotation replaces atomically. `_check_gate_mint_race` fails on the previous code (four secrets, one of twenty sessions verifying).
 - **Completeness.** Word export (`scripts/docx_export.py`, `GET /api/notebook/documents/<id>/export.docx`, the Document menu): minimal OOXML built from the structure — headings, lists (nested; each ordered list starts at 1), quotes, bold, italic, links, hard breaks, spaces preserved — validated part by part, read back by python-docx and LibreOffice where present. The concept picker: a concept-subject action (Re-check this concept) opens the shelf as ruled (`GET /api/concepts`), one press proposes it, and a selection offered to such an action is refused with the picker as the way. Your work shows registry labels and keeps action ids, store counts and the generation in details ("About this index"); Investigate keeps the contract text in a disclosure and says the cost on the card; the investigation card says what was kept (each reply with its size and hash), the delivery, and what a signature means.
+
+## Slice J — his own notes beside the work
+
+What he asked for, in his words: to be able to write notes to the right of the
+centre panel "practically simultaneously to reading", separate from the writing
+surface. What was built:
+
+- **A scratchpad per document**, attached to the document's stable id, in the
+  Results panel: one compose box at the top, earlier notes collapsed underneath
+  with readable previews, the count on the Notes tab so the surface is visibly
+  there while reading. His own notes are a separate store (`notes.jsonl`,
+  append-only) and a separate section from the carried list, because a carry is
+  the model's words and a note is his.
+- **The draft's protection, not less.** A note envelope per note per tab keeps
+  the words in this browser before any server acknowledgment; a refused save
+  keeps every word, says so, and retries under the same request id — which the
+  envelope carries too, so a reload mid-failure cannot end in a duplicate. An
+  edit against a moved revision is refused with both bodies; "Keep mine as a new
+  note" puts both on the record.
+- **Annotations on carried text**, through the existing carry-note event: his
+  words beside the excerpt, never over it, and the carry still records that the
+  carried text is not his.
+- **Two display repairs** the beta made visible: a standing rendered from its
+  fields instead of `[object Object]`, and a run named only when the record
+  holds one (the trace lives at `source.trace_id`; the old line read
+  `c.trace_id` and named nothing).
+
+Limits, stated: the surface is one click away on the Notes tab rather than
+visible at the same time as Results — showing both at once would change the
+panel geometry the suite pins, and that is a separate decision. Notes are not
+in the Your work index yet. The vault carries `notes.jsonl` because it carries
+the state root, but the vault manifest does not count notes separately.
 
 ## Slice I — the review of 0f2db31, corrected
 

@@ -1677,6 +1677,118 @@ def _check_preview_isolation(server):
     return out
 
 
+def _check_owner_notes(server, paired):
+    """Slice J. His own notes are a SEPARATE record from carries, and the
+    page may never fold the two together: a carry is the model's words under
+    "may be useful while revising", a note is his own. What is pinned here is
+    what the record has to guarantee, because the page cannot:
+
+      - a note names the document it belongs beside, and says in the record
+        that it is owner-authored and is not a carry, a result or an
+        acceptance;
+      - the same request id twice is ONE note, so a save that failed on the
+        wire and is retried cannot become two;
+      - an edit made against a revision that has moved is REFUSED, with both
+        bodies in the refusal, so the tab holding unsent words keeps them;
+      - nothing is rewritten: an edit and a removal are appended, and a
+        removed note's words are still in the log;
+      - an annotation on a carry is stored BESIDE the carried text and can
+        never replace it;
+      - the standing a carry holds is a record of fields, not a string —
+        the defect this slice repaired rendered it as "[object Object]" and
+        read the trace from a path that never held one, so every carry said
+        "from run" and named nothing."""
+    import json as _json, notes as _notes, carry as _carry
+    out = []
+    doc = "doc_suite_notes"
+    a = _notes.write_note(doc_id=doc, body="a note of his own", request_id="rk_suite_1", tab_id="tab_s")
+    if not (a["owner_authored"] is True and "a carry" in a["is_not"] and "verified" in a["is_not"]):
+        out.append(f"J: a note does not record that it is his own and not a carry: {a}")
+    if a["doc_id"] != doc:
+        out.append("J: a note does not name the document it belongs beside")
+    again = _notes.write_note(doc_id=doc, body="a note of his own", request_id="rk_suite_1", tab_id="tab_s")
+    if again["note_id"] != a["note_id"]:
+        out.append("J: the same request id made a SECOND note — a retried save would duplicate his words")
+    e = _notes.edit_note(note_id=a["note_id"], body="a note of his own, extended", base_revision=1, request_id="rk_suite_2")
+    if e["revision"] != 2 or e["body"] != "a note of his own, extended":
+        out.append(f"J: an edit did not move the revision or did not take: {e}")
+    try:
+        _notes.edit_note(note_id=a["note_id"], body="written against a stale revision", base_revision=1, request_id="rk_suite_3")
+        out.append("J: an edit against a moved revision was ACCEPTED — the other writer's words would be gone")
+    except _notes.NoteRefused as ex:
+        if ex.code != "conflict" or ex.detail.get("body_here") != "a note of his own, extended":
+            out.append(f"J: a conflict does not hand back what the record holds: {ex.code} {ex.detail}")
+    for bad, why in ((dict(doc_id="", body="x"), "no document"), (dict(doc_id=doc, body="   "), "an empty note"),
+                     (dict(doc_id=doc, body="x" * (_notes.BODY_LIMIT + 1)), "a note over the limit")):
+        try:
+            _notes.write_note(request_id="", **bad)
+            out.append(f"J: {why} was written rather than refused")
+        except _notes.NoteRefused:
+            pass
+    b = _notes.write_note(doc_id=doc, body="the second note", request_id="rk_suite_4")
+    _notes.remove_note(b["note_id"])
+    listed = [n["body"] for n in _notes.for_document(doc)]
+    if "the second note" in listed:
+        out.append("J: a removed note is still listed")
+    raw = (Path(cli.LOCAL_STATE) / "notes.jsonl").read_text(encoding="utf-8")
+    if "the second note" not in raw:
+        out.append("J: removing a note ERASED its words — removal is an appended event, never a rewrite")
+    kinds = [_json.loads(line)["kind"] for line in raw.splitlines() if line.strip()]
+    if kinds.count("written") != 2 or kinds.count("edited") != 1 or kinds.count("removed") != 1:
+        out.append(f"J: the note log is not append-only in the shape the laws require: {kinds}")
+    if _notes.for_document("doc_suite_other"):
+        out.append("J: notes leaked across documents")
+    summ = _notes.summary(doc)
+    if "population" not in summ or summ["active"] != 1:
+        out.append(f"J: the summary does not name its population or miscounts: {summ}")
+
+    # the route refuses a listing with no document rather than answering for all of them
+    c = paired(server.app.test_client())
+    if c.get("/api/notes").status_code != 400:
+        out.append("J: /api/notes answered without being told which document")
+    r = c.post("/api/notes", json={"doc_id": doc, "body": "through the route", "request_id": "rk_suite_route"})
+    if r.status_code != 200 or not r.get_json()["note"]["owner_authored"]:
+        out.append(f"J: the route did not write a note marked as his: {r.status_code}")
+    nid = r.get_json()["note"]["note_id"]
+    stale = c.put(f"/api/notes/{nid}", json={"body": "stale", "base_revision": 99, "request_id": "rk_suite_route2"})
+    if stale.status_code != 409 or not stale.get_json().get("your_words_are_not_lost"):
+        out.append(f"J: a stale edit through the route is not a 409 that says the words are kept: {stale.status_code}")
+
+    # an annotation is beside the carried text, never over it
+    row = _carry._append({"kind": "carried", "carry_id": "carry_suite_j", "at": cli._now(),
+                          "source": {"trace_id": "trace_suite_j", "kind": "candidate", "ref": {}},
+                          "analyzed": {"source_key": "k"}, "target": {"source_key": "k"},
+                          "excerpt": "the carried sentence, as the run produced it",
+                          "standing": {"route": "candidate concept", "invented": True},
+                          "means": "may be useful while revising",
+                          "is_not": ["accepted", "supported", "verified", "true", "owner_authored", "approved"]})
+    _carry.note_carry("carry_suite_j", "his own words about it")
+    folded = _carry.fold()["carry_suite_j"]
+    if folded["excerpt"] != row["excerpt"]:
+        out.append("J: an annotation CHANGED the carried text — a note must never replace what a run produced")
+    if folded.get("note") != "his own words about it":
+        out.append("J: the annotation was not kept beside the carry")
+    if "owner_authored" not in folded.get("is_not", []):
+        out.append("J: an annotated carry stopped saying that the carried text is not his words")
+
+    # the page's two repairs, pinned in the source that draws them
+    res = (Path(__file__).resolve().parents[1] / "webapp" / "work" / "results.js").read_text(encoding="utf-8")
+    if "standingWords" not in res or "runLine" not in res:
+        out.append("J: results.js no longer renders a standing from its fields or a run from the record")
+    if "${c.standing" in res or "c.trace_id" in res:
+        out.append("J: results.js is interpolating the standing object or reading the trace from a path the record does not use — "
+                   "that is the [object Object] / unnamed-run defect returning")
+    if "the originating run is not recorded" not in res:
+        out.append("J: the page no longer says when the record holds no run for a carried item")
+    nts = (Path(__file__).resolve().parents[1] / "webapp" / "work" / "notes.js").read_text(encoding="utf-8")
+    for needle, why in (("not saved to the record yet", "the honest local-only status"),
+                        ("press Retry", "the retry the words wait behind"),
+                        ("Keep mine as a new note", "the conflict choice that loses nothing")):
+        if needle not in nts:
+            out.append(f"J: notes.js lost {why} ({needle!r})")
+    return out
+
+
 def _check_preview_inheritance(server, paired):
     """The review of 0f2db31, finding 2. A preview on a COPIED store inherits
     that store's queued work; startup must not dispatch it (the original's
@@ -7979,6 +8091,7 @@ def main() -> int:
     failures.extend(_check_vault_sqlite())
     failures.extend(_check_preview_isolation(server))
     failures.extend(_check_preview_inheritance(server, _paired))
+    failures.extend(_check_owner_notes(server, _paired))
     failures.extend(_check_map_focus_routes(server, _paired))
     failures.extend(_check_moira_routes(server, _paired))
     failures.extend(_check_notebook_b(server, _paired))
