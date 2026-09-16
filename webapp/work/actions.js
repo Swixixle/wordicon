@@ -160,12 +160,17 @@ export class Actions {
       list.textContent = '';
       matches.forEach((m, i) => {
         const b = el('button', { type: 'button', class: i === active ? 'on' : '', role: 'option', 'aria-selected': String(i === active) },
-          [el('span', { text: m.label }), el('span', { class: 'g', text: GROUP_TITLES[m.group] || m.group }), m.accepts_subject ? null : el('span', { class: 'g', text: '· not for this selection' })]);
+          [el('span', { text: m.label }), el('span', { class: 'g', text: GROUP_TITLES[m.group] || m.group }), m.remainder ? el('span', { class: 'g', text: '· “' + m.remainder + '”' }) : null, m.accepts_subject ? null : el('span', { class: 'g', text: '· not for this selection' })]);
         b.addEventListener('click', () => { pick(i); });
         list.appendChild(b);
       });
     };
-    const pick = (i) => { const m = matches[i]; if (!m) return; this.closeAsk(); this.choose(m.id); };
+    const pick = (i) => {
+      const m = matches[i]; if (!m) return; this.closeAsk();
+      // a plain-language request whose rest names what to investigate: that rest is the subject, verbatim
+      if (m.remainder) { this.prepare(m.id, { kind: 'description', text: m.remainder, title: m.label }); return; }
+      this.choose(m.id);
+    };
     const query = async () => {
       const q = input.value.trim();
       if (!q) { matches = []; render(); return; }

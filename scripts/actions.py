@@ -146,17 +146,19 @@ ACTIONS = [
        mutation="record", outbound_fields=("nothing — a read of the producer's index",), recipient="producer:ethicalalt",
        provider="producer:ethicalalt", calls="1 read", result_type="deposition", legacy_entry="Investigation Rooms → EthicalAlt connector"),
     _a("investigate.ethicalalt.start", "Start an investigation (EthicalAlt)", group="investigate", kind="dispatch",
-       subjects=("none",), handler="adapter", aliases=("investigate a company", "ethicalalt investigation"),
-       inputs=("a company or brand name",), mutation="record", outbound_fields=("the name",), recipient="producer:ethicalalt",
-       provider="producer:ethicalalt", calls="unknown before it runs", result_type="investigation", legacy_entry="none (not connected)"),
+       subjects=("description",), handler="adapter", aliases=("investigate a company", "ethicalalt investigation", "investigate"),
+       inputs=("a company or brand name",), mutation="record", outbound_fields=("the name, and a session id minted here",), recipient="producer:ethicalalt",
+       provider="producer:ethicalalt", calls="1 POST, then 1 read of the signed export", result_type="investigation", legacy_entry="none (not connected)",
+       note="the start contract is pinned from the producer's source; live starts wait for the owner's verification ruling on the connector"),
     _a("investigate.opencase.list", "List cases", group="investigate", kind="lookup",
        subjects=("none",), handler="federation", aliases=("open case", "opencase", "cases"),
        mutation="record", outbound_fields=("your key, to the configured origin",), recipient="producer:open_case",
        provider="producer:open_case", calls="1 read", result_type="deposition", legacy_entry="Investigation Rooms → Open Case connector"),
     _a("investigate.opencase.start", "Start an investigation (Open Case)", group="investigate", kind="dispatch",
-       subjects=("none",), handler="adapter", aliases=("open case investigation",),
-       inputs=("a case",), mutation="record", outbound_fields=("a case and your key",), recipient="producer:open_case",
-       provider="producer:open_case", calls="unknown; enrichment calls a provider", result_type="investigation", legacy_entry="none (not connected)"),
+       subjects=("description",), handler="adapter", aliases=("open case investigation",),
+       inputs=("a case id and the handle to investigate",), mutation="record", outbound_fields=("the case id, the handle, and your key to the configured origin",), recipient="producer:open_case",
+       provider="producer:open_case", calls="1 POST, then 1 read of the signed export; the producer's own enrichment calls a provider on its side", result_type="investigation", legacy_entry="none (not connected)",
+       note="the start contract is pinned from the producer's source; live starts wait for the owner's verification ruling on the connector"),
     _a("investigate.publiceye.start", "Start an investigation (PUBLIC EYE)", group="investigate", kind="dispatch",
        subjects=("none",), handler="adapter", aliases=("public eye", "publiceye", "frame"),
        inputs=("an article or podcast URL",), mutation="record", outbound_fields=("the URL",), recipient="producer:public_eye",
@@ -285,7 +287,13 @@ def readiness(action: dict, server_gateway) -> dict:
         return {"available": lane["lane"] != "misconfigured", "reason": lane["says"], "lane": lane}
     if a["provider"].startswith("producer:"):
         prod = a["provider"].split(":", 1)[1]
-        r = _producer_readiness(prod, "lookup" if a["kind"] == "lookup" else "start")
+        if a["handler"] == "adapter":
+            # slice F: the adapter derives per capability (configured, contract, credentials,
+            # last check, deployment verified) — no remote check here
+            import producers
+            r = producers.readiness(prod, "start")
+        else:
+            r = _producer_readiness(prod, "lookup" if a["kind"] == "lookup" else "start")
         return {"available": r["available"], "reason": r["reason"] or ("available" if r["available"] else "not available"),
                 "producer": r}
     return {"available": False, "reason": "unknown provider"}
@@ -326,9 +334,29 @@ def match(query: str, subject: str = "none") -> dict:
         if all(w in hay for w in words):
             partial.append(a)
     found = exact or partial
+    remainder = ""
+    if not found:
+        # slice F: "investigate Exemplar Holdings" — a plain-language request whose
+        # first words name an action that takes a description, and whose rest is
+        # the description. The rest goes to the proposal as the subject, verbatim
+        # from the query; nothing is guessed about it.
+        raw = " ".join((query or "").split())
+        best = None
+        for a in ACTIONS:
+            if "description" not in a["subjects"]:
+                continue
+            for name in [a["label"]] + list(a["aliases"]):
+                n = " ".join(name.split())
+                if len(raw) > len(n) + 1 and raw[:len(n)].lower() == n.lower() and raw[len(n)] == " ":
+                    if best is None or len(n) > len(best[1]):
+                        best = (a, n)
+        if best is not None:
+            found = [best[0]]
+            remainder = raw[len(best[1]):].strip()
     subj_ok = [a for a in found if subject in a["subjects"] or "none" in a["subjects"] or subject == "none"]
     out = [{"id": a["id"], "label": a["label"], "group": a["group"], "kind": a["kind"],
-            "accepts_subject": subject in a["subjects"] or subject == "none"} for a in (subj_ok or found)]
+            "accepts_subject": subject in a["subjects"] or subject == "none" or bool(remainder),
+            **({"remainder": remainder} if remainder else {})} for a in (subj_ok or found)]
     return {"query": query, "matches": out, "ambiguous": len(out) > 1, "exact": bool(exact)}
 
 

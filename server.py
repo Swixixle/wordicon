@@ -95,6 +95,7 @@ import actions  # noqa: E402  (workspace-v2 slice B: the action registry — eve
 import snapshots  # noqa: E402  (workspace-v2 slice B: immutable input snapshots)
 import operations as ops  # noqa: E402  (workspace-v2 slice D: the durable operations store; JOBS is its projection)
 import workindex  # noqa: E402  (workspace-v2 slice E: the derived Your work index — rebuildable, never authority)
+import producers  # noqa: E402  (workspace-v2 slice F: investigation adapters — contracts pinned, live starts by the owner's ruling)
 
 # One dispatcher per store (slice D). The lock is taken when this process
 # first dispatches (or when it starts serving and reconciles), never on
@@ -3863,6 +3864,53 @@ def _execution_for_proposal(prepared: dict, a: dict, rd: dict, adapter: str) -> 
             "lane": lane.get("lane"), "model": lane.get("model"), "outbound": a.get("outbound")}
 
 
+def _run_investigation(op_id: str, spec: dict) -> None:
+    """One POST at the boundary, then the signed artifact through the import
+    verifier; the operation's row says what the producer said, what was
+    imported and how it verified — apart from each other."""
+    session_id = "nk_" + hashlib.sha256((op_id + _now_iso()).encode("utf-8")).hexdigest()[:16]
+    try:
+        with vault.corpus_write():
+            try:
+                started = producers.start(op_id, spec, session_id)
+            except producers.AdapterError as e:
+                # not sent → failed (nothing left); answered with an error → failed (a known refusal);
+                # unreachable → unknown (the request may have arrived; never sent again by itself)
+                ops.mark(op_id, "unknown" if e.outcome == "unknown" else "failed", last_error=str(e),
+                         local_state={"not_sent": "Not sent", "answered": "Refused by the producer", "unknown": "Sent; no answer came back"}[e.outcome],
+                         producer_state={"nothing_sent": e.nothing_sent, "outcome": e.outcome})
+                return
+            ops.mark(op_id, "running", local_state="The producer answered; retrieving the signed export", producer_state=started.get("producer_state") or {},
+                     result_ref={"upstream_id": started["upstream_id"], "object_id": started.get("object_id", "")}, event_kind="note",
+                     detail={"reply_keys": started.get("reply_keys", []), "object_id": started.get("object_id", "")})
+            art = producers.retrieve(op_id, spec, started.get("object_id", ""))
+            dep = (art or {}).get("deposition") or {}
+            ref = {"upstream_id": started["upstream_id"], "object_id": started.get("object_id", ""), "deposition_id": art.get("deposition_id") or dep.get("deposition_id", ""),
+                   "verification": art.get("verification") or dep.get("verification", ""), "duplicate": bool(art.get("duplicate")),
+                   "artifact_outcome": (art or {}).get("outcome", "imported" if art.get("ok") else "failed")}
+            if art.get("ok"):
+                ops.mark(op_id, "complete", local_state="Complete — the export is in custody" + (" (" + str(ref["verification"]) + ")" if ref["verification"] else "") + (" · already held (same bytes)" if ref["duplicate"] else ""), result_ref=ref)
+            else:
+                # the start was answered; the artifact was not retrieved: kept as failed-with-evidence, recoverable by a read
+                ops.mark(op_id, "failed", last_error="the producer answered the start, but its export could not be retrieved or verified: " + str(art.get("outcome") or "") + " — " + str(art.get("detail") or ""),
+                         local_state="Answered; artifact not retrieved", result_ref=ref)
+    except Exception as e:  # noqa: BLE001
+        traceback.print_exc()
+        ops.mark(op_id, "unknown", last_error=f"the investigation runner failed: {e}", local_state="Interrupted")
+    finally:
+        vault.mark_dirty()
+
+
+def _shape_investigation_view(op: dict) -> dict:
+    st = producers.status(op)
+    ex = op.get("execution") or {}
+    return {"operation_id": op["op_id"], "kind": "investigation", "status": op["status"], "action_id": op.get("action_id"),
+            "producer": (ex.get("spec") or {}).get("producer") or (op.get("config") or {}).get("producer", ""), "progress": op.get("local_state"),
+            "error": op.get("last_error"), "created_at": op.get("created_at"), "updated_at": op.get("updated_at"), "finished_at": op.get("finished_at"),
+            "prepared_id": op.get("prepared_id"), "snapshot_id": op.get("snapshot_id"), "result_ref": op.get("result_ref"), "producer_state": op.get("producer_state"),
+            "investigation": st, "request_key": op.get("request_key"), "retry_parent": op.get("retry_parent"), "events_count": op.get("events_count")}
+
+
 def _shape_job_view(op: dict, job: dict | None) -> dict:
     """What the page may say about a job operation: from the projection
     while it lives, from the store and the result files after a restart."""
@@ -3950,13 +3998,14 @@ def api_operations_start():
     if a is None:
         return jsonify({"error": "the proposal names an action the registry no longer has"}), 409
     rd = actions.readiness(a, server_gateway)
-    adapter = "moira/v1" if a["handler"] == "moira" else "job/v1"
+    adapter = "moira/v1" if a["handler"] == "moira" else ("adapter/" + ((rd.get("producer") or {}).get("adapter_version") or "0") if a["handler"] == "adapter" else "job/v1")
     execution = _execution_for_proposal(prepared, a, rd, adapter)
+    kind = "reading" if a["handler"] == "moira" else ("investigation" if a["handler"] == "adapter" else "job")
     # a repeat of a known key answers from the store before anything else is checked
     try:
-        prior_row, created = ops.reserve(request_key=key, kind=("reading" if a["handler"] == "moira" else "job"),
-                                         execution=execution, config={"lane": rd.get("lane") or {}},
-                                         op_id=(None if a["handler"] == "moira" else _new_job_id()),
+        prior_row, created = ops.reserve(request_key=key, kind=kind,
+                                         execution=execution, config={"lane": rd.get("lane") or {}, "producer": (rd.get("producer") or {}).get("producer", "")},
+                                         op_id=(_new_job_id() if kind == "job" else None),
                                          action_id=a["id"], registry_version=str(prepared.get("registry_version") or ""),
                                          prepared_id=pid, snapshot_id=str(prepared.get("snapshot_id") or ""))
     except ops.OperationsError as e:
@@ -3968,7 +4017,7 @@ def api_operations_start():
                         "reading_id": (row.get("result_ref") or {}).get("reading_id")})
     op_id = prior_row["op_id"]
     if not rd["available"]:
-        if a["handler"] != "moira":
+        if a["handler"] == "job":
             _release_job_id(op_id)
         ops.mark(op_id, "failed", last_error=f"not available at Start: {rd['reason']}", local_state="Refused before dispatch")
         return jsonify({"error": f"{a['label']} is not available now: {rd['reason']}", "not_started": True,
@@ -3997,6 +4046,30 @@ def api_operations_start():
         _moira_dispatch(reading)
         return jsonify({"operation_id": op_id, "reading_id": rid, "kind": "reading", "status": "running",
                         "prepared_id": pid, "snapshot_id": prepared.get("snapshot_id")})
+    if a["handler"] == "adapter":
+        # slice F: an investigation. The proposal froze the subject (a name, or a case id and handle);
+        # the adapter validates it locally, then one POST at the boundary, then the signed artifact
+        # through the import verifier — as an operation in the store like any other.
+        snap = snapshots.load(prepared["snapshot_id"]) if prepared.get("snapshot_id") else None
+        if snap is None or not snapshots.verify(snap):
+            ops.mark(op_id, "failed", last_error="the snapshot is missing or does not verify", local_state="Refused before dispatch")
+            return jsonify({"error": "the proposal's snapshot is missing or does not verify; prepare again", "nothing_was_sent": True}), 409
+        producer = a["provider"].split(":", 1)[1]
+        try:
+            spec = producers.prepare(producer, snap.get("text") or "", prepared.get("inputs") or {})
+        except producers.AdapterError as e:
+            ops.mark(op_id, "failed", last_error=str(e), local_state="Refused before dispatch")
+            return jsonify({"error": str(e), "nothing_was_sent": True}), e.status
+        if not _dispatching():
+            return jsonify({"operation_id": op_id, "kind": "investigation", "status": "queued", "dispatched": False,
+                            "note": "reserved, not dispatched: " + OPS_DISPATCHER.why, "prepared_id": pid, "snapshot_id": prepared.get("snapshot_id")})
+        if not ops.claim(op_id, OPS_DISPATCHER.token):
+            return jsonify({"error": "the operation was not queued in the store", "nothing_was_sent": True}), 409
+        ops.mark(op_id, "running", local_state="Sending to " + producers.ADAPTERS[producer]["display"], event_kind="stage",
+                 detail={"stage": "start", "producer": producer, "adapter_version": spec["adapter_version"], "connector_id": spec["connector_id"]})
+        threading.Thread(target=_run_investigation, args=(op_id, spec), daemon=True).start()
+        return jsonify({"operation_id": op_id, "kind": "investigation", "status": "running", "dispatched": True,
+                        "prepared_id": pid, "snapshot_id": prepared.get("snapshot_id"), "producer": producer})
     if a["handler"] != "job":
         _release_job_id(op_id)
         ops.mark(op_id, "failed", last_error=f"cannot be started from here yet ({a['handler']})", local_state="Refused before dispatch")
@@ -4041,11 +4114,11 @@ def api_operations_list():
     for op in out["operations"]:
         with JOBS_LOCK:
             job = JOBS.get(op["op_id"])
-        view = _shape_job_view(op, dict(job) if job else None) if op["kind"] == "job" else \
+        view = _shape_job_view(op, dict(job) if job else None) if op["kind"] == "job" else (_shape_investigation_view(op) if op["kind"] == "investigation" else \
             {"operation_id": op["op_id"], "kind": op["kind"], "status": op["status"], "action_id": op.get("action_id"),
              "created_at": op["created_at"], "updated_at": op["updated_at"], "result_ref": op.get("result_ref"),
              "prepared_id": op.get("prepared_id"), "snapshot_id": op.get("snapshot_id"), "progress": op.get("local_state"),
-             "reading_id": (op.get("result_ref") or {}).get("reading_id")}
+             "reading_id": (op.get("result_ref") or {}).get("reading_id")})
         view.pop("result", None)
         items.append(view)
     return jsonify({"operations": items, "total": out["total"], "population": out["population"], "next_cursor": out["next_cursor"],
@@ -4064,6 +4137,10 @@ def api_operation_get(op_id):
             return jsonify({"operation_id": op_id, "kind": "reading", "reading": v,
                             "status": v.get("status") or ("done" if all(d.get("status") == "done" for d in v.get("readers", [])) else "running")})
         return jsonify({"error": "no operation with that id in this store", "outcome": "unknown"}), 404
+    if op["kind"] == "investigation":
+        view = _shape_investigation_view(op)
+        view["recovery"] = _recovery_of(op)
+        return jsonify(view)
     if op["kind"] == "reading":
         rid = (op.get("result_ref") or {}).get("reading_id")
         v = moira.view(rid) if rid else None
@@ -4108,6 +4185,23 @@ def api_operation_recover(op_id):
             ops.event(op["op_id"], "recover", detail={"found": "reading pending" if v else "no reading record"})
         op = ops.get(op["op_id"])
         return jsonify({"operation_id": op["op_id"], "status": op["status"], "recovery": _recovery_of(op), "sent": False})
+    if op["kind"] == "investigation":
+        if op["status"] in ("running", "claimed"):
+            rec = _recovery_of(op)
+            if rec["case"] == "delivery_unknown":
+                ops.mark(op["op_id"], "unknown", last_error=rec["why"], local_state="Interrupted", event_kind="recover", detail={"case": rec["case"]})
+            op = ops.get(op["op_id"])
+        did = producers.recover(op)
+        if did.get("recovered"):
+            dep = federation.get_deposition(did.get("deposition_id", "")) or {}
+            ops.mark(op["op_id"], "complete", local_state="Complete — the export is in custody (recovered)",
+                     result_ref={**(op.get("result_ref") or {}), "deposition_id": dep.get("deposition_id", ""), "verification": dep.get("verification", ""), "artifact_outcome": "imported"},
+                     event_kind="recover", detail={"did": did.get("did")})
+        else:
+            ops.event(op["op_id"], "recover", detail={"did": did.get("did"), "artifact": did.get("artifact")})
+        op = ops.get(op["op_id"])
+        return jsonify({"operation_id": op["op_id"], "status": op["status"], "recovery": _recovery_of(op), "investigation": producers.status(op), "sent": False,
+                        "note": did.get("did")})
     rec = _recovery_of(op)
     with JOBS_LOCK:
         live = op["op_id"] in JOBS and (JOBS[op["op_id"]].get("status") not in ("complete", "failed"))
@@ -4198,6 +4292,29 @@ def api_operation_attempt(op_id):
 # a hit says how to reopen the authoritative record and nothing more. The
 # words never reach a model. Archive is a ruling in the record; the index
 # reads it. Rebuild is explicit.
+
+@app.route("/api/producers")
+def api_producers():
+    """The adapters' declared contracts and the readiness derived from the
+    record — no remote check. What a card may say."""
+    return jsonify({"producers": {k: {**{kk: vv for kk, vv in v.items() if kk != "subject"}, "subject": v.get("subject", ""),
+                                      "readiness": {"lookup": producers.readiness(k, "lookup"), "start": producers.readiness(k, "start")}}
+                                  for k, v in producers.ADAPTERS.items()},
+                    "population": "every producer this workspace knows an adapter for; readiness derived at this request"})
+
+
+@app.route("/api/connectors/<cid>/live-start", methods=["POST"])
+def api_connector_live_start(cid):
+    """The owner's ruling that this connector's deployment was verified for
+    starting investigations (or that it was not). Recorded in the connector
+    log; never inferred by the application."""
+    data = request.get_json(silent=True) or {}
+    try:
+        row = producers.rule_live_start(cid, bool(data.get("enabled")), note=str(data.get("note") or ""), by="owner")
+    except producers.AdapterError as e:
+        return jsonify({"error": str(e)}), e.status
+    return jsonify({"ok": True, "ruling": row})
+
 
 @app.route("/api/work")
 def api_work():

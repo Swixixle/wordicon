@@ -131,6 +131,11 @@ details > summary { cursor: pointer; color: var(--write-panel-ink); font-size: 1
 .apply-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 3px 0; }
 .apply-block > summary { padding: 4px 0; }
 .page-view { padding: 18px 22px; background: var(--write-panel); overflow: auto; gap: 12px; }
+/* ---- Investigate (slice F) ---- */
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 4px 0; font-size: 12.5px; }
+.facts dt { color: var(--write-panel-ink); }
+.facts dd { margin: 0; color: var(--text); }
+.inv-subject { flex: 1 1 200px; background: var(--ground); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; font-size: 13px; min-width: 0; }
 /* ---- Your work (slice E) ---- */
 .work-search { display: flex; flex-direction: column; gap: 6px; }
 .work-search input[type="search"] { width: 100%; max-width: 900px; background: var(--ground); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; font-size: 15px; }

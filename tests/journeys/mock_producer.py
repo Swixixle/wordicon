@@ -78,6 +78,41 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return self._send(404, b'{"error":"profile not found"}')
 
 
+    def do_POST(self):  # noqa: N802 — slice F: the producers' start contracts, as pinned from source
+        fx = self.fx
+        n = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(n) if n else b""
+        Handler.seen.append({"path": self.path, "method": "POST", "headers": {k.lower(): v for k, v in self.headers.items()}, "at": time.time(), "bytes": len(raw)})
+        p = self.path.split("?")[0]
+        try:
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return self._send(400, b'{"error":"body must be JSON"}')
+        if p == "/api/investigate":
+            # EthicalAlt: POST /api/investigate {brand, session_id} — synchronous; the reply names the profile slug
+            brand = str(body.get("brand") or "").strip()
+            sid = str(body.get("session_id") or "")
+            if not brand or not sid:
+                return self._send(400, b'{"error":"brand and session_id are required"}')
+            if brand.lower() == "boom industries":
+                return self._send(500, b'{"error":"the orchestrator failed"}')
+            if brand.lower() == "slow industries":
+                time.sleep(20)
+            slug = fx["ea_id"] if "exemplar" in brand.lower() else "not-a-profile"
+            return self._send(200, json.dumps({"ok": True, "brand": brand, "session_id": sid, "profile_id": slug, "status": "complete",
+                                               "message": "mock EthicalAlt: the profile is ready for export"}).encode("utf-8"))
+        if p.startswith("/api/v1/cases/") and p.endswith("/investigate"):
+            if self.headers.get("Authorization") != "Bearer " + os.environ.get(OC_KEY_ENV, "~"):
+                return self._send(401, b'{"detail":"an investigator API key is required"}')
+            cid = p[len("/api/v1/cases/"):-len("/investigate")]
+            if cid != fx["oc_id"]:
+                return self._send(404, b'{"detail":"case not found"}')
+            if not str(body.get("handle") or "").strip():
+                return self._send(400, b'{"detail":"handle is required"}')
+            return self._send(200, json.dumps({"case_id": cid, "status": "complete", "message": "mock Open Case: enrichment recorded"}).encode("utf-8"))
+        return self._send(404, b'{"error":"no such route"}')
+
+
 def start(port=0):
     """Start the mock on 127.0.0.1:<port> (0 = any free port) in a daemon
     thread; returns (server, port)."""

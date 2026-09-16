@@ -138,6 +138,7 @@ export class Results {
         const before = t.status;
         t.last = d;
         t.status = d.kind === 'reading' ? (d.reading && d.reading.pending === 0 ? 'done' : 'running') : (d.status || 'unknown');
+        if (d.kind) t.kind = d.kind;
         if (t.status !== before && ['done', 'complete', 'failed'].includes(t.status)) { this.bumpUnseen(); if (this.hooks.onActivity) this.hooks.onActivity(); }
         if (!['done', 'complete', 'failed', 'unknown'].includes(t.status)) busy = true;
       }
@@ -201,6 +202,7 @@ export class Results {
     const d = prepared.disclosure, sc = d.scope || {};
     const scopeLine = sc.kind === 'selection' ? `Scope: your selection — ${sc.words} word${sc.words === 1 ? '' : 's'}, ${sc.chars} character${sc.chars === 1 ? '' : 's'}, sent exactly as selected.`
                     : sc.kind === 'document' ? `Scope: the whole draft — ${sc.words} word${sc.words === 1 ? '' : 's'}, ${sc.chars} characters, sent exactly as written.`
+                    : sc.kind === 'description' ? `Scope: what you named — “${sc.head}”.`
                     : `Scope: ${sc.kind}${sc.head ? ' — “' + sc.head + '”' : ''}.`;
     const lane = d.lane || {};
     const card = el('div', { class: 'card', id: 'proposal-card' }, [
@@ -248,6 +250,19 @@ export class Results {
         el('button', { class: 'btn small', type: 'button', text: 'Check status / recover result', title: 'Reads the record and the result files again; sends nothing', onclick: () => this.recover(t) }),
         t.status !== 'queued' ? el('button', { class: 'btn small', type: 'button', text: 'Start another attempt', title: 'A new operation under a new key, linked to this one; it sends the frozen text again', onclick: () => this.anotherAttempt(t) }) : null,
       ]));
+    }
+    if (t.kind === 'investigation') {
+      const inv = d.investigation || {};
+      const pst = d.producer_state || {};
+      card.appendChild(el('div', { class: 'kv', text: 'Producer: ' + (d.producer || '—') + (inv.upstream_id ? ' · upstream id ' + inv.upstream_id : '') }));
+      card.appendChild(el('div', { class: 'kv', text: 'Start: ' + (inv.start || 'not sent') + (pst.status ? ' · the producer says: ' + pst.status : '') + (pst.message ? ' — ' + pst.message : '') }));
+      card.appendChild(el('div', { class: 'kv', text: 'Signed export: ' + (inv.artifact || 'not retrieved') + ' · receipt: ' + (inv.receipt || 'none') + ' — a valid signature says the bytes are the producer’s, not that the research is true' }));
+      if (inv.deposition_id) card.appendChild(el('div', { class: 'row' }, [el('span', { class: 'chip', text: 'in custody: ' + inv.deposition_id }), el('button', { class: 'btn', type: 'button', text: 'Open the Investigation rooms', onclick: () => { this.places.open('/investigation'); if (this.hooks.onPlace) this.hooks.onPlace(); } })]));
+      if (['failed', 'unknown'].includes(t.status)) card.appendChild(el('div', { class: 'row' }, [
+        el('button', { class: 'btn small', type: 'button', text: 'Check status / recover result', title: 'Reads the record; retrieves the export again by its id if the start was answered; never starts again', onclick: () => this.recover(t) }),
+        el('button', { class: 'btn small', type: 'button', text: 'Start another attempt', title: 'A new operation under a new key; the producer is asked again', onclick: () => this.anotherAttempt(t) }),
+      ]));
+      card.appendChild(el('details', {}, [el('summary', { text: 'Details' }), el('div', { class: 'small-text muted', text: `operation ${t.id} · snapshot ${d.snapshot_id || '—'}${rec ? ' · ' + rec.dispatch_intents + ' dispatch intent' + (rec.dispatch_intents === 1 ? '' : 's') + ' recorded, ' + rec.dispatch_ends + ' ended' : ''}` })]));
     }
     if (t.kind === 'reading' && d.reading) {
       const v = d.reading;

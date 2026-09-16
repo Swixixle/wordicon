@@ -5384,8 +5384,10 @@ def _check_workspace_registry(server, paired):
         if not (ea2["available"] and ea2["producer"]["configured"] and ea2["producer"]["contract"].startswith("read-only")):
             out.append(f"REGISTRY: after registering a connector the lookup is not derived as available: {ea2}")
         st = _ac.readiness(_ac.BY_ID["investigate.ethicalalt.start"], server.server_gateway)
-        if st["available"] or "cannot start" not in st["reason"]:
-            out.append(f"REGISTRY: starting an investigation must stay unavailable while the connector contract is read-only: {st}")
+        # slice F: a declared development connector on loopback may start in test mode — as a fixture, said so;
+        # a deployed connector waits for the owner's verification ruling (proven in _check_investigation_adapters)
+        if not st["available"] or not (st.get("producer") or {}).get("fixture_only") or "fixture" not in st["reason"]:
+            out.append(f"REGISTRY: in test mode a development connector's start must be available as a fixture and say so: {st}")
     finally:
         state_root.apply(_SCRATCH)
     # prepare: the snapshot and the proposal verify against their own ids
@@ -6237,6 +6239,205 @@ def _check_work_index(server, paired):
     return out
 
 
+def _check_investigation_adapters(server, paired):
+    """Slice F. Each instrument has an adapter that declares the contract it
+    was built against and where that contract came from; readiness is
+    derived per capability from the record (configured, contract,
+    credential, last check, lookup, start, deployment verified) and never
+    from a constant; a live start is disabled until the owner records a
+    verification ruling on the connector, and enabled in test mode only for
+    a declared development connector on loopback; a start is a proposal
+    first (the subject named, what leaves, to whom), then one POST at the
+    dispatch boundary with its intent and outcome and the upstream id, then
+    the signed export through the existing import verifier, linked by
+    deposition id, its signature state kept apart from the live reply; a
+    producer's error is a known failure, an unreachable producer an unknown
+    outcome; a missing credential refuses before anything is sent; the
+    adapter never leaves the connector's origin; Ask carries the rest of a
+    plain-language request as the subject; the routes answer through the
+    gate."""
+    import importlib, json as _json, os as _os, tempfile as _tf, time as _time
+    out = []
+    pr = importlib.import_module("producers")
+    fed = importlib.import_module("federation")
+    ac = importlib.import_module("actions")
+    ops = importlib.import_module("operations")
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "journeys"))
+    mock_producer = importlib.import_module("mock_producer")
+    # the contracts, declared
+    for k in ("ethicalalt", "open_case", "public_eye", "rabbit_hole"):
+        ad = pr.ADAPTERS.get(k) or {}
+        if not ad.get("contract_source") or not ad.get("adapter_version"):
+            out.append(f"F: {k} declares no contract source or adapter version")
+        if k in ("ethicalalt", "open_case") and not all(x in ad.get("start", {}) for x in ("method", "path", "payload", "auth", "synchronous", "side_effects", "limits", "id_correlation")):
+            out.append(f"F: {k}'s start contract does not declare route, method, auth, payload, side effects, limits and id correlation")
+    r0 = pr.readiness("public_eye", "start")
+    if r0["available"] or "no connector kind" not in r0["reason"]:
+        out.append(f"F: PUBLIC EYE must be unavailable for its real reason: {r0}")
+    r1 = pr.readiness("rabbit_hole", "start")
+    if r1["available"] or "not identified" not in r1["reason"]:
+        out.append(f"F: Rabbit Hole must say its repository is not identified: {r1}")
+    tmp = Path(_tf.mkdtemp(prefix="wordicon_inv_"))
+    state_root.apply(tmp)
+    srv = None
+    try:
+        # a deployed (https) connector: in test mode too, start waits for the owner's ruling
+        fed.register_connector("ea-deployed", "ethicalalt", "https://ethicalalt.example.org", display="EthicalAlt (deployed)", by="suite")
+        r2 = pr.readiness("ethicalalt", "start")
+        if r2["available"] or not r2["configured"] or r2["deployment_verified"] or "disabled until the deployment is verified" not in r2["reason"]:
+            out.append(f"F: a deployed connector without a verification ruling must not be startable: {r2}")
+        if not pr.readiness("ethicalalt", "lookup")["available"]:
+            out.append("F: lookup on a configured, enabled connector should be available")
+        pr.rule_live_start("ea-deployed", True, note="verified by the suite, deliberately", by="suite")
+        r3 = pr.readiness("ethicalalt", "start")
+        if not r3["available"] or not r3["deployment_verified"] or r3.get("fixture_only"):
+            out.append(f"F: the owner's ruling did not enable starting: {r3}")
+        pr.rule_live_start("ea-deployed", False, note="withdrawn", by="suite")
+        if pr.readiness("ethicalalt", "start")["available"]:
+            out.append("F: withdrawing the ruling did not disable starting")
+        fed.set_enabled("ea-deployed", False, by="suite")
+        # prepare validates locally
+        for producer, text, want in (("ethicalalt", "", "needs"), ("open_case", "no-case-id here", "case id"), ("public_eye", "https://example.org/a", "no connector kind"), ("rabbit_hole", "x", "not identified")):
+            try:
+                pr.prepare(producer, text)
+                out.append(f"F: prepare({producer!r}, {text!r}) did not refuse")
+            except pr.AdapterError as e:
+                if want not in str(e):
+                    out.append(f"F: prepare({producer!r}) refused for the wrong reason: {e}")
+        # the origin is pinned: a path that would leave it sends nothing
+        c_dep = fed.get_connector("ea-deployed")
+        for bad in ("http://evil.example.org/api/investigate", "/api/../../x", "https://evil.example.org/x"):
+            r = pr.post_json({**c_dep, "enabled": True}, bad, {"brand": "x"})
+            if r.get("ok") or r.get("outcome") != "origin_refused":
+                out.append(f"F: a path that leaves the origin was not refused: {bad} → {r}")
+        # the fixture producer on loopback, declared as development: the whole flow
+        srv, port = mock_producer.start(0)
+        import testmode as _tm
+        _tm.allow_port(port)
+        base = f"http://127.0.0.1:{port}"
+        fed.register_connector("ea-suite", "ethicalalt", base, display="EthicalAlt (suite)", dev_loopback=True, by="suite")
+        fed.pin_key("ea-suite", (mock_producer.FIXTURES / "ethicalalt.fixture.pub.b64").read_text().strip(), label="fixture key", by="suite")
+        _os.environ[mock_producer.OC_KEY_ENV] = "open_case_" + "s" * 64
+        fed.register_connector("oc-suite", "open_case", base, display="Open Case (suite)", credential_ref="env:" + mock_producer.OC_KEY_ENV, dev_loopback=True, by="suite")
+        fed.pin_key("oc-suite", (mock_producer.FIXTURES / "open_case.fixture.pub.b64").read_text().strip(), label="fixture key", by="suite")
+        r4 = pr.readiness("ethicalalt", "start")
+        if not r4["available"] or not r4.get("fixture_only"):
+            out.append(f"F: in test mode a declared development connector on loopback should be startable as a fixture: {r4}")
+        c = server.app.test_client()
+        paired(c)
+        pj = c.get("/api/producers").get_json() or {}
+        if not pj.get("producers", {}).get("ethicalalt", {}).get("readiness", {}).get("start", {}).get("start_available"):
+            out.append("F: /api/producers does not derive the fixture connector's start readiness")
+        # Ask: the rest of the request is the subject
+        m = ac.match("investigate Exemplar Holdings")
+        if [x["id"] for x in m["matches"]] != ["investigate.ethicalalt.start"] or m["matches"][0].get("remainder") != "Exemplar Holdings":
+            out.append(f"F: Ask does not carry the rest of 'investigate Exemplar Holdings' as the subject: {m}")
+        # a start: proposal → operation → POST → export in custody
+        rec = ac.prepare("investigate.ethicalalt.start", {"kind": "description", "text": "Exemplar Holdings", "title": "EthicalAlt"}, {}, server.server_gateway)
+        d = rec["disclosure"]
+        if d["scope"]["kind"] != "description" or "the name" not in " ".join(d["leaves_this_machine"]["fields"]) or d["leaves_this_machine"]["recipient"] != "producer:ethicalalt":
+            out.append(f"F: the proposal does not say the name leaves to the producer: {d['leaves_this_machine']} {d['scope']['kind']}")
+        seen0 = len(mock_producer.Handler.seen)
+        r = c.post("/api/operations", json={"prepared_id": rec["prepared_id"], "request_key": "rk_f_1"})
+        dd = r.get_json() or {}
+        op = dd.get("operation_id", "")
+        if r.status_code != 200 or dd.get("kind") != "investigation" or not dd.get("dispatched"):
+            out.append(f"F: the Start did not dispatch an investigation: {r.status_code} {dd}")
+            return out
+        for _ in range(300):
+            g = c.get("/api/operations/" + op).get_json() or {}
+            if g.get("status") in ("complete", "failed", "unknown"):
+                break
+            _time.sleep(0.1)
+        inv = g.get("investigation") or {}
+        if g.get("status") != "complete" or inv.get("artifact") != "imported" or not inv.get("verified") or not inv.get("deposition_id"):
+            out.append(f"F: the investigation did not complete with a verified export in custody: {g.get('status')} {inv} {g.get('error')}")
+        evs = [e for e in ops.events(op)]
+        kinds = [(e["kind"], e["stage"][:4], e["outcome"]) for e in evs]
+        if [k for k in kinds if k[0] in ("stage_intent", "stage_end")] != [("stage_intent", "POST", ""), ("stage_end", "POST", "ok"), ("stage_intent", "GET ", ""), ("stage_end", "GET ", "ok")]:
+            out.append(f"F: the boundary events are not intent/end for the POST then the GET: {kinds}")
+        posts = [x for x in mock_producer.Handler.seen[seen0:] if x.get("method") == "POST"]
+        if len(posts) != 1 or posts[0]["path"] != "/api/investigate" or "authorization" in posts[0]["headers"]:
+            out.append(f"F: the producer saw {len(posts)} POST(s), not one bare POST /api/investigate: {[(p['path'], sorted(p['headers'])) for p in posts]}")
+        if any(e["upstream_id"] == "" for e in evs if e["kind"] in ("stage_intent", "stage_end")):
+            out.append("F: a boundary event carries no upstream id")
+        dep = fed.get_deposition(inv.get("deposition_id", ""))
+        if not dep or not (dep.get("verification") or {}).get("ok"):
+            out.append("F: the deposition in custody is not verified under the pinned key")
+        if "Exemplar" in _json.dumps([e["detail"] for e in evs]):
+            out.append("F: the subject's text entered the operation's events")
+        # a repeat under the same key: the same operation
+        r2 = c.post("/api/operations", json={"prepared_id": rec["prepared_id"], "request_key": "rk_f_1"}).get_json() or {}
+        if not r2.get("repeated") or r2.get("operation_id") != op:
+            out.append(f"F: the same key did not return the same investigation: {r2}")
+        # the producer's error is a known failure; an unreachable producer is unknown
+        rec2 = ac.prepare("investigate.ethicalalt.start", {"kind": "description", "text": "Boom Industries"}, {}, server.server_gateway)
+        op2 = (c.post("/api/operations", json={"prepared_id": rec2["prepared_id"], "request_key": "rk_f_2"}).get_json() or {}).get("operation_id", "")
+        for _ in range(300):
+            g2 = c.get("/api/operations/" + op2).get_json() or {}
+            if g2.get("status") in ("complete", "failed", "unknown"):
+                break
+            _time.sleep(0.1)
+        if g2.get("status") != "failed" or "producer_error" not in (g2.get("error") or "") or (g2.get("recovery") or {}).get("dispatch_intents") != 1:
+            out.append(f"F: a producer's 500 must be a known failure with its one intent recorded: {g2.get('status')} {g2.get('error')} {g2.get('recovery')}")
+        fed.register_connector("ea-dead", "ethicalalt", "http://127.0.0.1:1", display="EthicalAlt (dead port)", dev_loopback=True, by="suite")
+        fed.set_enabled("ea-suite", False, by="suite")
+        _tm.allow_port(1)
+        rec3 = ac.prepare("investigate.ethicalalt.start", {"kind": "description", "text": "Exemplar Holdings"}, {}, server.server_gateway)
+        op3 = (c.post("/api/operations", json={"prepared_id": rec3["prepared_id"], "request_key": "rk_f_3"}).get_json() or {}).get("operation_id", "")
+        for _ in range(300):
+            g3 = c.get("/api/operations/" + op3).get_json() or {}
+            if g3.get("status") in ("complete", "failed", "unknown"):
+                break
+            _time.sleep(0.1)
+        if g3.get("status") != "unknown":
+            out.append(f"F: an unreachable producer must leave the outcome unknown: {g3.get('status')} {g3.get('error')}")
+        fed.set_enabled("ea-dead", False, by="suite")
+        fed.set_enabled("ea-suite", True, by="suite")
+        # Open Case: the credential is read through the reference; without it nothing is sent
+        oc_id = _json.loads((mock_producer.FIXTURES / "open_case.exemplar.deposition.json").read_bytes())["object"]["id"]
+        rec4 = ac.prepare("investigate.opencase.start", {"kind": "description", "text": oc_id + " @exemplar"}, {}, server.server_gateway)
+        seen1 = len(mock_producer.Handler.seen)
+        op4 = (c.post("/api/operations", json={"prepared_id": rec4["prepared_id"], "request_key": "rk_f_4"}).get_json() or {}).get("operation_id", "")
+        for _ in range(300):
+            g4 = c.get("/api/operations/" + op4).get_json() or {}
+            if g4.get("status") in ("complete", "failed", "unknown"):
+                break
+            _time.sleep(0.1)
+        posts4 = [x for x in mock_producer.Handler.seen[seen1:] if x.get("method") == "POST"]
+        if g4.get("status") != "complete" or not (g4.get("investigation") or {}).get("verified") or len(posts4) != 1 or not posts4[0]["headers"].get("authorization", "").startswith("Bearer "):
+            out.append(f"F: the Open Case start did not complete through the bearer credential: {g4.get('status')} {g4.get('error')} posts {len(posts4)}")
+        if any("open_case_sss" in _json.dumps(e["detail"]) for e in ops.events(op4)) or "open_case_sss" in _json.dumps(ops.get(op4)):
+            out.append("F: the credential's value entered the record")
+        saved = _os.environ.pop(mock_producer.OC_KEY_ENV)
+        try:
+            r5 = pr.readiness("open_case", "start")
+            if r5["available"] or r5["credential"] != "missing":
+                out.append(f"F: with the credential absent, starting must be unavailable: {r5}")
+            rec5 = ac.prepare("investigate.opencase.start", {"kind": "description", "text": oc_id + " @exemplar"}, {}, server.server_gateway)
+            seen2 = len(mock_producer.Handler.seen)
+            r6 = c.post("/api/operations", json={"prepared_id": rec5["prepared_id"], "request_key": "rk_f_5"})
+            if r6.status_code != 409 or not (r6.get_json() or {}).get("nothing_was_sent") or len(mock_producer.Handler.seen) != seen2:
+                out.append(f"F: a start without the credential was not refused before anything was sent: {r6.status_code} {r6.get_json()}")
+        finally:
+            _os.environ[mock_producer.OC_KEY_ENV] = saved
+        # the ruling route, through the gate
+        if c.post("/api/connectors/ea-suite/live-start", json={"enabled": True, "note": "suite"}).status_code != 200 or not pr.live_start_ruling(fed.get_connector("ea-suite"))["enabled"]:
+            out.append("F: the live-start ruling route does not record")
+        if c.post("/api/connectors/nonesuch/live-start", json={"enabled": True}).status_code != 404:
+            out.append("F: a ruling on an unknown connector is not a 404")
+        if server.app.test_client().get("/api/producers").status_code != 401:
+            out.append("F: /api/producers answers an unpaired device")
+    finally:
+        if srv is not None:
+            srv.shutdown()
+        state_root.apply(_SCRATCH)
+    src = (Path(__file__).resolve().parents[1] / "webapp" / "work" / "investigate.js").read_text(encoding="utf-8")
+    if "2 of 4" in src or "innerHTML" in src:
+        out.append("F: investigate.js carries a fixture constant or innerHTML")
+    return out
+
+
 def main() -> int:
     failures = FAILURES
     # block 113, hoisted: pure checks on a pure function, before anything
@@ -6378,6 +6579,7 @@ def main() -> int:
     failures.extend(_check_document_contract(server, _paired))
     failures.extend(_check_durable_operations(server, _paired))
     failures.extend(_check_work_index(server, _paired))
+    failures.extend(_check_investigation_adapters(server, _paired))
     failures.extend(_check_map_focus_routes(server, _paired))
     failures.extend(_check_moira_routes(server, _paired))
     failures.extend(_check_notebook_b(server, _paired))
