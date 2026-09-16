@@ -11,8 +11,14 @@
 // copy: the key includes the tab id.
 
 const DB_NAME = 'nikodemus.work.recovery';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'envelopes';
+// Slice J: the owner's own notes get the same protection as the draft — the
+// words are in this browser before any server acknowledgment, and a note's
+// key carries the tab that typed it, so two tabs writing the same note can
+// never overwrite each other's only copy. A separate store, because a note
+// is not a draft and the two are never folded together.
+const NOTES = 'note_envelopes';
 
 let dbPromise = null;
 
@@ -26,6 +32,11 @@ function open() {
       if (!db.objectStoreNames.contains(STORE)) {
         const st = db.createObjectStore(STORE, { keyPath: 'key' });
         st.createIndex('doc_id', 'doc_id', { unique: false });
+      }
+      if (!db.objectStoreNames.contains(NOTES)) {         // added at version 2; the v1 store is untouched
+        const nt = db.createObjectStore(NOTES, { keyPath: 'key' });
+        nt.createIndex('doc_id', 'doc_id', { unique: false });
+        nt.createIndex('scope', 'scope', { unique: false });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -92,6 +103,68 @@ export async function all() {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readonly');
     const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+
+// ---- the owner's notes ------------------------------------------------------
+// `scope` is the note's identity while it is being written: a note id once
+// the server has one, or 'new:<doc_id>' for words in the compose box that
+// have not become a note yet. The key carries the tab, so another tab's
+// unsent words are a separate row that this tab never writes over.
+
+export function noteKey(scope, tab_id) { return scope + '|' + tab_id; }
+
+export async function writeNote(envelope) {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    let tx;
+    try { tx = db.transaction(NOTES, 'readwrite'); } catch (e) { reject(e); return; }
+    const rec = { ...envelope, key: noteKey(envelope.scope, envelope.tab_id), at: new Date().toISOString() };
+    tx.objectStore(NOTES).put(rec);
+    tx.oncomplete = () => resolve(rec);
+    tx.onerror = () => reject(tx.error || new Error('the note recovery write failed'));
+    tx.onabort = () => reject(tx.error || new Error('the note recovery write was aborted'));
+  });
+}
+
+export async function readNote(scope, tab_id) {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(NOTES, 'readonly');
+    const req = tx.objectStore(NOTES).get(noteKey(scope, tab_id));
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function notesForDocument(doc_id) {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(NOTES, 'readonly');
+    const req = tx.objectStore(NOTES).index('doc_id').getAll(doc_id);
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function removeNote(scope, tab_id) {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(NOTES, 'readwrite');
+    tx.objectStore(NOTES).delete(noteKey(scope, tab_id));
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function allNotes() {
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(NOTES, 'readonly');
+    const req = tx.objectStore(NOTES).getAll();
     req.onsuccess = () => resolve(req.result || []);
     req.onerror = () => reject(req.error);
   });

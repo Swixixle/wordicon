@@ -101,6 +101,11 @@
         </div>
         <button id="results-hide" class="btn small" type="button" aria-label="Hide Results">Hide ▸</button>
       </div>
+      <!-- slice J: his own notes live here, ABOVE the tabbed body and never
+           detached. Removing a textarea from the document throws away the
+           browser's undo stack for it, so the surface that holds his words
+           is hidden between tabs rather than rebuilt. -->
+      <div id="notes-host" class="panel-body notes-host" hidden></div>
       <div id="results-body" class="panel-body"></div>
     </aside>
   </div>

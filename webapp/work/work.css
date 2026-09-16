@@ -232,3 +232,26 @@ details > summary { cursor: pointer; color: var(--write-panel-ink); font-size: 1
 .drafts-bar { margin: 8px 16px 0; padding: 8px 12px; border: 1px solid var(--bad); border-radius: 8px; background: var(--card); color: var(--text); font-size: 13px; }
 .drafts-bar .draft-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 4px 0; }
 .drafts-bar .draft-row .btn { flex-shrink: 0; }
+
+/* slice J — his own notes beside the work. A writing surface, not a card:
+   the box reads like the notebook it belongs to, and everything that says
+   whose words these are is stated in the markup, never only in colour. */
+.notes-mine { display: block; }
+.notes-host { padding-bottom: 0; border-bottom: 1px solid var(--line); }
+.note-box {
+  width: 100%; box-sizing: border-box; margin: .4rem 0 .25rem;
+  background: var(--write-bg); color: var(--write-ink);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: .55rem .6rem; font: inherit; line-height: 1.45; resize: vertical; min-height: 4.5em;
+}
+.note-box:disabled { opacity: .55; }
+.note-box:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.note-status { margin: .1rem 0 .35rem; }
+.note-acts { gap: .35rem; flex-wrap: wrap; }
+.note-list { margin-top: .5rem; }
+.note-chip { padding: .45rem .55rem; margin: .35rem 0; }
+.note-chip-head { display: block; text-align: left; width: 100%; }
+.note-chip.open .note-chip-head { font-weight: 600; }
+.note-sep { border-top: 1px solid var(--line); margin: 1rem 0 .6rem; }
+.note-mine { border-left: 3px solid var(--accent); padding-left: .5rem; }
+.note-annotate { margin-top: .35rem; }
