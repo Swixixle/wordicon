@@ -62,7 +62,8 @@ EXCLUDE_REL = {"library/search.db",  # rebuildable index, never authority
 #   new history — inherited drill rows would vouch for vaults that may not
 #   exist where it lands. vault/config.json DOES ride: it holds only the
 #   public recipient, so a restored corpus can seal again immediately.
-               "vault/lease"}        # the corpus lease file (see below)
+               "vault/lease",        # the corpus lease file (see below)
+               "operations.lock"}    # slice D: this process's dispatcher lock — a restored corpus takes its own
 QUIET_SECONDS = 15 * 60            # debounce: back up after 15 quiet min
 CEILING_SECONDS = 60 * 60          # staleness ceiling: 60 dirty minutes max
 STAGE_TIMEOUT = 300

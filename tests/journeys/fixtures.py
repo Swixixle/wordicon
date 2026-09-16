@@ -517,17 +517,42 @@ def seed_related():
     return ids
 
 
+def seed_operations():
+    """Slice D: what a dead process leaves behind, so the workspace journey
+    can see the record's honesty without killing its own server — an
+    operation reserved and claimed with its first dispatch intent persisted
+    and no outcome (the survivor must call it unknown and never send it
+    again), and one reserved but never dispatched under a legacy key with
+    no proposal (the survivor may not rebuild its request, so it is not
+    resumed and says why). Both are reconciled when the scratch server
+    starts."""
+    import operations as ops
+    if (DIR / "operations.json").exists():
+        return json.loads((DIR / "operations.json").read_text())
+    unknown, _ = ops.reserve(request_key="rk_seed_dead_intent", kind="job", op_id="job_seed_dead01", legacy_job_id="job_seed_dead01",
+                             action_id="analyze.decompose", execution={"adapter": "job/v1", "mode": "decompose", "seed": "dead after intent"})
+    ops.claim(unknown["op_id"], "a-dead-process")
+    ops.event(unknown["op_id"], "stage", stage="running", detail={"stage": "running"})
+    ops.event(unknown["op_id"], "stage_intent", stage="You are the decomposition stage of a Wordicon operation", detail={"call": "complete"})
+    never, _ = ops.reserve(request_key="legacy:job_seed_never01", kind="job", op_id="job_seed_never01", legacy_job_id="job_seed_never01",
+                           action_id="legacy:/api/jobs:forge", execution={"adapter": "job/v1", "mode": "forge", "seed": "never dispatched"})
+    ops.claim(never["op_id"], "a-dead-process")
+    ids = {"dead_after_intent": unknown["op_id"], "never_dispatched": never["op_id"]}
+    (DIR / "operations.json").write_text(json.dumps(ids))
+    return ids
+
+
 if __name__ == "__main__":
     marker = STATE / ".seeded"
     if marker.exists():
         print(json.dumps({"entrance": "already seeded", "pre_wiring": seed_pre_wiring(),
                           "epistemic": seed_epistemic(), "partial": seed_partial(),
                           "vault_states": seed_vault_states(), "map": seed_map(),
-                          "related": seed_related()}))
+                          "related": seed_related(), "operations": seed_operations()}))
     else:
         out = seed_entrance()
         marker.write_text("1")
         print(json.dumps({"entrance": out, "pre_wiring": seed_pre_wiring(),
                           "epistemic": seed_epistemic(), "partial": seed_partial(),
                           "vault_states": seed_vault_states(), "map": seed_map(),
-                          "related": seed_related()}))
+                          "related": seed_related(), "operations": seed_operations()}))

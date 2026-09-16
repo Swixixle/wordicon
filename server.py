@@ -93,6 +93,20 @@ import notebook as nbk  # noqa: E402  (the writer's notebook — stage B; the do
 import inquiry  # noqa: E402  (the Inquiry — block 111 phase 1; a question kept, branched and returnable. Zero model calls)
 import actions  # noqa: E402  (workspace-v2 slice B: the action registry — every control, one definition)
 import snapshots  # noqa: E402  (workspace-v2 slice B: immutable input snapshots)
+import operations as ops  # noqa: E402  (workspace-v2 slice D: the durable operations store; JOBS is its projection)
+
+# One dispatcher per store (slice D). The lock is taken when this process
+# first dispatches (or when it starts serving and reconciles), never on
+# import: a process that only reads the store leaves it untouched. A
+# process that cannot take the lock reserves operations and leaves them
+# queued, saying so.
+OPS_DISPATCHER = ops.DispatcherLock()
+
+
+def _dispatching() -> bool:
+    if not OPS_DISPATCHER.attempted:
+        OPS_DISPATCHER.acquire()
+    return OPS_DISPATCHER.held
 from wordicon_corpus.objects import Judgment  # noqa: E402
 
 WEBAPP_DIR = REPO_ROOT / "webapp"
@@ -532,6 +546,47 @@ def _update_job(job_id: str, **fields) -> None:
         if job_id in JOBS:
             JOBS[job_id].update(fields)
             JOBS[job_id]["updated_at"] = _now_iso()
+    _mirror_job(job_id, fields)
+
+
+def _result_ref(result) -> dict:
+    """What identifies a job's result on disk: its run's trace id, the
+    component traces, the receipt ids. Never the result's text."""
+    if not isinstance(result, dict):
+        return {}
+    ref = {}
+    if result.get("trace_id"):
+        ref["trace_id"] = result["trace_id"]
+    if result.get("receipt_id"):
+        ref["receipt_id"] = result["receipt_id"]
+    comps = [g.get("trace_id") for g in (result.get("groups") or []) if isinstance(g, dict) and g.get("trace_id")]
+    if comps:
+        ref["component_trace_ids"] = comps
+    if result.get("mode"):
+        ref["mode"] = result["mode"]
+    if result.get("partial"):
+        ref["partial"] = True
+    return ref
+
+
+def _mirror_job(job_id: str, fields: dict) -> None:
+    """The store is the authority; a job's progress, completion and failure
+    are written there as they happen (slice D). A projection that cannot be
+    mirrored is reported, never swallowed silently."""
+    try:
+        st = fields.get("status")
+        if st == "complete":
+            ops.mark(job_id, "complete", local_state="Complete", result_ref=_result_ref(fields.get("result")),
+                     detail={"result": _result_ref(fields.get("result"))})
+        elif st == "failed":
+            ops.mark(job_id, "failed", local_state="Failed", last_error=str(fields.get("error") or "")[:2000])
+        elif st is not None:
+            ops.mark(job_id, "running", local_state=f"{st}: {fields.get('progress') or ''}"[:500],
+                     event_kind="stage", detail={"stage": st, "progress": str(fields.get("progress") or "")[:300]})
+        elif "progress" in fields:
+            ops.mark(job_id, None, local_state=str(fields.get("progress") or "")[:500])
+    except Exception as e:  # noqa: BLE001
+        print(f"[operations] could not mirror job {job_id}: {e}")
 
 
 def _write_deep_record(result: dict, input_text: str) -> dict:
@@ -622,7 +677,10 @@ def _run_job(job_id: str, mode: str, input_text: str) -> None:
     with model calls inside cli — so the WHOLE body holds the shared side
     of the corpus-writers lock, and a vault staging copy waits for the job
     rather than tar a half-written receipt. Dirty is marked when the job
-    ends, so the quiet-debounce clock starts after the work, not during."""
+    ends, so the quiet-debounce clock starts after the work, not during.
+
+    Slice D: the thread runs only what the store says this process has
+    claimed; the claim happened before the thread started."""
     with vault.corpus_write():
         try:
             _run_job_body(job_id, mode, input_text)
@@ -646,6 +704,18 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
         # incident, 2026-09-01). The job still carries the plain sentence.
         traceback.print_exc()
         _update_job(job_id, status="failed", error=str(e))
+        with JOBS_LOCK:
+            notify.notify_job_complete(dict(JOBS[job_id]))
+        return
+    # slice D: the dispatch boundary on this job's own gateway instance —
+    # every stage and every HTTP attempt leaves its intent in the store
+    # before it goes; a boundary that cannot be written sends nothing
+    try:
+        ops.attach(gateway, job_id)
+        ops.mark(job_id, "running", local_state="Running", event_kind="stage", detail={"stage": "running"})
+    except Exception as e:  # noqa: BLE001
+        traceback.print_exc()
+        _update_job(job_id, status="failed", error=f"the operations store refused the dispatch boundary: {e} — nothing was sent")
         with JOBS_LOCK:
             notify.notify_job_complete(dict(JOBS[job_id]))
         return
@@ -1324,6 +1394,7 @@ def moira_models() -> dict:
 def _moira_run(reading: dict, reader: str, response_id: str = "") -> None:
     """One reader, on its own thread, holding the corpus-writers lock for its
     own write only. A lane that cannot be built is recorded as a failure."""
+    op_id = reading.get("operation_id")
     with vault.corpus_write():
         try:
             try:
@@ -1331,11 +1402,22 @@ def _moira_run(reading: dict, reader: str, response_id: str = "") -> None:
             except Exception as e:  # noqa: BLE001
                 moira.fail_reader(reading, reader, f"no model lane: {e}", response_id)
                 return
+            if op_id:
+                # slice D: the reader's one call leaves its intent in the store first
+                ops.attach(gw, op_id)
             moira.run_reader(reading, reader, gw, response_id)
         except Exception:  # noqa: BLE001 — a reader's failure is its own file, never the run's
             traceback.print_exc()
         finally:
             vault.mark_dirty()
+            if op_id:
+                try:
+                    v = moira.view(reading["reading_id"])
+                    if v is not None and v.get("pending") == 0:
+                        ops.mark(op_id, "complete", local_state="Every reader answered or failed",
+                                 producer_state={"statuses": {r.get("reader"): r.get("status") for r in v.get("readers", [])}})
+                except Exception as e:  # noqa: BLE001
+                    print(f"[operations] could not mark reading {op_id}: {e}")
 
 
 def _moira_dispatch(reading: dict, readers: "list[str] | None" = None, response_ids: "dict | None" = None) -> None:
@@ -3405,10 +3487,38 @@ def api_create_job():
     return _create_job_from(data)
 
 
-def _create_job_from(data: dict):
+def _execution_of(data: dict, mode: str, input_text: str) -> dict:
+    """The execution request as the store fingerprints it: what runs, on
+    what (by hash, never the text), with which options, through which lane
+    and adapter. A legacy Start carries no proposal, so its meaning is the
+    payload's own."""
+    lane = {}
+    try:
+        gw = server_gateway()
+        lane = {"lane": gw.name, "model": getattr(gw, "model", None) or gw.name}
+    except Exception as e:  # noqa: BLE001
+        lane = {"lane": "unavailable", "error": str(e)[:120]}
+    opts = {k: data.get(k) for k in ("gesture", "wordify", "parent_trace_id", "via", "parent_door_id", "avoid_titles", "prior_attempts",
+                                     "retry_anchor", "retry_stance", "retry_match_text", "only_languages", "destination", "shape", "provenance")
+            if data.get(k) not in (None, "", [], {})}
+    orig = data.get("original") or {}
+    return {"adapter": "job/v1", "mode": mode, "input_sha256": hashlib.sha256((input_text or "").encode("utf-8")).hexdigest(),
+            "original": {k: (hashlib.sha256(str(orig.get(k) or "").encode("utf-8")).hexdigest()[:16]) for k in ("title", "definition", "concept_id") if orig.get(k)},
+            "related_entry": {k: v for k, v in (data.get("related_entry") or {}).items() if k != "passage"} if isinstance(data.get("related_entry"), dict) else None,
+            "options": opts, **lane}
+
+
+def _create_job_from(data: dict, op_id: str | None = None):
     """The job route's body, callable without a request of its own (slice
     B: a Start built from a frozen proposal goes through the same path as
-    the legacy page, so there is one dispatch implementation)."""
+    the legacy page, so there is one dispatch implementation).
+
+    Slice D: every job is an operation in the store first. A workspace
+    Start reserved its row already and passes its id; a legacy Start is
+    reserved here under a key of its own (one press, one operation). The
+    job runs only after the store's queued→claimed transition, by this
+    process's dispatcher; without the dispatcher lock it stays queued and
+    the reply says so."""
     mode = data.get("mode")
     if mode not in ("auto", "deep", "forge", "crack", "decompose", "riff", "play", "revise",
                     "sprout", "refract", "verify", "archetype", "recheck", "etymon"):
@@ -3617,7 +3727,7 @@ def _create_job_from(data: dict):
                 "redundancy": str(a.get("redundancy", ""))[:400],
             })
 
-    job_id = _new_job_id()
+    job_id = op_id or _new_job_id()
     with JOBS_LOCK:
         JOBS[job_id] = {
             "id": job_id, "mode": mode, "gesture": gesture, "input_text": input_text,
@@ -3650,9 +3760,34 @@ def _create_job_from(data: dict):
                      destination=str(data.get("destination") or "")[:32], shape=str(data.get("shape") or "")[:16],
                      suggested=str(data.get("suggested") or "")[:32],
                      speech=_speech_cited(data.get("speech")))   # block 106: the transcription's identity rides only with provenance spoken
+    # slice D: the store's row, then the atomic claim, then the thread
+    if op_id is None:
+        try:
+            ops.reserve(request_key="legacy:" + job_id, kind="job", op_id=job_id, legacy_job_id=job_id,
+                        action_id="legacy:/api/jobs:" + str(mode), execution=_execution_of(data, mode, input_text),
+                        config={"route": "/api/jobs"})
+        except ops.OperationsError as e:
+            with JOBS_LOCK:
+                JOBS.pop(job_id, None)
+            return jsonify({"error": f"the operations store refused the reservation: {e}", "nothing_was_sent": True}), 500
+    return _dispatch_job(job_id, mode, input_text)
+
+
+def _dispatch_job(job_id: str, mode: str, input_text: str):
+    """queued → claimed by this process, then the thread. A process without
+    the dispatcher lock leaves the operation queued and says so; a row
+    another process claimed is not run twice."""
+    if not _dispatching():
+        _update_job(job_id, status="queued", progress="Queued — this process does not hold the dispatcher lock: " + OPS_DISPATCHER.why)
+        return jsonify({"job_id": job_id, "status": "queued", "dispatched": False,
+                        "note": "reserved, not dispatched: " + OPS_DISPATCHER.why})
+    if not ops.claim(job_id, OPS_DISPATCHER.token):
+        row = ops.get(job_id) or {}
+        return jsonify({"job_id": job_id, "status": row.get("status") or "unknown", "dispatched": False,
+                        "note": "not claimed: the operation is not queued in the store"})
     thread = threading.Thread(target=_run_job, args=(job_id, mode, input_text), daemon=True)
     thread.start()
-    return jsonify({"job_id": job_id, "status": "queued"})
+    return jsonify({"job_id": job_id, "status": "queued", "dispatched": True})
 
 
 # ---- workspace-v2 (slice B): the shell, the registry, the frozen proposal ---
@@ -3708,15 +3843,100 @@ def api_actions_prepare():
     return jsonify(rec)
 
 
-_OPERATION_KEYS: dict[str, str] = {}   # request_key -> operation id (slice B; slice D makes this durable)
+# ---- workspace-v2 (slice D): operations are durable ---------------------------
+#
+# The store (scripts/operations.py) is the authority. A Start reserves a row
+# under the client's request key with the fingerprint of the FULL execution
+# request; the same key with the same fingerprint returns the same
+# operation, the same key with a changed one is refused. The job runs only
+# after the store's queued→claimed transition by this process's dispatcher.
+# Reading an operation reads the store and, while the process lives, the
+# JOBS projection for progress and the shaped result; after a restart the
+# store and the result files answer alone.
+
+def _execution_for_proposal(prepared: dict, a: dict, rd: dict, adapter: str) -> dict:
+    lane = rd.get("lane") or {}
+    return {"adapter": adapter, "action_id": a["id"], "registry_version": prepared.get("registry_version"),
+            "prepared_id": prepared["prepared_id"], "snapshot_id": prepared.get("snapshot_id"),
+            "inputs": prepared.get("inputs") or {}, "mode": a.get("mode"), "handler": a.get("handler"),
+            "lane": lane.get("lane"), "model": lane.get("model"), "outbound": a.get("outbound")}
+
+
+def _shape_job_view(op: dict, job: dict | None) -> dict:
+    """What the page may say about a job operation: from the projection
+    while it lives, from the store and the result files after a restart."""
+    r = (job or {}).get("result") or {}
+    status = (job or {}).get("status") if job else op["status"]
+    if job and job.get("status") in ("complete", "failed") and op["status"] in ("complete", "failed", "unknown"):
+        status = op["status"] if op["status"] != "unknown" else job.get("status")
+    finished = status in ("complete", "done")
+    groups, titles, trace_id, partial = [], [], None, False
+    if isinstance(r, dict) and r:
+        for g in (r.get("groups") or []):
+            groups.append({"label": g.get("label", ""), "trace_id": g.get("trace_id", ""),
+                           "titles": [c.get("title", "") for c in (g.get("candidates") or []) if c.get("title")]})
+        titles = [((c.get("bff") or {}).get("title") or c.get("title") or "") for c in (r.get("candidates") or [])]
+        trace_id = r.get("trace_id")
+        partial = bool(r.get("partial"))
+    else:
+        ref = op.get("result_ref") or {}
+        trace_id = ref.get("trace_id") or ((ref.get("trace_ids") or [None])[0])
+        partial = bool(ref.get("partial"))
+        for tid in ([trace_id] if trace_id else []) + list(ref.get("component_trace_ids") or []):
+            snap = _read_result_file(tid)
+            if snap is None:
+                continue
+            t = [c.get("title", "") for c in (snap.get("candidates") or []) if c.get("title")]
+            if tid == trace_id and not snap.get("groups"):
+                titles = t
+            for g in (snap.get("groups") or []):
+                groups.append({"label": g.get("label", ""), "trace_id": g.get("trace_id", ""),
+                               "titles": [c.get("title", "") for c in (g.get("candidates") or []) if c.get("title")]})
+            if tid != trace_id:
+                groups.append({"label": snap.get("label", "") or (snap.get("source") or {}).get("title", "") or "a component", "trace_id": tid, "titles": t})
+    return {"operation_id": op["op_id"], "kind": "job", "mode": (job or {}).get("mode") or (op.get("execution") or {}).get("mode"),
+            "action_id": op.get("action_id") or (job or {}).get("action_id"), "status": status,
+            "progress": (job or {}).get("progress") or op.get("local_state"), "error": (job or {}).get("error") or op.get("last_error"),
+            "trace_id": trace_id, "groups": groups, "titles": [t for t in titles if t], "partial": partial,
+            "snapshot_id": op.get("snapshot_id") or (job or {}).get("snapshot_id"), "prepared_id": op.get("prepared_id") or (job or {}).get("prepared_id"),
+            "created_at": op.get("created_at"), "updated_at": op.get("updated_at"), "finished_at": op.get("finished_at"),
+            "result": r if (finished and r) else None, "in_process": job is not None,
+            "request_key": op.get("request_key"), "retry_parent": op.get("retry_parent"), "dispatcher": op.get("dispatcher"),
+            "events_count": op.get("events_count"), "result_ref": op.get("result_ref")}
+
+
+def _read_result_file(trace_id: str):
+    if not trace_id:
+        return None
+    path = cli.RESULTS_DIR / f"{trace_id}.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _recovery_of(op: dict) -> dict:
+    """The row of the recovery table this operation is in, from its events
+    and the result files — read, never refreshed upstream."""
+    evs = ops.events(op["op_id"])
+    a = ops.analyse(op, evs, cli.RESULTS_DIR, cli.RECEIPTS_DIR)
+    intents = sum(1 for e in evs if e["kind"] in ("stage_intent", "attempt_intent"))
+    ends = [e for e in evs if e["kind"] in ("stage_end", "attempt_end")]
+    return {**a, "dispatch_intents": intents, "dispatch_ends": len(ends),
+            "attempts_errored": sum(1 for e in ends if e["outcome"] == "error"),
+            "last_event": (evs[-1]["kind"] + (" · " + evs[-1]["stage"] if evs[-1]["stage"] else "")) if evs else "",
+            "sent_evidence": ("no dispatch was recorded — nothing was sent" if intents == 0 else
+                              f"{intents} dispatch intent{'s' if intents != 1 else ''} recorded at the boundary")}
 
 
 @app.route("/api/operations", methods=["POST"])
 def api_operations_start():
     """A Start. Revalidates the frozen proposal (it still verifies, its
-    snapshot still verifies, the action is still available) and dispatches
-    once under the client's request key: the same key returns the same
-    operation; a key reused for a different proposal is refused."""
+    snapshot still verifies, the action is still available), reserves the
+    operation in the store under the client's request key with the
+    fingerprint of the full execution request, and dispatches once: the
+    same key returns the same operation; a key reused for a different
+    request is refused."""
     data = request.get_json(silent=True) or {}
     pid = str(data.get("prepared_id") or "")
     key = str(data.get("request_key") or "")[:120]
@@ -3725,92 +3945,249 @@ def api_operations_start():
     prepared = actions.load_prepared(pid)
     if prepared is None:
         return jsonify({"error": "no such proposal, or it does not verify — prepare again"}), 404
-    with JOBS_LOCK:
-        prior = _OPERATION_KEYS.get(key)
-    if prior:
-        with JOBS_LOCK:
-            job = JOBS.get(prior)
-        if job is not None and job.get("prepared_id") != pid:
-            return jsonify({"error": "this request key was already used for a different proposal — a retry must carry the same one"}), 409
-        return jsonify({"operation_id": prior, "job_id": prior, "status": (job or {}).get("status", "unknown"),
-                        "repeated": True, "prepared_id": pid, "snapshot_id": prepared.get("snapshot_id")})
     a = actions.BY_ID.get(prepared["action_id"])
     if a is None:
         return jsonify({"error": "the proposal names an action the registry no longer has"}), 409
     rd = actions.readiness(a, server_gateway)
+    adapter = "moira/v1" if a["handler"] == "moira" else "job/v1"
+    execution = _execution_for_proposal(prepared, a, rd, adapter)
+    # a repeat of a known key answers from the store before anything else is checked
+    try:
+        prior_row, created = ops.reserve(request_key=key, kind=("reading" if a["handler"] == "moira" else "job"),
+                                         execution=execution, config={"lane": rd.get("lane") or {}},
+                                         op_id=(None if a["handler"] == "moira" else _new_job_id()),
+                                         action_id=a["id"], registry_version=str(prepared.get("registry_version") or ""),
+                                         prepared_id=pid, snapshot_id=str(prepared.get("snapshot_id") or ""))
+    except ops.OperationsError as e:
+        return jsonify({"error": str(e), "existing": (e.existing or {}).get("op_id"), "nothing_was_sent": True}), e.status
+    if not created:
+        row = prior_row
+        return jsonify({"operation_id": row["op_id"], "job_id": row.get("legacy_job_id") or row["op_id"], "kind": row["kind"],
+                        "status": row["status"], "repeated": True, "prepared_id": row["prepared_id"], "snapshot_id": row["snapshot_id"],
+                        "reading_id": (row.get("result_ref") or {}).get("reading_id")})
+    op_id = prior_row["op_id"]
     if not rd["available"]:
+        if a["handler"] != "moira":
+            _release_job_id(op_id)
+        ops.mark(op_id, "failed", last_error=f"not available at Start: {rd['reason']}", local_state="Refused before dispatch")
         return jsonify({"error": f"{a['label']} is not available now: {rd['reason']}", "not_started": True,
-                        "nothing_was_sent": True}), 409
+                        "nothing_was_sent": True, "operation_id": op_id}), 409
     if a["handler"] == "moira":
         snap = snapshots.load(prepared["snapshot_id"]) if prepared.get("snapshot_id") else None
         if snap is None or not snapshots.verify(snap):
-            return jsonify({"error": "the proposal's snapshot is missing or does not verify; prepare again"}), 409
+            ops.mark(op_id, "failed", last_error="the snapshot is missing or does not verify", local_state="Refused before dispatch")
+            return jsonify({"error": "the proposal's snapshot is missing or does not verify; prepare again", "nothing_was_sent": True}), 409
+        if not _dispatching():
+            return jsonify({"operation_id": op_id, "kind": "reading", "status": "queued", "dispatched": False,
+                            "note": "reserved, not dispatched: " + OPS_DISPATCHER.why, "prepared_id": pid, "snapshot_id": prepared.get("snapshot_id")})
+        if not ops.claim(op_id, OPS_DISPATCHER.token):
+            return jsonify({"error": "the operation was not queued in the store", "nothing_was_sent": True}), 409
         try:
             reading = moira.start_reading(snap["text"], prepared["inputs"].get("scope", "draft"), models=moira_models(),
                                           document={"id": snap.get("doc_id") or "", "revision": snap.get("revision"),
                                                     "seq": snap.get("seq")} if snap.get("doc_id") else None)
         except ValueError as e:
-            return jsonify({"error": str(e)}), 400
-        _moira_dispatch(reading)
+            ops.mark(op_id, "failed", last_error=str(e), local_state="Refused before dispatch")
+            return jsonify({"error": str(e), "nothing_was_sent": True}), 400
+        reading["operation_id"] = op_id
         rid = reading["reading_id"]
-        with JOBS_LOCK:
-            _OPERATION_KEYS[key] = rid
-        return jsonify({"operation_id": rid, "reading_id": rid, "kind": "reading", "status": "running",
+        ops.mark(op_id, "running", local_state="Readers dispatched", result_ref={"reading_id": rid}, event_kind="stage",
+                 detail={"stage": "readers", "reading_id": rid})
+        _moira_dispatch(reading)
+        return jsonify({"operation_id": op_id, "reading_id": rid, "kind": "reading", "status": "running",
                         "prepared_id": pid, "snapshot_id": prepared.get("snapshot_id")})
     if a["handler"] != "job":
+        _release_job_id(op_id)
+        ops.mark(op_id, "failed", last_error=f"cannot be started from here yet ({a['handler']})", local_state="Refused before dispatch")
         return jsonify({"error": f"{a['label']} cannot be started from here yet ({a['handler']})", "not_started": True,
                         "nothing_was_sent": True}), 409
     try:
         payload = actions.job_payload(prepared)
     except actions.PrepareError as e:
-        return jsonify({"error": str(e)}), e.status
-    resp = _create_job_from(payload)
+        _release_job_id(op_id)
+        ops.mark(op_id, "failed", last_error=str(e), local_state="Refused before dispatch")
+        return jsonify({"error": str(e), "nothing_was_sent": True}), e.status
+    with JOBS_LOCK:
+        JOBS[op_id]["prepared_id"] = pid
+    resp = _create_job_from(payload, op_id=op_id)
     body, status = (resp if isinstance(resp, tuple) else (resp, 200))
     out = body.get_json() if hasattr(body, "get_json") else {}
     if status != 200 or not out.get("job_id"):
+        ops.mark(op_id, "failed", last_error=str(out.get("error") or "the job was not created"), local_state="Refused before dispatch")
+        _release_job_id(op_id)
         return jsonify({"error": out.get("error") or "the job was not created", "not_started": True,
                         "nothing_was_sent": True}), (status if status >= 400 else 500)
-    jid = out["job_id"]
     with JOBS_LOCK:
-        _OPERATION_KEYS[key] = jid
-        if jid in JOBS:
-            JOBS[jid]["prepared_id"] = pid
-            JOBS[jid]["snapshot_id"] = prepared.get("snapshot_id")
-            JOBS[jid]["action_id"] = prepared["action_id"]
-    return jsonify({"operation_id": jid, "job_id": jid, "kind": "job", "status": "queued",
+        if op_id in JOBS:
+            JOBS[op_id]["prepared_id"] = pid
+            JOBS[op_id]["snapshot_id"] = prepared.get("snapshot_id")
+            JOBS[op_id]["action_id"] = prepared["action_id"]
+    return jsonify({"operation_id": op_id, "job_id": op_id, "kind": "job", "status": out.get("status", "queued"),
+                    "dispatched": bool(out.get("dispatched")), "note": out.get("note"),
                     "prepared_id": pid, "snapshot_id": prepared.get("snapshot_id")})
+
+
+@app.route("/api/operations")
+def api_operations_list():
+    """The store's recent operations — local state only, so a page that
+    reopens after a restart lists what was running without memory."""
+    try:
+        out = ops.list_ops(limit=int(request.args.get("limit") or 30), cursor=str(request.args.get("cursor") or ""),
+                           status=request.args.get("status") or None, kind=request.args.get("kind") or None)
+    except (ops.OperationsError, ValueError) as e:
+        return jsonify({"error": str(e)}), 400
+    items = []
+    for op in out["operations"]:
+        with JOBS_LOCK:
+            job = JOBS.get(op["op_id"])
+        view = _shape_job_view(op, dict(job) if job else None) if op["kind"] == "job" else \
+            {"operation_id": op["op_id"], "kind": op["kind"], "status": op["status"], "action_id": op.get("action_id"),
+             "created_at": op["created_at"], "updated_at": op["updated_at"], "result_ref": op.get("result_ref"),
+             "prepared_id": op.get("prepared_id"), "snapshot_id": op.get("snapshot_id"), "progress": op.get("local_state"),
+             "reading_id": (op.get("result_ref") or {}).get("reading_id")}
+        view.pop("result", None)
+        items.append(view)
+    return jsonify({"operations": items, "total": out["total"], "population": out["population"], "next_cursor": out["next_cursor"],
+                    "counts": ops.counts(), "dispatcher": OPS_DISPATCHER.status()})
 
 
 @app.route("/api/operations/<op_id>")
 def api_operation_get(op_id):
-    """Local state only: reading it refreshes nothing upstream."""
-    if op_id.startswith("job_"):
-        with JOBS_LOCK:
-            job = JOBS.get(op_id)
-        if job is None:
-            return jsonify({"error": "no operation with that id in this process — the server may have restarted; "
-                                     "slice D makes the ledger durable", "outcome": "unknown"}), 404
-        r = job.get("result") or {}
-        finished = job.get("status") in ("complete", "done")
-        # what a card may say: the run's own trace, or each group's (a
-        # decompose has one per concept found), and the titles that came back
-        groups = []
-        for g in (r.get("groups") or []) if isinstance(r, dict) else []:
-            groups.append({"label": g.get("label", ""), "trace_id": g.get("trace_id", ""),
-                           "titles": [c.get("title", "") for c in (g.get("candidates") or []) if c.get("title")]})
-        titles = [((c.get("bff") or {}).get("title") or c.get("title") or "") for c in (r.get("candidates") or [])] if isinstance(r, dict) else []
-        return jsonify({"operation_id": op_id, "kind": "job", "mode": job.get("mode"), "action_id": job.get("action_id"),
-                        "status": job.get("status"), "progress": job.get("progress"), "error": job.get("error"),
-                        "trace_id": r.get("trace_id") if isinstance(r, dict) else None,
-                        "groups": groups, "titles": [t for t in titles if t], "partial": bool(r.get("partial")) if isinstance(r, dict) else False,
-                        "snapshot_id": job.get("snapshot_id"), "prepared_id": job.get("prepared_id"),
-                        "created_at": job.get("created_at"), "updated_at": job.get("updated_at"),
-                        "result": r if finished else None})
-    v = moira.view(op_id)
-    if v is not None:
-        return jsonify({"operation_id": op_id, "kind": "reading", "reading": v,
-                        "status": v.get("status") or ("done" if all(d.get("status") == "done" for d in v.get("readers", [])) else "running")})
-    return jsonify({"error": "no operation with that id"}), 404
+    """Local state only: reading it refreshes nothing upstream. The store
+    answers; the projection adds progress and the shaped result while the
+    process lives; the result files answer after a restart."""
+    op = ops.get(op_id)
+    if op is None:
+        v = moira.view(op_id)
+        if v is not None:   # a reading started before the store existed
+            return jsonify({"operation_id": op_id, "kind": "reading", "reading": v,
+                            "status": v.get("status") or ("done" if all(d.get("status") == "done" for d in v.get("readers", [])) else "running")})
+        return jsonify({"error": "no operation with that id in this store", "outcome": "unknown"}), 404
+    if op["kind"] == "reading":
+        rid = (op.get("result_ref") or {}).get("reading_id")
+        v = moira.view(rid) if rid else None
+        if v is not None and op["status"] in ("running", "claimed") and v.get("pending") == 0:
+            ops.mark(op["op_id"], "complete", local_state="Every reader answered or failed",
+                     producer_state={"statuses": {r.get("reader"): r.get("status") for r in v.get("readers", [])}})
+            op = ops.get(op["op_id"])
+        return jsonify({"operation_id": op["op_id"], "kind": "reading", "reading": v, "reading_id": rid, "status": op["status"],
+                        "created_at": op["created_at"], "finished_at": op.get("finished_at"), "prepared_id": op.get("prepared_id"),
+                        "snapshot_id": op.get("snapshot_id"), "recovery": _recovery_of(op)})
+    with JOBS_LOCK:
+        job = JOBS.get(op["op_id"])
+        job = dict(job) if job else None
+    view = _shape_job_view(op, job)
+    view["recovery"] = _recovery_of(op)
+    return jsonify(view)
+
+
+@app.route("/api/operations/<op_id>/events")
+def api_operation_events(op_id):
+    op = ops.get(op_id)
+    if op is None:
+        return jsonify({"error": "no operation with that id"}), 404
+    return jsonify({"operation_id": op["op_id"], "events": ops.events(op["op_id"]), "population": "every event of this operation, in order"})
+
+
+@app.route("/api/operations/<op_id>/recover", methods=["POST"])
+def api_operation_recover(op_id):
+    """Explicit, bounded recovery: the record and the result files are read
+    again and the operation is placed in its row of the recovery table.
+    Nothing is sent; a result that exists is linked; an outcome that is
+    unknown stays unknown, said so."""
+    op = ops.get(op_id)
+    if op is None:
+        return jsonify({"error": "no operation with that id"}), 404
+    if op["kind"] == "reading":
+        rid = (op.get("result_ref") or {}).get("reading_id")
+        v = moira.view(rid) if rid else None
+        if v is not None and v.get("pending") == 0 and op["status"] != "complete":
+            ops.mark(op["op_id"], "complete", local_state="Every reader answered or failed (recovered)", event_kind="recover", detail={"found": "reading complete"})
+        else:
+            ops.event(op["op_id"], "recover", detail={"found": "reading pending" if v else "no reading record"})
+        op = ops.get(op["op_id"])
+        return jsonify({"operation_id": op["op_id"], "status": op["status"], "recovery": _recovery_of(op), "sent": False})
+    rec = _recovery_of(op)
+    with JOBS_LOCK:
+        live = op["op_id"] in JOBS and (JOBS[op["op_id"]].get("status") not in ("complete", "failed"))
+    if live:
+        ops.event(op["op_id"], "recover", detail={"found": "running in this process", "case": rec["case"]})
+        return jsonify({"operation_id": op["op_id"], "status": op["status"], "recovery": rec, "sent": False, "note": "still running in this process"})
+    if op["status"] in ("claimed", "running", "unknown") and rec["case"] in ("result_persisted_link_missing", "component_persisted") and rec.get("persisted"):
+        ops.mark(op["op_id"], "complete", local_state="Reconciled from the persisted result", result_ref={"trace_ids": rec["persisted"], "reconciled": True},
+                 event_kind="recover", detail={"found": rec["persisted"], "case": rec["case"]})
+    elif op["status"] in ("claimed", "running") and rec["case"] == "never_dispatched":
+        ops.mark(op["op_id"], "queued", local_state="Queued again — nothing had been sent", event_kind="recover", detail={"case": rec["case"]})
+    elif op["status"] in ("claimed", "running"):
+        ops.mark(op["op_id"], "unknown", last_error=rec["why"], local_state="Interrupted", event_kind="recover", detail={"case": rec["case"]})
+    else:
+        ops.event(op["op_id"], "recover", detail={"case": rec["case"], "changed": False})
+    op = ops.get(op["op_id"])
+    return jsonify({"operation_id": op["op_id"], "status": op["status"], "recovery": _recovery_of(op), "sent": False})
+
+
+@app.route("/api/operations/<op_id>/attempts", methods=["POST"])
+def api_operation_attempt(op_id):
+    """Start another attempt: a NEW operation under a new request key,
+    linked to this one as its retry parent, revalidated against the
+    registry as it stands now (a changed lane or action version is a
+    refusal, not a silent substitution), with the cost said before."""
+    data = request.get_json(silent=True) or {}
+    key = str(data.get("request_key") or "")[:120]
+    if not key:
+        return jsonify({"error": "another attempt needs its own request_key"}), 400
+    op = ops.get(op_id)
+    if op is None:
+        return jsonify({"error": "no operation with that id"}), 404
+    if op["status"] in ("queued", "claimed", "running"):
+        return jsonify({"error": "this operation is still queued or running; another attempt would be a second run of the same request", "nothing_was_sent": True}), 409
+    if not op.get("prepared_id"):
+        return jsonify({"error": "this operation was not started from a proposal; start it again from where it was started", "nothing_was_sent": True}), 409
+    prepared = actions.load_prepared(op["prepared_id"])
+    if prepared is None:
+        return jsonify({"error": "the proposal this operation was started from no longer verifies — prepare again", "nothing_was_sent": True}), 409
+    a = actions.BY_ID.get(prepared["action_id"])
+    if a is None:
+        return jsonify({"error": "the action is no longer in the registry", "nothing_was_sent": True}), 409
+    rd = actions.readiness(a, server_gateway)
+    if not rd["available"]:
+        return jsonify({"error": f"{a['label']} is not available now: {rd['reason']}", "nothing_was_sent": True}), 409
+    adapter = "moira/v1" if a["handler"] == "moira" else "job/v1"
+    execution = _execution_for_proposal(prepared, a, rd, adapter)
+    old_exec = op.get("execution") or {}
+    changed = [k for k in ("lane", "model", "registry_version", "adapter", "action_id") if old_exec.get(k) != execution.get(k)]
+    if changed and not data.get("accept_changed_plan"):
+        return jsonify({"error": "the plan changed since the first attempt (" + ", ".join(changed) + "); confirm the new plan to start another attempt",
+                        "changed": {k: {"was": old_exec.get(k), "now": execution.get(k)} for k in changed}, "nothing_was_sent": True}), 409
+    if a["handler"] != "job":
+        return jsonify({"error": "another attempt of a reading is started from Get feedback again", "nothing_was_sent": True}), 409
+    try:
+        new_id = _new_job_id()
+        row, created = ops.reserve(request_key=key, kind="job", execution=execution, config={"lane": rd.get("lane") or {}}, op_id=new_id,
+                                   action_id=a["id"], registry_version=str(prepared.get("registry_version") or ""),
+                                   prepared_id=op["prepared_id"], snapshot_id=op.get("snapshot_id") or "", retry_parent=op["op_id"])
+    except ops.OperationsError as e:
+        _release_job_id(new_id)
+        return jsonify({"error": str(e), "nothing_was_sent": True}), e.status
+    if not created:
+        _release_job_id(new_id)
+        return jsonify({"operation_id": row["op_id"], "status": row["status"], "repeated": True, "retry_parent": op["op_id"]})
+    payload = actions.job_payload(prepared)
+    with JOBS_LOCK:
+        JOBS[new_id]["prepared_id"] = op["prepared_id"]
+    resp = _create_job_from(payload, op_id=new_id)
+    body, status = (resp if isinstance(resp, tuple) else (resp, 200))
+    out = body.get_json() if hasattr(body, "get_json") else {}
+    if status != 200 or not out.get("job_id"):
+        ops.mark(new_id, "failed", last_error=str(out.get("error") or "the job was not created"), local_state="Refused before dispatch")
+        _release_job_id(new_id)
+        return jsonify({"error": out.get("error") or "the job was not created", "nothing_was_sent": True}), (status if status >= 400 else 500)
+    with JOBS_LOCK:
+        if new_id in JOBS:
+            JOBS[new_id]["prepared_id"] = op["prepared_id"]; JOBS[new_id]["snapshot_id"] = op.get("snapshot_id"); JOBS[new_id]["action_id"] = a["id"]
+    return jsonify({"operation_id": new_id, "job_id": new_id, "kind": "job", "status": out.get("status", "queued"), "dispatched": bool(out.get("dispatched")),
+                    "retry_parent": op["op_id"], "prepared_id": op["prepared_id"], "snapshot_id": op.get("snapshot_id"),
+                    "cost": "this attempt sends the frozen text again; the earlier attempt's outcome is " + op["status"] + " and stays on record"})
 
 
 @app.route("/api/jobs/<job_id>")
@@ -3818,7 +4195,25 @@ def api_get_job(job_id):
     with JOBS_LOCK:
         job = JOBS.get(job_id)
         if job is None:
-            return jsonify({"error": "no job with that id — the server may have restarted since it was submitted"}), 404
+            # slice D: the store outlives the process. A job this process
+            # does not hold is answered from the record — complete with its
+            # result's id, failed with its reason, or honestly unknown — and
+            # the legacy page's poller sees a terminal status, never a 404
+            # that reads as "gone" for a run that may have finished.
+            op = ops.get(job_id)
+            if op is None:
+                return jsonify({"error": "no job with that id — the server may have restarted since it was submitted"}), 404
+            view = _shape_job_view(op, None)
+            legacy_status = {"complete": "complete", "failed": "failed", "unknown": "failed", "queued": "queued",
+                             "claimed": "queued", "running": "running"}.get(op["status"], "failed")
+            err = op.get("last_error")
+            if op["status"] == "unknown":
+                err = "Outcome unknown: the server was interrupted after this run may have been sent; it was not sent again. " + (op.get("last_error") or "")
+            elif op["status"] == "complete" and not view.get("result"):
+                err = None
+            return jsonify({"id": job_id, "mode": view.get("mode"), "status": legacy_status, "progress": view.get("progress"),
+                            "result": view.get("result"), "error": err, "trace_id": view.get("trace_id"),
+                            "from_store": True, "created_at": op["created_at"], "updated_at": op["updated_at"]})
         shaped = dict(job)
         # Server-clock-only elapsed time for the current step — computed at
         # read time so the phone never has to compare its clock to ours.
@@ -5512,6 +5907,74 @@ def api_library():
                     "orphan_corrections": bench.get("orphan_corrections") or []})
 
 
+def _ops_startup() -> dict:
+    """When a process starts SERVING this root (server.py's main, the
+    journeys' serve.py) — never on a mere import (slice D): the operations a
+    dead process left claimed or running are placed in their row of the
+    recovery table from the record; those provably never dispatched go back
+    to queued and, when this process holds the dispatcher, are resumed under
+    their unchanged plan (the proposal is reloaded and its execution
+    fingerprint must equal the reserved one). Nothing whose dispatch was
+    recorded is sent again."""
+    dispatching = _dispatching()
+    summary = {"reconciled": [], "resumed": [], "left_queued": [], "dispatching": dispatching}
+    try:
+        summary["reconciled"] = ops.reconcile(OPS_DISPATCHER.token if dispatching else "no-dispatcher", cli.RESULTS_DIR, cli.RECEIPTS_DIR)
+    except Exception as e:  # noqa: BLE001
+        print(f"[operations] startup reconciliation failed: {e}")
+        return summary
+    if not dispatching:
+        summary["left_queued"] = [o["op_id"] for o in ops.queued()]
+        return summary
+    for op in ops.queued("job"):
+        pid = op.get("prepared_id")
+        prepared = actions.load_prepared(pid) if pid else None
+        if prepared is None:
+            # a legacy Start (no proposal) or a proposal that no longer verifies: the
+            # request cannot be rebuilt exactly, so it is not resumed
+            ops.mark(op["op_id"], "failed", last_error="interrupted before dispatch and not resumable: no verifying proposal to rebuild the request from",
+                     local_state="Not resumed")
+            continue
+        a = actions.BY_ID.get(prepared["action_id"])
+        if a is None or a["handler"] != "job":
+            ops.mark(op["op_id"], "failed", last_error="interrupted before dispatch and not resumable: the action is not a job the registry holds", local_state="Not resumed")
+            continue
+        rd = actions.readiness(a, server_gateway)
+        execution = _execution_for_proposal(prepared, a, rd, "job/v1")
+        if ops.fingerprint(execution) != op["fingerprint"] or not rd["available"]:
+            ops.mark(op["op_id"], "failed", last_error="interrupted before dispatch and not resumed: the plan changed since it was reserved (lane, model, registry or action) — start another attempt",
+                     local_state="Not resumed")
+            continue
+        try:
+            payload = actions.job_payload(prepared)
+        except actions.PrepareError as e:
+            ops.mark(op["op_id"], "failed", last_error=f"not resumable: {e}", local_state="Not resumed")
+            continue
+        with JOBS_LOCK:
+            JOBS[op["op_id"]] = {"id": op["op_id"], "status": "reserved", "created_at": _now_iso(), "prepared_id": pid}
+        ops.event(op["op_id"], "resumed", detail={"by": OPS_DISPATCHER.token})
+        with app.app_context():   # the job route's body answers with jsonify; there is no request here
+            resp = _create_job_from(payload, op_id=op["op_id"])
+            body, status = (resp if isinstance(resp, tuple) else (resp, 200))
+            out = body.get_json() if hasattr(body, "get_json") else {}
+        if status == 200 and out.get("dispatched"):
+            with JOBS_LOCK:
+                if op["op_id"] in JOBS:
+                    JOBS[op["op_id"]]["prepared_id"] = pid; JOBS[op["op_id"]]["snapshot_id"] = op.get("snapshot_id"); JOBS[op["op_id"]]["action_id"] = a["id"]
+            summary["resumed"].append(op["op_id"])
+        else:
+            ops.mark(op["op_id"], "failed", last_error="not resumed: " + str(out.get("error") or out.get("note") or status), local_state="Not resumed")
+    return summary
+
+
+def ops_startup_report() -> dict:
+    """The serving process's startup reconciliation, said out loud."""
+    summary = _ops_startup()
+    print(f"[operations] startup: reconciled {len(summary['reconciled'])}, resumed {len(summary['resumed'])}, "
+          f"left queued {len(summary['left_queued'])} (dispatching: {summary['dispatching']})")
+    return summary
+
+
 if __name__ == "__main__":
     import sys as _sys
     if "--rotate-secret" in _sys.argv:
@@ -5530,6 +5993,7 @@ if __name__ == "__main__":
               "Two writers on one corpus is how backups go silently "
               "wrong. Stop that process first.")
         raise SystemExit(3)
+    ops_startup_report()   # slice D: what a dead process left is reconciled before anything is served
     host = gate.bind_host()
     gate.ensure_master()
     code = gate.new_pairing_code()

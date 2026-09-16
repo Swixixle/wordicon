@@ -2851,13 +2851,25 @@ class Gateway:
     RETRY_AFTER_BUDGET_S = 30.0
     ATTEMPTS = 3
     BACKOFF_BASE_S = 3.0
+    # workspace-v2 slice D: the operations store's boundary. When an
+    # operation is attached (operations.attach), every real HTTP attempt
+    # leaves a dispatch INTENT in the store before it goes and its outcome
+    # after; a boundary that cannot be persisted does not dispatch.
+    dispatch_hook = None
 
     def _record_attempt(self, *, stage, attempt, started_at, t0, t1,
                         outcome, exc=None, usage=None, outcome_detail="") -> None:
         ledger = getattr(self, "attempts", None)
+        label = _current_label(ledger) if isinstance(ledger, AttemptLedger) else {}
+        hook = getattr(self, "dispatch_hook", None)
+        if hook is not None:
+            hook("attempt_end", stage=label.get("stage") or stage, attempt=attempt, outcome=outcome,
+                 exception=((getattr(exc, "cause_class", "") or type(exc).__name__) if exc is not None else ""),
+                 status_code=_status_code_of(exc), duration_s=round(t1 - t0, 3), outcome_detail=outcome_detail,
+                 retry_after_s=_retry_after_of(exc), run_id=label.get("run_id") or (ledger.run_id if isinstance(ledger, AttemptLedger) else ""),
+                 component=label.get("component") or "")
         if not isinstance(ledger, AttemptLedger):
             return
-        label = _current_label(ledger)
         ledger.record({
             "run_id": label.get("run_id") or ledger.run_id,
             "component": label.get("component") or "",
@@ -2905,6 +2917,12 @@ class Gateway:
             attempt += 1
             started_at = _now_precise()
             t0 = time.monotonic()
+            hook = getattr(self, "dispatch_hook", None)
+            if hook is not None:
+                # the intent is on disk BEFORE the attempt; if it cannot be
+                # written, nothing is sent (an untracked attempt is the one
+                # kind of attempt the record may never contain)
+                hook("attempt_intent", stage=stage, attempt=attempt, started_at=started_at)
             try:
                 response = make_call()
             except rate_limited as e:
@@ -6212,15 +6230,30 @@ def mint_trace_id(input_text: str, prefix: str = "trace_cli_") -> str:
 
 
 def _write_exclusive(path: Path, text: str, what: str) -> Path:
+    """Created once, whole: the bytes go to a temporary file beside the
+    target and are then LINKED to the stable name, which is atomic and
+    fails if the name exists — so a crash mid-write leaves no half record
+    under the stable id (slice D), and a second writer of the same id
+    still collides instead of overwriting."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{os.urandom(4).hex()}.tmp")
     try:
-        with open(path, "x", encoding="utf-8") as f:
+        with open(tmp, "x", encoding="utf-8") as f:
             f.write(text)
-    except FileExistsError:
-        raise RunRecordCollision(
-            f"{what} {path.name} already exists in the store; refusing to overwrite it — "
-            "the record that was there is untouched, and this run's result was not written: "
-            "a job that hits this is marked failed and its result is lost with it") from None
+            f.flush()
+            os.fsync(f.fileno())
+        try:
+            os.link(tmp, path)
+        except FileExistsError:
+            raise RunRecordCollision(
+                f"{what} {path.name} already exists in the store; refusing to overwrite it — "
+                "the record that was there is untouched, and this run's result was not written: "
+                "a job that hits this is marked failed and its result is lost with it") from None
+    finally:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
     return path
 
 

@@ -88,17 +88,21 @@ const path = require('path');
   await page.click('button[data-action="analyze.decompose"]');
   await page.waitForSelector('#proposal-card');
   ok(/the whole draft/.test(await page.textContent('#proposal-card')), 'with nothing selected the scope is the whole draft');
+  const knownOps = await page.evaluate(() => Array.from(window.__work.results.tracked.keys()));
   await page.click('#proposal-card .btn.primary');
+  // the operation started HERE is the one the Activity list did not hold before the press (the list also holds the record's earlier operations, slice D)
+  await page.waitForFunction(known => Array.from(window.__work.results.tracked.keys()).some(k => !known.includes(k)), knownOps, { timeout: 10000, polling: 100 });
+  const opId = await page.evaluate(known => Array.from(window.__work.results.tracked.keys()).find(k => !known.includes(k)), knownOps);
   try {
-    await page.waitForFunction(() => /(^|[^A-Za-z])Done([^A-Za-z]|$)/.test(document.getElementById('results-body').textContent) || document.querySelector('#results-body .state.good') !== null, null, { timeout: 60000, polling: 200 });
+    await page.waitForFunction(id => { const t = window.__work.results.tracked.get(id); return t && ['complete', 'done', 'failed'].includes(t.status); }, opId, { timeout: 60000, polling: 200 });
   } catch (e) {
     ok(false, 'the run did not reach Done in 60s; errors so far: ' + JSON.stringify(errs) + ' tracked: ' + JSON.stringify(await page.evaluate(() => Array.from(window.__work.results.tracked.values()).map(t => [t.id, t.status, t.last && t.last.status]))));
   }
+  await page.waitForTimeout(300);
   const card = await page.textContent('#results-body');
   ok(/From this draft, revision \d+/.test(card), 'the result names its origin: ' + (card.match(/From this draft, revision \d+/) || [''])[0]);
   ok(/hasn’t changed since/.test(card), 'and says the draft has not changed since');
   ok(/Open full result/.test(card), 'and offers the full result');
-  const opId = await page.evaluate(() => Array.from(window.__work.results.tracked.keys())[0]);
   const op = await (await page.request.get(BASE + '/api/operations/' + opId)).json();
   ok(op.status === 'complete' && (op.groups || []).length > 0, 'the operation completed through the one job path with groups: ' + (op.groups || []).length);
   ok(typeof op.snapshot_id === 'string' && op.snapshot_id.startsWith('snap_'), 'the operation links to its immutable snapshot');
@@ -158,7 +162,7 @@ const path = require('path');
   await page.waitForSelector('#proposal-card');
   ok(/3 \(one per reader\)/.test(await page.textContent('#proposal-card')), 'the readers proposal says three calls, one per reader');
   await page.click('#proposal-card .btn.primary');
-  await page.waitForFunction(() => /readers answered/.test(document.getElementById('results-body').textContent), null, { timeout: 30000, polling: 200 });
+  await page.waitForFunction(() => /3 of 3 readers answered/.test(document.getElementById('results-body').textContent), null, { timeout: 30000, polling: 200 });
   const reading = await page.textContent('#results-body');
   ok(/3 of 3 readers answered/.test(reading), 'all three readers answered: ' + (reading.match(/\d of \d readers answered/) || [''])[0]);
   ok(/readers answer separately|nothing here combines them/.test(reading), 'and nothing combines them');
@@ -223,6 +227,39 @@ const path = require('path');
   await page.waitForTimeout(800);
   ok(await page.evaluate(() => window.__work.session.id) === docId, 'a reload reopens the same document');
   ok(/^He threw it once/.test(await page.evaluate(() => window.__work.editor.getText())), 'with its text');
+
+  // 12. the record outlives the page (slice D): after the reload the Activity list is read from the
+  // store — the run made here, and what a dead process left behind — and restoring a page starts nothing
+  const postsBefore12 = posts.length;
+  await page.waitForTimeout(600);
+  await page.click('#results-toggle');
+  if ((await page.getAttribute('#shell', 'data-results')) !== 'open') await page.click('#results-toggle');
+  await page.waitForTimeout(400);
+  const act = await page.textContent('#results-body');
+  ok(/Analyze this passage/.test(act) && /Done/.test(act), 'after the reload the run made here is listed from the record, Done');
+  ok(!posts.slice(postsBefore12).some(p => /\/api\/(jobs|operations)$/.test(p)), 'restoring the page started nothing: ' + JSON.stringify(posts.slice(postsBefore12)));
+  const seeded = JSON.parse(fs.readFileSync(path.join(DIR, 'operations.json'), 'utf8'));
+  const dead = await (await page.request.get(BASE + '/api/operations/' + seeded.dead_after_intent)).json();
+  ok(dead.status === 'unknown' && dead.recovery && dead.recovery.case === 'delivery_unknown' && dead.recovery.dispatch_intents === 1, 'an operation a dead process left after its first dispatch intent is unknown, by the record: ' + dead.recovery.case);
+  const never = await (await page.request.get(BASE + '/api/operations/' + seeded.never_dispatched)).json();
+  ok(never.status === 'failed' && /not resumable/.test(never.error || '') && never.recovery.dispatch_intents === 0, 'one never dispatched and without a proposal is not resumed, and says why: ' + (never.error || '').slice(0, 60));
+  const unknownRow = (await page.$$('#results-body .card.op')).length;
+  ok(unknownRow >= 2 && /Outcome unknown/.test(act), 'the Activity list shows the unknown operation as unknown, not as running');
+  // open it: the card says what the record says, and the two doors are apart
+  await page.evaluate(id => { window.__work.results.selected = id; window.__work.results.render(); }, seeded.dead_after_intent);
+  await page.waitForTimeout(300);
+  const card12 = await page.textContent('#results-body');
+  ok(/Outcome unknown — A dispatch was recorded and its outcome was not/.test(card12) && /1 dispatch intent recorded/.test(card12), 'the card says a dispatch was recorded and its outcome was not, with the count from the record');
+  const before12 = posts.length;
+  await page.click('#results-body button:has-text("Check status / recover result")');
+  await page.waitForTimeout(500);
+  ok(/nothing was sent/.test(await page.textContent('#toast')) && posts.slice(before12).every(p => /\/recover$/.test(p)), 'Check status reads the record and sends nothing: ' + JSON.stringify(posts.slice(before12)));
+  ok((await (await page.request.get(BASE + '/api/operations/' + seeded.dead_after_intent)).json()).status === 'unknown', 'and the operation stays unknown — it is never replayed');
+  await page.click('#results-body button:has-text("Start another attempt")');
+  await page.waitForTimeout(500);
+  ok(/not started from a proposal/.test(await page.textContent('#results-body')) && !posts.slice(before12).some(p => /\/api\/(jobs|operations)$/.test(p)), 'Start another attempt is refused for an operation with no proposal to rebuild, and nothing was sent');
+  const opsList = await (await page.request.get(BASE + '/api/operations?limit=10')).json();
+  ok(opsList.dispatcher && opsList.dispatcher.held === true && opsList.population, 'the store names its dispatcher and its population');
 
   ok(errs.length === 0, 'no page errors across the workspace journey: ' + JSON.stringify(errs));
   await browser.close();

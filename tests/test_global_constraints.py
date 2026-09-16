@@ -5733,6 +5733,317 @@ def _check_document_contract(server, paired):
     return out
 
 
+_CRASH_CHILD = r"""
+import os, sys, time, json
+sys.path.insert(0, sys.argv[1] + "/scripts"); sys.path.insert(0, sys.argv[1])
+os.environ["WORDICON_TEST_MODE"] = "1"
+os.environ["WORDICON_STATE"] = sys.argv[2]
+import testmode, state_root
+state_root.apply(state_root.resolve(sys.argv[2]))
+import server, actions, operations as ops, wordicon_cli as cli
+window = sys.argv[3]
+text = "A crash window, deliberately."
+subj = {"kind": "selection", "text": text, "doc_id": "doc_crash", "revision": 1, "seq": 1, "range": {"start": 0, "end": len(text)}, "units": "codepoint"}
+rec = actions.prepare("analyze.decompose", subj, {}, server.server_gateway)
+if window == "before_dispatch":
+    # reserved and claimed by this process, which dies before any thread runs
+    a = actions.BY_ID["analyze.decompose"]; rd = actions.readiness(a, server.server_gateway)
+    row, created = ops.reserve(request_key="rk_crash_before", kind="job", op_id=server._new_job_id(), action_id=a["id"],
+                               registry_version=str(rec.get("registry_version") or ""), prepared_id=rec["prepared_id"], snapshot_id=rec["snapshot_id"],
+                               execution=server._execution_for_proposal(rec, a, rd, "job/v1"), config={"lane": rd.get("lane") or {}})
+    ops.claim(row["op_id"], server.OPS_DISPATCHER.token)
+    print(json.dumps({"op_id": row["op_id"]})); sys.stdout.flush()
+    os._exit(0)
+if window == "after_intent":
+    # the first stage's intent lands in the store and the call never returns: the parent kills this process
+    real = server.server_gateway
+    class Hang(cli.MockGateway):
+        def complete(self, prompt):
+            time.sleep(600)
+            return ""
+    server.server_gateway = lambda: Hang()
+    import gate
+    c = server.app.test_client(); c.set_cookie(gate.SESSION_COOKIE, gate.issue_session("crash")["token"])
+    r = c.post("/api/operations", json={"prepared_id": rec["prepared_id"], "request_key": "rk_crash_after"}).get_json()
+    print(json.dumps({"op_id": r["operation_id"]})); sys.stdout.flush()
+    time.sleep(600)
+"""
+
+
+def _check_durable_operations(server, paired):
+    """Slice D. The operations store is the authority and the record says
+    what happened: a Start reserves a row under the request key with the
+    fingerprint of the full execution request (the same key returns the
+    same operation, a changed request under the same key is refused); the
+    job runs only after the atomic queued→claimed transition by the
+    process holding the dispatcher lock; every stage and every HTTP attempt
+    leaves a dispatch intent BEFORE it goes and its outcome after, and a
+    boundary that cannot be persisted sends nothing; a complete operation
+    is reopenable from the store and the result files after the process
+    forgets it, through the workspace route and the legacy job route;
+    "recover" reads and never sends; "another attempt" is a new operation
+    under a new key linked to the first, refused while the first still runs
+    and refused when the plan changed; the six crash windows are told apart
+    from persisted evidence — proven on the store and on a real killed
+    process for the two windows that matter most; and a second process on
+    the same store does not dispatch."""
+    import importlib, json as _json, subprocess, sqlite3 as _sq, tempfile as _tf, time as _time, os
+    out = []
+    ops = importlib.import_module("operations")
+    ac = importlib.import_module("actions")
+    REPO = Path(__file__).resolve().parents[1]
+    c = server.app.test_client()
+    paired(c)
+    text = "He threw it once, and the room laughed. Nobody said so."
+    subj = {"kind": "selection", "text": text, "doc_id": "doc_d", "revision": 1, "seq": 2, "range": {"start": 0, "end": len(text)}, "units": "codepoint", "editor_session": "es_d"}
+    rec = ac.prepare("analyze.decompose", subj, {}, server.server_gateway)
+    r = c.post("/api/operations", json={"prepared_id": rec["prepared_id"], "request_key": "rk_d_1"})
+    d = r.get_json() or {}
+    op = d.get("operation_id", "")
+    if r.status_code != 200 or not op or not d.get("dispatched"):
+        out.append(f"D: a Start did not reserve and dispatch: {r.status_code} {d}")
+        return out
+    row = ops.get(op)
+    if not row or row["request_key"] != "rk_d_1" or row["prepared_id"] != rec["prepared_id"] or row["snapshot_id"] != rec["snapshot_id"] or not row["fingerprint"].startswith("xf_"):
+        out.append(f"D: the store's row does not carry the key, proposal, snapshot and fingerprint: {row}")
+    if row and not (row.get("execution") or {}).get("lane") or not (row.get("execution") or {}).get("registry_version"):
+        out.append("D: the execution fingerprint does not cover the lane and the registry version")
+    if row and "input_text" in _json.dumps(row.get("execution")):
+        out.append("D: the execution record carries the text itself rather than a reference")
+    for _ in range(900):
+        g = c.get("/api/operations/" + op).get_json() or {}
+        if g.get("status") in ("complete", "failed"):
+            break
+        _time.sleep(0.1)
+    if g.get("status") != "complete":
+        out.append(f"D: the operation did not complete: {g.get('status')} {g.get('error')}")
+        return out
+    evs = ops.events(op)
+    kinds = [e["kind"] for e in evs]
+    if kinds[:2] != ["reserved", "claimed"] or "complete" not in kinds:
+        out.append(f"D: the event order is not reserved, claimed … complete: {kinds[:4]} … {kinds[-1]}")
+    intents = [e for e in evs if e["kind"] == "stage_intent"]
+    ends = [e for e in evs if e["kind"] == "stage_end"]
+    if not intents or len(intents) != len(ends) or any(e["outcome"] != "ok" for e in ends):
+        out.append(f"D: every stage must leave an intent and an end: {len(intents)} intents, {len(ends)} ends")
+    for it in intents:
+        if it["seq"] >= min((e["seq"] for e in ends if e["stage"] == it["stage"] and e["seq"] > it["seq"]), default=10**9):
+            out.append("D: a stage's intent is not before its end")
+            break
+    if any(text[:20] in _json.dumps(e["detail"]) for e in evs):
+        out.append("D: the text itself entered the operation's events")
+    if g.get("recovery", {}).get("case") != "complete" or g["recovery"]["dispatch_intents"] != len(intents):
+        out.append(f"D: the recovery view of a complete operation is wrong: {g.get('recovery')}")
+    # the same key: the same operation; a changed request under the same key: refused
+    r2 = c.post("/api/operations", json={"prepared_id": rec["prepared_id"], "request_key": "rk_d_1"}).get_json() or {}
+    if not r2.get("repeated") or r2.get("operation_id") != op:
+        out.append(f"D: the same request key did not return the same operation: {r2}")
+    rec2 = ac.prepare("analyze.decompose", {**subj, "text": text + " More."}, {}, server.server_gateway)
+    r3 = c.post("/api/operations", json={"prepared_id": rec2["prepared_id"], "request_key": "rk_d_1"})
+    if r3.status_code != 409 or "different request" not in (r3.get_json() or {}).get("error", ""):
+        out.append(f"D: a changed request under the same key was not refused: {r3.status_code} {r3.get_json()}")
+    if ops.get(op)["status"] != "complete" or ops.counts().get("queued"):
+        out.append("D: the refused Start changed the store")
+    # the process forgets: the store and the result files answer
+    with server.JOBS_LOCK:
+        held = dict(server.JOBS)
+        server.JOBS.clear()
+    try:
+        g2 = c.get("/api/operations/" + op).get_json() or {}
+        if g2.get("status") != "complete" or g2.get("in_process") is not False or len(g2.get("groups") or []) < 1 or not all(x.get("trace_id") for x in g2["groups"]):
+            out.append(f"D: after the process forgot the job, the store did not answer complete with its groups: {g2.get('status')} {g2.get('in_process')} {g2.get('groups')}")
+        lj = c.get("/api/jobs/" + op).get_json() or {}
+        if lj.get("status") != "complete" or not lj.get("from_store"):
+            out.append(f"D: the legacy job route does not answer from the store after a restart: {lj}")
+        if c.get("/api/jobs/job_nonesuch").status_code != 404:
+            out.append("D: an id no store holds is not a 404 on the legacy route")
+        lst = c.get("/api/operations?limit=5").get_json() or {}
+        if not any(o["operation_id"] == op and o["status"] == "complete" for o in lst.get("operations", [])) or not lst.get("dispatcher", {}).get("held"):
+            out.append(f"D: the list does not show the operation from the store with the dispatcher held: {lst.get('dispatcher')}")
+        rv = c.post("/api/operations/" + op + "/recover", json={}).get_json() or {}
+        if rv.get("sent") is not False or rv.get("status") != "complete":
+            out.append(f"D: recover of a complete operation must read, send nothing and stay complete: {rv}")
+    finally:
+        with server.JOBS_LOCK:
+            server.JOBS.update(held)
+    # another attempt: a new operation, linked, refused while running / when the plan changed
+    a1 = c.post("/api/operations/" + op + "/attempts", json={})
+    if a1.status_code != 400:
+        out.append("D: another attempt without a key was accepted")
+    a2 = c.post("/api/operations/" + op + "/attempts", json={"request_key": "rk_d_2"})
+    d2 = a2.get_json() or {}
+    if a2.status_code != 200 or d2.get("retry_parent") != op or not d2.get("cost") or d2.get("operation_id") == op:
+        out.append(f"D: another attempt is not a new linked operation with its cost said: {a2.status_code} {d2}")
+    op2 = d2.get("operation_id", "")
+    a3 = c.post("/api/operations/" + op + "/attempts", json={"request_key": "rk_d_3"})
+    if a3.status_code == 200 and (a3.get_json() or {}).get("operation_id") not in (op2,):
+        pass   # a third attempt of a complete parent is allowed; it is a new operation
+    a4 = c.post("/api/operations/" + op2 + "/attempts", json={"request_key": "rk_d_4"})
+    if ops.get(op2)["status"] in ("queued", "claimed", "running") and a4.status_code != 409:
+        out.append("D: another attempt of a running operation was accepted")
+    for _ in range(900):
+        if (ops.get(op2) or {}).get("status") in ("complete", "failed"):
+            break
+        _time.sleep(0.1)
+    if ops.get(op2)["status"] != "complete" or not any(e["kind"] == "attempt_from" for e in ops.events(op)):
+        out.append("D: the second attempt did not complete or the first does not record the link")
+    row2 = ops.get(op2)
+    row2_exec = dict(row2["execution"]); row2_exec["lane"] = "someone-else"
+    conn = ops._connect()
+    conn.execute("UPDATE operations SET execution = ? WHERE op_id = ?", (ops.canonical(row2_exec), op2)); conn.close()
+    a5 = c.post("/api/operations/" + op2 + "/attempts", json={"request_key": "rk_d_5"})
+    if a5.status_code != 409 or "plan changed" not in (a5.get_json() or {}).get("error", "") or "lane" not in (a5.get_json() or {}).get("changed", {}):
+        out.append(f"D: a changed plan (lane) was not refused by name: {a5.status_code} {a5.get_json()}")
+    # the HTTP-attempt boundary: a gateway whose call fails once then answers leaves intent/end per attempt;
+    # a boundary that cannot be written sends nothing
+    calls = []
+    class _Flaky(server.cli.Gateway):
+        name = "flaky-suite"
+        ATTEMPTS = 3
+        BACKOFF_BASE_S = 0.0
+        def _retryable(self):
+            return (tuple(), (RuntimeError,))
+        def complete(self, prompt):
+            def make_call():
+                calls.append(1)
+                if len(calls) == 1:
+                    raise RuntimeError("transient, deliberately")
+                return "answered"
+            return self._call_with_attempts("suite stage", make_call)
+    fg = _Flaky()
+    frow, _ = ops.reserve(request_key="rk_d_flaky", kind="job", execution={"suite": "flaky"})
+    ops.claim(frow["op_id"], "suite")
+    ops.attach(fg, frow["op_id"])
+    if fg.complete("You are the suite stage") != "answered":
+        out.append("D: the flaky gateway did not answer on its second attempt")
+    fev = [(e["kind"], e["attempt"], e["outcome"]) for e in ops.events(frow["op_id"]) if e["kind"].startswith("attempt")]
+    if fev != [("attempt_intent", 1, ""), ("attempt_end", 1, "error"), ("attempt_intent", 2, ""), ("attempt_end", 2, "ok")]:
+        out.append(f"D: the HTTP attempts did not each leave an intent before and an outcome after: {fev}")
+    sev = [(e["kind"], e["outcome"]) for e in ops.events(frow["op_id"]) if e["kind"].startswith("stage")]
+    if sev != [("stage_intent", ""), ("stage_end", "ok")]:
+        out.append(f"D: the stage boundary around the attempts is wrong: {sev}")
+    calls.clear()
+    real_db = ops.db_path
+    ops.db_path = lambda: Path("/proc/version/cannot/operations.sqlite3")
+    try:
+        try:
+            fg.complete("You are the suite stage")
+            out.append("D: a call went out although its dispatch intent could not be written")
+        except Exception:  # noqa: BLE001 — the refusal is the point
+            pass
+        if calls:
+            out.append("D: the provider was called before the boundary was persisted")
+    finally:
+        ops.db_path = real_db
+    # a read of the store changes no byte of it (a Home paint or a listing must leave the directory as found)
+    import hashlib as _hl
+    dbp = ops.db_path()
+    before_bytes = _hl.sha256(dbp.read_bytes()).hexdigest()
+    before_names = sorted(p.name for p in dbp.parent.iterdir() if p.name.startswith("operations"))
+    ops.get(op); ops.list_ops(5); ops.events(op); ops.counts(); ops.queued()
+    if _hl.sha256(dbp.read_bytes()).hexdigest() != before_bytes or sorted(p.name for p in dbp.parent.iterdir() if p.name.startswith("operations")) != before_names:
+        out.append("D: reading the operations store changed it (bytes or files)")
+    # the crash windows, on the store
+    tmp = Path(_tf.mkdtemp(prefix="wordicon_ops_"))
+    state_root.apply(tmp)
+    try:
+        wins = {}
+        for name, steps in (("never_dispatched", []),
+                            ("delivery_unknown", [("stage_intent", {"stage": "s"})]),
+                            ("reply_received_result_missing", [("stage_intent", {"stage": "s"}), ("stage_end", {"stage": "s", "outcome": "ok"})]),
+                            ("result_persisted_link_missing", [("attempt_intent", {"stage": "s", "attempt": 1}), ("attempt_end", {"stage": "s", "attempt": 1, "outcome": "ok", "detail": {"run_id": "trace_cli_persisted1"}})])):
+            wrow, _ = ops.reserve(request_key="rk_win_" + name, kind="job", execution={"w": name})
+            ops.claim(wrow["op_id"], "dead-process")
+            for kind, f in steps:
+                ops.event(wrow["op_id"], kind, **f)
+            wins[name] = wrow["op_id"]
+        (tmp / "results").mkdir(parents=True, exist_ok=True)
+        (tmp / "results" / "trace_cli_persisted1.json").write_text(_json.dumps({"mode": "forge", "trace_id": "trace_cli_persisted1", "candidates": [{"title": "Persisted Word"}]}), encoding="utf-8")
+        changed = {x["op_id"]: x for x in ops.reconcile("new-process", tmp / "results", tmp / "receipts")}
+        want = {"never_dispatched": "queued", "delivery_unknown": "unknown", "reply_received_result_missing": "unknown", "result_persisted_link_missing": "complete"}
+        for name, st in want.items():
+            got = changed.get(wins[name], {})
+            if got.get("now") != st or got.get("case") != name:
+                out.append(f"D: crash window {name} → {got.get('now')} ({got.get('case')}), wanted {st}")
+        if (ops.get(wins["result_persisted_link_missing"]).get("result_ref") or {}).get("trace_ids") != ["trace_cli_persisted1"]:
+            out.append("D: the reconciled operation does not link the persisted result by its stable id")
+    finally:
+        state_root.apply(_SCRATCH)
+    # a second dispatcher on the store this process holds does not dispatch (flock: a second
+    # open of the lock file conflicts, in this process or another)
+    if not server._dispatching():
+        out.append(f"D: the suite's server process does not hold its store's dispatcher lock: {server.OPS_DISPATCHER.why}")
+    second = ops.DispatcherLock()
+    if second.acquire():
+        second.release()
+        out.append("D: a second dispatcher lock on the store this process holds was granted")
+    elif "holds the dispatcher lock" not in second.why:
+        out.append(f"D: the second dispatcher's refusal does not say why: {second.why}")
+    # the crash windows, on a REAL killed process
+    for window, want_case, want_status in (("before_dispatch", "never_dispatched", "queued"), ("after_intent", "delivery_unknown", "unknown")):
+        croot = Path(_tf.mkdtemp(prefix="wordicon_crash_"))
+        child_script = croot / "child.py"
+        child_script.write_text(_CRASH_CHILD, encoding="utf-8")
+        env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+        env["WORDICON_TEST_MODE"] = "1"
+        proc = subprocess.Popen([sys.executable, str(child_script), str(REPO), str(croot), window], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, text=True)
+        line = ""
+        try:
+            deadline = _time.time() + 120
+            while _time.time() < deadline:
+                line = proc.stdout.readline().strip()
+                if line.startswith("{"):
+                    break
+            info = _json.loads(line) if line.startswith("{") else {}
+            cop = info.get("op_id", "")
+            if window == "after_intent":
+                # wait for the intent to land, then kill without warning
+                dbp = croot / "operations.sqlite3"
+                seen = False
+                for _ in range(200):
+                    try:
+                        cc = _sq.connect(str(dbp)); n = cc.execute("SELECT COUNT(*) FROM operation_events WHERE op_id = ? AND kind = 'stage_intent'", (cop,)).fetchone()[0]; cc.close()
+                    except _sq.Error:
+                        n = 0
+                    if n:
+                        seen = True
+                        break
+                    _time.sleep(0.1)
+                if not seen:
+                    out.append("D: the killed child never recorded a dispatch intent")
+            proc.kill()
+            proc.wait(timeout=30)
+        except Exception as e:  # noqa: BLE001
+            proc.kill()
+            out.append(f"D: the crash child for {window} could not be driven: {e}")
+            continue
+        state_root.apply(croot)
+        try:
+            changed = {x["op_id"]: x for x in ops.reconcile("survivor", croot / "results", croot / "receipts")}
+            got = changed.get(cop, {})
+            if got.get("case") != want_case or got.get("now") != want_status:
+                out.append(f"D: after a real kill in window {window}: {got.get('case')} → {got.get('now')}, wanted {want_case} → {want_status}")
+            if window == "before_dispatch":
+                # the survivor resumes what was provably never sent, under the unchanged plan
+                summary = server._ops_startup()
+                if cop not in summary.get("resumed", []):
+                    out.append(f"D: the never-dispatched operation was not resumed by the survivor: {summary}")
+                else:
+                    for _ in range(900):
+                        if (ops.get(cop) or {}).get("status") in ("complete", "failed"):
+                            break
+                        _time.sleep(0.1)
+                    if (ops.get(cop) or {}).get("status") != "complete" or not any(e["kind"] == "resumed" for e in ops.events(cop)):
+                        out.append(f"D: the resumed operation did not complete with a 'resumed' event: {(ops.get(cop) or {}).get('status')}")
+            else:
+                summary = server._ops_startup()
+                if cop in summary.get("resumed", []) or (ops.get(cop) or {}).get("status") != "unknown":
+                    out.append("D: an operation whose dispatch was recorded was sent again, or is not unknown")
+        finally:
+            state_root.apply(_SCRATCH)
+    return out
+
+
 def main() -> int:
     failures = FAILURES
     # block 113, hoisted: pure checks on a pure function, before anything
@@ -5872,6 +6183,7 @@ def main() -> int:
     failures.extend(_check_test_mode_fails_closed(server))
     failures.extend(_check_workspace_registry(server, _paired))
     failures.extend(_check_document_contract(server, _paired))
+    failures.extend(_check_durable_operations(server, _paired))
     failures.extend(_check_map_focus_routes(server, _paired))
     failures.extend(_check_moira_routes(server, _paired))
     failures.extend(_check_notebook_b(server, _paired))

@@ -350,6 +350,7 @@ async function boot() {
   bindDocMenu(); bindSelection(); bindDestinations(); bindFind(); actions.bindAsk();
   layout.hooks.onChange = () => { if (layout.state.results) results.seen(); };
   await actions.load();
+  results.loadRecent(id => (actions.byId[id] && actions.byId[id].label) || (id || '').replace(/^legacy:\/api\/jobs:/, 'a run: '));
   const known = session.loadIdentity();
   let opened = false;
   if (known && known.id) opened = await session.open(known.id);

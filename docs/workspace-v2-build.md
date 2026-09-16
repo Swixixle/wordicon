@@ -38,6 +38,14 @@ The living contract of the workspace build (authorized 2026-09-16; the instructi
 
 **D17 — exports say what they are (slice C).** Text export is the exact projection and says what a .txt does not carry; Markdown is serialized from the structure; Print/PDF renders the structure. DOCX is not built (its plan is not in the repository).
 
+**D18 — SQLite is the authority on operations; JOBS is a projection (slice D).** Every job — a workspace Start and a legacy `/api/jobs` press alike — is a row reserved under a request key with the fingerprint of the full execution request, claimed by one atomic transition, run only by the process holding the dispatcher lock, and mirrored as it progresses. A reader of an operation reads the store; the projection adds progress and the shaped result while the process lives; the result files answer after a restart. D5's in-memory keys are gone.
+
+**D19 — the dispatch boundary is on the gateway instance (slice D).** `operations.attach` wraps a job's own gateway: an intent event before every stage call and, inside `_call_with_attempts`, before every real HTTP attempt; the outcome after. A boundary that cannot be persisted raises before the call, so an untracked attempt cannot happen. The SDK's own retries stay off (`max_retries=0`); the gateway's bounded retries are each recorded. The mock gateway records stage boundaries only — it makes no HTTP attempts — so a fixture run proves the mechanism, not the provider's billing.
+
+**D20 — interruption is read from the record (slice D).** The six rows of §8's recovery table are derived from persisted events and result files: no intent → never dispatched (resumable under the unchanged plan, by fingerprint); an intent without its end → delivery unknown, never replayed; every end recorded but no result → unknown; a persisted result under a run id the events name → complete, linked by its stable id. "Recover" is a read; "another attempt" is a new operation with its own key, its retry parent, and a refusal when the plan changed. Nothing here promises exactly-once provider execution.
+
+**D21 — the legacy job route answers from the store after a restart (slice D).** A job the process no longer holds is no longer a 404: the store says complete (with its result's id), failed (with its reason) or, for an unknown outcome, a terminal failed with the sentence that says it may have run — so the legacy page's poller stops instead of polling a ghost, and the journey that mocks a lost job keeps its meaning.
+
 ## Parity checklist
 
 Status words: **reached** (a labelled control in the shell reaches it and a test proves it), **inside** (opens inside the shell as the existing page, with return), **legacy** (reachable only through "The previous interface" under More tools), **pending** (not yet wired; the slice that will).
@@ -66,5 +74,5 @@ Status words: **reached** (a labelled control in the shell reaches it and a test
 | Library: sources, anchors, crossings, support rulings, works, media, recordings/transcripts | `/api/library/*`, `/api/media/*`, `/api/works` | Sources tab lists; Attach and Open the Library open the Library inside | inside | — |
 | Investigations: connectors, depositions, identity rulings, rooms | `/api/connectors`, `/api/depositions`, `/api/investigations` | Investigate cards (readiness derived) + Investigation rooms inside | inside; start pending (F) | `work.js` §10 |
 | Your work: everything retained, searchable | (slice E index) | Your work | pending (E) — lists the notebook and the last thirty runs | `work.js` §10 |
-| Durable operations, honest recovery after restart | (slice D) | Results → Activity | pending (D) — an operation the restarted server does not hold is shown as outcome unknown | `results.js` |
+| Durable operations, honest recovery after restart | `operations.sqlite3`; `/api/operations*` | Results → Activity (from the record); Check status / recover result; Start another attempt | reached | `work.js` §12; suite `_check_durable_operations` (two real killed processes) |
 | Settings, pairing, Vault, notifications, encounter switch, epochs, Keeper | Home/About, `/pair` | Settings (opens the previous interface) | legacy | — |

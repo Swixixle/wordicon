@@ -4,7 +4,7 @@
 // and offers the full view; closing the side hides it and nothing else.
 // A finished operation raises the count on the header control and never
 // opens a closed side or moves the caret.
-import { getJSON, el, whenOf, toast } from './util.js';
+import { getJSON, postJSON, el, whenOf, toast, requestKey } from './util.js';
 
 const POLL_MS = 1500;
 const STATE_WORDS = { queued: 'Queued', running: 'Running', done: 'Done', complete: 'Done', failed: 'Failed', unknown: 'Outcome unknown' };
@@ -65,6 +65,44 @@ export class Results {
     this.poll();
     if (this.hooks.onActivity) this.hooks.onActivity();
   }
+  // The store's recent operations (slice D): what was running or done
+  // before this page opened, or before the server restarted — listed from
+  // the record, with their state as the record has it. No proposal is in
+  // memory for them, so a card reads from the operation itself.
+  async loadRecent(labelOf) {
+    const r = await getJSON('/api/operations?limit=30');
+    if (!r.ok) return;
+    for (const o of (r.data.operations || [])) {
+      if (this.tracked.has(o.operation_id)) continue;
+      this.tracked.set(o.operation_id, { id: o.operation_id, kind: o.kind, status: o.status, prepared: null, label: labelOf ? labelOf(o.action_id) : o.action_id,
+                                         startedAt: o.created_at, last: o, fromStore: true });
+    }
+    this.dispatcher = r.data.dispatcher || null;
+    this.render();
+    this.poll();
+    if (this.hooks.onActivity) this.hooks.onActivity();
+  }
+  // "Check status / recover result": the record and the result files read again; nothing is sent
+  async recover(t) {
+    const r = await postJSON('/api/operations/' + encodeURIComponent(t.id) + '/recover', {});
+    if (!r.ok) { toast('Not recovered: ' + (r.data.error || r.status)); return; }
+    t.status = r.data.status; t.last = { ...(t.last || {}), status: r.data.status, recovery: r.data.recovery };
+    toast('Checked from the record — nothing was sent. ' + (r.data.recovery && r.data.recovery.why || ''), 6000);
+    this.render(); this.poll();
+    if (this.hooks.onActivity) this.hooks.onActivity();
+  }
+  // "Start another attempt": a NEW operation under a new key, linked to this one; the cost is said
+  async anotherAttempt(t) {
+    const r = await postJSON('/api/operations/' + encodeURIComponent(t.id) + '/attempts', { request_key: requestKey() });
+    if (!r.ok) {
+      const d = r.data || {};
+      this.showNotice((d.error || ('HTTP ' + r.status)) + (d.nothing_was_sent ? ' — nothing was sent.' : '') + (d.changed ? ' Changed: ' + Object.entries(d.changed).map(([k, v]) => k + ' ' + v.was + ' → ' + v.now).join(', ') : ''),
+                      d.changed ? [{ label: 'Start it under the new plan', onClick: async () => { const r2 = await postJSON('/api/operations/' + encodeURIComponent(t.id) + '/attempts', { request_key: requestKey(), accept_changed_plan: true }); if (r2.ok) { this.notice = null; this.track({ operation_id: r2.data.operation_id, kind: r2.data.kind, status: r2.data.status }, t.prepared); } else toast('Not started: ' + (r2.data.error || r2.status)); } }] : []);
+      return;
+    }
+    toast(r.data.cost || 'Another attempt started.', 6000);
+    this.track({ operation_id: r.data.operation_id, kind: r.data.kind, status: r.data.status }, t.prepared);
+  }
   async poll() {
     clearTimeout(this.pollTimer);
     if (this.polling) { this.pollAgain = true; return; }     // one poll at a time; a second request waits for it
@@ -72,7 +110,10 @@ export class Results {
     let busy = false;
     try {
       for (const t of this.tracked.values()) {
-        if (['done', 'complete', 'failed'].includes(t.status)) continue;
+        // a finished operation is read once more when it came from the list
+        // without its recovery line; otherwise a terminal state is not re-read
+        const needsDetail = t.fromStore && t.last && !t.last.recovery;
+        if (['done', 'complete', 'failed', 'unknown'].includes(t.status) && !needsDetail) continue;
         let r;
         try { r = await getJSON('/api/operations/' + encodeURIComponent(t.id)); } catch (e) { busy = true; continue; }
         if (r.status === 404) { t.status = 'unknown'; t.last = r.data; continue; }
@@ -170,18 +211,28 @@ export class Results {
   }
 
   resultCard(t) {
-    const p = t.prepared, a = p ? p.label : t.kind;
+    const p = t.prepared, a = p ? p.label : (t.label || t.kind);
     const d = t.last || {};
     const state = STATE_WORDS[t.status] || t.status;
     const fresh = this.freshness(p);
+    const rec = d.recovery || null;
     const card = el('div', { class: 'card' }, [
       el('div', { class: 'row', style: 'justify-content: space-between' }, [el('div', { class: 'result-title', text: a }), el('span', { class: 'chip', text: whenOf(t.startedAt) })]),
       p && p.disclosure.scope && p.disclosure.scope.doc_id ? el('div', { class: 'kv', text: `From this draft, revision ${p.disclosure.scope.revision}${p.disclosure.scope.kind === 'selection' ? ' · your selection “' + p.disclosure.scope.head + '”' : ''}` }) : null,
+      !p && t.fromStore ? el('div', { class: 'kv muted', text: 'From the record' + (d.retry_parent ? ' · another attempt of an earlier operation' : '') + (d.in_process === false ? ' · not running in this process' : '') }) : null,
       fresh.text ? el('div', { class: 'kv ' + (fresh.fresh ? 'ok' : 'warn'), text: fresh.text }) : null,
-      el('div', { class: 'kv state ' + (t.status === 'failed' || t.status === 'unknown' ? 'bad' : (t.status === 'done' ? 'good' : 'running')), text: state + (d.progress && !['done', 'complete', 'failed'].includes(t.status) ? ' · ' + d.progress : '') }),
+      el('div', { class: 'kv state ' + (t.status === 'failed' || t.status === 'unknown' ? 'bad' : (t.status === 'done' || t.status === 'complete' ? 'good' : 'running')), text: state + (d.progress && !['done', 'complete', 'failed', 'unknown'].includes(t.status) ? ' · ' + d.progress : '') }),
     ]);
-    if (t.status === 'unknown') card.appendChild(el('div', { class: 'warn small-text', text: 'The server does not hold this operation any more (it may have restarted). Outcome unknown — nothing was sent again.' }));
+    if (t.status === 'unknown') card.appendChild(el('div', { class: 'warn small-text', text: 'Outcome unknown — ' + (rec && rec.why ? rec.why : 'the server was interrupted; it may still have run. Nothing was sent again.') }));
     if (t.status === 'failed') card.appendChild(el('div', { class: 'warn small-text', text: 'Failed — ' + (d.error || 'no reason was recorded') + '.' }));
+    if (t.status === 'queued' && d.progress && /dispatcher/.test(d.progress)) card.appendChild(el('div', { class: 'warn small-text', text: d.progress }));
+    if (rec && rec.sent_evidence && ['failed', 'unknown', 'queued'].includes(t.status)) card.appendChild(el('div', { class: 'muted small-text', text: rec.sent_evidence + '.' }));
+    if (['failed', 'unknown', 'queued'].includes(t.status) && t.kind === 'job') {
+      card.appendChild(el('div', { class: 'row' }, [
+        el('button', { class: 'btn small', type: 'button', text: 'Check status / recover result', title: 'Reads the record and the result files again; sends nothing', onclick: () => this.recover(t) }),
+        t.status !== 'queued' ? el('button', { class: 'btn small', type: 'button', text: 'Start another attempt', title: 'A new operation under a new key, linked to this one; it sends the frozen text again', onclick: () => this.anotherAttempt(t) }) : null,
+      ]));
+    }
     if (t.kind === 'reading' && d.reading) {
       const v = d.reading;
       card.appendChild(el('div', { class: 'kv', text: `${v.answered || 0} of ${(v.readers || []).length} readers answered · ${v.no_conference || 'the readers answer separately'}` }));
@@ -216,7 +267,7 @@ export class Results {
         el('span', { class: 'chip', text: 'Kept in Your work' }),
         el('button', { class: 'btn', type: 'button', text: 'Open full result', onclick: () => { this.places.open(d.trace_id ? '/?trace=' + encodeURIComponent(d.trace_id) : '/?job=' + encodeURIComponent(t.id)); if (this.hooks.onPlace) this.hooks.onPlace(); } }),
       ]));
-      card.appendChild(el('details', {}, [el('summary', { text: 'Details' }), el('div', { class: 'small-text muted', text: `operation ${t.id} · mode ${d.mode || ''} · run ${d.trace_id || (d.groups || []).map(g => g.trace_id).join(', ') || '—'} · snapshot ${d.snapshot_id || '—'}` })]));
+      card.appendChild(el('details', {}, [el('summary', { text: 'Details' }), el('div', { class: 'small-text muted', text: `operation ${t.id} · mode ${d.mode || ''} · run ${d.trace_id || (d.groups || []).map(g => g.trace_id).join(', ') || '—'} · snapshot ${d.snapshot_id || '—'}${rec ? ' · ' + rec.dispatch_intents + ' dispatch intent' + (rec.dispatch_intents === 1 ? '' : 's') + ' recorded, ' + rec.dispatch_ends + ' ended' : ''}` })]));
       card.appendChild(el('div', { class: 'muted small-text', text: 'Nothing is accepted until you rule — rulings are made on the full result.' }));
     }
     return card;
@@ -231,7 +282,7 @@ export class Results {
       const st = STATE_WORDS[t.status] || t.status;
       const cls = t.status === 'failed' || t.status === 'unknown' ? 'bad' : (t.status === 'done' || t.status === 'complete' ? 'good' : 'running');
       const row = el('div', { class: 'card op' }, [
-        el('div', {}, [el('span', { text: t.prepared ? t.prepared.label : t.kind }), el('span', { class: 'muted', text: ' · ' + whenOf(t.startedAt) })]),
+        el('div', {}, [el('span', { text: t.prepared ? t.prepared.label : (t.label || t.kind) }), el('span', { class: 'muted', text: ' · ' + whenOf(t.startedAt) })]),
         el('div', { class: 'state ' + cls, text: st + (cls === 'running' && d.progress ? ' · ' + d.progress : '') }),
         el('div', { class: 'acts' }, [
           el('button', { class: 'linkish', type: 'button', text: 'Open', onclick: () => { this.selected = t.id; this.render(); } }),

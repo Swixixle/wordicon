@@ -89,4 +89,5 @@ DIR.mkdir(parents=True, exist_ok=True)
 (DIR / "cookie").write_text(gate.SESSION_COOKIE)
 print(f"journey server: state={STATE} port={PORT} gateway=poisoned key=absent producers=127.0.0.1:{PRODUCER_PORT} "
       f"testmode={testmode.status()}", flush=True)
+server.ops_startup_report()   # slice D: the serving process reconciles what a dead process left, then serves
 server.app.run(host="127.0.0.1", port=PORT, debug=False, threaded=True)
