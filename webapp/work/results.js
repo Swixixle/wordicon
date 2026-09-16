@@ -25,14 +25,14 @@ export class Results {
   }
 
   bindTabs() {
-    for (const t of document.querySelectorAll('#results .tab')) {
+    for (const t of document.querySelectorAll('#results-tabs .tab')) {
       t.addEventListener('click', () => this.showTab(t.dataset.tab));
     }
     document.getElementById('activity-btn').addEventListener('click', () => { this.showTab('results'); this.layout.setResults(true); });
   }
   showTab(name) {
     this.tab = name;
-    for (const t of document.querySelectorAll('#results .tab')) { const on = t.dataset.tab === name; t.classList.toggle('on', on); t.setAttribute('aria-selected', String(on)); }
+    for (const t of document.querySelectorAll('#results-tabs .tab')) { const on = t.dataset.tab === name; t.classList.toggle('on', on); t.setAttribute('aria-selected', String(on)); }
     this.render();
   }
 

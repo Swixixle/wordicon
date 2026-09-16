@@ -48,10 +48,12 @@ export class Layout {
     prefs.set('layout.' + this.bucket(), { tools: s.tools, results: s.results, toolsW: s.toolsW, resultsW: s.resultsW });
   }
 
-  // narrow = both sides open would leave the writing under the minimum
+  // narrow = both sides open, even at their thinnest, would leave the writing
+  // under the minimum; before that point the sides give way, not the writing
+  // (slice G: a 1280 px laptop keeps both panels by narrowing them)
   measure() {
     const s = this.state;
-    const wouldBe = window.innerWidth - s.toolsW - s.resultsW;
+    const wouldBe = window.innerWidth - TOOLS_MIN - RESULTS_MIN;
     const narrow = wouldBe < MIN_WRITING_PX;
     if (narrow !== s.narrow) { s.narrow = narrow; }
     // clamp widths so an open side never squeezes the writing below the minimum
@@ -79,11 +81,16 @@ export class Layout {
     const stacked = document.getElementById('stacked');
     const stackedOn = s.narrow && s.results && !s.focus;
     stacked.hidden = !stackedOn;
-    // the results body lives in ONE place: the side when beside, the stacked section when below
+    // the results body — and its tabs (Results, Feedback, Notes, Sources) — live
+    // in ONE place: the side when beside, the stacked section when below
     const body = document.getElementById('results-body');
     const stackedBody = document.getElementById('stacked-body');
     if (stackedOn && body.parentElement !== stackedBody) stackedBody.appendChild(body);
     if (!stackedOn && body.parentElement !== this.results) this.results.appendChild(body);
+    const tabs = document.getElementById('results-tabs');
+    const stackedHead = document.getElementById('stacked-head'), sideHead = this.results.querySelector('.panel-head');
+    if (tabs && stackedOn && tabs.parentElement !== stackedHead) stackedHead.insertBefore(tabs, document.getElementById('back-to-writing'));
+    if (tabs && !stackedOn && tabs.parentElement !== sideHead) sideHead.insertBefore(tabs, document.getElementById('results-hide'));
     // the drawer: scrim + inert centre while open at narrow widths
     const drawer = s.narrow && s.tools && !s.focus;
     this.scrim.hidden = !drawer;

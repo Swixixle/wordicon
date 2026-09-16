@@ -248,6 +248,11 @@ function renderHelp() {
     'The previous interface is still there under More tools; nothing was removed.',
   ];
   for (const l of lines) v.appendChild(el('div', { class: 'kv', text: l }));
+  // the workspace's rule, as the constitution states it (verbatim), with its door
+  v.appendChild(el('div', { class: 'kv' }, [
+    el('span', { text: 'The rule the two sides work under: The sides never insert or replace writing, accept or rule on a result, or initiate research on their own. Saving, keeping a result that was started and the index that finds kept things continue without a press; everything else waits for one. ' }),
+    el('button', { class: 'linkish', type: 'button', text: 'Read the clause in the constitution', onclick: () => places.open('/constitution#the-workspace-two-sides-that-act-only-on-a-press') }),
+  ]));
 }
 
 // ---- document menu ------------------------------------------------------------

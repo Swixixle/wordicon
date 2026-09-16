@@ -443,9 +443,88 @@ def _walk(root: pathlib.Path):
     return files, excluded, findings
 
 
+def _sqlite_consistent_copies(root: pathlib.Path, snap: pathlib.Path) -> "list[str]":
+    """workspace-v2 slice G. Every SQLite store in the corpus is copied AGAIN,
+    through SQLite's own backup API, over the plain copy the tree copy made.
+    The API reads under the database's locks and yields a transactionally
+    consistent file even while a writer is mid-transaction — and one writer
+    stands outside the corpus lock on purpose: the Your work index draining
+    the notebook's outbox on a GET and on its timer. A plain copy of an
+    actively written database file is not a database (the instructions,
+    §3.5; SQLite's backup documentation). A journal or WAL sibling of such a
+    store is dropped from the snapshot: the API copy is whole by itself.
+    Returns the stores copied this way, for the manifest."""
+    import sqlite3
+    done = []
+    for p in sorted(root.rglob("*.sqlite3")):
+        rel = p.relative_to(root)
+        parts = pathlib.PurePosixPath(str(rel)).parts
+        if str(rel) in EXCLUDE_REL or (parts and parts[0] in EXCLUDE_DIRS):
+            continue
+        target = snap / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        src = sqlite3.connect(f"file:{p}?mode=ro", uri=True, timeout=30)
+        try:
+            if target.exists():
+                target.unlink()
+            dst = sqlite3.connect(str(target))
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+        finally:
+            src.close()
+        for sib in (target.with_name(target.name + "-journal"),
+                    target.with_name(target.name + "-wal"),
+                    target.with_name(target.name + "-shm")):
+            if sib.exists():
+                sib.unlink()
+        done.append(str(rel))
+    return done
+
+
+def _sqlite_counts(root: pathlib.Path) -> dict:
+    """Row counts and schema versions of the SQLite stores in a snapshot —
+    counts only, never text. A store that is absent or unreadable counts as
+    absent (None), which is a different fact from zero."""
+    import sqlite3
+    out = {}
+    def count(db: pathlib.Path, table: str):
+        try:
+            c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            try:
+                if not c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+                    return None
+                return int(c.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+            finally:
+                c.close()
+        except sqlite3.Error:
+            return None
+    nb = root / "notebook.sqlite3"
+    if nb.exists():
+        out["notebook_documents"] = count(nb, "documents")
+        out["notebook_checkpoints"] = count(nb, "checkpoints")
+        out["notebook_document_events"] = count(nb, "document_events")
+        try:
+            c = sqlite3.connect(f"file:{nb}?mode=ro", uri=True)
+            try:
+                row = c.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone() if c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='meta'").fetchone() else None
+                out["notebook_schema"] = row[0] if row else None
+            finally:
+                c.close()
+        except sqlite3.Error:
+            out["notebook_schema"] = None
+    ops = root / "operations.sqlite3"
+    if ops.exists():
+        out["operations"] = count(ops, "operations")
+        out["operation_events"] = count(ops, "operation_events")
+    return out
+
+
 def _semantic_counts(root: pathlib.Path) -> dict:
     out = {"accepted_concepts": 0, "results": 0, "documents": 0,
            "media_items": 0, "transcripts": 0}
+    out.update(_sqlite_counts(root))
     try:
         acc = json.loads((root / "accepted_concepts.json").read_text())
         out["accepted_concepts"] = len(acc)
@@ -517,12 +596,14 @@ def _backup(cfg: dict, reason: str, stage_timeout: float) -> str:
         try:
             snap = stage / "snap"
             shutil.copytree(root, snap)
+            api_copied = _sqlite_consistent_copies(root, snap)
         finally:
             _LOCK.release_exclusive()
         files, excluded, findings = _walk(snap)
         manifest = {
             "schema": VAULT_SCHEMA, "created_at": cli._now(),
             "reason": reason, "app_commit": _app_commit(),
+            "sqlite_backup_api": api_copied,
             "pyrage_version": cfg.get("pyrage_version", ""),
             "recipient_fingerprint": cfg.get("recipient_fingerprint", ""),
             "files": [{"path": rel, "bytes": p.stat().st_size,

@@ -147,6 +147,12 @@ const path = require('path');
   await page.click('#results-toggle');
   ok(await page.isVisible('#stacked'), 'Results is a section below the draft');
   ok(await page.isHidden('#results'), 'and not a side');
+  ok(await page.isVisible('#stacked #results-tabs') && (await page.$$('#stacked #results-tabs .tab')).length === 4, 'and its four tabs (Results, Feedback, Notes, Sources) came down with it');
+  await page.click('#stacked #results-tabs .tab[data-tab="feedback"]');
+  ok((await page.getAttribute('#stacked #results-tabs .tab[data-tab="feedback"]', 'aria-selected')) === 'true', 'a tab in the section still switches');
+  await page.click('#stacked #results-tabs .tab[data-tab="results"]');
+  const hdr = await page.evaluate(() => { const h = document.getElementById('header'); return { sw: h.scrollWidth, cw: h.clientWidth, rows: new Set(Array.from(h.children).filter(e => !e.hidden).map(e => Math.round(e.getBoundingClientRect().top))).size }; });
+  ok(hdr.sw <= hdr.cw && hdr.rows >= 2, 'the header wraps its formatting bar onto its own row rather than overlapping (' + hdr.rows + ' rows, no overflow)');
   const editorH = await page.evaluate(() => document.querySelector('.pm-editor').getBoundingClientRect().height);
   ok(editorH >= 300, 'the draft keeps its height (' + Math.round(editorH) + 'px)');
   await page.click('#back-to-writing');
@@ -155,6 +161,16 @@ const path = require('path');
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(300);
   ok((await page.getAttribute('#shell', 'data-narrow')) === 'no', 'back at 1440 the sides are sides again');
+  ok(await page.isVisible('#results #results-tabs') || (await page.getAttribute('#shell', 'data-results')) === 'closed', 'and the tabs went back to the side');
+  // a 1280 px laptop keeps both panels by narrowing them instead of going to a drawer
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { window.__work.layout.setTools(true); window.__work.layout.setResults(true); });
+  await page.waitForTimeout(200);
+  const w1280 = await page.evaluate(() => ({ narrow: document.getElementById('shell').dataset.narrow, tools: document.getElementById('tools').getBoundingClientRect().width, results: document.getElementById('results').getBoundingClientRect().width, writing: document.getElementById('center').getBoundingClientRect().width, hide: !!document.getElementById('results-hide') && document.getElementById('results-hide').getBoundingClientRect().right <= window.innerWidth }));
+  ok(w1280.narrow === 'no' && w1280.writing >= 690 && w1280.tools >= 200 && w1280.results >= 280 && w1280.hide, 'at 1280×800 both sides stay open as sides, narrowed, the writing keeps ' + Math.round(w1280.writing) + 'px, and Hide is in reach');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(300);
 
   // 8. Get feedback: three readers, one call each, through the fixture stand-ins
   if ((await page.getAttribute('#shell', 'data-tools')) !== 'open') await page.click('#tools-toggle');
@@ -324,6 +340,38 @@ const path = require('path');
   ok(/not started from a proposal/.test(await page.textContent('#results-body')) && !posts.slice(before12).some(p => /\/api\/(jobs|operations)$/.test(p)), 'Start another attempt is refused for an operation with no proposal to rebuild, and nothing was sent');
   const opsList = await (await page.request.get(BASE + '/api/operations?limit=10')).json();
   ok(opsList.dispatcher && opsList.dispatcher.held === true && opsList.population, 'the store names its dispatcher and its population');
+
+  // 13. every control is reachable by keyboard (slice G, instructions §11 "all controls keyboard reachable"):
+  // a walk of Tab from the first header control reaches the header, the formatting bar, both sides'
+  // controls, the editor itself, and the grips; a grip resizes on the arrow keys; Tab leaves the editor
+  await page.click('a[data-page="work"]');
+  await page.evaluate(() => { window.__work.layout.setTools(true); window.__work.layout.setResults(true); });
+  await page.waitForTimeout(200);
+  await page.focus('#tools-toggle');
+  const reached = new Set();
+  const describe = () => page.evaluate(() => { const a = document.activeElement; if (!a || a === document.body) return ''; return a.tagName.toLowerCase() + (a.id ? '#' + a.id : '') + (a.className ? '.' + String(a.className).split(' ').filter(Boolean).join('.') : '') + (a.dataset && a.dataset.page ? '[' + a.dataset.page + ']' : '') + (a.dataset && a.dataset.action ? '[' + a.dataset.action + ']' : ''); });
+  reached.add(await describe());
+  for (let i = 0; i < 120; i++) {
+    await page.keyboard.press('Tab');
+    const d = await describe();
+    if (!d) break;
+    if (d.includes('#tools-toggle') && i > 5) break;
+    reached.add(d);
+  }
+  const need = [['#tools-toggle', 'Tools toggle'], ['#doc-menu-btn', 'Document menu'], ['.fmt', 'a formatting button'], ['#ask-btn', 'Ask'], ['#focus-btn', 'Focus'], ['#results-toggle', 'Results toggle'], ['[yourwork]', 'Your work destination'], ['[feedback.readers]', 'Get feedback'], ['#tools-hide', 'Hide Tools'], ['#tools-grip', 'the Tools grip'], ['.pm-editor', 'the editor'], ['.tab', 'a Results tab'], ['#results-hide', 'Hide Results'], ['#results-grip', 'the Results grip']];
+  const missing = need.filter(([sel]) => !Array.from(reached).some(r => r.includes(sel))).map(([, name]) => name);
+  ok(missing.length === 0, 'a Tab walk reaches every control of the header, Tools, the editor and Results, including both grips (' + reached.size + ' stops)' + (missing.length ? ' — missing: ' + missing.join(', ') : ''));
+  await page.focus('#tools-grip');
+  const wBefore = await page.evaluate(() => document.getElementById('tools').getBoundingClientRect().width);
+  await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft');
+  await page.waitForTimeout(150);
+  const wAfter = await page.evaluate(() => document.getElementById('tools').getBoundingClientRect().width);
+  ok(wAfter < wBefore, 'the Tools grip resizes on the arrow keys (' + Math.round(wBefore) + ' → ' + Math.round(wAfter) + 'px)');
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight');
+  const text13 = await page.evaluate(() => window.__work.editor.getText());
+  await page.evaluate(() => { const e = window.__work.editor; e.focus(); e.setSelection(0, 0); });
+  await page.keyboard.press('Tab');
+  ok(!(await page.evaluate(() => window.__work.editor.hasFocus())) && (await page.evaluate(() => window.__work.editor.getText())) === text13, 'Tab outside a list leaves the editor (the keyboard is never trapped in the draft) and types nothing');
 
   ok(errs.length === 0, 'no page errors across the workspace journey: ' + JSON.stringify(errs));
   await browser.close();

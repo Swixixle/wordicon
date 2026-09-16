@@ -1366,6 +1366,157 @@ def _check_law_filing():
     return out
 
 
+# ---- workspace-v2 slice G: the workspace's rule, filed as the instruction ----
+#
+# The desk's law says the panel reads and never acts. The workspace's Tools
+# and Results sides DO begin work and DO change the draft — on a press. The
+# build instruction ("Panel behavior") named the invariant and directed that
+# the constitution record the change as that instruction, not pretend the
+# old rule allowed it. These pins hold: the clause exists, under the work
+# movement, verbatim; it names its origin; the desk's rule still stands,
+# once; the workspace's Help carries the same sentence and points at the
+# clause; and the registry's classes agree with it (an apply, a ruling and
+# a dispatch are different kinds, none of them a view).
+
+WORKSPACE_LAW_ID = "the-workspace-two-sides-that-act-only-on-a-press"
+WORKSPACE_LAW = ("The sides never insert or replace writing, accept or rule on a result, "
+                 "or initiate research on their own.")
+WORKSPACE_LAW_ORIGIN = "added by the build instruction for the workspace"
+DESK_LAW = "The panel reads; it never acts."
+
+
+def _check_workspace_law():
+    out = []
+    root = _pathlib.Path(__file__).resolve().parents[1]
+    canon = _canon_source()
+    regions = _canon_regions()
+    flat = " ".join(_re.sub(r"<[^>]+>", " ", canon).split())
+    if WORKSPACE_LAW_ID not in regions:
+        return [f"G-law: the constitution has no region {WORKSPACE_LAW_ID!r} — the workspace's rule is unfiled"]
+    region = regions[WORKSPACE_LAW_ID]
+    if WORKSPACE_LAW not in region:
+        out.append("G-law: the workspace clause does not state the invariant verbatim")
+    if WORKSPACE_LAW_ORIGIN not in region or "Panel behavior" not in region:
+        out.append("G-law: the clause does not say it came from the build instruction — a rule that "
+                   "pretends it was always there hides who changed the law")
+    if flat.count(WORKSPACE_LAW) != 1:
+        out.append(f"G-law: the invariant appears {flat.count(WORKSPACE_LAW)} time(s); one law, one place")
+    if flat.count(DESK_LAW) != 1:
+        out.append(f"G-law: the desk's own rule ({DESK_LAW!r}) appears {flat.count(DESK_LAW)} time(s) — "
+                   "the workspace's clause amends nothing about the desk")
+    # under the work movement, after the desk, before the room
+    order = [m.group(1) for m in _re.finditer(r'<section class="cl" id="([^"]+)"', canon)]
+    try:
+        if not (order.index("the-desk-three-zones-and-no-place-without-a-door") < order.index(WORKSPACE_LAW_ID)
+                < order.index("the-room-where-writing-happens")):
+            out.append("G-law: the workspace clause is not filed between the desk and the room")
+    except ValueError as e:
+        out.append(f"G-law: a section the ordering relies on is gone: {e}")
+    mv = [m for m in _re.finditer(r'<div class="about-movement" id="([^"]+)"', canon)]
+    pos = canon.index(f'<section class="cl" id="{WORKSPACE_LAW_ID}"')
+    holding = [m.group(1) for m in mv if m.start() < pos][-1:]
+    if holding != ["where-the-work-happens"]:
+        out.append(f"G-law: the clause lives under {holding or 'no movement'}, not under the work movement")
+    if f'href="#{WORKSPACE_LAW_ID}"' not in canon:
+        out.append("G-law: the contents do not list the workspace clause")
+    # the workspace's Help carries the sentence and points at the clause
+    help_src = (root / "webapp" / "work" / "main.js").read_text(encoding="utf-8")
+    if WORKSPACE_LAW not in help_src:
+        out.append("G-law: the workspace's Help does not carry the invariant verbatim")
+    if f"/constitution#{WORKSPACE_LAW_ID}" not in help_src:
+        out.append("G-law: the workspace's Help does not point at the clause")
+    # the registry agrees: applying, ruling and dispatching are different kinds, and no view dispatches
+    import actions as _ac
+    kinds = {a["id"]: a["kind"] for a in _ac.ACTIONS}
+    for aid, want in (("apply.insert", "apply"), ("apply.replace", "apply"), ("rule.judge", "ruling"), ("analyze.decompose", "dispatch")):
+        if kinds.get(aid) != want:
+            out.append(f"G-law: {aid} is {kinds.get(aid)!r}, not {want!r} — the classes the clause relies on drifted")
+    return out
+
+
+def _check_vault_sqlite():
+    """Slice G. A vault sealed while a notebook write transaction is open
+    holds a consistent notebook: inside the drained window the SQLite stores
+    are copied again through SQLite's own backup API (a writer outside the
+    corpus lock — the index draining the outbox — cannot tear them), the
+    rollback journal never rides, the manifest names the stores copied that
+    way and counts their rows, and the restored store passes integrity_check
+    holding exactly the committed rows. Proven to fail before the change:
+    the journal rode the vault and the manifest knew nothing of the API."""
+    import json as _json, sqlite3 as _sq, tempfile as _tf
+    import vault as _v, notebook as nbk, operations as ops
+    out = []
+    tmp = Path(_tf.mkdtemp(prefix="wordicon_vaultg_"))
+    saved_dirty, saved_fail = dict(_v._DIRTY), dict(_v._LAST_FAILURE)
+    state_root.apply(tmp)
+    try:
+        (tmp / "results").mkdir(parents=True, exist_ok=True)
+        (tmp / "receipts").mkdir(parents=True, exist_ok=True)
+        if _v.local_state() != tmp or nbk.db_path().parent != tmp:
+            return [f"G-vault: the isolated root did not take: vault at {_v.local_state()}, notebook at {nbk.db_path()}"]
+        for i in range(3):
+            nbk.save(f"doc_vg_{i}", title="", title_is_manual=False, body=f"vault words {i}", base_revision=0,
+                     base_fingerprint="", request_id=f"req_vg_{i}")
+        ops.reserve(request_key="rk_vg_1", kind="job", execution={"suite": "vault"})
+        # an open write transaction with an uncommitted change: the store is mid-write
+        w = _sq.connect(str(nbk.db_path()), isolation_level=None, timeout=1)
+        w.execute("BEGIN IMMEDIATE")
+        w.execute("UPDATE documents SET body = 'UNCOMMITTED' WHERE doc_id = 'doc_vg_0'")
+        try:
+            if not nbk.db_path().with_name("notebook.sqlite3-journal").exists():
+                out.append("G-vault: the open write transaction left no rollback journal — the premise does not hold")
+            got = _v.init_vault(dest=str(tmp / "dest"))
+            name = _v.backup(reason="suite")
+        finally:
+            w.execute("ROLLBACK")
+            w.close()
+        if not name:
+            return out + [f"G-vault: the backup failed with a writer mid-transaction: {_v._LAST_FAILURE['msg']}"]
+        man = _v.restore(str(tmp / "dest" / name), str(tmp / "restored"), got["identity"])
+        paths = [f["path"] for f in man["files"]]
+        if "notebook.sqlite3" not in paths or "operations.sqlite3" not in paths:
+            out.append(f"G-vault: the SQLite stores did not ride the vault: {paths}")
+        if any(p.endswith(("-journal", "-wal", "-shm")) for p in paths):
+            out.append("G-vault: a journal sibling rode the vault — that is the plain copy of an active database, "
+                       "not a consistent one")
+        api = man.get("sqlite_backup_api") or []
+        if "notebook.sqlite3" not in api or "operations.sqlite3" not in api:
+            out.append(f"G-vault: the manifest does not say the stores were copied through SQLite's backup API: {api}")
+        sem = man.get("semantic") or {}
+        if sem.get("notebook_documents") != 3 or sem.get("operations") != 1 or sem.get("notebook_schema") != "2":
+            out.append(f"G-vault: the manifest's counts of the new stores are wrong: {sem}")
+        if "vault words" in _json.dumps(man):
+            out.append("G-vault: the manifest carries document text")
+        rdb = tmp / "restored" / "local_state" / "notebook.sqlite3"
+        c = _sq.connect(f"file:{rdb}?mode=ro", uri=True)
+        try:
+            integrity = c.execute("PRAGMA integrity_check").fetchone()[0]
+            bodies = [r[0] for r in c.execute("SELECT body FROM documents ORDER BY doc_id").fetchall()]
+        finally:
+            c.close()
+        if integrity != "ok":
+            out.append(f"G-vault: the restored notebook fails integrity_check: {integrity}")
+        if bodies != ["vault words 0", "vault words 1", "vault words 2"]:
+            out.append(f"G-vault: the restored notebook does not hold exactly the committed rows: {bodies}")
+        rops = tmp / "restored" / "local_state" / "operations.sqlite3"
+        c = _sq.connect(f"file:{rops}?mode=ro", uri=True)
+        try:
+            n_ops = c.execute("SELECT COUNT(*) FROM operations WHERE request_key = 'rk_vg_1'").fetchone()[0]
+        finally:
+            c.close()
+        if n_ops != 1:
+            out.append("G-vault: the restored operations store lost the reserved operation")
+        # the derived index and the dispatcher lock never ride
+        for never in ("work_index.sqlite3", "operations.lock"):
+            if never in paths:
+                out.append(f"G-vault: {never} rode the vault; it is rebuilt or retaken, never restored")
+    finally:
+        state_root.apply(_SCRATCH)
+        _v._DIRTY.update(saved_dirty)
+        _v._LAST_FAILURE.update(saved_fail)
+    return out
+
+
 # ---- block 123: Carry Back ---------------------------------------------------
 #
 # The bridge from a workup to the writing room. A carry means "this may be
@@ -5878,8 +6029,10 @@ def _check_durable_operations(server, paired):
         out.append(f"D: another attempt is not a new linked operation with its cost said: {a2.status_code} {d2}")
     op2 = d2.get("operation_id", "")
     a3 = c.post("/api/operations/" + op + "/attempts", json={"request_key": "rk_d_3"})
-    if a3.status_code == 200 and (a3.get_json() or {}).get("operation_id") not in (op2,):
-        pass   # a third attempt of a complete parent is allowed; it is a new operation
+    op3 = (a3.get_json() or {}).get("operation_id", "") if a3.status_code == 200 else ""
+    # a third attempt of a complete parent is allowed; it is a new operation — and
+    # it runs in the background, so it is waited for below before the store is
+    # measured byte-for-byte (a slow machine let its events land mid-measure)
     a4 = c.post("/api/operations/" + op2 + "/attempts", json={"request_key": "rk_d_4"})
     if ops.get(op2)["status"] in ("queued", "claimed", "running") and a4.status_code != 409:
         out.append("D: another attempt of a running operation was accepted")
@@ -5889,6 +6042,10 @@ def _check_durable_operations(server, paired):
         _time.sleep(0.1)
     if ops.get(op2)["status"] != "complete" or not any(e["kind"] == "attempt_from" for e in ops.events(op)):
         out.append("D: the second attempt did not complete or the first does not record the link")
+    for _ in range(900):
+        if not op3 or (ops.get(op3) or {}).get("status") in ("complete", "failed"):
+            break
+        _time.sleep(0.1)
     row2 = ops.get(op2)
     row2_exec = dict(row2["execution"]); row2_exec["lane"] = "someone-else"
     conn = ops._connect()
@@ -6043,6 +6200,134 @@ def _check_durable_operations(server, paired):
                     out.append("D: an operation whose dispatch was recorded was sent again, or is not unknown")
         finally:
             state_root.apply(_SCRATCH)
+    return out
+
+
+_LOCK_CONTENDER = r"""
+import os, sys, json
+sys.path.insert(0, sys.argv[1] + "/scripts"); sys.path.insert(0, sys.argv[1])
+os.environ["WORDICON_TEST_MODE"] = "1"
+os.environ["WORDICON_STATE"] = sys.argv[2]
+import testmode, state_root
+state_root.apply(state_root.resolve(sys.argv[2]))
+import operations as ops
+lk = ops.DispatcherLock()
+got = lk.acquire()
+if got:
+    lk.release()
+print(json.dumps({"acquired": bool(got), "why": lk.why}))
+"""
+
+
+def _check_dispatch_concurrency(server, paired):
+    """Slice G (instructions §11, "Dispatch"). Twenty identical Starts at the
+    same instant — the same proposal under the same request key, from
+    twenty threads — yield ONE operation with ONE reservation, ONE claim and
+    ONE fixture dispatch (the same number of stage intents as a single
+    Start makes); every caller is told the same operation id; a changed
+    payload under that key is refused; and a SECOND PROCESS contending for
+    this store's dispatcher lock is refused and told who holds it."""
+    import concurrent.futures as _fut, importlib, json as _json, subprocess, time as _time
+    ops = importlib.import_module("operations")
+    ac = importlib.import_module("actions")
+    out = []
+    REPO = Path(__file__).resolve().parents[1]
+    text = "Twenty at once: the same words under the same key."
+    subj = {"kind": "selection", "text": text, "doc_id": "doc_g20", "revision": 1, "seq": 1, "range": {"start": 0, "end": len(text)}, "units": "codepoint", "editor_session": "es_g20"}
+    rec = ac.prepare("analyze.decompose", subj, {}, server.server_gateway)
+
+    # one paired device (one session, minted once, single-threaded) firing the
+    # same Start twenty times at once — a double press, a retry storm
+    import gate as _gate_g
+    token = _gate_g.issue_session("suite-twenty")["token"]
+
+    def start(key):
+        c = server.app.test_client()
+        c.set_cookie(_gate_g.SESSION_COOKIE, token)
+        r = c.post("/api/operations", json={"prepared_id": rec["prepared_id"], "request_key": key})
+        return r.status_code, (r.get_json() or {})
+
+    with _fut.ThreadPoolExecutor(max_workers=20) as pool:
+        results = list(pool.map(lambda _: start("rk_g_twenty"), range(20)))
+    codes = sorted(set(s for s, _ in results))
+    ids = {d.get("operation_id") for _, d in results}
+    if codes != [200] or len(ids) != 1 or None in ids:
+        return out + [f"G-dispatch: twenty identical Starts did not all succeed on ONE operation: codes {codes}, ids {ids}"]
+    op = ids.pop()
+    if sum(1 for _, d in results if not d.get("repeated")) != 1:
+        out.append(f"G-dispatch: {sum(1 for _, d in results if not d.get('repeated'))} callers were told they had created the operation; exactly one did")
+    for _ in range(900):
+        if (ops.get(op) or {}).get("status") in ("complete", "failed"):
+            break
+        _time.sleep(0.1)
+    if (ops.get(op) or {}).get("status") != "complete":
+        return out + [f"G-dispatch: the shared operation did not complete: {(ops.get(op) or {}).get('status')}"]
+    evs = ops.events(op)
+    kinds = [e["kind"] for e in evs]
+    if kinds.count("reserved") != 1 or kinds.count("claimed") != 1:
+        out.append(f"G-dispatch: {kinds.count('reserved')} reservation(s) and {kinds.count('claimed')} claim(s) for twenty identical Starts; one of each")
+    with server.JOBS_LOCK:
+        held = [j for j in server.JOBS.values() if j.get("prepared_id") == rec["prepared_id"]]
+    if len(held) != 1:
+        out.append(f"G-dispatch: the process holds {len(held)} job(s) for the proposal; one dispatch")
+    # a single Start under another key makes the same number of stage intents: twenty made one dispatch, not twenty
+    s1, d1 = start("rk_g_single")
+    op1 = d1.get("operation_id", "")
+    for _ in range(900):
+        if (ops.get(op1) or {}).get("status") in ("complete", "failed"):
+            break
+        _time.sleep(0.1)
+    n20 = sum(1 for e in evs if e["kind"] == "stage_intent")
+    n1 = sum(1 for e in ops.events(op1) if e["kind"] == "stage_intent")
+    if s1 != 200 or n1 == 0 or n20 != n1:
+        out.append(f"G-dispatch: twenty identical Starts left {n20} dispatch intent(s); one Start leaves {n1}")
+    # the same key with a changed payload is refused, after the fact too
+    rec2 = ac.prepare("analyze.decompose", {**subj, "text": text + " Changed."}, {}, server.server_gateway)
+    c = server.app.test_client(); paired(c)
+    r = c.post("/api/operations", json={"prepared_id": rec2["prepared_id"], "request_key": "rk_g_twenty"})
+    if r.status_code != 409:
+        out.append(f"G-dispatch: a changed payload under the shared key was not refused: {r.status_code}")
+    # the reservation itself, at the store: twenty threads released by one barrier
+    # into reserve() under the same key, ten rounds — one row and no error every
+    # time. (Sabotage: a deferred BEGIN instead of BEGIN IMMEDIATE lets two callers
+    # both find no prior row; with the barrier that shows in most rounds, and ten
+    # rounds make a miss vanishingly unlikely.)
+    import threading as _thr
+    for rnd in range(10):
+        key = f"rk_g_barrier_{rnd}"
+        barrier = _thr.Barrier(20)
+        got = []
+        def go():
+            barrier.wait()
+            try:
+                row, _created = ops.reserve(request_key=key, kind="job", execution={"round": rnd})
+                got.append(("ok", row["op_id"]))
+            except Exception as e:  # noqa: BLE001 — an error here IS the finding
+                got.append(("err", type(e).__name__ + ": " + str(e)[:80]))
+        ts = [_thr.Thread(target=go) for _ in range(20)]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join()
+        errs = [g for g in got if g[0] == "err"]
+        ids = {g[1] for g in got if g[0] == "ok"}
+        if errs or len(ids) != 1:
+            out.append(f"G-dispatch: round {rnd}: twenty simultaneous reservations under one key made {len(ids)} row(s) with {len(errs)} error(s) — {errs[:1]}")
+            break
+    # a second PROCESS on this store's dispatcher lock
+    if not server._dispatching():
+        out.append(f"G-dispatch: this process does not hold the dispatcher lock: {server.OPS_DISPATCHER.why}")
+    child = Path(_tempfile.mkdtemp(prefix="wordicon_contender_")) / "contender.py"
+    child.write_text(_LOCK_CONTENDER, encoding="utf-8")
+    env = {k: v for k, v in _os.environ.items() if k != "ANTHROPIC_API_KEY"}
+    env["WORDICON_TEST_MODE"] = "1"
+    p = subprocess.run([sys.executable, str(child), str(REPO), str(_SCRATCH)], capture_output=True, text=True, timeout=120, env=env)
+    line = next((l for l in p.stdout.splitlines() if l.startswith("{")), "")
+    got = _json.loads(line) if line else {}
+    if got.get("acquired") is not False:
+        out.append(f"G-dispatch: a second process acquired this store's dispatcher lock: {got or p.stderr[-300:]}")
+    elif "holds the dispatcher lock" not in got.get("why", ""):
+        out.append(f"G-dispatch: the second process's refusal does not say who holds the lock: {got.get('why')!r}")
     return out
 
 
@@ -6460,6 +6745,7 @@ def main() -> int:
     failures.extend(_check_stream_and_retry_authority())
     failures.extend(_check_constitution_split())
     failures.extend(_check_law_filing())
+    failures.extend(_check_workspace_law())
     failures.extend(_check_carry_back())
     failures.extend(_check_moira())
     failures.extend(_check_notebook_a())
@@ -6591,8 +6877,10 @@ def main() -> int:
     failures.extend(_check_workspace_registry(server, _paired))
     failures.extend(_check_document_contract(server, _paired))
     failures.extend(_check_durable_operations(server, _paired))
+    failures.extend(_check_dispatch_concurrency(server, _paired))
     failures.extend(_check_work_index(server, _paired))
     failures.extend(_check_investigation_adapters(server, _paired))
+    failures.extend(_check_vault_sqlite())
     failures.extend(_check_map_focus_routes(server, _paired))
     failures.extend(_check_moira_routes(server, _paired))
     failures.extend(_check_notebook_b(server, _paired))
@@ -22622,6 +22910,11 @@ console.log(out.join('\\n'));
             # a door for every specialized workspace. It precedes the room
             # because the room opens inside it.
             "The desk — three zones, and no place without a door",
+            # workspace-v2 slice G: the second desk (/work), whose sides act
+            # only on a press — filed by the build instruction ("Panel
+            # behavior") beside the desk it amends, before the room that
+            # opens inside both.
+            "The workspace — two sides that act only on a press",
             "The room — where writing happens",
             # block 125: the readers read the text the room holds; their
             # clause sits beside the room's, under the same movement.

@@ -1,0 +1,1194 @@
+{
+ "taken_on": "the dev scratch server on the mock lane, fixtures only (tests/journeys/fixtures.py), by the screenshot pass of slice G",
+ "kept_here": [
+  "chromium-01-tools-open-results-closed.png",
+  "chromium-02-selection-menu.png",
+  "chromium-03-proposal.png",
+  "chromium-05-apply-controls.png",
+  "chromium-06-results-only.png",
+  "chromium-07-both-hidden.png",
+  "chromium-09-focus.png",
+  "chromium-10-readers-feedback.png",
+  "chromium-11-result-unknown.png",
+  "chromium-12-investigate.png",
+  "chromium-14-result-error.png",
+  "chromium-16-place-source-reading.png",
+  "chromium-18-yourwork.png",
+  "chromium-20-help.png",
+  "chromium-33-zoom150-results-below.png",
+  "chromium-35-phone.png",
+  "webkit-04-both-open-result.png"
+ ],
+ "every_shot_measured": [
+  {
+   "engine": "chromium",
+   "name": "01-tools-open-results-closed",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the default arrangement: Tools open, Results closed, the draft on the blue surface"
+  },
+  {
+   "engine": "chromium",
+   "name": "02-selection-menu",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "selected words and the selection menu (\u2318.) \u2014 nothing has run"
+  },
+  {
+   "engine": "chromium",
+   "name": "03-proposal",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the proposal: what leaves, to whom, the lane, the cost \u2014 nothing runs until Start"
+  },
+  {
+   "engine": "chromium",
+   "name": "04-both-open-result",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "both sides open with a complete result (mock lane)"
+  },
+  {
+   "engine": "chromium",
+   "name": "05-apply-controls",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the result\u2019s application controls: Insert below / Replace, offered only while the target holds"
+  },
+  {
+   "engine": "chromium",
+   "name": "06-results-only",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "closed",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Tools hidden, Results open (the header keeps its reopen control)"
+  },
+  {
+   "engine": "chromium",
+   "name": "07-both-hidden",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "closed",
+   "results": "closed",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "both sides hidden; the header controls bring them back"
+  },
+  {
+   "engine": "chromium",
+   "name": "08-tools-only",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Tools open, Results hidden"
+  },
+  {
+   "engine": "chromium",
+   "name": "09-focus",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "on",
+   "overflow": false,
+   "errors": [],
+   "note": "Focus: sides and secondary controls out of sight; Exit focus restores the arrangement"
+  },
+  {
+   "engine": "chromium",
+   "name": "10-readers-feedback",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the three readers\u2019 feedback, each on its own, no verdict"
+  },
+  {
+   "engine": "chromium",
+   "name": "11-result-unknown",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "an operation a dead process left after its first dispatch intent: outcome unknown, by the record; Check status sends nothing"
+  },
+  {
+   "engine": "chromium",
+   "name": "12-investigate",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Investigate: four instruments, readiness from the record, nothing contacted by opening"
+  },
+  {
+   "engine": "chromium",
+   "name": "13-investigation-proposal",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "an investigation proposed from the fixture producer: what leaves and to whom, before Start"
+  },
+  {
+   "engine": "chromium",
+   "name": "14a-result-running",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "an investigation in flight: Running \u00b7 Sending to EthicalAlt"
+  },
+  {
+   "engine": "chromium",
+   "name": "14-result-error",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "a failed investigation (the fixture producer answered 500): a known failure, named"
+  },
+  {
+   "engine": "chromium",
+   "name": "15-result-partial",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "a partial workup from the record opened as a place (its own page: 2 components proposed, 1 analysed, partiality stated before any verdict)"
+  },
+  {
+   "engine": "chromium",
+   "name": "16-place-source-reading",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "a source (the fixture document) read on the previous interface, opened as a place inside the shell; the draft keeps its element"
+  },
+  {
+   "engine": "chromium",
+   "name": "17-place-constitution-clause",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the constitution opened at the workspace clause"
+  },
+  {
+   "engine": "chromium",
+   "name": "18-yourwork",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Your work: everything kept, from the index, with its population"
+  },
+  {
+   "engine": "chromium",
+   "name": "19-yourwork-search",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "a search of the record (local; the words go to the index only)"
+  },
+  {
+   "engine": "chromium",
+   "name": "20-help",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Help, with the workspace\u2019s rule and its door"
+  },
+  {
+   "engine": "chromium",
+   "name": "21-doc-menu",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the document menu: New, Rename, Duplicate, Open another, Versions, plain copy, exports, Archive"
+  },
+  {
+   "engine": "chromium",
+   "name": "22-versions",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Versions: checkpoints and events; restore makes a new revision"
+  },
+  {
+   "engine": "chromium",
+   "name": "23-find",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "find and replace, with its count and population"
+  },
+  {
+   "engine": "chromium",
+   "name": "24-ask",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Ask: a plain request; the rest of it becomes the subject; Enter proposes, never runs"
+  },
+  {
+   "engine": "chromium",
+   "name": "30-1920x1080",
+   "viewport": {
+    "width": 1920,
+    "height": 1080
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "1920\u00d71080, both sides open"
+  },
+  {
+   "engine": "chromium",
+   "name": "31-1280x800",
+   "viewport": {
+    "width": 1280,
+    "height": 800
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "a smaller laptop, both sides open"
+  },
+  {
+   "engine": "chromium",
+   "name": "32-zoom125",
+   "viewport": {
+    "width": 1152,
+    "height": 720
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "125% zoom (1440 px window)"
+  },
+  {
+   "engine": "chromium",
+   "name": "32-zoom125-results-below",
+   "viewport": {
+    "width": 1152,
+    "height": 720
+   },
+   "narrow": "yes",
+   "tools": "closed",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Results as a section below the writing, with Back to writing"
+  },
+  {
+   "engine": "chromium",
+   "name": "32-zoom125-drawer",
+   "viewport": {
+    "width": 1152,
+    "height": 720
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Tools as a drawer over the writing, with its own close"
+  },
+  {
+   "engine": "chromium",
+   "name": "33-zoom150",
+   "viewport": {
+    "width": 960,
+    "height": 600
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "150% zoom (1440 px window): measured narrow \u2014 Tools is a drawer, Results a section below"
+  },
+  {
+   "engine": "chromium",
+   "name": "33-zoom150-results-below",
+   "viewport": {
+    "width": 960,
+    "height": 600
+   },
+   "narrow": "yes",
+   "tools": "closed",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Results as a section below the writing, with Back to writing"
+  },
+  {
+   "engine": "chromium",
+   "name": "33-zoom150-drawer",
+   "viewport": {
+    "width": 960,
+    "height": 600
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Tools as a drawer over the writing, with its own close"
+  },
+  {
+   "engine": "chromium",
+   "name": "34-zoom200",
+   "viewport": {
+    "width": 720,
+    "height": 450
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "200% zoom (1440 px window)"
+  },
+  {
+   "engine": "chromium",
+   "name": "34-zoom200-results-below",
+   "viewport": {
+    "width": 720,
+    "height": 450
+   },
+   "narrow": "yes",
+   "tools": "closed",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Results as a section below the writing, with Back to writing"
+  },
+  {
+   "engine": "chromium",
+   "name": "34-zoom200-drawer",
+   "viewport": {
+    "width": 720,
+    "height": 450
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Tools as a drawer over the writing, with its own close"
+  },
+  {
+   "engine": "chromium",
+   "name": "35-phone",
+   "viewport": {
+    "width": 390,
+    "height": 844
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "phone width"
+  },
+  {
+   "engine": "chromium",
+   "name": "35-phone-results-below",
+   "viewport": {
+    "width": 390,
+    "height": 844
+   },
+   "narrow": "yes",
+   "tools": "closed",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Results as a section below the writing, with Back to writing"
+  },
+  {
+   "engine": "chromium",
+   "name": "35-phone-drawer",
+   "viewport": {
+    "width": 390,
+    "height": 844
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Tools as a drawer over the writing, with its own close"
+  },
+  {
+   "engine": "webkit",
+   "name": "01-tools-open-results-closed",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the default arrangement: Tools open, Results closed, the draft on the blue surface"
+  },
+  {
+   "engine": "webkit",
+   "name": "02-selection-menu",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "selected words and the selection menu (\u2318.) \u2014 nothing has run"
+  },
+  {
+   "engine": "webkit",
+   "name": "03-proposal",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the proposal: what leaves, to whom, the lane, the cost \u2014 nothing runs until Start"
+  },
+  {
+   "engine": "webkit",
+   "name": "04-both-open-result",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "both sides open with a complete result (mock lane)"
+  },
+  {
+   "engine": "webkit",
+   "name": "05-apply-controls",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the result\u2019s application controls: Insert below / Replace, offered only while the target holds"
+  },
+  {
+   "engine": "webkit",
+   "name": "06-results-only",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "closed",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Tools hidden, Results open (the header keeps its reopen control)"
+  },
+  {
+   "engine": "webkit",
+   "name": "07-both-hidden",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "closed",
+   "results": "closed",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "both sides hidden; the header controls bring them back"
+  },
+  {
+   "engine": "webkit",
+   "name": "08-tools-only",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Tools open, Results hidden"
+  },
+  {
+   "engine": "webkit",
+   "name": "09-focus",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "closed",
+   "focus": "on",
+   "overflow": false,
+   "errors": [],
+   "note": "Focus: sides and secondary controls out of sight; Exit focus restores the arrangement"
+  },
+  {
+   "engine": "webkit",
+   "name": "10-readers-feedback",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the three readers\u2019 feedback, each on its own, no verdict"
+  },
+  {
+   "engine": "webkit",
+   "name": "11-result-unknown",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "an operation a dead process left after its first dispatch intent: outcome unknown, by the record; Check status sends nothing"
+  },
+  {
+   "engine": "webkit",
+   "name": "12-investigate",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Investigate: four instruments, readiness from the record, nothing contacted by opening"
+  },
+  {
+   "engine": "webkit",
+   "name": "13-investigation-proposal",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "an investigation proposed from the fixture producer: what leaves and to whom, before Start"
+  },
+  {
+   "engine": "webkit",
+   "name": "14a-result-running",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "an investigation in flight: Running \u00b7 Sending to EthicalAlt"
+  },
+  {
+   "engine": "webkit",
+   "name": "14-result-error",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "a failed investigation (the fixture producer answered 500): a known failure, named"
+  },
+  {
+   "engine": "webkit",
+   "name": "15-result-partial",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "a partial workup from the record opened as a place (its own page: 2 components proposed, 1 analysed, partiality stated before any verdict)"
+  },
+  {
+   "engine": "webkit",
+   "name": "16-place-source-reading",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "a source (the fixture document) read on the previous interface, opened as a place inside the shell; the draft keeps its element"
+  },
+  {
+   "engine": "webkit",
+   "name": "17-place-constitution-clause",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the constitution opened at the workspace clause"
+  },
+  {
+   "engine": "webkit",
+   "name": "18-yourwork",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Your work: everything kept, from the index, with its population"
+  },
+  {
+   "engine": "webkit",
+   "name": "19-yourwork-search",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "a search of the record (local; the words go to the index only)"
+  },
+  {
+   "engine": "webkit",
+   "name": "20-help",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Help, with the workspace\u2019s rule and its door"
+  },
+  {
+   "engine": "webkit",
+   "name": "21-doc-menu",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "the document menu: New, Rename, Duplicate, Open another, Versions, plain copy, exports, Archive"
+  },
+  {
+   "engine": "webkit",
+   "name": "22-versions",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Versions: checkpoints and events; restore makes a new revision"
+  },
+  {
+   "engine": "webkit",
+   "name": "23-find",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "find and replace, with its count and population"
+  },
+  {
+   "engine": "webkit",
+   "name": "24-ask",
+   "viewport": {
+    "width": 1440,
+    "height": 900
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "Ask: a plain request; the rest of it becomes the subject; Enter proposes, never runs"
+  },
+  {
+   "engine": "webkit",
+   "name": "30-1920x1080",
+   "viewport": {
+    "width": 1920,
+    "height": 1080
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "1920\u00d71080, both sides open"
+  },
+  {
+   "engine": "webkit",
+   "name": "31-1280x800",
+   "viewport": {
+    "width": 1280,
+    "height": 800
+   },
+   "narrow": "no",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "a smaller laptop, both sides open"
+  },
+  {
+   "engine": "webkit",
+   "name": "32-zoom125",
+   "viewport": {
+    "width": 1152,
+    "height": 720
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "125% zoom (1440 px window)"
+  },
+  {
+   "engine": "webkit",
+   "name": "32-zoom125-results-below",
+   "viewport": {
+    "width": 1152,
+    "height": 720
+   },
+   "narrow": "yes",
+   "tools": "closed",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Results as a section below the writing, with Back to writing"
+  },
+  {
+   "engine": "webkit",
+   "name": "32-zoom125-drawer",
+   "viewport": {
+    "width": 1152,
+    "height": 720
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Tools as a drawer over the writing, with its own close"
+  },
+  {
+   "engine": "webkit",
+   "name": "33-zoom150",
+   "viewport": {
+    "width": 960,
+    "height": 600
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "150% zoom (1440 px window): measured narrow \u2014 Tools is a drawer, Results a section below"
+  },
+  {
+   "engine": "webkit",
+   "name": "33-zoom150-results-below",
+   "viewport": {
+    "width": 960,
+    "height": 600
+   },
+   "narrow": "yes",
+   "tools": "closed",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Results as a section below the writing, with Back to writing"
+  },
+  {
+   "engine": "webkit",
+   "name": "33-zoom150-drawer",
+   "viewport": {
+    "width": 960,
+    "height": 600
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Tools as a drawer over the writing, with its own close"
+  },
+  {
+   "engine": "webkit",
+   "name": "34-zoom200",
+   "viewport": {
+    "width": 720,
+    "height": 450
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "200% zoom (1440 px window)"
+  },
+  {
+   "engine": "webkit",
+   "name": "34-zoom200-results-below",
+   "viewport": {
+    "width": 720,
+    "height": 450
+   },
+   "narrow": "yes",
+   "tools": "closed",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Results as a section below the writing, with Back to writing"
+  },
+  {
+   "engine": "webkit",
+   "name": "34-zoom200-drawer",
+   "viewport": {
+    "width": 720,
+    "height": 450
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Tools as a drawer over the writing, with its own close"
+  },
+  {
+   "engine": "webkit",
+   "name": "35-phone",
+   "viewport": {
+    "width": 390,
+    "height": 844
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "phone width"
+  },
+  {
+   "engine": "webkit",
+   "name": "35-phone-results-below",
+   "viewport": {
+    "width": 390,
+    "height": 844
+   },
+   "narrow": "yes",
+   "tools": "closed",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Results as a section below the writing, with Back to writing"
+  },
+  {
+   "engine": "webkit",
+   "name": "35-phone-drawer",
+   "viewport": {
+    "width": 390,
+    "height": 844
+   },
+   "narrow": "yes",
+   "tools": "open",
+   "results": "open",
+   "focus": "off",
+   "overflow": false,
+   "errors": [],
+   "note": "narrow: Tools as a drawer over the writing, with its own close"
+  }
+ ]
+}

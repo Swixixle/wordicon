@@ -72,7 +72,7 @@
         <div id="editor-host" class="editor-host"></div>
         <div id="sel-popover" class="popover" hidden role="menu" aria-label="On your selection"></div>
         <section id="stacked" class="stacked" hidden aria-label="Results below the draft">
-          <div class="panel-head"><span class="lbl">Results</span><button id="back-to-writing" class="btn small" type="button">↑ Back to writing</button></div>
+          <div class="panel-head" id="stacked-head"><button id="back-to-writing" class="btn small" type="button">↑ Back to writing</button></div>
           <div id="stacked-body"></div>
         </section>
       </section>
@@ -90,7 +90,7 @@
     <aside id="results" class="results" aria-label="Results" hidden>
       <div class="grip" id="results-grip" role="separator" aria-orientation="vertical" aria-label="Resize Results" tabindex="0" title="Drag, or use ← → to resize"></div>
       <div class="panel-head">
-        <div class="tabs" role="tablist" aria-label="Results panel">
+        <div class="tabs" id="results-tabs" role="tablist" aria-label="Results panel">
           <button class="tab on" role="tab" data-tab="results" aria-selected="true" type="button">Results</button>
           <button class="tab" role="tab" data-tab="feedback" aria-selected="false" type="button">Feedback</button>
           <button class="tab" role="tab" data-tab="notes" aria-selected="false" type="button">Notes</button>
