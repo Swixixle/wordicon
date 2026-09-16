@@ -46,7 +46,15 @@ def _poisoned(*a, **k):
     raise RuntimeError("the journeys run with the model gateway poisoned — nothing here may construct it")
 
 
-server.server_gateway = _poisoned
+# workspace-v2 slice B: the workspace journeys need a run to COMPLETE through
+# the one job path (write → choose an action → a fixture result → reopen), so
+# a second scratch server runs with the mock lane instead of the poison. Test
+# mode still refuses every provider and every outbound socket; the mock
+# gateway is the canned fixture, and the lane says so on every proposal.
+if os.environ.get("JOURNEY_MOCK_LANE") == "1":
+    server.server_gateway = lambda: cli.make_gateway("mock", None)
+else:
+    server.server_gateway = _poisoned
 # block 111 phase 2: the Reader's deterministic offline stand-in. The rest of
 # the server stays poisoned; only the Question Reader has a stand-in, and it
 # runs the real check, the real run record and the real adoption.

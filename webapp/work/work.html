@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nikodemus — Work</title>
+  <link rel="stylesheet" href="/work/work.css">
+  <script src="/brand.js"></script>
+</head>
+<body>
+<div id="shell" class="shell" data-tools="open" data-results="closed" data-focus="off" data-narrow="no" data-page="work">
+
+  <header id="header" class="header">
+    <button id="tools-toggle" class="btn small" type="button" aria-pressed="true" aria-controls="tools" title="Show or hide Tools">◂ Tools</button>
+    <div class="title" id="title-block">
+      <span id="doc-title" class="doc-title"></span>
+      <span id="doc-meta" class="muted small-text"></span>
+      <div class="docmenu">
+        <button id="doc-menu-btn" class="btn small" type="button" aria-haspopup="menu" aria-expanded="false" title="Document">Document ▾</button>
+        <div id="doc-menu" class="menu" role="menu" hidden>
+          <button role="menuitem" data-doc="new" type="button">New</button>
+          <button role="menuitem" data-doc="rename" type="button">Rename…</button>
+          <button role="menuitem" data-doc="duplicate" type="button">Duplicate</button>
+          <button role="menuitem" data-doc="open" type="button">Open another…</button>
+          <button role="menuitem" data-doc="versions" type="button">Versions</button>
+          <button role="menuitem" data-doc="export" type="button">Export as text</button>
+          <button role="menuitem" data-doc="archive" type="button">Archive</button>
+        </div>
+      </div>
+    </div>
+    <div id="toolbar" class="toolbar" role="toolbar" aria-label="Formatting" hidden></div>
+    <div class="header-right">
+      <button id="ask-btn" class="btn small" type="button" title="Ask Nikodemus (⌘K)">Ask ⌘K</button>
+      <button id="focus-btn" class="btn small" type="button" aria-pressed="false" title="Hide the sides and the secondary controls">Focus</button>
+      <button id="results-toggle" class="btn small" type="button" aria-pressed="false" aria-controls="results" title="Show or hide Results">◂ Results <span id="results-count" class="chip count" hidden></span></button>
+    </div>
+    <button id="exit-focus" class="btn small on" type="button" hidden>Exit focus</button>
+  </header>
+
+  <div id="body" class="body">
+
+    <aside id="tools" class="tools" aria-label="Tools">
+      <div class="panel-head"><span class="lbl">Tools</span><button id="tools-hide" class="btn small" type="button" aria-label="Hide Tools">◂ Hide</button><button id="tools-close" class="btn small" type="button" aria-label="Close Tools" hidden>Close ✕</button></div>
+      <nav class="destinations" aria-label="Destinations">
+        <a href="#work" data-page="work" class="dest on">Work</a>
+        <a href="#yourwork" data-page="yourwork" class="dest">Your work</a>
+        <a href="#investigate" data-page="investigate" class="dest">Investigate</a>
+      </nav>
+      <div class="rule"></div>
+      <div id="tool-groups" class="groups"></div>
+      <div class="spacer"></div>
+      <div class="foot-links"><a href="#system" data-page="settings" class="muted">Settings</a><a href="#help" data-page="help" class="muted">Help</a></div>
+      <div class="grip" id="tools-grip" role="separator" aria-orientation="vertical" aria-label="Resize Tools" tabindex="0" title="Drag, or use ← → to resize"></div>
+    </aside>
+
+    <main id="center" class="center">
+      <section id="work-view" class="view work-view">
+        <div id="editor-host" class="editor-host"></div>
+        <div id="sel-popover" class="popover" hidden role="menu" aria-label="On your selection"></div>
+        <section id="stacked" class="stacked" hidden aria-label="Results below the draft">
+          <div class="panel-head"><span class="lbl">Results</span><button id="back-to-writing" class="btn small" type="button">↑ Back to writing</button></div>
+          <div id="stacked-body"></div>
+        </section>
+      </section>
+      <section id="yourwork-view" class="view page-view" hidden></section>
+      <section id="investigate-view" class="view page-view" hidden></section>
+      <section id="settings-view" class="view page-view" hidden></section>
+      <section id="help-view" class="view page-view" hidden></section>
+      <section id="place-view" class="view place-view" hidden>
+        <div class="place-bar"><span id="place-name" class="lbl"></span><span id="place-why" class="muted small-text"></span><button id="place-back" class="btn small" type="button">↑ Back to writing</button></div>
+        <iframe id="place-frame" title="" src="about:blank"></iframe>
+      </section>
+      <footer id="activity-foot" class="activity-foot"><button id="activity-btn" class="linkish" type="button">Activity ▸</button><span id="activity-summary" class="muted"></span></footer>
+    </main>
+
+    <aside id="results" class="results" aria-label="Results" hidden>
+      <div class="grip" id="results-grip" role="separator" aria-orientation="vertical" aria-label="Resize Results" tabindex="0" title="Drag, or use ← → to resize"></div>
+      <div class="panel-head">
+        <div class="tabs" role="tablist" aria-label="Results panel">
+          <button class="tab on" role="tab" data-tab="results" aria-selected="true" type="button">Results</button>
+          <button class="tab" role="tab" data-tab="feedback" aria-selected="false" type="button">Feedback</button>
+          <button class="tab" role="tab" data-tab="notes" aria-selected="false" type="button">Notes</button>
+          <button class="tab" role="tab" data-tab="sources" aria-selected="false" type="button">Sources</button>
+        </div>
+        <button id="results-hide" class="btn small" type="button" aria-label="Hide Results">Hide ▸</button>
+      </div>
+      <div id="results-body" class="panel-body"></div>
+    </aside>
+  </div>
+
+  <div id="ask" class="ask" hidden>
+    <div class="ask-box" role="dialog" aria-label="Ask Nikodemus" aria-modal="true">
+      <input id="ask-input" type="text" autocomplete="off" placeholder="Ask for a tool by name — e.g. related words, feedback, map" aria-label="Ask Nikodemus">
+      <div id="ask-matches" class="ask-matches" role="listbox"></div>
+      <div class="muted small-text">Enter proposes; the proposal's Start runs it. Esc closes. Nothing here runs by itself.</div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</div>
+<script type="module" src="/work/main.js"></script>
+</body>
+</html>

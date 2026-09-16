@@ -1,5 +1,63 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.36.1 — workspace-v2, slice B: the shell, the registry, the frozen proposal
+
+`/work` is the new shell over the existing core: Work, Your work and
+Investigate in one document, in the application's own blue and yellow;
+Tools on the left and Results on the right, each with its own Hide, the
+header always carrying the way back and lit while a side is open; Focus,
+which hides both sides and the secondary controls and restores exactly what
+was open before; at widths where two sides would squeeze the writing under
+about 60ch, Tools as a drawer and Results as a section below the draft.
+The legacy pages are untouched and answer on their own routes; a specialist
+place opens inside the shell in a frame the way slice 2 opened one beside
+the room, and "Back to writing" restores the caret.
+
+Every control is generated from one registry (scripts/actions.py): each
+action once, with its plain label, its legacy names, the subjects it
+accepts, what leaves this machine and to whom, the provider and the call
+count, and the /api/jobs mode or the route it opens. Readiness is derived
+at request time from the gateway lane and the connector record — the
+boards' "2 of 4 available" was a fixture constant and is gone. Choosing an
+action PREPARES it: the server checks the subject against the action,
+freezes the exact scope as a content-addressed snapshot
+(scripts/snapshots.py, temp-file-and-rename), and writes a proposal whose
+disclosure — scope, fields that leave, recipient, calls, lane, cost
+uncertainty — is built from the registry and the snapshot, never from the
+client. Start (POST /api/operations) reloads the proposal by id, refuses
+one that does not hash to its id or whose snapshot does not verify,
+revalidates readiness, and dispatches once under a request key through
+the legacy route's own body (_create_job_from) — one dispatch
+implementation. The same key returns the same operation; a key reused for
+another proposal is refused; the job receives the snapshot's text, whatever
+was typed since. A words-only tool asked for on a whole draft says "select
+them first"; Sprout on a selection offers Analyze this passage instead of
+inventing a concept; a view cannot be started. The mock lane says "no
+provider request, no provider charge" and never calls model work local.
+
+The document session (webapp/work/session.js) carries the notebook
+client's semantics whole — one save in flight, the request id bound to its
+payload, superseded replies ignored, a conflict keeping both copies — over
+an editor adapter; slice B's adapter is a textarea on the blue surface,
+kept in slice C as the plain-text path. Recovery is an IndexedDB envelope
+per document and tab from the start. Ask (⌘K) matches labels and aliases
+deterministically on the server, presents ambiguity as choices, proposes,
+and never runs. The selection menu (⌘.) opens below the selected words
+with three plain routes and More.
+
+Proven in WebKit by tests/journeys/work.js (65 checks, on a second scratch
+server that runs the mock lane so a run can complete): the colours; typing
+saves and starts nothing; a proposal spends nothing and Escape closes it;
+Analyze this passage completes through the one job path and the card
+names its origin, says the draft has not changed, then says it changed
+after typing; four toggles leave the editor element, selection and undo
+untouched; Focus and its exit; the drawer and the section below at
+1152×720; three readers; Ask; the Map round trip; Your work and
+Investigate; a reload reopens the same document. The suite gains
+_check_workspace_registry (the registry names every mode; readiness
+derives from the record; snapshot and proposal verify; a tampered proposal
+is refused; the key rules; the exact text reaches the job).
+
 ## v1.36.0 — workspace-v2, slice A: the test environment fails closed
 
 The first slice of the build authorized on 2026-09-16 (branch `workspace-v2`;

@@ -1,0 +1,57 @@
+# workspace-v2 — the build contract
+
+The living contract of the workspace build (authorized 2026-09-16; the instructions are the owner's forwarded "Nikodemus — implementation instructions for Claude"). Two things live here: the engineering decisions made during the build, each recorded in a few lines with its reason, and the parity checklist that says how every existing capability is reached from the new shell and what proves it. `workspace-v2-progress.md` is the resumable state; this file is the reference a future agent reads before touching the shell.
+
+## Decisions
+
+**D1 — one switch for a test process (slice A).** `WORDICON_TEST_MODE=1`, read before the first application import; three independent refusals (socket guard, gateway choice, fixture stand-ins). Reason: a test that spends money when one variable is present will spend again; belt and braces because each layer has failed on its own before.
+
+**D2 — the data root is resolved once, by where paths point (slice A).** `state_root.apply()` rebases every `Path` in every scripts module that points under a known root, rather than a hand-kept list of attribute names. Resolution order: explicit, `WORDICON_STATE`, a root the process chose by hand, the repository default. Reason: the hand list missed subsystems twice (the suite's leak guard and the journeys' seeder); the first cut of this module, which took only the current root as the old one, sent seeded fixtures into a real store — the order above is the repair.
+
+**D3 — the registry is data, readiness is computed (slice B).** `scripts/actions.py` defines each action once (id, label, aliases, group, kind, subjects, mutation, outbound fields and recipient, provider, calls, result type, handler). Readiness is derived per request from the gateway lane and the connector record; no availability constant is stored. Reason: the boards' "2 of 4 available" was a fixture assertion; a page may only say what the record says.
+
+**D4 — prepare freezes, Start revalidates (slice B).** `POST /api/actions/prepare` writes an immutable snapshot (`scripts/snapshots.py`, content-addressed, temp-file-and-rename) and a proposal record under `local_state/proposals/`; `POST /api/operations` reloads the proposal by id, checks it hashes to its id, checks the snapshot verifies and the action is still available, and only then dispatches — through `_create_job_from`, the legacy route's own body, so there is one dispatch implementation. The client's request at Start carries only `prepared_id` and `request_key`. Reason: tampering with a client proposal cannot add outbound fields or expand a call plan; the frozen text is what the model sees.
+
+**D5 — the request key is in memory in slice B.** `_OPERATION_KEYS` maps a key to an operation id in the process; the same key returns the same operation; a key reused for another proposal is refused. Slice D moves this into the durable operations store. Recorded as a known gap until D lands: a server restart forgets keys.
+
+**D6 — the editor is an adapter behind one document session (slice B).** `webapp/work/session.js` carries the notebook client's semantics whole (one request in flight, key bound to payload, superseded replies ignored, 409 keeps both copies, checkpoint reasons ride the next save); the editor speaks a small interface (`getText/setText/onEdit/getSelection/focus/getScroll/getStructure`). Slice B's adapter is a textarea (`editor_plain.js`); slice C adds the structured adapter and keeps the plain one as the safe path for documents that cannot round-trip. Reason: no second save implementation, and the plain path is required by the storage contract, not a leftover.
+
+**D7 — recovery is IndexedDB from the start (slice B).** One envelope per (document, tab): body, structure (null until C), versions, base revision and fingerprint, local sequence, selection, scroll, pending request. "Saved locally" is said only after the transaction completes; a failed write leaves the last envelope and is reported. Reason: the instructions reject a `structure_dropped` fallback as the normal contract; localStorage cannot hold structured documents reliably.
+
+**D8 — specialist places open inside the shell in a frame (slice B).** `webapp/work/places.js` mirrors slice 2's shell: the writing view is hidden, never unmounted; the place is the existing page on its own route; "Back to writing" restores the caret. Full results open the legacy result view (`/?trace=` or `/?job=`) the same way. Reason: the instructions allow existing views inside the new shell with correct return behaviour; rewriting the renderers is not needed for parity and would fork them.
+
+**D9 — the arrangement is measured, not breakpointed (slice B).** `layout.js` calls the shell narrow when `innerWidth − toolsW − resultsW` would leave the writing under 700 CSS px (≈60ch of 19px prose plus padding); at narrow widths Tools is a drawer (scrim, inert centre, focus trapped, focus returned to the opener) and Results is a section below the draft. Widths clamp so an open side cannot push the writing under the minimum. Preferences are kept per bucket (wide ≥1600, laptop ≥1100, small).
+
+**D10 — the workspace journey runs on a second scratch server with the mock lane.** The existing journeys keep their poisoned gateway (some rely on a queued job failing at the model); the workspace loop needs a run to complete, so `run.sh` starts a second server (`JOURNEY_MOCK_LANE=1`, port 8498, its own scratch root) for `work.js`. Test mode still refuses every provider and socket on both.
+
+**D11 — chrome colours.** Two values are new for the shell and not tokens in `webapp/index.html`: `--ground #0a1733` (the writing blue, darker, so the writing surface is the brightest blue on screen) and `--line #2b4a86` (borders, grips). Everything else is the application's own palette. Subject to a contrast pass in slice G.
+
+## Parity checklist
+
+Status words: **reached** (a labelled control in the shell reaches it and a test proves it), **inside** (opens inside the shell as the existing page, with return), **legacy** (reachable only through "The previous interface" under More tools), **pending** (not yet wired; the slice that will).
+
+| Capability (register family) | Current entry / store | In the shell | Status | Proof |
+|---|---|---|---|---|
+| Writing: draft, autosave, first-line title, reopen | `/api/notebook/*`, `notebook.sqlite3` | Work — the editor; header title and save state | reached (plain text) | `work.js` §2, §11 |
+| Rename, duplicate, versions (checkpoints), export as text | notebook routes | Document ▾ menu | reached (versions list; restore-as-new pending C) | `work.js`; C |
+| Archive | new flag (slice E) | Document ▾ → Archive | pending (E) | — |
+| Formatting, find/replace, structured export | — | header toolbar | pending (C) | — |
+| Conflict: keep both, mine as new / open saved | notebook 409 | a notice in Results with the two ways out | reached | notebook journey (legacy); `work.js` pending case E21 (C) |
+| Get feedback (three readers) | `/api/moira/readings` | On this draft → Get feedback; selection menu | reached | `work.js` §8 |
+| Analyze this passage (decompose) | `/api/jobs` mode decompose | On this draft; selection menu | reached | `work.js` §4 |
+| Find related words (refract) | mode refract | Explore; selection menu | reached (selection / description / concept) | `work.js` §3, §9 |
+| Explore related ideas (sprout) | mode sprout | Explore | reached for a concept; a selection is offered Analyze first | registry test (suite) |
+| Build a concept (forge), Take this apart (crack), Full workup (deep), Riff, Play, Trace the word's roots (etymon), Let Nikodemus choose (auto) | modes forge/crack/deep/riff/play/etymon/auto | Explore | reached (proposal → Start through the one job path) | suite registry check; `work.js` covers decompose end to end |
+| Explore character patterns (archetype), Revise, Re-check, Verify | modes archetype/revise/recheck/verify | Explore (concept / candidate subjects) | reached via a concept subject; no concept picker in the shell yet | legacy for choosing the concept (E lists concepts) |
+| Connect on the Map (Map · focus) | `/map/focus` | Explore; Ask "map" | inside | `work.js` §9 |
+| Map · trails, Map · world, Bench, Clinic, Recovery review, Investigation rooms, Inquiry, What is Nikodemus | their routes | More tools | inside | places module |
+| Speak to Nikodemus, Read aloud | Home; `/api/speak/status` | More tools | Speak: inside (legacy Home); Read aloud: shown not available (not proven implemented) | — |
+| Anatomy, the previous interface | `/anatomy`, `/` | More tools (new tab) | legacy (standalone by law) | — |
+| Add to revision notes (carry) | `/api/carry` | Notes tab lists; adding rides the full result view | inside (legacy result view) | carry journey (legacy) |
+| Bookmark a word, Check sources, related-word comparisons, narrowing, gloss, language follow-ups | related-word routes | the full result view inside the shell | inside | related journeys (legacy) |
+| Rulings (accept / reject / revise), judgments | `/api/judge` | the full result view inside the shell | inside | legacy journeys |
+| Library: sources, anchors, crossings, support rulings, works, media, recordings/transcripts | `/api/library/*`, `/api/media/*`, `/api/works` | Sources tab lists; Attach and Open the Library open the Library inside | inside | — |
+| Investigations: connectors, depositions, identity rulings, rooms | `/api/connectors`, `/api/depositions`, `/api/investigations` | Investigate cards (readiness derived) + Investigation rooms inside | inside; start pending (F) | `work.js` §10 |
+| Your work: everything retained, searchable | (slice E index) | Your work | pending (E) — lists the notebook and the last thirty runs | `work.js` §10 |
+| Durable operations, honest recovery after restart | (slice D) | Results → Activity | pending (D) — an operation the restarted server does not hold is shown as outcome unknown | `results.js` |
+| Settings, pairing, Vault, notifications, encounter switch, epochs, Keeper | Home/About, `/pair` | Settings (opens the previous interface) | legacy | — |

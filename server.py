@@ -91,6 +91,8 @@ import map_focus  # noqa: E402  (Map · focus — one place's ring, read-only. N
 import moira  # noqa: E402  (Professor Moira — block 125; three readers beside the draft, each on its own call)
 import notebook as nbk  # noqa: E402  (the writer's notebook — stage B; the document store the room was missing. No model, no network)
 import inquiry  # noqa: E402  (the Inquiry — block 111 phase 1; a question kept, branched and returnable. Zero model calls)
+import actions  # noqa: E402  (workspace-v2 slice B: the action registry — every control, one definition)
+import snapshots  # noqa: E402  (workspace-v2 slice B: immutable input snapshots)
 from wordicon_corpus.objects import Judgment  # noqa: E402
 
 WEBAPP_DIR = REPO_ROOT / "webapp"
@@ -3326,6 +3328,13 @@ def api_config():
 @app.route("/api/jobs", methods=["POST"])
 def api_create_job():
     data = request.get_json(force=True) or {}
+    return _create_job_from(data)
+
+
+def _create_job_from(data: dict):
+    """The job route's body, callable without a request of its own (slice
+    B: a Start built from a frozen proposal goes through the same path as
+    the legacy page, so there is one dispatch implementation)."""
     mode = data.get("mode")
     if mode not in ("auto", "deep", "forge", "crack", "decompose", "riff", "play", "revise",
                     "sprout", "refract", "verify", "archetype", "recheck", "etymon"):
@@ -3570,6 +3579,164 @@ def api_create_job():
     thread = threading.Thread(target=_run_job, args=(job_id, mode, input_text), daemon=True)
     thread.start()
     return jsonify({"job_id": job_id, "status": "queued"})
+
+
+# ---- workspace-v2 (slice B): the shell, the registry, the frozen proposal ---
+#
+# /work is the new shell. The legacy pages keep answering on their own
+# routes untouched; a specialist place opens inside the shell the way slice
+# 2 opened one beside the room. Every control in the shell is generated from
+# the registry (scripts/actions.py); a Start is checked against the frozen
+# proposal it was prepared from, never against what the client says now,
+# and goes through the same job path as the legacy page.
+
+@app.route("/work")
+def work_page():
+    return send_from_directory(WEBAPP_DIR / "work", "work.html")
+
+
+@app.route("/work/<path:name>")
+def work_static(name):
+    if not re.fullmatch(r"[A-Za-z0-9_./-]+\.(js|css|svg|map|json)", name) or ".." in name:
+        return jsonify({"error": "no such file"}), 404
+    return send_from_directory(WEBAPP_DIR / "work", name)
+
+
+@app.route("/api/actions")
+def api_actions():
+    """The registry with readiness derived from the record; no provider call."""
+    return jsonify(actions.listing(server_gateway))
+
+
+@app.route("/api/actions/match", methods=["POST"])
+def api_actions_match():
+    """Ask: deterministic matching over labels and aliases. Ambiguity is
+    returned as choices. No model is asked to classify a command."""
+    data = request.get_json(silent=True) or {}
+    return jsonify(actions.match(str(data.get("query") or "")[:400], str(data.get("subject") or "none")))
+
+
+@app.route("/api/actions/prepare", methods=["POST"])
+def api_actions_prepare():
+    """Local validation and a frozen proposal: the subject is checked against
+    the action, the scope is written as an immutable snapshot, the
+    disclosure is built from the registry and the snapshot. Nothing is
+    dispatched; nothing leaves this machine."""
+    data = request.get_json(silent=True) or {}
+    try:
+        rec = actions.prepare(str(data.get("action_id") or ""), data.get("subject") or {}, data.get("inputs") or {},
+                              server_gateway)
+    except actions.PrepareError as e:
+        body = {"error": str(e)}
+        if e.choices:
+            body["choices"] = e.choices
+        return jsonify(body), e.status
+    return jsonify(rec)
+
+
+_OPERATION_KEYS: dict[str, str] = {}   # request_key -> operation id (slice B; slice D makes this durable)
+
+
+@app.route("/api/operations", methods=["POST"])
+def api_operations_start():
+    """A Start. Revalidates the frozen proposal (it still verifies, its
+    snapshot still verifies, the action is still available) and dispatches
+    once under the client's request key: the same key returns the same
+    operation; a key reused for a different proposal is refused."""
+    data = request.get_json(silent=True) or {}
+    pid = str(data.get("prepared_id") or "")
+    key = str(data.get("request_key") or "")[:120]
+    if not key:
+        return jsonify({"error": "a Start carries a request_key; without one a lost reply cannot be told from a second press"}), 400
+    prepared = actions.load_prepared(pid)
+    if prepared is None:
+        return jsonify({"error": "no such proposal, or it does not verify — prepare again"}), 404
+    with JOBS_LOCK:
+        prior = _OPERATION_KEYS.get(key)
+    if prior:
+        with JOBS_LOCK:
+            job = JOBS.get(prior)
+        if job is not None and job.get("prepared_id") != pid:
+            return jsonify({"error": "this request key was already used for a different proposal — a retry must carry the same one"}), 409
+        return jsonify({"operation_id": prior, "job_id": prior, "status": (job or {}).get("status", "unknown"),
+                        "repeated": True, "prepared_id": pid, "snapshot_id": prepared.get("snapshot_id")})
+    a = actions.BY_ID.get(prepared["action_id"])
+    if a is None:
+        return jsonify({"error": "the proposal names an action the registry no longer has"}), 409
+    rd = actions.readiness(a, server_gateway)
+    if not rd["available"]:
+        return jsonify({"error": f"{a['label']} is not available now: {rd['reason']}", "not_started": True,
+                        "nothing_was_sent": True}), 409
+    if a["handler"] == "moira":
+        snap = snapshots.load(prepared["snapshot_id"]) if prepared.get("snapshot_id") else None
+        if snap is None or not snapshots.verify(snap):
+            return jsonify({"error": "the proposal's snapshot is missing or does not verify; prepare again"}), 409
+        try:
+            reading = moira.start_reading(snap["text"], prepared["inputs"].get("scope", "draft"), models=moira_models(),
+                                          document={"id": snap.get("doc_id") or "", "revision": snap.get("revision"),
+                                                    "seq": snap.get("seq")} if snap.get("doc_id") else None)
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        _moira_dispatch(reading)
+        rid = reading["reading_id"]
+        with JOBS_LOCK:
+            _OPERATION_KEYS[key] = rid
+        return jsonify({"operation_id": rid, "reading_id": rid, "kind": "reading", "status": "running",
+                        "prepared_id": pid, "snapshot_id": prepared.get("snapshot_id")})
+    if a["handler"] != "job":
+        return jsonify({"error": f"{a['label']} cannot be started from here yet ({a['handler']})", "not_started": True,
+                        "nothing_was_sent": True}), 409
+    try:
+        payload = actions.job_payload(prepared)
+    except actions.PrepareError as e:
+        return jsonify({"error": str(e)}), e.status
+    resp = _create_job_from(payload)
+    body, status = (resp if isinstance(resp, tuple) else (resp, 200))
+    out = body.get_json() if hasattr(body, "get_json") else {}
+    if status != 200 or not out.get("job_id"):
+        return jsonify({"error": out.get("error") or "the job was not created", "not_started": True,
+                        "nothing_was_sent": True}), (status if status >= 400 else 500)
+    jid = out["job_id"]
+    with JOBS_LOCK:
+        _OPERATION_KEYS[key] = jid
+        if jid in JOBS:
+            JOBS[jid]["prepared_id"] = pid
+            JOBS[jid]["snapshot_id"] = prepared.get("snapshot_id")
+            JOBS[jid]["action_id"] = prepared["action_id"]
+    return jsonify({"operation_id": jid, "job_id": jid, "kind": "job", "status": "queued",
+                    "prepared_id": pid, "snapshot_id": prepared.get("snapshot_id")})
+
+
+@app.route("/api/operations/<op_id>")
+def api_operation_get(op_id):
+    """Local state only: reading it refreshes nothing upstream."""
+    if op_id.startswith("job_"):
+        with JOBS_LOCK:
+            job = JOBS.get(op_id)
+        if job is None:
+            return jsonify({"error": "no operation with that id in this process — the server may have restarted; "
+                                     "slice D makes the ledger durable", "outcome": "unknown"}), 404
+        r = job.get("result") or {}
+        finished = job.get("status") in ("complete", "done")
+        # what a card may say: the run's own trace, or each group's (a
+        # decompose has one per concept found), and the titles that came back
+        groups = []
+        for g in (r.get("groups") or []) if isinstance(r, dict) else []:
+            groups.append({"label": g.get("label", ""), "trace_id": g.get("trace_id", ""),
+                           "titles": [c.get("title", "") for c in (g.get("candidates") or []) if c.get("title")]})
+        titles = [((c.get("bff") or {}).get("title") or c.get("title") or "") for c in (r.get("candidates") or [])] if isinstance(r, dict) else []
+        return jsonify({"operation_id": op_id, "kind": "job", "mode": job.get("mode"), "action_id": job.get("action_id"),
+                        "status": job.get("status"), "progress": job.get("progress"), "error": job.get("error"),
+                        "trace_id": r.get("trace_id") if isinstance(r, dict) else None,
+                        "groups": groups, "titles": [t for t in titles if t], "partial": bool(r.get("partial")) if isinstance(r, dict) else False,
+                        "snapshot_id": job.get("snapshot_id"), "prepared_id": job.get("prepared_id"),
+                        "created_at": job.get("created_at"), "updated_at": job.get("updated_at"),
+                        "result": r if finished else None})
+    v = moira.view(op_id)
+    if v is not None:
+        return jsonify({"operation_id": op_id, "kind": "reading", "reading": v,
+                        "status": v.get("status") or ("done" if all(d.get("status") == "done" for d in v.get("readers", [])) else "running")})
+    return jsonify({"error": "no operation with that id"}), 404
 
 
 @app.route("/api/jobs/<job_id>")

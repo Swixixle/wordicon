@@ -40,6 +40,16 @@ These are the written contracts that sit under it.
 - [`adr/ADR-002-model-egress-boundaries.md`](./adr/ADR-002-model-egress-boundaries.md)
   — where model calls are allowed to go. **Proposed, not implemented.**
 
+## The workspace build (workspace-v2)
+
+- [`workspace-v2-progress.md`](./workspace-v2-progress.md) — the resumable
+  state of the build authorized on 2026-09-16: slices done, commit, tests,
+  what remains. Updated at the end of every slice.
+- [`workspace-v2-build.md`](./workspace-v2-build.md) — the living build
+  contract: the engineering decisions made during the build, recorded
+  briefly, and the parity checklist that says how each existing capability
+  is reached from the new shell.
+
 ## Federation and connectors
 
 - [`adr-federation.md`](./adr-federation.md) — why Open Case and EthicalAlt

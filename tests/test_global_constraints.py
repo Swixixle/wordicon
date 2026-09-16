@@ -3539,7 +3539,7 @@ def _check_journey_engines():
     construction."""
     out = []
     jdir = Path(cli.__file__).parent.parent / "tests" / "journeys"
-    WEBKIT = {"deep", "moira", "notebook", "related", "resume", "room", "narrowing", "gloss"}
+    WEBKIT = {"deep", "moira", "notebook", "related", "resume", "room", "narrowing", "gloss", "work"}
     lib = (jdir / "lib.js").read_text(encoding="utf-8")
     at = lib.find("async function launch()")
     body = lib[at: lib.find("\n}\n", at)] if at != -1 else ""
@@ -3571,7 +3571,8 @@ def _check_journey_engines():
         out.append(f"ENGINE: tests/journeys/{missing}.js is gone")
     for name, sentence in (("room", "the room is measured in WebKit"),
                            ("narrowing", "the narrowing is measured in WebKit"),
-                           ("gloss", "the gloss panel is measured in WebKit")):
+                           ("gloss", "the gloss panel is measured in WebKit"),
+                           ("work", "the workspace is measured in WebKit")):
         src = (jdir / f"{name}.js").read_text(encoding="utf-8") if (jdir / f"{name}.js").exists() else ""
         if "browser.browserType().name() === 'webkit'" not in src or f"'{sentence}" not in src:
             out.append(f"ENGINE: tests/journeys/{name}.js no longer asks the browser which engine it is and says so in its log")
@@ -5328,6 +5329,157 @@ def _check_test_mode_fails_closed(server):
     return out
 
 
+def _check_workspace_registry(server, paired):
+    """Slice B. The registry is the one definition of every control, and a
+    Start is checked against the frozen proposal, never against the client:
+    every /api/jobs mode is named; readiness derives from the record (a
+    producer lookup is unavailable until a connector exists, then configured);
+    prepare writes a content-addressed snapshot and a proposal that verify
+    against their own ids; a tampered proposal is refused; a Start needs a
+    request key, repeats under the same key, refuses the key for another
+    proposal, and sends the SNAPSHOT's text whatever the client typed since;
+    a words-only tool on a whole draft asks for a selection; Sprout on a
+    selection offers Analyze first; a view cannot be started; the shell and
+    its modules are served, and nothing outside webapp/work is."""
+    import json as _json
+    out = []
+    import actions as _ac
+    import snapshots as _sn
+    import federation as _fed
+    listing = _ac.listing(server.server_gateway)
+    modes = {a["mode"] for a in listing["actions"] if a["mode"]}
+    if modes != set(_ac.JOB_MODES) or set(_ac.JOB_MODES) != {"auto", "deep", "forge", "crack", "decompose", "riff", "play", "revise",
+                                                             "sprout", "refract", "verify", "archetype", "recheck", "etymon"}:
+        out.append(f"REGISTRY: the registry does not name every /api/jobs mode: {sorted(modes)}")
+    if listing["lane"]["lane"] != "mock" or listing["lane"]["external"]:
+        out.append(f"REGISTRY: in a test process the lane is not the mock: {listing['lane']}")
+    for a in listing["actions"]:
+        if a["kind"] == "view" and a["provider"] != "none":
+            out.append(f"REGISTRY: view {a['id']} names a provider — opening a view starts nothing")
+        if a["kind"] in ("dispatch", "lookup") and a["provider"] == "none":
+            out.append(f"REGISTRY: {a['id']} dispatches to no provider")
+        if "readiness" not in a or "available" not in a["readiness"] or "reason" not in a["readiness"]:
+            out.append(f"REGISTRY: {a['id']} carries no derived readiness")
+    by = {a["id"]: a for a in listing["actions"]}
+    ea = by["investigate.ethicalalt.lookup"]["readiness"]
+    if ea["available"] or "no connector" not in ea["reason"]:
+        out.append(f"REGISTRY: with no connector registered, the EthicalAlt lookup should be unavailable for that reason: {ea}")
+    # a connector registered in a throwaway root (the suite's scratch registry
+    # is what block 107's own check measures, so it stays as it was)
+    import tempfile as _tf
+    _tmp_root = Path(_tf.mkdtemp(prefix="wordicon_registry_"))
+    state_root.apply(_tmp_root)
+    try:
+        _fed.register_connector("ea-suite", "ethicalalt", "http://127.0.0.1:9", display="EthicalAlt (suite)", dev_loopback=True, by="suite")
+        ea2 = _ac.readiness(_ac.BY_ID["investigate.ethicalalt.lookup"], server.server_gateway)
+        if not (ea2["available"] and ea2["producer"]["configured"] and ea2["producer"]["contract"].startswith("read-only")):
+            out.append(f"REGISTRY: after registering a connector the lookup is not derived as available: {ea2}")
+        st = _ac.readiness(_ac.BY_ID["investigate.ethicalalt.start"], server.server_gateway)
+        if st["available"] or "cannot start" not in st["reason"]:
+            out.append(f"REGISTRY: starting an investigation must stay unavailable while the connector contract is read-only: {st}")
+    finally:
+        state_root.apply(_SCRATCH)
+    # prepare: the snapshot and the proposal verify against their own ids
+    text = "He threw it once,\tcleanly — and the room laughed.\n\n  Nobody said so. 🙂"
+    subj = {"kind": "selection", "text": text, "doc_id": "doc_suite", "revision": 4, "seq": 9, "range": {"start": 0, "end": len(text)}, "units": "codepoint"}
+    rec = _ac.prepare("analyze.decompose", subj, {}, server.server_gateway)
+    snap = _sn.load(rec["snapshot_id"])
+    if snap is None or not _sn.verify(snap) or snap["text"] != text or snap["range"]["units"] != "codepoint" or snap["seq"] != 9 or snap["revision"] != 4:
+        out.append("REGISTRY: the prepared snapshot is missing, does not verify, or lost the exact text / range units / seq / revision")
+    if _ac.load_prepared(rec["prepared_id"]) is None:
+        out.append("REGISTRY: a freshly written proposal does not load and verify")
+    path = _ac._proposals_dir() / f"{rec['prepared_id']}.json"
+    tampered = _json.loads(path.read_text(encoding="utf-8"))
+    tampered["disclosure"]["leaves_this_machine"]["fields"] = ["text", "your notes"]
+    path.write_text(_json.dumps(tampered, sort_keys=True, ensure_ascii=False), encoding="utf-8")
+    if _ac.load_prepared(rec["prepared_id"]) is not None:
+        out.append("REGISTRY: a proposal whose disclosure was edited on disk still verifies")
+    rec = _ac.prepare("analyze.decompose", subj, {}, server.server_gateway)   # a fresh, untampered one
+    # subjects
+    try:
+        _ac.prepare("explore.refract", {"kind": "document", "text": "whole draft"}, {}, server.server_gateway)
+        out.append("REGISTRY: Find related words accepted a whole draft")
+    except _ac.PrepareError as e:
+        if e.status != 409 or "select them first" not in str(e):
+            out.append(f"REGISTRY: the whole-draft refusal does not ask for a selection: {e}")
+    try:
+        _ac.prepare("explore.sprout", subj, {}, server.server_gateway)
+        out.append("REGISTRY: Sprout accepted a selection (it wants a concept)")
+    except _ac.PrepareError as e:
+        if e.status != 409 or not e.choices or e.choices[0]["id"] != "analyze.decompose":
+            out.append(f"REGISTRY: Sprout on a selection does not offer Analyze this passage: {e} {e.choices}")
+    try:
+        _ac.prepare("explore.map", {"kind": "none"}, {}, server.server_gateway)
+        out.append("REGISTRY: a view was prepared as if it could be started")
+    except _ac.PrepareError as e:
+        if e.status != 400:
+            out.append(f"REGISTRY: preparing a view fails with the wrong status: {e.status}")
+    # the Start: through the route, with the gate
+    c = server.app.test_client()
+    if c.get("/api/actions").status_code != 401:
+        out.append("REGISTRY: the registry answers an unpaired device")
+    paired(c)
+    if c.get("/api/actions").status_code != 200:
+        out.append("REGISTRY: the registry does not answer a paired device")
+    r = c.post("/api/operations", json={"prepared_id": rec["prepared_id"]})
+    if r.status_code != 400:
+        out.append(f"REGISTRY: a Start without a request key was not refused: {r.status_code}")
+    r = c.post("/api/operations", json={"prepared_id": "prep_nonesuch", "request_key": "rk_a"})
+    if r.status_code != 404:
+        out.append(f"REGISTRY: a Start on an unknown proposal was not refused: {r.status_code}")
+    r = c.post("/api/operations", json={"prepared_id": rec["prepared_id"], "request_key": "rk_suite_1"})
+    d = r.get_json() or {}
+    if r.status_code != 200 or not d.get("operation_id", "").startswith("job_"):
+        out.append(f"REGISTRY: a Start through the route did not create a job: {r.status_code} {d}")
+    op = d.get("operation_id", "")
+    r2 = c.post("/api/operations", json={"prepared_id": rec["prepared_id"], "request_key": "rk_suite_1"})
+    d2 = r2.get_json() or {}
+    if r2.status_code != 200 or d2.get("operation_id") != op or not d2.get("repeated"):
+        out.append(f"REGISTRY: the same request key did not return the same operation: {r2.status_code} {d2}")
+    rec2 = _ac.prepare("analyze.decompose", {**subj, "text": text + " more"}, {}, server.server_gateway)
+    r3 = c.post("/api/operations", json={"prepared_id": rec2["prepared_id"], "request_key": "rk_suite_1"})
+    if r3.status_code != 409:
+        out.append(f"REGISTRY: a request key reused for a different proposal was not refused: {r3.status_code}")
+    with server.JOBS_LOCK:
+        job = dict(server.JOBS.get(op) or {})
+    if job.get("input_text") != text:
+        out.append("REGISTRY: the job did not receive the snapshot's exact text (whitespace, tab and emoji included)")
+    if job.get("prepared_id") != rec["prepared_id"] or job.get("snapshot_id") != rec["snapshot_id"] or job.get("action_id") != "analyze.decompose":
+        out.append("REGISTRY: the job row does not link to its proposal, snapshot and action")
+    g = c.get("/api/operations/" + op).get_json() or {}
+    if g.get("snapshot_id") != rec["snapshot_id"] or g.get("kind") != "job":
+        out.append(f"REGISTRY: reading the operation does not report its snapshot: {g}")
+    # the mock run finishes in the background; wait for it so a later check
+    # that measures the store is not measuring this job's receipts
+    import time as _time
+    for _ in range(600):
+        with server.JOBS_LOCK:
+            st_ = (server.JOBS.get(op) or {}).get("status")
+        if st_ in ("complete", "failed"):
+            break
+        _time.sleep(0.1)
+    else:
+        out.append("REGISTRY: the started job did not finish within 60s")
+    g404 = c.get("/api/operations/job_nonesuch")
+    if g404.status_code != 404 or (g404.get_json() or {}).get("outcome") != "unknown":
+        out.append("REGISTRY: an operation the process does not hold is not reported as outcome unknown")
+    # the shell is served; nothing outside webapp/work is
+    if c.get("/work").status_code != 200 or b"editor-host" not in c.get("/work").data:
+        out.append("REGISTRY: /work does not serve the shell")
+    for name in ("main.js", "session.js", "layout.js", "actions.js", "results.js", "work.css"):
+        if c.get("/work/" + name).status_code != 200:
+            out.append(f"REGISTRY: /work/{name} is not served")
+    if c.get("/work/../server.py").status_code == 200 or c.get("/work/server.py").status_code == 200:
+        out.append("REGISTRY: /work/ serves something outside webapp/work")
+    m = c.post("/api/actions/match", json={"query": "related words", "subject": "selection"}).get_json() or {}
+    if not m.get("exact") or [x["id"] for x in m.get("matches", [])] != ["explore.refract"]:
+        out.append(f"REGISTRY: Ask's exact alias match is wrong: {m}")
+    m2 = c.post("/api/actions/match", json={"query": "map", "subject": "none"}).get_json() or {}
+    if [x["id"] for x in m2.get("matches", [])] != ["explore.map"]:
+        out.append(f"REGISTRY: Ask 'map' should name the Map only: {m2}")
+    return out
+
+
 def main() -> int:
     failures = FAILURES
     # block 113, hoisted: pure checks on a pure function, before anything
@@ -5465,6 +5617,7 @@ def main() -> int:
     if shaped.get("global_constraints") != gc:
         failures.append("server did not pass global_constraints through")
     failures.extend(_check_test_mode_fails_closed(server))
+    failures.extend(_check_workspace_registry(server, _paired))
     failures.extend(_check_map_focus_routes(server, _paired))
     failures.extend(_check_moira_routes(server, _paired))
     failures.extend(_check_notebook_b(server, _paired))
