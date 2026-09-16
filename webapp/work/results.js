@@ -245,7 +245,8 @@ export class Results {
       fresh.text ? el('div', { class: 'kv ' + (fresh.fresh ? 'ok' : 'warn'), text: fresh.text }) : null,
       el('div', { class: 'kv state ' + (t.status === 'failed' || t.status === 'unknown' ? 'bad' : (t.status === 'done' || t.status === 'complete' ? 'good' : 'running')), text: state + (d.progress && !['done', 'complete', 'failed', 'unknown'].includes(t.status) ? ' · ' + d.progress : '') }),
     ]);
-    if (t.status === 'unknown') card.appendChild(el('div', { class: 'warn small-text', text: 'Outcome unknown — ' + (rec && rec.why ? rec.why : 'the server was interrupted; it may still have run. Nothing was sent again.') }));
+    // the operation's own recorded reason first (an investigation says what was delivered and what is not known); the recovery table's sentence when there is none
+    if (t.status === 'unknown') card.appendChild(el('div', { class: 'warn small-text', text: 'Outcome unknown — ' + (d.error || (rec && rec.why) || 'the server was interrupted; it may still have run. Nothing was sent again.') }));
     if (t.status === 'failed') card.appendChild(el('div', { class: 'warn small-text', text: 'Failed — ' + (d.error || 'no reason was recorded') + '.' }));
     if (t.status === 'queued' && d.progress && /dispatcher/.test(d.progress)) card.appendChild(el('div', { class: 'warn small-text', text: d.progress }));
     if (rec && rec.sent_evidence && ['failed', 'unknown', 'queued'].includes(t.status)) card.appendChild(el('div', { class: 'muted small-text', text: rec.sent_evidence + '.' }));

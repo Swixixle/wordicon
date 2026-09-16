@@ -122,7 +122,7 @@ export class Investigate {
     if (p.start) {
       const det = el('details', { class: 'contract' }, [el('summary', { text: 'The contract, as pinned' })]);
       if (ct) {
-        det.appendChild(el('div', { class: 'small-text muted', text: `${ct.repo} · revision ${ct.revision} (${ct.branch}, ${ct.revision_date}) · read ${ct.read_on}` }));
+        det.appendChild(el('div', { class: 'small-text muted', text: `${ct.repo} · revision ${ct.revision} (${ct.branch}, ${ct.revision_date}) · read ${ct.read_on}` + (ct.branch_note ? ' · ' + ct.branch_note : '') }));
         for (const [name, r] of Object.entries(ct.routes || {})) {
           det.appendChild(el('div', { class: 'small-text muted', text: `${name}: ${r.method} ${r.path} · auth ${r.auth} · ${r.source}` + (r.request ? ` · request ${r.request}` : '') + ` · reply ${r.reply} · side effects: ${r.side_effects}` + (r.implemented ? '' : ` · not used here: ${r.why_not || ''}`) + (r.separate_action ? ` · ${r.separate_action}` : '') }));
         }

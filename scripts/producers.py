@@ -125,7 +125,8 @@ CONTRACTS = {
         "repo": "Open-Case (github.com/Swixixle)",
         "revision": "4dc17090feb9915204070e9fdd65fcc0d2813867",
         "revision_date": "2026-07-12",
-        "branch": "origin/main (the checkout's HEAD aca9920 is contained in it with an identical tree for every file below)",
+        "branch": "origin/main",
+        "branch_note": "the owner's checkout has aca9920 (fix/fail-closed-key-handling) checked out; 4dc1709 merges it into main with an identical tree for every file named below",
         "read_on": "2026-09-16, from the owner's checkout, read-only git plumbing",
         "routes": {
             "cases": {"method": "GET", "path": "/api/v1/cases", "auth": "none (GET routes are public: auth.py:2-4)",

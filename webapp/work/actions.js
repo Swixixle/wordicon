@@ -93,7 +93,7 @@ export class Actions {
     const r = await getJSON('/api/concepts');
     if (!r.ok) { toast('The shelf could not be read: ' + (r.data && r.data.error || r.status)); return; }
     const all = r.data.concepts || [];
-    const host = el('div', { class: 'card', id: 'concept-picker' }, [
+    const host = el('div', { id: 'concept-picker' }, [
       el('div', { class: 'result-title', text: a.label + ' — choose a concept you keep' }),
       el('div', { class: 'kv muted small-text', text: (r.data.population || '') + ' · ' + all.length + ' concept' + (all.length === 1 ? '' : 's') + '. Choosing one proposes the action on it; nothing is sent until Start.' }),
     ]);
@@ -110,12 +110,14 @@ export class Actions {
             this.results.custom = null;
             this.prepare(actionId, { kind: 'concept', concept: { title: c.name, definition: c.definition, concept_id: c.concept_id || c.id, plain_gloss: c.plain_gloss } });
           } }),
-          el('span', { class: 'muted small-text', text: ' ' + (c.definition || '').slice(0, 140) + ((c.definition || '').length > 140 ? '…' : '') }),
+          // two concepts may share a title (a title is never an identity): the id and the acceptance date tell them apart
+          el('span', { class: 'muted small-text', text: (c.concept_id || c.id ? String(c.concept_id || c.id).slice(0, 20) : '') + (c.accepted_at ? ' · accepted ' + String(c.accepted_at).slice(0, 10) : '') + (c.alias_of ? ' · alias of ' + c.alias_of : '') }),
+          el('span', { class: 'small-text', style: 'flex-basis: 100%', text: (c.definition || '').slice(0, 160) + ((c.definition || '').length > 160 ? '…' : '') }),
         ]));
       }
     };
     filter.addEventListener('input', draw);
-    host.appendChild(el('div', { class: 'row' }, [filter, el('button', { class: 'btn small', type: 'button', text: 'Close', onclick: () => { this.results.custom = null; this.results.render(); } })]));
+    host.appendChild(el('div', { class: 'row' }, [filter]));
     host.appendChild(list);
     draw();
     this.results.showCustom(host);
