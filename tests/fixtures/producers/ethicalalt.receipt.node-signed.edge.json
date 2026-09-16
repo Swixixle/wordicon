@@ -1,0 +1,50 @@
+{
+ "edge": true,
+ "note": "a vector for the verifier, not a realistic receipt: values a naive canonicalizer gets wrong, signed by node:crypto over the producer's stableStringify",
+ "receipt_id": "e0e0e0e0-0000-4000-8000-000000000e0e",
+ "signed_receipt": {
+  "receipt_id": "e0e0e0e0-0000-4000-8000-000000000e0e",
+  "subject": {
+   "brand_name": "Exemplar Holdings",
+   "brand_slug": "exemplar-holdings",
+   "ultimate_parent": "Exemplar Holdings"
+  },
+  "investigated_at": "2026-09-01T10:00:00.000Z",
+  "generated_at": "2026-09-16T09:00:00.000Z",
+  "incident_count": 4,
+  "category_summary": [
+   {
+    "category": "labor",
+    "count": 2,
+    "overflow": 0,
+    "share": 2.5e-7
+   },
+   {
+    "category": "environment",
+    "count": 2,
+    "overflow": 1,
+    "share": 1
+   }
+  ],
+  "source_urls": [
+   "https://example.org/é",
+   "https://example.org/😀"
+  ],
+  "source_count": 2,
+  "incidents_hash": "4a5b6c7d8e9f00112233445566778899aabbccddeeff00112233445566778899",
+  "data_source": "deep_research+database",
+  "last_deep_researched": "2026-09-01T10:00:00.000Z",
+  "disclaimer": "line separated\ttab \"quoted\" \\ slash",
+  "methodology_url": "https://ethicalalt-client.onrender.com/methodology",
+  "issuer": "EthicalAlt / Nikodemus Systems",
+  "schema_version": "1.0",
+  "overall_concern_level": "significant",
+  "investigation_id": "op_node_signed_edge",
+  "z￿": "last by code units",
+  "😀": "an astral key with a lone surrogate \udc00"
+ },
+ "signature": "ed25519:CJCPBOozmJZv8pQWpIcnkcCXuB1_hanK1Il9GN7Jk6psxmeLLH5s3uIwJfE8QheWafpjjMrqOuiOVNZD4WBfCw",
+ "public_key": "MCowBQYDK2VwAyEAxojI-QeyVFZIje46OqEQ8z_f-RhnAh_U666ck_OhTFI",
+ "verify_url": "https://ethicalalt-client.onrender.com/verify/e0e0e0e0-0000-4000-8000-000000000e0e",
+ "cached": false
+}

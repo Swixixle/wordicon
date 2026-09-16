@@ -46,6 +46,14 @@ and writes:
   field changes, and reports whether the reply's own key is the pinned one
   without ever trusting it.
 
+- `ethicalalt.receipt.node-signed.edge.json` — a second Node-signed reply
+  whose body carries what a nearly-right canonicalizer gets wrong (a float
+  the producer prints as `2.5e-7`, a U+2028, a non-ASCII key sorted by
+  UTF-16 code units, a lone surrogate parsed from JSON). Labelled
+  `edge: true`: a vector for the verifier, not a realistic receipt. The
+  sabotage pass swaps the verifier's canonicalizer for `json.dumps` and
+  this receipt fails to verify by name.
+
 Re-generate with `node tests/fixtures/producers/make_ethicalalt_fixtures.mjs`
 (Node 22 was used); the vectors must not change unless the producer's
 function does.

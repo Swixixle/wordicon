@@ -5577,11 +5577,19 @@ def _check_carry_back():
 
 
 _MINT_CONTENDER = r"""
-import os, sys, time, pathlib
+import os, sys, time, pathlib, secrets as _secrets
 sys.path.insert(0, sys.argv[1]); sys.path.insert(0, os.path.join(sys.argv[1], "scripts"))
 os.environ["WORDICON_TEST_MODE"] = "1"
 import state_root; state_root.apply(pathlib.Path(sys.argv[2]))
 import gate
+# the window between "no secret yet" and "my secret is written" is held open on purpose (the
+# random bytes take 300 ms to arrive), so every contender is inside it at once — a mint that
+# checks then writes cannot survive this; an exclusive one does
+_real = gate.secrets.token_bytes
+def _slow(n):
+    time.sleep(0.3)
+    return _real(n)
+gate.secrets.token_bytes = _slow
 go = float(sys.argv[3])
 while time.time() < go:
     time.sleep(0.001)
@@ -5602,11 +5610,18 @@ def _check_gate_mint_race():
     out = []
     REPO = Path(__file__).resolve().parents[1]
     tmp = Path(_tf.mkdtemp(prefix="wordicon_mint_"))
+    real_token_bytes = _g.secrets.token_bytes
+    def slow_token_bytes(n):
+        # the window between "no secret yet" and "my secret is written" is held open on purpose:
+        # every racer is inside it at once, so a check-then-write mint cannot pass by luck
+        _time.sleep(0.2)
+        return real_token_bytes(n)
     try:
         # threads in one process
         state_root.apply(tmp / "threads")
         secrets_seen, sessions, errors = [], [], []
         barrier = _thr.Barrier(20)
+        _g.secrets.token_bytes = slow_token_bytes
         def go():
             try:
                 barrier.wait(timeout=10)
@@ -5618,6 +5633,7 @@ def _check_gate_mint_race():
         ts = [_thr.Thread(target=go) for _ in range(20)]
         for t in ts: t.start()
         for t in ts: t.join(30)
+        _g.secrets.token_bytes = real_token_bytes
         if errors:
             out.append(f"G-gate: minting under contention raised: {errors[:3]}")
         if len(set(secrets_seen)) != 1:
@@ -5655,6 +5671,7 @@ def _check_gate_mint_race():
         if len(_g.ensure_master()) != 32 or any(p.name.startswith(".master_secret.tmp") for p in _g.auth_dir().iterdir()):
             out.append("G-gate: the rotation left a temp file or a short key")
     finally:
+        _g.secrets.token_bytes = real_token_bytes
         state_root.apply(_SCRATCH)
     return out
 
@@ -7114,6 +7131,15 @@ def _check_producer_contracts():
     v = pr.verify_ethicalalt_receipt(reply, conn)
     if not v["ok"] or v["key_in_reply_matches_pinned"] is not True or v["key_id"] != conn["trusted_keys"][0]["key_id"] or v["investigation_id"] != "op_node_signed_fixture":
         out.append(f"F3: the receipt Node signed with the producer's own form does not verify under the pinned key: {v}")
+    # the edge receipt: values a naive canonicalizer gets wrong, signed by Node the producer's way — a
+    # verifier that is "nearly" the producer's (json.dumps with sorted keys, say) fails here by name
+    edge = _json.loads((PF / "ethicalalt.receipt.node-signed.edge.json").read_text(encoding="utf-8"))
+    ve = pr.verify_ethicalalt_receipt(edge, conn)
+    if not edge.get("edge") or not ve["ok"] or ve["investigation_id"] != "op_node_signed_edge":
+        out.append(f"F3: the edge-case receipt Node signed does not verify — the canonicalizer is not the producer's on the values that differ: {ve}")
+    naive = _json.dumps(edge["signed_receipt"], sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    if naive == pr.stable_stringify(edge["signed_receipt"]):
+        out.append("F3: the edge receipt does not tell the producer's canonicalizer from json.dumps — it is not an edge case")
     tampered = _json.loads(_json.dumps(reply)); tampered["signed_receipt"]["incident_count"] = 5
     if pr.verify_ethicalalt_receipt(tampered, conn)["ok"]:
         out.append("F3: a receipt with one changed field verified")

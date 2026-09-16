@@ -94,4 +94,21 @@ writeFileSync(join(HERE, 'ethicalalt.receipt.node-signed.json'), JSON.stringify(
   receipt_id: receiptBody.receipt_id, signed_receipt: receiptBody, signature, public_key: pubB64Url,
   verify_url: 'https://ethicalalt-client.onrender.com/verify/' + encodeURIComponent(receiptBody.receipt_id), cached: false,
 }, null, 1) + '\n');
-console.log('wrote', outVectors.length, 'vectors and one node-signed receipt; public key (SPKI DER base64url):', pubB64Url);
+// a second receipt whose body carries what a naive canonicalizer gets wrong — a float the
+// producer prints as 2.5e-7, a line separator, a non-ASCII key sorted by code units, a lone
+// surrogate parsed from JSON — signed the same way. Not a realistic receipt: a vector for the
+// verifier, labelled as such (edge: true), so that a verifier that canonicalizes "nearly" like
+// the producer fails here and not in the field.
+const edgeBody = JSON.parse(JSON.stringify({ ...receiptBody, receipt_id: 'e0e0e0e0-0000-4000-8000-000000000e0e', investigation_id: 'op_node_signed_edge',
+  category_summary: [{ category: 'labor', count: 2, overflow: 0, share: 2.5e-7 }, { category: 'environment', count: 2, overflow: 1, share: 1.0 }],
+  disclaimer: 'line\u2028separated\ttab "quoted" \\ slash', source_urls: ['https://example.org/\u00e9', 'https://example.org/\ud83d\ude00'],
+  'z\uffff': 'last by code units', '\ud83d\ude00': 'an astral key' })
+  .replace('"an astral key"', '"an astral key with a lone surrogate \\udc00"'));
+const edgeMsg = Buffer.from(stableStringify(edgeBody), 'utf8');
+const edgeSig = `ed25519:${Buffer.from(sign(null, edgeMsg, priv)).toString('base64url')}`;
+writeFileSync(join(HERE, 'ethicalalt.receipt.node-signed.edge.json'), JSON.stringify({
+  edge: true, note: 'a vector for the verifier, not a realistic receipt: values a naive canonicalizer gets wrong, signed by node:crypto over the producer\'s stableStringify',
+  receipt_id: edgeBody.receipt_id, signed_receipt: edgeBody, signature: edgeSig, public_key: pubB64Url,
+  verify_url: 'https://ethicalalt-client.onrender.com/verify/' + encodeURIComponent(edgeBody.receipt_id), cached: false,
+}, null, 1) + '\n');
+console.log('wrote', outVectors.length, 'vectors and two node-signed receipts; public key (SPKI DER base64url):', pubB64Url);
