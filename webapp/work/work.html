@@ -26,6 +26,7 @@
           <button role="menuitem" data-doc="plaincopy" type="button">Make a plain copy</button>
           <button role="menuitem" data-doc="export-text" type="button">Export as text (.txt, plain)</button>
           <button role="menuitem" data-doc="export-md" type="button">Export as Markdown (.md)</button>
+          <button role="menuitem" data-doc="export-docx" type="button">Export as Word (.docx)</button>
           <button role="menuitem" data-doc="print" type="button">Print / PDF</button>
           <button role="menuitem" data-doc="archive" type="button">Archive</button>
         </div>
@@ -33,6 +34,7 @@
     </div>
     <div id="toolbar" class="toolbar" role="toolbar" aria-label="Formatting" hidden></div>
     <div class="header-right">
+      <span id="preview-chip" class="chip warn" hidden title="This process was started as a preview (WORDICON_PREVIEW=1): nothing is sealed, scheduled, pruned or drilled; no notification is sent">Preview · backups off</span>
       <button id="ask-btn" class="btn small" type="button" title="Ask Nikodemus (⌘K)">Ask ⌘K</button>
       <button id="focus-btn" class="btn small" type="button" aria-pressed="false" title="Hide the sides and the secondary controls">Focus</button>
       <button id="results-toggle" class="btn small" type="button" aria-pressed="false" aria-controls="results" title="Show or hide Results">◂ Results <span id="results-count" class="chip count" hidden></span></button>

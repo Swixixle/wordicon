@@ -1517,6 +1517,166 @@ def _check_vault_sqlite():
     return out
 
 
+def _check_preview_isolation(server):
+    """The review of 6e5b59c, finding 2. A store copied for a preview carries
+    the owner's vault configuration (a destination OUTSIDE the root — the
+    real backups) and history (which arms retention). A preview process
+    must leave that destination exactly as it found it: at startup, on the
+    timer, on a manual seal, at shutdown, and under prune. Proven both ways:
+    with the guard off the copied configuration DOES seal into the
+    destination and prune it (the hazard is real); with WORDICON_PREVIEW=1
+    nothing there changes. The launch script never copies vault/ or auth/,
+    never reuses a root, and refuses while the source's server holds its
+    lease."""
+    import hashlib as _hl, json as _json, os as _os2, subprocess, tempfile as _tf, time as _time, threading as _thr
+    import vault as _v, notebook as nbk
+    out = []
+    tmp = Path(_tf.mkdtemp(prefix="wordicon_preview_"))
+    dest = tmp / "real-vaults"; dest.mkdir()
+    root = tmp / "copied-state"; root.mkdir()
+    saved_env = _os2.environ.get("WORDICON_PREVIEW")
+    saved_dirty, saved_fail = dict(_v._DIRTY), dict(_v._LAST_FAILURE)
+    state_root.apply(root)
+
+    def fingerprint_dest():
+        return {p.name: (_hl.sha256(p.read_bytes()).hexdigest()[:16], int(p.stat().st_mtime)) for p in sorted(dest.iterdir())}
+
+    try:
+        (root / "results").mkdir(); (root / "receipts").mkdir()
+        nbk.save("doc_preview_1", title="", title_is_manual=False, body="preview words", base_revision=0, base_fingerprint="", request_id="req_preview_1")
+        # the owner's vault configuration and history, as a copy of the store would carry them
+        got = _v.init_vault(dest=str(dest))
+        now = _time.time()
+        fake = [("wordicon-vault-20260701T000000.enc", 64 * 86400), ("wordicon-vault-20260703T000000.enc", 62 * 86400),
+                ("wordicon-vault-20260906T000000.enc", 10 * 86400), ("wordicon-vault-20260915T000000.enc", 1 * 86400)]
+        for name, age in fake:
+            (dest / name).write_bytes(b"sealed bytes " + name.encode())
+            (dest / (name + ".json")).write_text(_json.dumps({"blob_sha256": "x", "bytes": 13}))
+            _os2.utime(dest / name, (now - age, now - age))
+            _v._log({"type": "sealed", "name": name, "reason": "copied history", "bytes": 13, "n_files": 1, "payload_verified_locally": True})
+        _v._log({"type": "drilled", "name": fake[-1][0], "at": cli._now()})
+        before = fingerprint_dest()
+        if len(before) != 8:
+            return [f"G-preview: the fake destination was not set up ({len(before)} entries)"]
+
+        # ---- the guard ON: nothing at the destination changes through every path a server takes ----
+        _os2.environ["WORDICON_PREVIEW"] = "1"
+        threads0 = _thr.active_count()
+        rep = server.startup_vault()
+        _time.sleep(0.3)
+        if not rep.get("preview") or rep.get("started") or rep.get("scheduler") or rep.get("shutdown_seal"):
+            out.append(f"G-preview: startup_vault did not stand down in preview mode: {rep}")
+        if _thr.active_count() != threads0:
+            out.append("G-preview: a preview started a background thread at startup (a seal or the scheduler)")
+        if _v.backup(reason="debounce") != "" or _v.backup(reason="shutdown", stage_timeout=1) != "" or _v.backup(reason="manual") != "":
+            out.append("G-preview: a preview sealed a vault")
+        if _v.prune() != []:
+            out.append("G-preview: a preview pruned")
+        _v.start_scheduler()
+        if _thr.active_count() != threads0:
+            out.append("G-preview: a preview started the scheduler")
+        try:
+            _v.drill(got["identity"])
+            out.append("G-preview: a preview drilled")
+        except RuntimeError as e:
+            if "preview" not in str(e):
+                out.append(f"G-preview: the drill refusal does not say why: {e}")
+        st = _v.status()
+        if not st.get("preview") or st.get("n_vaults") != 0 or st.get("stale_red") or st.get("failure"):
+            out.append(f"G-preview: the status does not say preview, with nothing red: {st}")
+        if fingerprint_dest() != before:
+            out.append(f"G-preview: the destination changed under a preview: {sorted(set(fingerprint_dest().items()) ^ set(before.items()))}")
+        # the Home strip and the workspace say so (static pins on the page and the shell)
+        idx = (Path(cli.__file__).parent.parent / "webapp" / "index.html").read_text(encoding="utf-8")
+        if "v.preview" not in idx or "PREVIEW — backups are OFF in this process" not in idx:
+            out.append("G-preview: the Home strip does not render the preview state")
+        mainjs = (Path(cli.__file__).parent.parent / "webapp" / "work" / "main.js").read_text(encoding="utf-8")
+        if "preview-chip" not in mainjs or "/api/vault/status" not in mainjs:
+            out.append("G-preview: the workspace header does not show the preview state")
+        import notify as _nt
+        _os2.environ["WORDICON_NOTIFY_EMAIL_FROM"] = "a@b"; _os2.environ["WORDICON_NOTIFY_EMAIL_APP_PASSWORD"] = "x"
+        if _nt._configured():
+            out.append("G-preview: a preview would send notifications")
+
+        # ---- the guard OFF (documented absence): the copied configuration seals INTO the destination and prunes it ----
+        _os2.environ.pop("WORDICON_PREVIEW", None)
+        _os2.environ["WORDICON_TEST_MODE"] = "1"      # still a test process: no network, no mail
+        name = _v.backup(reason="start")
+        after = fingerprint_dest()
+        if not name or name not in after:
+            out.append(f"G-preview: without the guard the copied configuration did NOT seal into the destination — the hazard this check exists for could not be shown: {_v._LAST_FAILURE['msg']}")
+        if fake[1][0] in after:
+            out.append("G-preview: without the guard the copied history did not prune the destination — the retention hazard could not be shown")
+        if fake[0][0] not in after or fake[2][0] not in after or fake[3][0] not in after:
+            out.append("G-preview: the retention rule pruned more than the one vault it should")
+
+        # ---- the launch script: a fresh root, nothing of the vault or the gate copied, the lease respected ----
+        (root / "auth").mkdir(exist_ok=True); (root / "auth" / "master_secret").write_bytes(b"\x02" * 32)
+        (root / "operations.lock").write_text(""); (root / "work_index.sqlite3").write_bytes(b"SQLite format 3\x00")
+        previews = tmp / "previews"
+        REPO = Path(__file__).resolve().parents[1]
+        env = {k: v for k, v in _os2.environ.items() if k != "ANTHROPIC_API_KEY"}
+        p = subprocess.run([sys.executable, str(REPO / "scripts" / "preview.py"), "--from", str(root), "--no-serve", "--root-dir", str(previews), "--port", "8431"],
+                           capture_output=True, text=True, timeout=120, env=env)
+        made = sorted(previews.glob("preview-*/state")) if previews.exists() else []
+        if p.returncode != 0 or len(made) != 1:
+            out.append(f"G-preview: the launch script did not make one fresh root: rc {p.returncode} {p.stdout[-300:]} {p.stderr[-300:]}")
+        else:
+            new = made[0]
+            for never in ("vault", "auth", "operations.lock", "work_index.sqlite3"):
+                if (new / never).exists():
+                    out.append(f"G-preview: the launch script copied {never} into the preview root")
+            if not (new / "notebook.sqlite3").exists():
+                out.append("G-preview: the launch script did not copy the notebook")
+            else:
+                import sqlite3 as _sq
+                c = _sq.connect(f"file:{new / 'notebook.sqlite3'}?mode=ro", uri=True)
+                try:
+                    if c.execute("PRAGMA integrity_check").fetchone()[0] != "ok" or c.execute("SELECT COUNT(*) FROM documents").fetchone()[0] != 1:
+                        out.append("G-preview: the copied notebook is not the source's, consistent")
+                finally:
+                    c.close()
+            if "WORDICON_PREVIEW=1" not in p.stdout or "WORDICON_TEST_MODE=1" not in p.stdout or "rm -rf" in p.stdout:
+                out.append(f"G-preview: the launch script's serving line is not the preview line: {p.stdout[-400:]}")
+            # a second run makes a second root; the first is untouched
+            _time.sleep(1.1)
+            p2 = subprocess.run([sys.executable, str(REPO / "scripts" / "preview.py"), "--from", str(root), "--no-serve", "--root-dir", str(previews)], capture_output=True, text=True, timeout=120, env=env)
+            made2 = sorted(previews.glob("preview-*/state"))
+            if p2.returncode != 0 or len(made2) != 2 or not (new / "notebook.sqlite3").exists():
+                out.append("G-preview: a second launch did not make a second, separate root")
+        # while the source's server holds its lease, the script refuses
+        lease = root / "vault" / "lease"; lease.parent.mkdir(exist_ok=True); lease.write_text("a live server")
+        import fcntl as _fc
+        fd = _os2.open(lease, _os2.O_RDWR)
+        try:
+            _fc.flock(fd, _fc.LOCK_EX | _fc.LOCK_NB)
+            p3 = subprocess.run([sys.executable, str(REPO / "scripts" / "preview.py"), "--from", str(root), "--no-serve", "--root-dir", str(previews)], capture_output=True, text=True, timeout=120, env=env)
+            if p3.returncode != 3 or "stop that server first" not in p3.stdout:
+                out.append(f"G-preview: the launch script did not refuse a store whose server holds the lease: rc {p3.returncode} {p3.stdout[-200:]}")
+            if previews.exists() and len(list(previews.glob("preview-*"))) != 2:
+                out.append("G-preview: a refused launch left a directory behind")
+        finally:
+            _fc.flock(fd, _fc.LOCK_UN); _os2.close(fd)
+        # two runs in the same second: the second name carries a counter; neither is reused, nothing removed
+        import importlib.util as _ilu
+        spec = _ilu.spec_from_file_location("preview_script", REPO / "scripts" / "preview.py"); pv = _ilu.module_from_spec(spec); spec.loader.exec_module(pv)
+        same = tmp / "same-second"
+        a1 = pv._allocate(same, stamp="20260916T000000Z"); a2 = pv._allocate(same, stamp="20260916T000000Z"); a3 = pv._allocate(same, stamp="20260916T000000Z")
+        if [x.parent.name for x in (a1, a2, a3)] != ["preview-20260916T000000Z", "preview-20260916T000000Z-2", "preview-20260916T000000Z-3"]:
+            out.append(f"G-preview: same-second allocations are not distinct, counted names: {[x.parent.name for x in (a1, a2, a3)]}")
+        if not all(x.parent.is_dir() for x in (a1, a2, a3)):
+            out.append("G-preview: an allocated preview directory was removed or never made")
+    finally:
+        if saved_env is None:
+            _os2.environ.pop("WORDICON_PREVIEW", None)
+        else:
+            _os2.environ["WORDICON_PREVIEW"] = saved_env
+        _os2.environ.pop("WORDICON_NOTIFY_EMAIL_FROM", None); _os2.environ.pop("WORDICON_NOTIFY_EMAIL_APP_PASSWORD", None)
+        state_root.apply(_SCRATCH)
+        _v._DIRTY.update(saved_dirty); _v._LAST_FAILURE.update(saved_fail)
+    return out
+
+
 # ---- block 123: Carry Back ---------------------------------------------------
 #
 # The bridge from a workup to the writing room. A carry means "this may be
@@ -4671,6 +4831,34 @@ def _check_notebook_b(server, paired):
             except nbk.NotebookError as e:
                 if e.status != 400:
                     out.append(f"B: a reused request id is HTTP {e.status}, not 400")
+            # the review of 6e5b59c: the same words under the same id but with a
+            # different INTENT (a checkpoint reason it did not carry) is not a retry
+            try:
+                nbk.save(d, title="", title_is_manual=False, body=body, base_revision=0, base_fingerprint="",
+                         request_id="req_suite_00000001", checkpoint_reason="save")
+                out.append("B: a request id reused with the same words but a different checkpoint reason was accepted as a retry")
+            except nbk.NotebookError as e:
+                if e.status != 400 or e.error_class != "request_intent_differs":
+                    out.append(f"B: a same-words/different-intent repeat is not refused by name ({e.status}, {e.error_class!r})")
+            try:
+                nbk.save(d, title="", title_is_manual=False, body=body, base_revision=0, base_fingerprint="",
+                         request_id="req_suite_00000001", origin="elsewhere")
+                out.append("B: a request id reused with the same words from a different origin was accepted as a retry")
+            except nbk.NotebookError as e:
+                if e.error_class != "request_intent_differs":
+                    out.append(f"B: a different-origin repeat is not refused by name ({e.error_class!r})")
+            if a2.get("request_fp_version") != nbk.REQUEST_FP_VERSION or a.get("request_fp_version") != nbk.REQUEST_FP_VERSION:
+                out.append("B: the acknowledgement does not name the request fingerprint version")
+            # a row from before the request fingerprint existed (NULL) compares by content, as it always did
+            _c = nbk._connect()
+            try:
+                _c.execute("UPDATE save_requests SET request_fp = NULL, request_fp_version = NULL WHERE request_id = 'req_suite_00000001'")
+            finally:
+                _c.close()
+            a3 = nbk.save(d, title="", title_is_manual=False, body=body, base_revision=0, base_fingerprint="",
+                          request_id="req_suite_00000001", checkpoint_reason="save")
+            if not a3["repeated"] or a3["revision"] != a["revision"] or a3.get("request_fp_version") is not None:
+                out.append(f"B: a historical request row (no request fingerprint) is not compared by content as before ({a3})")
             b = nbk.save(d, title="", title_is_manual=False, body=body + "more\n", base_revision=1,
                          base_fingerprint=a["fingerprint"], request_id="req_suite_00000002", checkpoint_reason="save")
             if b["revision"] != 2 or not (b["checkpoint"] and b["checkpoint"]["created"]):
@@ -5388,6 +5576,89 @@ def _check_carry_back():
     return out
 
 
+_MINT_CONTENDER = r"""
+import os, sys, time, pathlib
+sys.path.insert(0, sys.argv[1]); sys.path.insert(0, os.path.join(sys.argv[1], "scripts"))
+os.environ["WORDICON_TEST_MODE"] = "1"
+import state_root; state_root.apply(pathlib.Path(sys.argv[2]))
+import gate
+go = float(sys.argv[3])
+while time.time() < go:
+    time.sleep(0.001)
+print(gate.ensure_master().hex())
+"""
+
+
+def _check_gate_mint_race():
+    """The review of 6e5b59c: gate.ensure_master() was check-then-write, so
+    concurrent first callers each minted a secret and the last write won —
+    every session MAC'd under an earlier one stopped verifying (the 401s the
+    concurrency check hit while minting twenty sessions at once). Now the
+    mint is exclusive: twenty threads and eight processes racing on an
+    absent secret agree on ONE, every session any of them issued verifies
+    afterwards, and a short or empty secret is refused, never used."""
+    import subprocess, tempfile as _tf, threading as _thr, time as _time
+    import gate as _g
+    out = []
+    REPO = Path(__file__).resolve().parents[1]
+    tmp = Path(_tf.mkdtemp(prefix="wordicon_mint_"))
+    try:
+        # threads in one process
+        state_root.apply(tmp / "threads")
+        secrets_seen, sessions, errors = [], [], []
+        barrier = _thr.Barrier(20)
+        def go():
+            try:
+                barrier.wait(timeout=10)
+                s = _g.issue_session("racer")
+                secrets_seen.append(_g.ensure_master())
+                sessions.append(s["token"])
+            except Exception as e:
+                errors.append(repr(e))
+        ts = [_thr.Thread(target=go) for _ in range(20)]
+        for t in ts: t.start()
+        for t in ts: t.join(30)
+        if errors:
+            out.append(f"G-gate: minting under contention raised: {errors[:3]}")
+        if len(set(secrets_seen)) != 1:
+            out.append(f"G-gate: {len(set(secrets_seen))} master secrets were minted by twenty concurrent first callers, not one")
+        if sum(1 for tok in sessions if _g.verify(tok)) != len(sessions) or len(sessions) != 20:
+            out.append(f"G-gate: {sum(1 for tok in sessions if _g.verify(tok))} of {len(sessions)} sessions issued under contention verify")
+        if not (tmp / "threads" / "auth" / "master_secret").exists() or (tmp / "threads" / "auth" / "master_secret").stat().st_mode & 0o777 != 0o600:
+            out.append("G-gate: the master secret is not at its path with 0600")
+        if any(p.name.startswith(".master_secret.tmp") for p in (tmp / "threads" / "auth").iterdir()):
+            out.append("G-gate: a temp file was left beside the master secret")
+        # processes, released together
+        (tmp / "procs").mkdir()
+        start = _time.time() + 1.5
+        procs = [subprocess.Popen([sys.executable, "-c", _MINT_CONTENDER, str(REPO), str(tmp / "procs"), str(start)],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(8)]
+        outs = [p.communicate(timeout=60) for p in procs]
+        hexes = {o[0].strip() for o in outs}
+        if any(p.returncode != 0 for p in procs) or len(hexes) != 1 or len(next(iter(hexes))) != 64:
+            out.append(f"G-gate: eight processes racing on an absent secret did not agree on one: {hexes} {[o[1][-120:] for o in outs if o[1]][:2]}")
+        # a short secret is refused, never MAC'd under
+        state_root.apply(tmp / "short")
+        _g.auth_dir().mkdir(parents=True); _g.master_path().write_bytes(b"")
+        try:
+            _g.ensure_master()
+            out.append("G-gate: an EMPTY master secret was accepted as the key")
+        except RuntimeError as e:
+            if "32" not in str(e):
+                out.append(f"G-gate: the short-secret refusal does not say what it expects: {e}")
+        # a rotation replaces atomically and invalidates every session
+        state_root.apply(tmp / "rotate")
+        tok = _g.issue_session("before")["token"]
+        _g.rotate_master()
+        if _g.verify(tok):
+            out.append("G-gate: a session survived the rotation")
+        if len(_g.ensure_master()) != 32 or any(p.name.startswith(".master_secret.tmp") for p in _g.auth_dir().iterdir()):
+            out.append("G-gate: the rotation left a temp file or a short key")
+    finally:
+        state_root.apply(_SCRATCH)
+    return out
+
+
 def _check_test_mode_fails_closed(server):
     """Slice A. Three independent refusals, each proven with the thing it
     refuses actually attempted: (1) a direct socket to a public address and
@@ -5639,6 +5910,240 @@ def _check_workspace_registry(server, paired):
     m2 = c.post("/api/actions/match", json={"query": "map", "subject": "none"}).get_json() or {}
     if [x["id"] for x in m2.get("matches", [])] != ["explore.map"]:
         out.append(f"REGISTRY: Ask 'map' should name the Map only: {m2}")
+    return out
+
+
+def _check_concept_picker(server, paired):
+    """The review of 6e5b59c (completeness): an action whose subject is a
+    concept you keep (Re-check this concept) is chosen from the shelf as
+    ruled, never guessed from the draft. /api/concepts lists the accepted
+    concepts with their definitions through the gate; a prepare with the
+    picker's subject shape freezes the concept (identity, definition) and
+    the proposal names it; a selection offered to a concept action is
+    refused with the picker as a choice on the page; the page has the
+    picker and no innerHTML in it."""
+    import json as _json
+    out = []
+    root = Path(__file__).resolve().parents[1]
+    c = paired(server.app.test_client())
+    if server.app.test_client().get("/api/concepts").status_code != 401:
+        out.append("picker: /api/concepts answers an unpaired device")
+    r = c.get("/api/concepts")
+    d = r.get_json() or {}
+    if r.status_code != 200 or "concepts" not in d or "population" not in d or d.get("count") != len(d.get("concepts", [])):
+        out.append(f"picker: /api/concepts does not list concepts with a population: {r.status_code} {list(d)}")
+    rows = d.get("concepts") or []
+    if not rows:
+        # the scratch shelf is empty at this point: put a synthetic concept on it the way a ruling does
+        cli.persist_accepted_concept("ZZ Picker Probe", "a synthetic concept accepted for the picker check", "trace_picker_probe", concept_id="concept_zzpicker1")
+        rows = (c.get("/api/concepts").get_json() or {}).get("concepts") or []
+    if rows:
+        if any(not (x.get("name") and "definition" in x and ("concept_id" in x or "id" in x)) for x in rows):
+            out.append("picker: a listed concept lacks its name, definition or identity")
+        if [x["name"].lower() for x in rows] != sorted(x["name"].lower() for x in rows):
+            out.append("picker: the concepts are not in name order")
+        pick = rows[0]
+        pr = c.post("/api/actions/prepare", json={"action_id": "explore.recheck", "subject": {"kind": "concept", "concept": {"title": pick["name"], "definition": pick["definition"], "concept_id": pick.get("concept_id") or pick.get("id"), "plain_gloss": pick.get("plain_gloss", "")}}, "inputs": {}})
+        pj = pr.get_json() or {}
+        sc = (pj.get("disclosure") or {}).get("scope") or {}
+        if pr.status_code != 200 or pj.get("subject_kind") != "concept" or sc.get("kind") != "concept" or sc.get("title") != pick["name"] or not pj.get("prepared_id"):
+            out.append(f"picker: a prepare with the picker's subject did not freeze the concept: {pr.status_code} {pj.get('error')} {sc}")
+    else:
+        out.append("picker: no concept could be put on the scratch shelf, so the picker's prepare was not exercised")
+    pr2 = c.post("/api/actions/prepare", json={"action_id": "explore.recheck", "subject": {"kind": "selection", "text": "some words"}, "inputs": {}})
+    if pr2.status_code != 409 or "choose a concept" not in (pr2.get_json() or {}).get("error", ""):
+        out.append(f"picker: a selection offered to a concept action is not refused with the shelf as the way: {pr2.status_code} {pr2.get_json()}")
+    src = (root / "webapp" / "work" / "actions.js").read_text(encoding="utf-8")
+    if "pickConcept(" not in src or "/api/concepts" not in src or "kind: 'concept', concept:" not in src:
+        out.append("picker: actions.js has no concept picker wired to /api/concepts and the concept subject")
+    if "innerHTML" in src[src.find("async pickConcept("):src.find("async pickConcept(") + 3000]:
+        out.append("picker: the picker uses innerHTML")
+    if "Choose a concept you keep" not in src:
+        out.append("picker: the refusal of a selection does not offer the picker")
+    return out
+
+
+def _check_docx_export(server, paired):
+    """The Word export the instructions required (the review of 6e5b59c:
+    missing from 6e5b59c). Built on the server from the saved structure:
+    every part of the package is well-formed XML with the right content
+    types; the text of every leaf is in the file exactly and in order
+    (spaces kept, XML-significant characters escaped); headings carry their
+    styles; two ordered lists number independently and a nested list sits
+    one level deeper; a link is a hyperlink relationship to its href; bold
+    and italic are run properties; a plain document exports as paragraphs;
+    the route answers through the gate. Where python-docx or LibreOffice is
+    present the file is also opened by them (a skip is said, never a pass)."""
+    import io as _io, json as _json, shutil as _sh, subprocess, tempfile as _tf, zipfile as _zf
+    import xml.etree.ElementTree as ET
+    import notebook as nbk, document_schema as ds, docx_export
+    out = []
+    W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+    rich = {"type": "doc", "content": [
+        {"type": "heading", "attrs": {"level": 1}, "content": [{"type": "text", "text": "A title with <angles> & an ampersand", "marks": []}]},
+        {"type": "paragraph", "content": [{"type": "text", "text": "  leading spaces, ", "marks": []}, {"type": "text", "text": "bold", "marks": [{"type": "strong"}]},
+                                          {"type": "text", "text": " and ", "marks": []}, {"type": "text", "text": "italic", "marks": [{"type": "em"}]},
+                                          {"type": "text", "text": " and a ", "marks": []}, {"type": "text", "text": "link", "marks": [{"type": "link", "attrs": {"href": "https://example.org/a?b=1&c=2"}}]},
+                                          {"type": "hard_break"}, {"type": "text", "text": "after a break — ünïcödé 😀 trailing  ", "marks": []}]},
+        {"type": "heading", "attrs": {"level": 3}, "content": [{"type": "text", "text": "Lists", "marks": []}]},
+        {"type": "bullet_list", "content": [
+            {"type": "list_item", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "first bullet", "marks": []}]},
+                                              {"type": "bullet_list", "content": [{"type": "list_item", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "nested bullet", "marks": []}]}]}]}]},
+            {"type": "list_item", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "second bullet", "marks": []}]}, {"type": "paragraph", "content": [{"type": "text", "text": "its second paragraph", "marks": []}]}]}]},
+        {"type": "ordered_list", "content": [{"type": "list_item", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "one", "marks": []}]}]},
+                                             {"type": "list_item", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "two", "marks": []}]}]}]},
+        {"type": "paragraph", "content": [{"type": "text", "text": "between the lists", "marks": []}]},
+        {"type": "ordered_list", "content": [{"type": "list_item", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "starts at one again", "marks": []}]}]}]},
+        {"type": "blockquote", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "a quoted line", "marks": []}]}]},
+    ]}
+    leaves = []
+    def walk(n):
+        for k in n.get("content") or []:
+            if k.get("type") == "text":
+                leaves.append(k["text"])
+            elif k.get("type") == "hard_break":
+                leaves.append("\n")
+            else:
+                walk(k)
+    walk(rich)
+    want_text = "".join(leaves)
+    try:
+        data = docx_export.build_docx("A title with <angles> & an ampersand", rich)
+    except Exception as e:  # noqa: BLE001
+        return [f"DOCX: the builder raised on a valid structure: {e}"]
+    try:
+        z = _zf.ZipFile(_io.BytesIO(data))
+        names = set(z.namelist())
+        parts = {n: z.read(n) for n in names}
+    except Exception as e:  # noqa: BLE001
+        return [f"DOCX: not a zip package: {e}"]
+    for need in ("[Content_Types].xml", "_rels/.rels", "word/document.xml", "word/_rels/document.xml.rels", "word/styles.xml", "word/numbering.xml", "docProps/core.xml"):
+        if need not in names:
+            out.append(f"DOCX: the package lacks {need}")
+    trees = {}
+    for n, b in parts.items():
+        try:
+            trees[n] = ET.fromstring(b)
+        except ET.ParseError as e:
+            out.append(f"DOCX: {n} is not well-formed XML: {e}")
+    if out:
+        return out
+    ct = parts["[Content_Types].xml"].decode("utf-8")
+    if 'PartName="/word/document.xml"' not in ct or "wordprocessingml.document.main+xml" not in ct or 'PartName="/word/numbering.xml"' not in ct:
+        out.append("DOCX: [Content_Types].xml does not declare the main document and numbering parts")
+    doc = trees["word/document.xml"]
+    body = doc.find(f"{W}body")
+    if body is None:
+        return out + ["DOCX: no w:body"]
+    paras = body.findall(f"{W}p")
+    # the text, exactly and in order
+    got = []
+    for p_ in paras:
+        for el_ in p_.iter():
+            if el_.tag == f"{W}t":
+                got.append(el_.text or "")
+            elif el_.tag == f"{W}br":
+                got.append("\n")
+    got_text = "".join(got)
+    if got_text != want_text:
+        out.append(f"DOCX: the text is not the leaves' text in order: {got_text[:120]!r} vs {want_text[:120]!r}")
+    def style_of(p_):
+        ps = p_.find(f"{W}pPr/{W}pStyle")
+        return ps.get(f"{W}val") if ps is not None else ""
+    def num_of(p_):
+        np_ = p_.find(f"{W}pPr/{W}numPr")
+        if np_ is None:
+            return None
+        return (np_.find(f"{W}numId").get(f"{W}val"), np_.find(f"{W}ilvl").get(f"{W}val"))
+    texts = ["".join(t.text or "" for t in p_.iter(f"{W}t")) for p_ in paras]
+    by_text = dict(zip(texts, paras))
+    if style_of(paras[0]) != "Heading1" or style_of(by_text.get("Lists")) != "Heading3":
+        out.append(f"DOCX: headings do not carry Heading1/Heading3 styles: {style_of(paras[0])!r} {style_of(by_text.get('Lists'))!r}")
+    nb1, nb2, nb_nested, nb_second_para = num_of(by_text["first bullet"]), num_of(by_text["second bullet"]), num_of(by_text["nested bullet"]), num_of(by_text["its second paragraph"])
+    if not nb1 or nb1 != nb2 or nb1[1] != "0" or not nb_nested or nb_nested[0] != nb1[0] or nb_nested[1] != "1" or nb_second_para is not None:
+        out.append(f"DOCX: the bullet list is not one numbering instance with the nested item one level deeper and the second paragraph unnumbered: {nb1} {nb2} {nb_nested} {nb_second_para}")
+    o1, o2, o3 = num_of(by_text["one"]), num_of(by_text["two"]), num_of(by_text["starts at one again"])
+    if not o1 or o1 != o2 or not o3 or o3[0] == o1[0] or o1[0] == nb1[0]:
+        out.append(f"DOCX: two ordered lists must be two numbering instances (each starts at 1), apart from the bullets: {o1} {o2} {o3}")
+    numbering = trees["word/numbering.xml"]
+    ids = {n.get(f"{W}val") for n in numbering.iter(f"{W}abstractNumId")} | {n.get(f"{W}numId") for n in numbering.findall(f"{W}num")}
+    for nid in {nb1[0], o1[0], o3[0]} if nb1 and o1 and o3 else set():
+        if nid not in ids:
+            out.append(f"DOCX: numId {nid} is used but not defined in numbering.xml")
+    fmts = [lvl.find(f"{W}numFmt").get(f"{W}val") for an in numbering.findall(f"{W}abstractNum") for lvl in an.findall(f"{W}lvl") if lvl.get(f"{W}ilvl") == "0"]
+    if fmts.count("bullet") != 1 or fmts.count("decimal") != 2:
+        out.append(f"DOCX: numbering does not define one bullet and two decimal lists: {fmts}")
+    if style_of(by_text["a quoted line"]) != "Quote":
+        out.append("DOCX: the block quote does not carry the Quote style")
+    # bold, italic, the link
+    def run_props(p_, text):
+        for r_ in p_.iter(f"{W}r"):
+            t = r_.find(f"{W}t")
+            if t is not None and t.text == text:
+                rp = r_.find(f"{W}rPr")
+                return {c.tag.replace(W, "") for c in rp} if rp is not None else set()
+        return None
+    p1 = paras[1]
+    if "b" not in (run_props(p1, "bold") or set()) or "i" not in (run_props(p1, "italic") or set()) or "b" in (run_props(p1, " and ") or set()):
+        out.append(f"DOCX: bold and italic are not run properties on the marked runs only: {run_props(p1, 'bold')} {run_props(p1, 'italic')} {run_props(p1, ' and ')}")
+    hl = p1.find(f"{W}hyperlink")
+    rels = {r_.get("Id"): r_ for r_ in trees["word/_rels/document.xml.rels"]}
+    if hl is None or hl.get(f"{R}id") not in rels or rels[hl.get(f"{R}id")].get("Target") != "https://example.org/a?b=1&c=2" or rels[hl.get(f"{R}id")].get("TargetMode") != "External":
+        out.append("DOCX: the link is not a hyperlink with an external relationship to its href")
+    if "Hyperlink" not in (run_props(hl, "link") or set()) and not any(rs.get(f"{W}val") == "Hyperlink" for rs in hl.iter(f"{W}rStyle")):
+        out.append("DOCX: the link's run does not carry the Hyperlink style")
+    if not all(t.get("{http://www.w3.org/XML/1998/namespace}space") == "preserve" for t in doc.iter(f"{W}t")):
+        out.append("DOCX: a run lacks xml:space=preserve — its spaces would be trimmed")
+    if (trees["docProps/core.xml"].find("{http://purl.org/dc/elements/1.1/}title").text or "") != "A title with <angles> & an ampersand":
+        out.append("DOCX: the title is not in the core properties")
+    # a plain document: paragraphs, no numbering, no styles beyond Normal
+    plain = docx_export.docx_for_document({"body": "first line\nsecond line\n\nsecond paragraph  ", "display_title": "Plain", "doc_json": None})
+    pd = ET.fromstring(_zf.ZipFile(_io.BytesIO(plain)).read("word/document.xml"))
+    pparas = pd.find(f"{W}body").findall(f"{W}p")
+    ptexts = ["".join((t.text or "") if t.tag == f"{W}t" else "\n" for t in p_.iter() if t.tag in (f"{W}t", f"{W}br")) for p_ in pparas]
+    if ptexts != ["first line\nsecond line", "second paragraph  "]:
+        out.append(f"DOCX: a plain body does not export as its paragraphs with breaks: {ptexts}")
+    # the outside readers, where present — a skip is said
+    try:
+        import docx as _docx
+        d2 = _docx.Document(_io.BytesIO(data))
+        ptx = [p_.text for p_ in d2.paragraphs]
+        if ptx[0] != "A title with <angles> & an ampersand" or "one" not in ptx or d2.paragraphs[0].style.name.lower() != "heading 1":
+            out.append(f"DOCX: python-docx reads the file differently: {ptx[:3]} style {d2.paragraphs[0].style.name!r}")
+    except ImportError:
+        SKIPPED.append("the DOCX export was not opened by python-docx (not installed here)")
+    soffice = _sh.which("soffice") or _sh.which("libreoffice")
+    if soffice:
+        td = Path(_tf.mkdtemp(prefix="wordicon_docx_"))
+        (td / "export.docx").write_bytes(data)
+        try:
+            r = subprocess.run([soffice, "--headless", "--convert-to", "txt:Text (encoded):UTF8", "--outdir", str(td), str(td / "export.docx")],
+                               capture_output=True, text=True, timeout=120, env={**_os.environ, "HOME": str(td)})
+            txt = (td / "export.txt").read_text(encoding="utf-8") if (td / "export.txt").exists() else ""
+            if "starts at one again" not in txt or "nested bullet" not in txt or "A title with <angles> & an ampersand" not in txt:
+                out.append(f"DOCX: LibreOffice did not read the text back: rc {r.returncode} {r.stderr[-200:]} {txt[:120]!r}")
+        except (subprocess.TimeoutExpired, OSError) as e:
+            SKIPPED.append(f"the DOCX export was not converted by LibreOffice ({e})")
+    else:
+        SKIPPED.append("the DOCX export was not converted by LibreOffice (not installed here)")
+    # the route, through the gate, on a saved rich document
+    did = nbk.new_id()
+    nbk.save(did, title="", title_is_manual=False, body=ds.project(ds.validate(rich)), base_revision=0, base_fingerprint="", request_id="req_docx_1",
+             doc_json=rich, doc_schema=1, projection_version=1)
+    if server.app.test_client().get(f"/api/notebook/documents/{did}/export.docx").status_code != 401:
+        out.append("DOCX: the export answers an unpaired device")
+    c = paired(server.app.test_client())
+    r = c.get(f"/api/notebook/documents/{did}/export.docx")
+    if r.status_code != 200 or not r.headers.get("Content-Disposition", "").endswith('.docx"') or r.headers.get("X-Document-Revision") != "1" \
+            or "wordprocessingml.document" not in r.headers.get("Content-Type", "") or _zf.ZipFile(_io.BytesIO(r.data)).read("word/document.xml") != parts["word/document.xml"]:
+        out.append(f"DOCX: the route does not serve the same document as an attachment naming its revision: {r.status_code} {dict(r.headers)}")
+    if c.get("/api/notebook/documents/doc_nonesuch_000/export.docx").status_code != 404:
+        out.append("DOCX: an unknown document is not a 404")
+    html = (Path(__file__).resolve().parents[1] / "webapp" / "work" / "work.html").read_text(encoding="utf-8")
+    mainjs = (Path(__file__).resolve().parents[1] / "webapp" / "work" / "main.js").read_text(encoding="utf-8")
+    if 'data-doc="export-docx"' not in html or "/export.docx" not in mainjs or "innerHTML" in mainjs.split("export-docx", 1)[1][:800]:
+        out.append("DOCX: the Document menu has no Word export, or it is not wired to the route")
     return out
 
 
@@ -6524,24 +7029,175 @@ def _check_work_index(server, paired):
     return out
 
 
+def _check_producer_contracts():
+    """The review of 6e5b59c, finding 3 — the adapters' contracts are the
+    producers' own, at pinned revisions, and the verifiers reproduce the
+    producers' signing byte for byte:
+    1. every route the adapters use names its repo, revision, file:line,
+       auth, reply and side effects; the package contract the rooms import
+       is declared NOT served by either main, and named as such in the
+       federation core too;
+    2. EthicalAlt's canonicalization: the Python re-implementation matches
+       the bytes the producer's own stableStringify wrote under Node for
+       every vector (numbers, escapes, surrogates, UTF-16 key order), and
+       the values a JSON body can carry that Node's own serializer could
+       not put in the vectors file;
+    3. a receipt Node signed with the producer's own signing form verifies
+       under the pinned key and only there: a changed byte of the body, a
+       reply carrying a different public key, no pinned key — each refused
+       by name; the reply's key is compared, never trusted;
+    4. Open Case's signed_hash: JCS → sha256 hex → Ed25519 over the hex,
+       verified under the pinned key; a forged hash, a tampered payload and
+       an EMPTY signature (the producer without a key) each refused by name;
+    5. prepare's syntax: the subject is required for a start; the snapshot
+       is its own kind with its own disclosure."""
+    import base64 as _b64, importlib, json as _json
+    out = []
+    pr = importlib.import_module("producers")
+    fed = importlib.import_module("federation")
+    PF = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "producers"
+    # ---- 1. the pins ----
+    for k in ("ethicalalt", "open_case"):
+        ct = pr.CONTRACTS.get(k) or {}
+        if not re.match(r"^[0-9a-f]{40}$", ct.get("revision", "")) or not ct.get("revision_date") or not ct.get("repo") or not ct.get("read_on"):
+            out.append(f"F3: {k}'s contract does not pin a repository, a 40-hex revision, its date and when it was read: {ct.get('revision')!r}")
+        for name, r in (ct.get("routes") or {}).items():
+            for field in ("method", "path", "source", "auth", "reply", "side_effects", "implemented"):
+                if field not in r:
+                    out.append(f"F3: {k}.{name} does not declare {field}")
+            if not re.search(r"\.(js|py):\d+", str(r.get("source", ""))):
+                out.append(f"F3: {k}.{name} does not name a file:line in the producer's source: {r.get('source')!r}")
+            if r.get("method") == "POST" and "request" not in r:
+                out.append(f"F3: {k}.{name} is a POST without its request shape")
+            if r.get("implemented") is False and not r.get("why_not"):
+                out.append(f"F3: {k}.{name} is declared and not implemented without saying why")
+        ns = (ct.get("not_served") or {}).get("package_export") or {}
+        if "branch" not in ns.get("served_by", "") or "not on main" not in ns.get("served_by", ""):
+            out.append(f"F3: {k} does not declare that the package export is served only by a branch, not main: {ns}")
+        ad = pr.ADAPTERS[k]
+        if ad.get("package_contract", {}).get("served") is not False or ct["revision"][:7] not in ad.get("contract_source", ""):
+            out.append(f"F3: {k}'s adapter does not declare the package contract unserved, or its contract_source does not name the revision")
+        if ad["artifact"].get("signed") is not False:
+            out.append(f"F3: {k}'s artifact (what main serves) is declared signed — it is not")
+        norm = lambda p_: re.sub(r"\{[a-z_]+\}", "{id}", p_)
+        if norm(ad["start"]["path"]) != norm(ct["routes"]["start"]["path"]) or ad["lookup"]["path"] != ct["routes"]["index" if k == "ethicalalt" else "cases"]["path"] \
+                or norm(ad["artifact"]["path"]) != norm(ct["routes"]["export" if k == "ethicalalt" else "report"]["path"]) \
+                or norm(ad["receipt"]["path"]) != norm(ct["routes"]["receipt" if k == "ethicalalt" else "snapshot"]["path"]):
+            out.append(f"F3: {k}'s adapter routes are not the pinned routes")
+        if fed.PRODUCERS[k].get("export_path") != ad["package_contract"]["path"] or "branch" not in fed.PRODUCERS[k].get("export_path_served_by", ""):
+            out.append(f"F3: the federation core does not declare {k}'s export_path as served by a branch only")
+    if not pr.PACKAGE_CONTRACT.get("served_by_main") is False:
+        out.append("F3: PACKAGE_CONTRACT does not say main does not serve it")
+    if fed.PRODUCERS["open_case"]["locate_path"] != "/api/v1/cases" or fed.PRODUCERS["open_case"].get("locate_items_key") != "cases":
+        out.append("F3: Open Case's locate is not the listing main serves (GET /api/v1/cases → cases[])")
+    if not str(pr.CONTRACTS["open_case"]["routes"]["snapshot"].get("separate_action", "")).startswith("investigate.opencase.snapshot"):
+        out.append("F3: the snapshot is not declared as its own action")
+    # ---- 2. the canonicalizer against the producer's own bytes ----
+    vec = _json.loads((PF / "ethicalalt.stable-stringify.vectors.json").read_text(encoding="utf-8"))
+    if "investigationReceipt.js:21-31" not in vec.get("source", "") or "1a71460" not in vec.get("source", ""):
+        out.append(f"F3: the vectors do not name the producer's function and revision: {vec.get('source')!r}")
+    bad = [(x["input"], x["output"], pr.stable_stringify(x["input"])) for x in vec["vectors"] if pr.stable_stringify(x["input"]) != x["output"]]
+    if bad or len(vec["vectors"]) < 30:
+        out.append(f"F3: the Python canonicalizer differs from the producer's stableStringify on {len(bad)} of {len(vec['vectors'])} vectors: {bad[:3]}")
+    # what Node's own serializer could not put in the file: integers beyond 2^53 are doubles to the producer
+    for v, want in ((12345678901234567890, "12345678901234567000"), (2 ** 53 + 1, "9007199254740992"), (2 ** 63, "9223372036854776000"), (-0.0, "0"),
+                    ({"b": [1.0, 2.50, -3e-7], "a": {"é": " ", "z": None}}, '{"a":{"z":null,"é":" "},"b":[1,2.5,-3e-7]}'),
+                    ("lone \udc00 low", '"lone \\udc00 low"')):
+        got = pr.stable_stringify(v)
+        if got != want:
+            out.append(f"F3: stable_stringify({v!r}) = {got!r}, the producer would write {want!r}")
+    # ---- 3. the Node-signed receipt ----
+    pub = (PF / "ethicalalt.receipt.pub.spki.b64").read_text().strip()
+    raw = fed._raw_public_key(pub)
+    conn = {"trusted_keys": [{"key_id": fed.key_id_from_spki_b64(pub), "public_key_b64": _b64.b64encode(raw).decode(), "label": "fixture"}]}
+    reply = _json.loads((PF / "ethicalalt.receipt.node-signed.json").read_text(encoding="utf-8"))
+    v = pr.verify_ethicalalt_receipt(reply, conn)
+    if not v["ok"] or v["key_in_reply_matches_pinned"] is not True or v["key_id"] != conn["trusted_keys"][0]["key_id"] or v["investigation_id"] != "op_node_signed_fixture":
+        out.append(f"F3: the receipt Node signed with the producer's own form does not verify under the pinned key: {v}")
+    tampered = _json.loads(_json.dumps(reply)); tampered["signed_receipt"]["incident_count"] = 5
+    if pr.verify_ethicalalt_receipt(tampered, conn)["ok"]:
+        out.append("F3: a receipt with one changed field verified")
+    reordered = _json.loads(_json.dumps(reply)); reordered["signed_receipt"] = dict(reversed(list(reply["signed_receipt"].items())))
+    if not pr.verify_ethicalalt_receipt(reordered, conn)["ok"]:
+        out.append("F3: the same receipt with its keys in another order did not verify (key order is not part of the bytes)")
+    other = _json.loads(_json.dumps(reply)); other["public_key"] = (PF / "open_case.snapshot.pub.spki.b64").read_text().strip()
+    v2 = pr.verify_ethicalalt_receipt(other, conn)
+    if not v2["ok"] or v2["key_in_reply_matches_pinned"] is not False:
+        out.append(f"F3: a reply carrying another public key must still verify under the PINNED key and say the reply's key is not it: {v2}")
+    v3 = pr.verify_ethicalalt_receipt(reply, {"trusted_keys": []})
+    if v3["ok"] or "no key is pinned" not in v3["why"]:
+        out.append(f"F3: with no pinned key the receipt must be unverified by name: {v3}")
+    v4 = pr.verify_ethicalalt_receipt(reply, {"trusted_keys": [{"key_id": "ed25519:sha256:00", "public_key_b64": _b64.b64encode(fed._raw_public_key((PF / 'open_case.snapshot.pub.spki.b64').read_text().strip())).decode()}]})
+    if v4["ok"] or "does not verify" not in v4["why"] or "never trusted" not in v4["why"]:
+        out.append(f"F3: under a different pinned key the receipt must fail by name and say the reply's key is not trusted: {v4}")
+    # ---- 4. Open Case's signed_hash ----
+    import jcs as _jcs, hashlib as _hl
+    from cryptography.hazmat.primitives.serialization import load_der_private_key
+    oc_priv = load_der_private_key(_b64.b64decode((PF / "open_case.snapshot.key.pkcs8.b64").read_text().strip()), password=None)
+    oc_pub = (PF / "open_case.snapshot.pub.spki.b64").read_text().strip()
+    oc_conn = {"trusted_keys": [{"key_id": fed.key_id_from_spki_b64(oc_pub), "public_key_b64": _b64.b64encode(fed._raw_public_key(oc_pub)).decode()}]}
+    payload = {"case": {"id": "c", "title": "T"}, "entries": [{"n": 1.5}], "snapshot": {"snapshot_number": 1, "taken_by": "exemplar", "label": ""}}
+    digest = _hl.sha256(_jcs.canonicalize(payload)).hexdigest()
+    packed = _json.dumps({"content_hash": digest, "signature": _b64.b64encode(oc_priv.sign(digest.encode("utf-8"))).decode(), "payload": payload}, separators=(",", ":"), sort_keys=True)
+    s1 = pr.verify_open_case_signed_hash(packed, oc_conn)
+    if not s1["ok"] or s1["content_hash"] != digest:
+        out.append(f"F3: an Open Case signed_hash made the producer's way does not verify: {s1}")
+    forged = _json.loads(packed); forged["payload"]["entries"][0]["n"] = 2
+    s2 = pr.verify_open_case_signed_hash(_json.dumps(forged), oc_conn)
+    if s2["ok"] or "content_hash does not match" not in s2["why"]:
+        out.append(f"F3: a tampered snapshot payload must fail on the hash by name: {s2}")
+    unsigned = _json.loads(packed); unsigned["signature"] = ""
+    s3 = pr.verify_open_case_signed_hash(_json.dumps(unsigned), oc_conn)
+    if s3["ok"] or not s3.get("unsigned") or "UNSIGNED" not in s3["why"]:
+        out.append(f"F3: an empty signature must be named an unsigned snapshot: {s3}")
+    s4 = pr.verify_open_case_signed_hash(packed, conn)      # the EthicalAlt key pinned instead
+    if s4["ok"] or "does not verify" not in s4["why"]:
+        out.append(f"F3: under another pinned key the snapshot must fail by name: {s4}")
+    # ---- 5. prepare's syntax (no connector needed to refuse) ----
+    oid = "0f4c2b1a-9e8d-4c7b-a6f5-e4d3c2b1a098"
+    for text, want in (("", "needs"), ("no-case-id here", "case id first"), (oid, "investigator handle"), (oid + " exemplar", "subject to investigate")):
+        try:
+            pr.prepare("open_case", text)
+            out.append(f"F3: prepare(open_case, {text!r}) did not refuse")
+        except pr.AdapterError as e:
+            if want not in str(e):
+                out.append(f"F3: prepare(open_case, {text!r}) refused for the wrong reason: {e}")
+    try:
+        sp = pr.prepare("open_case", oid + " exemplar Some Person")
+        if sp["subject_name"] != "Some Person" or sp["handle"] != "exemplar" or sp["kind"] != "start" or "counts as a view" not in sp["then"]:
+            out.append(f"F3: the Open Case start spec is not case id / handle / subject with the report read disclosed: {sp}")
+        ss = pr.prepare("open_case", oid + " exemplar after the filing", kind="snapshot")
+        if ss["kind"] != "snapshot" or ss["label"] != "after the filing" or ss["path"] != "/cases/{id}/snapshot" or "re-signed" not in ss["mutation"]:
+            out.append(f"F3: the snapshot spec does not carry its own path, label and mutation disclosure: {ss}")
+    except pr.AdapterError as e:
+        out.append(f"F3: a well-formed Open Case subject was refused: {e}")
+    return out
+
+
 def _check_investigation_adapters(server, paired):
-    """Slice F. Each instrument has an adapter that declares the contract it
-    was built against and where that contract came from; readiness is
-    derived per capability from the record (configured, contract,
-    credential, last check, lookup, start, deployment verified) and never
-    from a constant; a live start is disabled until the owner records a
-    verification ruling on the connector, and enabled in test mode only for
-    a declared development connector on loopback; a start is a proposal
-    first (the subject named, what leaves, to whom), then one POST at the
-    dispatch boundary with its intent and outcome and the upstream id, then
-    the signed export through the existing import verifier, linked by
-    deposition id, its signature state kept apart from the live reply; a
-    producer's error is a known failure, an unreachable producer an unknown
-    outcome; a missing credential refuses before anything is sent; the
+    """Slice F, corrected after the review of 6e5b59c (finding 3). Each
+    instrument has an adapter that declares the contract it was built
+    against and where that contract came from (the producer's source at a
+    pinned revision); readiness is derived per capability from the record
+    and names the revision the ruling must be made against; a live start is
+    disabled until the owner records that the deployment runs the pinned
+    revision, and enabled in test mode only for a declared development
+    connector on loopback; a start is a proposal first, then one POST at
+    the dispatch boundary with its intent and outcome and the upstream id;
+    then what the producer's main serves — EthicalAlt: the unsigned export
+    (a read, kept with its hash) and the signed receipt (a write on the
+    producer, verified here under the pinned key, correlated by subject and
+    investigation id, a cached receipt said so); Open Case: the report (a
+    read the producer counts) — every reply kept byte for byte; the
+    snapshot is a separate action, a disclosed mutation, verified; delivery
+    is kept apart from outcome: a 4xx is delivered and refused (failed), a
+    5xx or an HTML page after delivery leaves the outcome UNKNOWN, an
+    unreachable producer leaves delivery unknown; recovery reads again and
+    says it sent; a missing credential refuses before anything is sent; the
     adapter never leaves the connector's origin; Ask carries the rest of a
     plain-language request as the subject; the routes answer through the
     gate."""
-    import importlib, json as _json, os as _os, tempfile as _tf, time as _time
+    import hashlib, importlib, json as _json, os as _os, tempfile as _tf, time as _time
     out = []
     pr = importlib.import_module("producers")
     fed = importlib.import_module("federation")
@@ -6549,6 +7205,7 @@ def _check_investigation_adapters(server, paired):
     ops = importlib.import_module("operations")
     sys.path.insert(0, str(Path(__file__).resolve().parent / "journeys"))
     mock_producer = importlib.import_module("mock_producer")
+    PF = mock_producer.PFIX
     # the contracts, declared
     for k in ("ethicalalt", "open_case", "public_eye", "rabbit_hole"):
         ad = pr.ADAPTERS.get(k) or {}
@@ -6565,18 +7222,33 @@ def _check_investigation_adapters(server, paired):
     tmp = Path(_tf.mkdtemp(prefix="wordicon_inv_"))
     state_root.apply(tmp)
     srv = None
+
+    def wait(c, op):
+        g = {}
+        for _ in range(300):
+            g = c.get("/api/operations/" + op).get_json() or {}
+            if g.get("status") in ("complete", "failed", "unknown"):
+                break
+            _time.sleep(0.1)
+        return g
+
     try:
-        # a deployed (https) connector: in test mode too, start waits for the owner's ruling
+        # a deployed (https) connector: in test mode too, start waits for the owner's ruling, which names the revision
         fed.register_connector("ea-deployed", "ethicalalt", "https://ethicalalt.example.org", display="EthicalAlt (deployed)", by="suite")
         r2 = pr.readiness("ethicalalt", "start")
-        if r2["available"] or not r2["configured"] or r2["deployment_verified"] or "disabled until the deployment is verified" not in r2["reason"]:
-            out.append(f"F: a deployed connector without a verification ruling must not be startable: {r2}")
+        if r2["available"] or not r2["configured"] or r2["deployment_verified"] or "runs the pinned revision 1a71460" not in r2["reason"] or r2.get("contract_verified") != "source":
+            out.append(f"F: a deployed connector without a ruling must not be startable, and the reason names the pinned revision: {r2}")
         if not pr.readiness("ethicalalt", "lookup")["available"]:
             out.append("F: lookup on a configured, enabled connector should be available")
         pr.rule_live_start("ea-deployed", True, note="verified by the suite, deliberately", by="suite")
         r3 = pr.readiness("ethicalalt", "start")
-        if not r3["available"] or not r3["deployment_verified"] or r3.get("fixture_only"):
-            out.append(f"F: the owner's ruling did not enable starting: {r3}")
+        if not r3["available"] or not r3["deployment_verified"] or r3.get("fixture_only") or r3["live_start_ruling"].get("revision") != pr.CONTRACTS["ethicalalt"]["revision"]:
+            out.append(f"F: the owner's ruling did not enable starting, or it does not record the revision it was made against: {r3}")
+        # a ruling made against another revision does not carry over a re-pin
+        fed._append(fed.connectors_log(), {"kind": "live_start", "connector_id": "ea-deployed", "enabled": True, "note": "older", "by": "suite", "revision": "0" * 40})
+        r3b = pr.readiness("ethicalalt", "start")
+        if r3b["available"] or "recorded against revision 0000000" not in r3b["reason"]:
+            out.append(f"F: a ruling recorded against another revision must not enable starting at this one: {r3b}")
         pr.rule_live_start("ea-deployed", False, note="withdrawn", by="suite")
         if pr.readiness("ethicalalt", "start")["available"]:
             out.append("F: withdrawing the ruling did not disable starting")
@@ -6593,14 +7265,8 @@ def _check_investigation_adapters(server, paired):
         c_dep = fed.get_connector("ea-deployed")
         for bad in ("http://evil.example.org/api/investigate", "/api/../../x", "https://evil.example.org/x"):
             r = pr.post_json({**c_dep, "enabled": True}, bad, {"brand": "x"})
-            if r.get("ok") or r.get("outcome") != "origin_refused":
-                out.append(f"F: a path that leaves the origin was not refused: {bad} → {r}")
-        # slice G (sabotage pass): the three paths above are all refused by the
-        # PATH test alone, so removing the origin comparison went unnoticed.
-        # A connector row whose base URL no longer matches its recorded origin
-        # (a tampered or mis-edited record) passes the path test and must be
-        # refused by the origin comparison — and refused before any socket:
-        # the guard's refusal log must not grow.
+            if r.get("ok") or r.get("outcome") != "origin_refused" or r.get("delivery") != "not_sent":
+                out.append(f"F: a path that leaves the origin was not refused before sending: {bad} → {r}")
         import testmode as _tm_o
         n_denied = len(_tm_o.denied())
         r = pr.post_json({**c_dep, "enabled": True, "base_url": "https://evil.example.org"}, "/api/investigate", {"brand": "x"})
@@ -6614,27 +7280,38 @@ def _check_investigation_adapters(server, paired):
         _tm.allow_port(port)
         base = f"http://127.0.0.1:{port}"
         fed.register_connector("ea-suite", "ethicalalt", base, display="EthicalAlt (suite)", dev_loopback=True, by="suite")
-        fed.pin_key("ea-suite", (mock_producer.FIXTURES / "ethicalalt.fixture.pub.b64").read_text().strip(), label="fixture key", by="suite")
+        fed.pin_key("ea-suite", (PF / "ethicalalt.receipt.pub.spki.b64").read_text().strip(), label="receipt fixture key", by="suite")
+        fed.pin_key("ea-suite", (mock_producer.FIXTURES / "ethicalalt.fixture.pub.b64").read_text().strip(), label="package fixture key", by="suite")
         _os.environ[mock_producer.OC_KEY_ENV] = "open_case_" + "s" * 64
         fed.register_connector("oc-suite", "open_case", base, display="Open Case (suite)", credential_ref="env:" + mock_producer.OC_KEY_ENV, dev_loopback=True, by="suite")
-        fed.pin_key("oc-suite", (mock_producer.FIXTURES / "open_case.fixture.pub.b64").read_text().strip(), label="fixture key", by="suite")
+        fed.pin_key("oc-suite", (PF / "open_case.snapshot.pub.spki.b64").read_text().strip(), label="snapshot fixture key", by="suite")
+        fed.pin_key("oc-suite", (mock_producer.FIXTURES / "open_case.fixture.pub.b64").read_text().strip(), label="package fixture key", by="suite")
         r4 = pr.readiness("ethicalalt", "start")
         if not r4["available"] or not r4.get("fixture_only"):
             out.append(f"F: in test mode a declared development connector on loopback should be startable as a fixture: {r4}")
         c = server.app.test_client()
         paired(c)
         pj = c.get("/api/producers").get_json() or {}
-        if not pj.get("producers", {}).get("ethicalalt", {}).get("readiness", {}).get("start", {}).get("start_available"):
+        ea_pj = pj.get("producers", {}).get("ethicalalt", {})
+        if not ea_pj.get("readiness", {}).get("start", {}).get("start_available"):
             out.append("F: /api/producers does not derive the fixture connector's start readiness")
+        if (pj.get("package_contract") or {}).get("served_by_main") is not False or not ea_pj.get("contract", {}).get("routes", {}).get("receipt", {}).get("source"):
+            out.append("F: /api/producers does not carry the pinned contract with its sources, or does not say the package contract is unserved by main")
+        # the connection check reads the listing main serves and imports nothing
+        chk = c.post("/api/connectors/oc-suite/check", json={}).get_json() or {}
+        if not chk.get("ok") or chk.get("count") != 1:
+            out.append(f"F: the Open Case check does not read GET /api/v1/cases (main's listing): {chk}")
         # Ask: the rest of the request is the subject
         m = ac.match("investigate Exemplar Holdings")
         if [x["id"] for x in m["matches"]] != ["investigate.ethicalalt.start"] or m["matches"][0].get("remainder") != "Exemplar Holdings":
             out.append(f"F: Ask does not carry the rest of 'investigate Exemplar Holdings' as the subject: {m}")
-        # a start: proposal → operation → POST → export in custody
+        # ---- EthicalAlt: proposal → operation → POST → export (unsigned, kept) → receipt (signed, verified) ----
         rec = ac.prepare("investigate.ethicalalt.start", {"kind": "description", "text": "Exemplar Holdings", "title": "EthicalAlt"}, {}, server.server_gateway)
         d = rec["disclosure"]
         if d["scope"]["kind"] != "description" or "the name" not in " ".join(d["leaves_this_machine"]["fields"]) or d["leaves_this_machine"]["recipient"] != "producer:ethicalalt":
             out.append(f"F: the proposal does not say the name leaves to the producer: {d['leaves_this_machine']} {d['scope']['kind']}")
+        if "signed receipt" not in str(d.get("calls", "")) or "stores" not in str(d.get("calls", "")):
+            out.append(f"F: the proposal does not disclose the receipt POST as a write the producer stores: {d.get('calls')!r}")
         seen0 = len(mock_producer.Handler.seen)
         r = c.post("/api/operations", json={"prepared_id": rec["prepared_id"], "request_key": "rk_f_1"})
         dd = r.get_json() or {}
@@ -6642,86 +7319,196 @@ def _check_investigation_adapters(server, paired):
         if r.status_code != 200 or dd.get("kind") != "investigation" or not dd.get("dispatched"):
             out.append(f"F: the Start did not dispatch an investigation: {r.status_code} {dd}")
             return out
-        for _ in range(300):
-            g = c.get("/api/operations/" + op).get_json() or {}
-            if g.get("status") in ("complete", "failed", "unknown"):
-                break
-            _time.sleep(0.1)
+        g = wait(c, op)
         inv = g.get("investigation") or {}
-        if g.get("status") != "complete" or inv.get("artifact") != "imported" or not inv.get("verified") or not inv.get("deposition_id"):
-            out.append(f"F: the investigation did not complete with a verified export in custody: {g.get('status')} {inv} {g.get('error')}")
+        if g.get("status") != "complete" or not inv.get("verified") or inv.get("start") != "ok" or inv.get("delivery") != "delivered":
+            out.append(f"F: the investigation did not complete with a verified receipt: {g.get('status')} {inv} {g.get('error')}")
+        if not re.search(r"unsigned structured export kept \(\d+ bytes, sha256 [0-9a-f]{12}", inv.get("artifact", "")):
+            out.append(f"F: the unsigned export is not said to be kept with its size and hash: {inv.get('artifact')!r}")
+        if "investigation_id is this operation's" not in inv.get("receipt", "") or "signature verified" not in inv.get("receipt", ""):
+            out.append(f"F: the receipt line does not say it verified and correlates by investigation id: {inv.get('receipt')!r}")
+        ref = (g.get("result_ref") or {})
+        kept = {x["name"]: x for x in (ref.get("kept") or [])}
+        if set(kept) != {"start-reply.json", "export.json", "receipt.json"}:
+            out.append(f"F: the producer's bytes are not all kept under the operation: {sorted(kept)}")
+        for name, k in kept.items():
+            b = pr.artifact_bytes(op, name)
+            if not b or hashlib.sha256(b).hexdigest() != k["sha256"] or len(b) != k["bytes"]:
+                out.append(f"F: {name} on disk does not match the hash in the record")
+        try:
+            if _json.loads(pr.artifact_bytes(op, "export.json"))["brand_slug"] != "exemplar-holdings" or _json.loads(pr.artifact_bytes(op, "receipt.json"))["signed_receipt"]["investigation_id"] != op:
+                out.append("F: the kept export or receipt is not the producer's reply for this operation")
+        except Exception as e:  # noqa: BLE001
+            out.append(f"F: the kept bytes are not the producer's JSON replies: {e}")
+        ver = ref.get("verification") or {}
+        if not ver.get("ok") or ver.get("key_in_reply_matches_pinned") is not True or not (ver.get("correlation") or {}).get("subject_slug_matches") or "deep-research incidents" not in (ver.get("correlation") or {}).get("incidents_hash", ""):
+            out.append(f"F: the verification record does not say the key matched, the subject matched and what incidents_hash covers: {ver}")
         evs = [e for e in ops.events(op)]
-        kinds = [(e["kind"], e["stage"][:4], e["outcome"]) for e in evs]
-        if [k for k in kinds if k[0] in ("stage_intent", "stage_end")] != [("stage_intent", "POST", ""), ("stage_end", "POST", "ok"), ("stage_intent", "GET ", ""), ("stage_end", "GET ", "ok")]:
-            out.append(f"F: the boundary events are not intent/end for the POST then the GET: {kinds}")
+        kinds = [(e["kind"], e["stage"][:4], e["outcome"]) for e in evs if e["kind"] in ("stage_intent", "stage_end")]
+        if kinds != [("stage_intent", "POST", ""), ("stage_end", "POST", "ok"), ("stage_intent", "GET ", ""), ("stage_end", "GET ", "ok"), ("stage_intent", "POST", ""), ("stage_end", "POST", "ok")]:
+            out.append(f"F: the boundary events are not intent/end for the start, the export read and the receipt: {kinds}")
         posts = [x for x in mock_producer.Handler.seen[seen0:] if x.get("method") == "POST"]
-        if len(posts) != 1 or posts[0]["path"] != "/api/investigate" or "authorization" in posts[0]["headers"]:
-            out.append(f"F: the producer saw {len(posts)} POST(s), not one bare POST /api/investigate: {[(p['path'], sorted(p['headers'])) for p in posts]}")
+        if [p_["path"] for p_ in posts] != ["/api/investigate", "/api/receipt/generate"] or any("authorization" in p_["headers"] for p_ in posts):
+            out.append(f"F: the producer saw {[(p_['path'], sorted(p_['headers'])) for p_ in posts]}, not the bare start then the receipt request")
+        gets = [x for x in mock_producer.Handler.seen[seen0:] if x.get("method") == "GET"]
+        if [x["path"] for x in gets] != ["/api/profiles/exemplar-holdings/export"]:
+            out.append(f"F: the producer's export was not read exactly once at the route main serves: {[x['path'] for x in gets]}")
         if any(e["upstream_id"] == "" for e in evs if e["kind"] in ("stage_intent", "stage_end")):
             out.append("F: a boundary event carries no upstream id")
-        dep = fed.get_deposition(inv.get("deposition_id", ""))
-        if not dep or not (dep.get("verification") or {}).get("ok"):
-            out.append("F: the deposition in custody is not verified under the pinned key")
         if "Exemplar" in _json.dumps([e["detail"] for e in evs]):
             out.append("F: the subject's text entered the operation's events")
         # a repeat under the same key: the same operation
         r2 = c.post("/api/operations", json={"prepared_id": rec["prepared_id"], "request_key": "rk_f_1"}).get_json() or {}
         if not r2.get("repeated") or r2.get("operation_id") != op:
             out.append(f"F: the same key did not return the same investigation: {r2}")
-        # the producer's error is a known failure; an unreachable producer is unknown
+        # a second investigation of the same subject: the producer returns its CACHED receipt (the first's investigation_id) — said so, not hidden
+        rec_c = ac.prepare("investigate.ethicalalt.start", {"kind": "description", "text": "Exemplar Holdings"}, {}, server.server_gateway)
+        op_c = (c.post("/api/operations", json={"prepared_id": rec_c["prepared_id"], "request_key": "rk_f_1c"}).get_json() or {}).get("operation_id", "")
+        gc_ = wait(c, op_c)
+        inv_c = gc_.get("investigation") or {}
+        if gc_.get("status") != "complete" or not inv_c.get("verified") or "cached" not in inv_c.get("receipt", "") or "not this operation's" not in inv_c.get("receipt", ""):
+            out.append(f"F: a cached receipt must verify and say its investigation_id is an earlier request's: {gc_.get('status')} {inv_c.get('receipt')!r}")
+        # the receipt refused (a legacy profile without deep research): the export is kept, no receipt, said by name
+        rec_l = ac.prepare("investigate.ethicalalt.start", {"kind": "description", "text": "Exemplar Legacy Co"}, {}, server.server_gateway)
+        # the mock maps a brand without 'exemplar' to not-a-profile; 'Exemplar Legacy Co' maps to exemplar-holdings — use the start reply's slug via a direct retrieve instead
+        spec_l = pr.prepare("ethicalalt", "Exemplar Legacy Co")
+        op_l = "op_suite_legacy_" + hashlib.sha256(b"legacy").hexdigest()[:8]
+        ops.reserve(request_key="rk_f_legacy", kind="investigation", execution={"adapter": "producer/2", "spec": spec_l}, config={}, op_id=op_l, action_id="investigate.ethicalalt.start")
+        ops.claim(op_l, server.OPS_DISPATCHER.token)
+        res_l = pr.retrieve(op_l, spec_l, "exemplar-legacy-co")
+        if not res_l.get("ok") or res_l.get("receipt") is not None or "no_deep_research" not in (res_l.get("verification") or {}).get("why", "") or not res_l.get("artifact"):
+            out.append(f"F: a refused receipt must leave the export kept and say why there is no receipt: {res_l}")
+        # ---- delivery apart from outcome ----
+        # a 5xx after delivery: UNKNOWN, with delivery 'delivered' and the sentence that says what is not known
         rec2 = ac.prepare("investigate.ethicalalt.start", {"kind": "description", "text": "Boom Industries"}, {}, server.server_gateway)
         op2 = (c.post("/api/operations", json={"prepared_id": rec2["prepared_id"], "request_key": "rk_f_2"}).get_json() or {}).get("operation_id", "")
-        for _ in range(300):
-            g2 = c.get("/api/operations/" + op2).get_json() or {}
-            if g2.get("status") in ("complete", "failed", "unknown"):
-                break
-            _time.sleep(0.1)
-        if g2.get("status") != "failed" or "producer_error" not in (g2.get("error") or "") or (g2.get("recovery") or {}).get("dispatch_intents") != 1:
-            out.append(f"F: a producer's 500 must be a known failure with its one intent recorded: {g2.get('status')} {g2.get('error')} {g2.get('recovery')}")
+        g2 = wait(c, op2)
+        pst2 = g2.get("producer_state") or {}
+        if g2.get("status") != "unknown" or pst2.get("delivery") != "delivered" or pst2.get("outcome") != "error_after_delivery" \
+                or "whether it accepted or ran the work is not known" not in (g2.get("error") or "") or (g2.get("recovery") or {}).get("dispatch_intents") != 1:
+            out.append(f"F: a producer's 500 after delivery must leave the outcome UNKNOWN with delivery said: {g2.get('status')} {pst2} {g2.get('error')}")
+        if not (g2.get("result_ref") or {}).get("reply_kept") and not any(e["detail"].get("reply_kept") for e in ops.events(op2) if e["kind"] == "stage_end"):
+            out.append("F: the producer's error reply bytes were not kept")
+        # an HTML 502 (a proxy's page): the same class — delivered, not JSON, outcome unknown
+        rec2b = ac.prepare("investigate.ethicalalt.start", {"kind": "description", "text": "HTML Industries"}, {}, server.server_gateway)
+        op2b = (c.post("/api/operations", json={"prepared_id": rec2b["prepared_id"], "request_key": "rk_f_2b"}).get_json() or {}).get("operation_id", "")
+        g2b = wait(c, op2b)
+        if g2b.get("status") != "unknown" or (g2b.get("producer_state") or {}).get("delivery") != "delivered":
+            out.append(f"F: an HTML 502 after delivery must be unknown/delivered: {g2b.get('status')} {g2b.get('producer_state')}")
+        # a 4xx: delivered and REFUSED — failed, a known refusal
+        rec2c = ac.prepare("investigate.ethicalalt.start", {"kind": "description", "text": "Refused Industries"}, {}, server.server_gateway)
+        op2c = (c.post("/api/operations", json={"prepared_id": rec2c["prepared_id"], "request_key": "rk_f_2c"}).get_json() or {}).get("operation_id", "")
+        g2c = wait(c, op2c)
+        if g2c.get("status") != "failed" or (g2c.get("producer_state") or {}).get("outcome") != "refused" or (g2c.get("producer_state") or {}).get("delivery") != "delivered":
+            out.append(f"F: a 4xx must be a delivered refusal, failed: {g2c.get('status')} {g2c.get('producer_state')}")
+        # the producer answered with no investigation (null): complete with nothing to retrieve, said so
+        rec2d = ac.prepare("investigate.ethicalalt.start", {"kind": "description", "text": "Nameless Industries"}, {}, server.server_gateway)
+        op2d = (c.post("/api/operations", json={"prepared_id": rec2d["prepared_id"], "request_key": "rk_f_2d"}).get_json() or {}).get("operation_id", "")
+        g2d = wait(c, op2d)
+        if g2d.get("status") != "failed" or "null" not in _json.dumps(g2d.get("producer_state") or {}) or "no object to retrieve" not in (g2d.get("error") or ""):
+            out.append(f"F: a null investigation must be said (nothing to retrieve), not shown as a result: {g2d.get('status')} {g2d.get('producer_state')} {g2d.get('error')}")
+        # unreachable: delivery unknown
         fed.register_connector("ea-dead", "ethicalalt", "http://127.0.0.1:1", display="EthicalAlt (dead port)", dev_loopback=True, by="suite")
         fed.set_enabled("ea-suite", False, by="suite")
         _tm.allow_port(1)
         rec3 = ac.prepare("investigate.ethicalalt.start", {"kind": "description", "text": "Exemplar Holdings"}, {}, server.server_gateway)
         op3 = (c.post("/api/operations", json={"prepared_id": rec3["prepared_id"], "request_key": "rk_f_3"}).get_json() or {}).get("operation_id", "")
-        for _ in range(300):
-            g3 = c.get("/api/operations/" + op3).get_json() or {}
-            if g3.get("status") in ("complete", "failed", "unknown"):
-                break
-            _time.sleep(0.1)
-        if g3.get("status") != "unknown":
-            out.append(f"F: an unreachable producer must leave the outcome unknown: {g3.get('status')} {g3.get('error')}")
+        g3 = wait(c, op3)
+        if g3.get("status") != "unknown" or (g3.get("producer_state") or {}).get("delivery") != "unknown":
+            out.append(f"F: an unreachable producer must leave delivery unknown: {g3.get('status')} {g3.get('producer_state')}")
         fed.set_enabled("ea-dead", False, by="suite")
         fed.set_enabled("ea-suite", True, by="suite")
-        # Open Case: the credential is read through the reference; without it nothing is sent
+        # ---- recovery reads again and SAYS it sent ----
+        rec_r = ac.prepare("investigate.ethicalalt.start", {"kind": "description", "text": "Exemplar Holdings"}, {}, server.server_gateway)
+        _os.environ["MOCK_EA_NO_SIGNING_KEY"] = "1"
+        try:
+            op_r = (c.post("/api/operations", json={"prepared_id": rec_r["prepared_id"], "request_key": "rk_f_r"}).get_json() or {}).get("operation_id", "")
+            g_r = wait(c, op_r)
+        finally:
+            _os.environ.pop("MOCK_EA_NO_SIGNING_KEY", None)
+        if g_r.get("status") != "complete" or (g_r.get("investigation") or {}).get("verified") or "signing_key_unconfigured" not in (g_r.get("investigation") or {}).get("receipt", ""):
+            out.append(f"F: with the producer's signing key unconfigured the export must be kept and the receipt's absence named: {g_r.get('status')} {(g_r.get('investigation') or {}).get('receipt')!r}")
+        seen_r = len(mock_producer.Handler.seen)
+        rv = c.post("/api/operations/" + op_r + "/recover", json={}).get_json() or {}
+        sent_r = [x["path"] for x in mock_producer.Handler.seen[seen_r:]]
+        if rv.get("sent") is not True or not rv.get("what") or sent_r != ["/api/profiles/exemplar-holdings/export", "/api/receipt/generate"] or not (rv.get("investigation") or {}).get("verified"):
+            out.append(f"F: recovery that read the producer again must say sent: true with what it sent, and now hold the verified receipt: {rv.get('sent')} {rv.get('what')} {sent_r} {(rv.get('investigation') or {}).get('receipt')!r}")
+        rv2 = c.post("/api/operations/" + op2c + "/recover", json={}).get_json() or {}
+        if rv2.get("sent") is not False or rv2.get("what"):
+            out.append(f"F: recovery of a refused start must send nothing and say so: {rv2.get('sent')} {rv2.get('what')}")
+        # ---- Open Case: the credential through the reference; the report read; the snapshot a separate mutation ----
         oc_id = _json.loads((mock_producer.FIXTURES / "open_case.exemplar.deposition.json").read_bytes())["object"]["id"]
-        rec4 = ac.prepare("investigate.opencase.start", {"kind": "description", "text": oc_id + " @exemplar"}, {}, server.server_gateway)
+        # a start without the subject's name is refused before dispatch — the producer requires subject_name
+        rec4n = ac.prepare("investigate.opencase.start", {"kind": "description", "text": oc_id + " exemplar"}, {}, server.server_gateway)
+        seen_n = len(mock_producer.Handler.seen)
+        r4n = c.post("/api/operations", json={"prepared_id": rec4n["prepared_id"], "request_key": "rk_f_4n"})
+        if r4n.status_code != 400 or "subject to investigate" not in (r4n.get_json() or {}).get("error", "") or not (r4n.get_json() or {}).get("nothing_was_sent") or len(mock_producer.Handler.seen) != seen_n:
+            out.append(f"F: an Open Case start without the subject was not refused before dispatch: {r4n.status_code} {r4n.get_json()}")
+        rec4 = ac.prepare("investigate.opencase.start", {"kind": "description", "text": oc_id + " exemplar Exemplar Person"}, {}, server.server_gateway)
+        if "counts as a view" not in str(rec4["disclosure"].get("calls", "")):
+            out.append(f"F: the Open Case proposal does not disclose the report read as one the producer counts: {rec4['disclosure'].get('calls')!r}")
         seen1 = len(mock_producer.Handler.seen)
-        op4 = (c.post("/api/operations", json={"prepared_id": rec4["prepared_id"], "request_key": "rk_f_4"}).get_json() or {}).get("operation_id", "")
-        for _ in range(300):
-            g4 = c.get("/api/operations/" + op4).get_json() or {}
-            if g4.get("status") in ("complete", "failed", "unknown"):
-                break
-            _time.sleep(0.1)
+        r4r = c.post("/api/operations", json={"prepared_id": rec4["prepared_id"], "request_key": "rk_f_4"})
+        op4 = (r4r.get_json() or {}).get("operation_id", "")
+        if r4r.status_code != 200:
+            out.append(f"F: the Open Case start was refused: {r4r.status_code} {r4r.get_json()}")
+        g4 = wait(c, op4)
         posts4 = [x for x in mock_producer.Handler.seen[seen1:] if x.get("method") == "POST"]
-        if g4.get("status") != "complete" or not (g4.get("investigation") or {}).get("verified") or len(posts4) != 1 or not posts4[0]["headers"].get("authorization", "").startswith("Bearer "):
-            out.append(f"F: the Open Case start did not complete through the bearer credential: {g4.get('status')} {g4.get('error')} posts {len(posts4)}")
+        inv4 = g4.get("investigation") or {}
+        if g4.get("status") != "complete" or inv4.get("verified") or "case report kept" not in inv4.get("artifact", "") or "separate act" not in inv4.get("receipt", "") \
+                or len(posts4) != 1 or not posts4[0]["headers"].get("authorization", "").startswith("Bearer ") or posts4[0]["path"] != f"/api/v1/cases/{oc_id}/investigate":
+            out.append(f"F: the Open Case start did not complete with the report kept and the snapshot named a separate act: {g4.get('status')} {inv4} posts {[(p_['path']) for p_ in posts4]}")
+        if (g4.get("producer_state") or {}).get("evidence_entries_created") != 3:
+            out.append(f"F: what the producer said (evidence_entries_created) is not on the row: {g4.get('producer_state')}")
         if any("open_case_sss" in _json.dumps(e["detail"]) for e in ops.events(op4)) or "open_case_sss" in _json.dumps(ops.get(op4)):
             out.append("F: the credential's value entered the record")
+        # a start under a handle that is not the key holder's: 403 — delivered and refused
+        rec4b = ac.prepare("investigate.opencase.start", {"kind": "description", "text": oc_id + " someoneelse Exemplar Person"}, {}, server.server_gateway)
+        op4b = (c.post("/api/operations", json={"prepared_id": rec4b["prepared_id"], "request_key": "rk_f_4b"}).get_json() or {}).get("operation_id", "")
+        g4b = wait(c, op4b)
+        if g4b.get("status") != "failed" or (g4b.get("producer_state") or {}).get("outcome") != "refused":
+            out.append(f"F: a handle that is not the key holder's must land as a delivered refusal: {g4b.get('status')} {g4b.get('producer_state')}")
+        # the snapshot: its own action, its own proposal (a mutation, disclosed), verified under the pinned key
+        rec5 = ac.prepare("investigate.opencase.snapshot", {"kind": "description", "text": oc_id + " exemplar after the filing"}, {}, server.server_gateway)
+        if "MUTATION" not in str(rec5["disclosure"].get("calls", "")) or "re-signed" not in str(rec5["disclosure"].get("calls", "")):
+            out.append(f"F: the snapshot proposal does not disclose the mutation: {rec5['disclosure'].get('calls')!r}")
+        seen5 = len(mock_producer.Handler.seen)
+        op5 = (c.post("/api/operations", json={"prepared_id": rec5["prepared_id"], "request_key": "rk_f_5"}).get_json() or {}).get("operation_id", "")
+        g5 = wait(c, op5)
+        inv5 = g5.get("investigation") or {}
+        posts5 = [x["path"] for x in mock_producer.Handler.seen[seen5:]]
+        if g5.get("status") != "complete" or not inv5.get("verified") or "open_case.snapshot" not in inv5.get("receipt", "") or posts5 != [f"/cases/{oc_id}/snapshot"]:
+            out.append(f"F: the snapshot did not complete as one verified POST: {g5.get('status')} {inv5.get('receipt')!r} {posts5}")
+        kept5 = {x["name"] for x in ((g5.get("result_ref") or {}).get("kept") or [])}
+        if kept5 != {"snapshot-reply.json"}:
+            out.append(f"F: the snapshot reply is not kept byte for byte: {kept5}")
+        # an unsigned snapshot (the producer without a signing key): kept, named UNSIGNED, not verified
+        _os.environ["MOCK_OC_NO_SIGNING_KEY"] = "1"
+        try:
+            rec5u = ac.prepare("investigate.opencase.snapshot", {"kind": "description", "text": oc_id + " exemplar"}, {}, server.server_gateway)
+            op5u = (c.post("/api/operations", json={"prepared_id": rec5u["prepared_id"], "request_key": "rk_f_5u"}).get_json() or {}).get("operation_id", "")
+            g5u = wait(c, op5u)
+        finally:
+            _os.environ.pop("MOCK_OC_NO_SIGNING_KEY", None)
+        if g5u.get("status") != "complete" or (g5u.get("investigation") or {}).get("verified") or "UNSIGNED" not in (g5u.get("investigation") or {}).get("receipt", ""):
+            out.append(f"F: an unsigned snapshot must be kept and named UNSIGNED: {g5u.get('status')} {(g5u.get('investigation') or {}).get('receipt')!r}")
+        # without the credential nothing is sent
         saved = _os.environ.pop(mock_producer.OC_KEY_ENV)
         try:
             r5 = pr.readiness("open_case", "start")
             if r5["available"] or r5["credential"] != "missing":
                 out.append(f"F: with the credential absent, starting must be unavailable: {r5}")
-            rec5 = ac.prepare("investigate.opencase.start", {"kind": "description", "text": oc_id + " @exemplar"}, {}, server.server_gateway)
+            rec6 = ac.prepare("investigate.opencase.start", {"kind": "description", "text": oc_id + " exemplar Exemplar Person"}, {}, server.server_gateway)
             seen2 = len(mock_producer.Handler.seen)
-            r6 = c.post("/api/operations", json={"prepared_id": rec5["prepared_id"], "request_key": "rk_f_5"})
+            r6 = c.post("/api/operations", json={"prepared_id": rec6["prepared_id"], "request_key": "rk_f_6"})
             if r6.status_code != 409 or not (r6.get_json() or {}).get("nothing_was_sent") or len(mock_producer.Handler.seen) != seen2:
                 out.append(f"F: a start without the credential was not refused before anything was sent: {r6.status_code} {r6.get_json()}")
         finally:
             _os.environ[mock_producer.OC_KEY_ENV] = saved
-        # the ruling route, through the gate
-        if c.post("/api/connectors/ea-suite/live-start", json={"enabled": True, "note": "suite"}).status_code != 200 or not pr.live_start_ruling(fed.get_connector("ea-suite"))["enabled"]:
-            out.append("F: the live-start ruling route does not record")
+        # the ruling route, through the gate; it records the revision
+        if c.post("/api/connectors/ea-suite/live-start", json={"enabled": True, "note": "suite"}).status_code != 200 or not pr.live_start_ruling(fed.get_connector("ea-suite"))["enabled"] \
+                or pr.live_start_ruling(fed.get_connector("ea-suite")).get("revision") != pr.CONTRACTS["ethicalalt"]["revision"]:
+            out.append("F: the live-start ruling route does not record the ruling with the pinned revision")
         if c.post("/api/connectors/nonesuch/live-start", json={"enabled": True}).status_code != 404:
             out.append("F: a ruling on an unknown connector is not a 404")
         if server.app.test_client().get("/api/producers").status_code != 401:
@@ -6733,6 +7520,11 @@ def _check_investigation_adapters(server, paired):
     src = (Path(__file__).resolve().parents[1] / "webapp" / "work" / "investigate.js").read_text(encoding="utf-8")
     if "2 of 4" in src or "innerHTML" in src:
         out.append("F: investigate.js carries a fixture constant or innerHTML")
+    if "runs the pinned revision" not in src or "not served by" not in src:
+        out.append("F: investigate.js does not word the ruling as 'runs the pinned revision' or say the package contract is not served by main")
+    rsrc = (Path(__file__).resolve().parents[1] / "webapp" / "work" / "results.js").read_text(encoding="utf-8")
+    if "sent nothing" in rsrc and "r.data.sent" not in rsrc:
+        out.append("F: results.js says recovery sent nothing without reading whether it did")
     return out
 
 
@@ -6874,13 +7666,18 @@ def main() -> int:
     if shaped.get("global_constraints") != gc:
         failures.append("server did not pass global_constraints through")
     failures.extend(_check_test_mode_fails_closed(server))
+    failures.extend(_check_gate_mint_race())
     failures.extend(_check_workspace_registry(server, _paired))
     failures.extend(_check_document_contract(server, _paired))
+    failures.extend(_check_docx_export(server, _paired))
+    failures.extend(_check_concept_picker(server, _paired))
     failures.extend(_check_durable_operations(server, _paired))
     failures.extend(_check_dispatch_concurrency(server, _paired))
     failures.extend(_check_work_index(server, _paired))
+    failures.extend(_check_producer_contracts())
     failures.extend(_check_investigation_adapters(server, _paired))
     failures.extend(_check_vault_sqlite())
+    failures.extend(_check_preview_isolation(server))
     failures.extend(_check_map_focus_routes(server, _paired))
     failures.extend(_check_moira_routes(server, _paired))
     failures.extend(_check_notebook_b(server, _paired))
@@ -22166,6 +22963,10 @@ console.log(out.join('\\n'));
                 return self._send(200, _oc_bytes)
             if p == "/api/v1/cases/exportable":
                 return self._send(200, (_fx107 / "open_case.exportable.json").read_bytes())
+            if p == "/api/v1/cases":
+                # the listing origin/main serves (routes/reporting.py:851 @4dc1709): {count, cases: [...]}
+                return self._send(200, _json.dumps({"count": 1, "cases": [{"id": _OC_ID, "slug": "exemplar-case", "title": "Exemplar Case", "subject_name": "Exemplar Person",
+                                                                        "subject_type": "official", "jurisdiction": "example", "status": "open"}]}).encode("utf-8"))
             if p == f"/api/profiles/{_EA_ID}/export/v2":
                 return self._send(200, _ea_bytes)
             if p == "/api/profiles/exemplar-legacy-co/export/v2":

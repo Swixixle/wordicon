@@ -39,6 +39,14 @@ MUTATIONS = [
      "old": "    if (this.id) await this.settle(undefined, SWITCH_WAIT_MS);",
      "new": "    await this.flush();",
      "expect": "every word typed before the switch is on the server"},
+    {"name": "discard an envelope based on an older revision than the head (the review's finding 1, as delivered)", "file": "webapp/work/session.js",
+     "old": "    let newer = envs.filter(unsent).sort(",
+     "new": "    let newer = envs.filter(e => unsent(e) && e.base_revision === d.revision).sort(",
+     "expect": "after the reload every later word is in the editor"},
+    {"name": "never resend the pending request (keep both versions even when the head is our own acknowledged save)", "file": "webapp/work/session.js",
+     "old": "    if (!e.pending || !e.pending.payload || !e.pending.request_id) return { kind: 'kept', why: 'no request to resend' };",
+     "new": "    return { kind: 'kept', why: 'sabotaged' };",
+     "expect": "after the reload every later word is in the editor"},
 ]
 
 

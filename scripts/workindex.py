@@ -335,7 +335,7 @@ def _scan_operations(conn, gen, full: bool):
             snap = snapshots.load(r["snapshot_id"]) if r["snapshot_id"] else None
             text = (snap or {}).get("text") or ""
             ref = json.loads(r["result_ref"]) if r["result_ref"] else {}
-            title = (r["action_id"] or "operation").replace("legacy:/api/jobs:", "a run: ")
+            title = _action_label(r["action_id"] or "") or (r["action_id"] or "operation").replace("legacy:/api/jobs:", "a run: ")
             head = " ".join(text.split())[:80]
             items.append(_item("operations", "operation", r["op_id"], title=title + (" — " + head if head else ""), body=text, tool=r["action_id"] or "",
                                status=r["status"], created_at=r["created_at"], changed_at=r["updated_at"], version=str(top),
@@ -879,9 +879,24 @@ def search(q: str = "", *, kind: str = "", tool: str = "", status: str = "", sin
         conn.close()
 
 
+def _action_label(action_id: str) -> str:
+    """The registry's label for an action id (the review of 6e5b59c: the page
+    shows labels; the ids stay in details). Empty when the id is not in the
+    registry, so the caller keeps the id."""
+    if not action_id:
+        return ""
+    try:
+        import actions as _ac
+        a = _ac.BY_ID.get(action_id)
+        return str(a["label"]) if a else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _public(r) -> dict:
     d = dict(r)
     d.pop("body", None); d.pop("meta_text", None); d.pop("rowid", None); d.pop("gen", None)
+    d["tool_label"] = _action_label(d.get("tool") or "") or (d.get("tool") or "")
     for k in ("meta", "open", "related"):
         try:
             d[k] = json.loads(d.get(k) or ("[]" if k == "related" else "{}"))

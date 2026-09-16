@@ -60,8 +60,20 @@ will no longer verify.
 - From a package in hand: paste the JSON the producer gave you; the exact
   bytes go through the same chokepoint and the same pinned keys.
 - "Locate" asks the instrument for its own list (Open Case:
-  `/api/v1/cases/exportable`; EthicalAlt: `/api/profiles/index`) and
-  imports nothing.
+  `GET /api/v1/cases`, the listing its main serves; EthicalAlt:
+  `/api/profiles/index`) and imports nothing.
+
+Which revision serves what (the review of 6e5b59c, finding 3; read from
+the producers' source on 2026-09-16 with read-only git plumbing): the
+signed package export this page imports — `GET /api/v1/cases/{id}/export`
+and `/api/v1/cases/exportable` for Open Case, `GET /api/profiles/{slug}/export/v2`
+for EthicalAlt — exists in each producer only on an unpushed local branch
+(`block107/export-contract` on top of origin/main `4dc1709`;
+`block107/export-v2` beside main `1a71460`). A deployment of main answers
+an import with 404, which lands here as a named failure, never as a
+record. What main does serve, and what the workspace's Investigate
+adapters use, is pinned in `scripts/producers.py` (`CONTRACTS`), with the
+file and line of every route.
 
 What arrives is kept byte for byte under `local_state/library/blobs/<sha256>`
 and recorded in `local_state/federation/depositions.jsonl`; a verified

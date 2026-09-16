@@ -81,8 +81,11 @@ _pbase = f"http://127.0.0.1:{PRODUCER_PORT}"
 federation.register_connector("open-case-dev", "open_case", _pbase, display="Open Case (scratch)",
                               credential_ref="env:" + mock_producer.OC_KEY_ENV, dev_loopback=True, by="journeys")
 federation.register_connector("ethicalalt-dev", "ethicalalt", _pbase, display="EthicalAlt (scratch)", dev_loopback=True, by="journeys")
-federation.pin_key("open-case-dev", (mock_producer.FIXTURES / "open_case.fixture.pub.b64").read_text().strip(), label="fixture key", by="journeys")
-federation.pin_key("ethicalalt-dev", (mock_producer.FIXTURES / "ethicalalt.fixture.pub.b64").read_text().strip(), label="fixture key", by="journeys")
+federation.pin_key("open-case-dev", (mock_producer.FIXTURES / "open_case.fixture.pub.b64").read_text().strip(), label="package fixture key", by="journeys")
+federation.pin_key("ethicalalt-dev", (mock_producer.FIXTURES / "ethicalalt.fixture.pub.b64").read_text().strip(), label="package fixture key", by="journeys")
+# the producers' contracts at the pinned revisions (the review of 6e5b59c, finding 3): the receipt and snapshot keys
+federation.pin_key("ethicalalt-dev", (mock_producer.PFIX / "ethicalalt.receipt.pub.spki.b64").read_text().strip(), label="receipt fixture key", by="journeys")
+federation.pin_key("open-case-dev", (mock_producer.PFIX / "open_case.snapshot.pub.spki.b64").read_text().strip(), label="snapshot fixture key", by="journeys")
 DIR.mkdir(parents=True, exist_ok=True)
 (DIR / "producer_port").write_text(str(PRODUCER_PORT))
 (DIR / "token").write_text(gate.issue_session("journeys")["token"])

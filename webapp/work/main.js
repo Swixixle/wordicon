@@ -81,7 +81,10 @@ function renderHeader(s) {
 
 function renderConflict(s) {
   const head = s.conflict && s.conflict.head;
-  results.showNotice('This document was saved elsewhere since this copy was opened (revision ' + (head ? head.revision : '?') + '). Nothing was overwritten. Keep both: yours becomes a new document, or open the saved copy and keep yours in this browser’s recovery.', [
+  const why = s.conflict && s.conflict.why === 'unreconciled'
+    ? 'This browser holds words for this document that its saved copy (revision ' + (head ? head.revision : '?') + ') does not: ' + (s.conflict.detail || 'the two do not descend from each other') + '. Nothing was overwritten and nothing was combined. Keep both: these words become a new document, or open the saved copy and keep these words in this browser’s recovery.'
+    : 'This document was saved elsewhere since this copy was opened (revision ' + (head ? head.revision : '?') + '). Nothing was overwritten. Keep both: yours becomes a new document, or open the saved copy and keep yours in this browser’s recovery.';
+  results.showNotice(why, [
     { label: 'Keep mine as a new document', onClick: () => session.keepMineAsNew().then(() => { results.notice = null; results.render(); }) },
     { label: 'Open the saved copy', onClick: () => session.openSaved().then(() => { results.notice = null; results.render(); }) },
   ]);
@@ -224,6 +227,7 @@ function renderSettings() {
   const v = document.getElementById('settings-view'); v.textContent = '';
   v.appendChild(el('h1', { text: 'Settings' }));
   v.appendChild(el('div', { class: 'kv', text: 'Appearance, pairing, the Vault, notifications and the record’s own settings live in the previous interface for now; they are not lost.' }));
+  if (PREVIEW.on) v.appendChild(el('div', { class: 'kv warn', text: 'This process is a preview (started with WORDICON_PREVIEW=1): it seals no backups at start, on a timer or at shutdown, prunes and drills nothing, and sends no notification — whatever vault configuration its data root carries. Its writing is kept in its own data root only.' }));
   v.appendChild(el('div', { class: 'row' }, [el('button', { class: 'btn', type: 'button', text: 'Open the previous interface (new tab)', onclick: () => window.open('/', '_blank', 'noopener') }), el('button', { class: 'btn', type: 'button', text: 'Devices and pairing', onclick: () => window.open('/pair', '_blank', 'noopener') })]));
   v.appendChild(el('div', { class: 'kv' }, ['Arrangement: Tools and Results remember whether they are open and how wide, per screen size. ', el('button', { class: 'btn small', type: 'button', text: 'Forget the arrangement', onclick: () => { try { Object.keys(localStorage).filter(k => k.startsWith('nikodemus.work.layout.')).forEach(k => localStorage.removeItem(k)); } catch (e) {} toast('Forgotten. Reload to see the defaults.'); } })]));
 }
@@ -240,9 +244,9 @@ function renderHelp() {
     'Select words and press ⌘. (or use the selection menu) to act on exactly those words. Nothing runs until you press Start on the proposal, which says what leaves this machine and what it costs.',
     'A result made from a selection can be put into the draft — Insert below the selection, or Replace the selection — only while the draft is as it was when the result was made; otherwise you choose the target again. An application is one undo step (⌘Z).',
     'Ask ⌘K finds a tool by name — related words, feedback, analyze, map — and takes a plain request like “investigate Exemplar Holdings”, whose rest becomes what the tool is asked about. It proposes; it never runs by itself.',
-    'Investigate shows the four instruments and, for each, what the record says: the connector, the pinned contract, the credential, the last check, whether a lookup or a start is available, and whether you have recorded that the deployment was verified for starting. A start is a proposal first; it sends one request to the producer and then reads the signed export into custody. A valid signature means the bytes are the producer’s, not that the research is true.',
+    'Investigate shows the four instruments and, for each, what the record says: the connector, the contract pinned from the producer’s source at a named revision, the credential, the last check, whether a lookup or a start is available, the cost (unknown here — billed on the producer’s side), and whether you have recorded that the deployment runs that revision. A start is a proposal first; it sends one request to the producer, then keeps what the producer serves byte for byte — EthicalAlt: its unsigned export and a signed receipt (a write the producer stores), Open Case: the case report (a read the producer counts); a signed snapshot of a case is a separate act, disclosed as the mutation it is. A valid signature means the bytes are the producer’s under the key you pinned, not that the research is true. The rooms’ signed package import is not served by either producer’s main at the pinned revisions.',
     'Focus hides the sides and the secondary controls; Exit focus brings back what was open.',
-    'Document ▾: New, Rename, Duplicate, Open another, Versions (⌘S makes a checkpoint; a version can be restored as a new revision — nothing is rewritten), Make a plain copy, Export (text is visibly plain; Markdown keeps the structure; Print for PDF).',
+    'Document ▾: New, Rename, Duplicate, Open another, Versions (⌘S makes a checkpoint; a version can be restored as a new revision — nothing is rewritten), Make a plain copy, Export (text is visibly plain; Markdown and Word (.docx) keep the structure; Print for PDF).',
     'Undo is the editor’s own for this sitting. Checkpoints and the recovery copy in this browser are what persist; they are not continuous undo.',
     'Your work lists what is kept. Investigate shows the instruments and whether each can be started from here.',
     'The previous interface is still there under More tools; nothing was removed.',
@@ -323,6 +327,16 @@ function bindDocMenu() {
       saveBlob(new Blob([md], { type: 'text/markdown;charset=utf-8' }), fileName('.md'));
       toast(s ? 'Exported as Markdown with its headings, lists, quotes, emphasis and links.' : 'Exported as Markdown: the text as it stands (this document has no structure).');
     }
+    else if (what === 'export-docx') {
+      // built on the server from the saved structure: the head as it stands there, so a save still
+      // pending is settled first (bounded) and the export names the revision it carries
+      const settled = await session.settle('save', 4000);
+      const r = await fetch('/api/notebook/documents/' + encodeURIComponent(session.id) + '/export.docx', { credentials: 'same-origin' });
+      if (!r.ok) { let why = 'HTTP ' + r.status; try { why = (await r.json()).error || why; } catch (e) { /* not JSON */ } toast('No Word file was made: ' + why, 6000); return; }
+      const blob = await r.blob();
+      saveBlob(blob, fileName('.docx'));
+      toast('Exported as a Word document (revision ' + (r.headers.get('X-Document-Revision') || '?') + ') with its headings, lists, quotes, emphasis and links.' + (settled ? '' : ' A save was still pending: the file holds the last saved revision.'), 7000);
+    }
     else if (what === 'print') {
       const s = editor.getStructure();
       const html = s ? toHTML(s) : '<pre style="white-space:pre-wrap;font:inherit">' + session.body().replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</pre>';
@@ -378,6 +392,9 @@ async function boot() {
   renderActivity();
   results.render();
   layout.apply();
+  // a preview process says so in the header for as long as it runs (state, never hidden)
+  getJSON('/api/vault/status').then(r => { if (r.ok && r.data && r.data.preview) { document.getElementById('preview-chip').hidden = false; PREVIEW.on = true; } }).catch(() => {});
   window.__work = { session, layout, results, actions, places, editor, applier };   // for the journeys: state, not a control surface
 }
+const PREVIEW = { on: false };
 boot();

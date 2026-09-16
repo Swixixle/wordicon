@@ -133,4 +133,5 @@ def summary(rec: dict) -> dict:
             "range": rec.get("range"),
             "chars": rec.get("chars"), "words": rec.get("words"), "text_sha256": rec.get("text_sha256"),
             "head": head[:80] + ("…" if len(head) > 80 else ""), "input_kind": rec.get("input_kind"),
+            "title": (rec.get("concept") or {}).get("title", "") if rec.get("kind") == "concept" else "",
             "created_at": rec.get("created_at")}

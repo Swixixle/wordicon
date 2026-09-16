@@ -181,7 +181,7 @@ const OC_ID = OC.object.id, EA_ID = EA.object.id;
   // ---- About & proof names the instruments; the Rooms place has the door
   await page.evaluate(() => { document.getElementById('about-panel').open = true; }); await page.waitForTimeout(1200);
   const about = await text('#about-instruments');
-  ok(/Open Case \(scratch\) \(open_case, 1 key pinned, credential env:JOURNEY_OPEN_CASE_KEY\)/.test(about) && /3 deposition\(s\)/.test(about) && /1 room\(s\)/.test(about) && /identity ruling\(s\)/.test(about) && /manual pull only/.test(about) && !/jjjj/.test(about),
+  ok(/Open Case \(scratch\) \(open_case, 2 keys pinned, credential env:JOURNEY_OPEN_CASE_KEY\)/.test(about) && /3 deposition\(s\)/.test(about) && /1 room\(s\)/.test(about) && /identity ruling\(s\)/.test(about) && /manual pull only/.test(about) && !/jjjj/.test(about),
     'About & proof states the registry, custody and rulings, the credential by reference: ' + about.slice(0, 200));
   // block 121: the law moved to /constitution. The panel keeps the STATE
   // readout (checked above); this paragraph is explanation and followed the

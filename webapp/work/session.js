@@ -42,6 +42,11 @@ export function tabId() {
 
 function requestId() { return 'req_' + newId('').slice(0, 24) + '_' + Date.now().toString(36); }
 
+function _headOf(d) {
+  return { doc_id: d.doc_id, revision: d.revision | 0, fingerprint: d.fingerprint || '', saved_at: d.saved_at || '', title: d.title || '',
+           title_is_manual: !!d.title_is_manual, body: d.body, doc_json: d.doc_json || null };
+}
+
 export class DocumentSession {
   constructor(adapter, hooks = {}) {
     this.adapter = adapter;
@@ -288,6 +293,20 @@ export class DocumentSession {
   renderStatus() { if (this.hooks.onStatus) this.hooks.onStatus(this); }
 
   // ---- open / new / conflict ways out ------------------------------------------
+  //
+  // Reopening a document reads the head and every recovery envelope this
+  // browser holds for it, and never discards an envelope with unsent words:
+  //   - an envelope based on the head recovers (unless it holds exactly the head);
+  //   - an envelope based on an OLDER revision that still carries the request it
+  //     sent is reconciled by resending that request under its own id — the
+  //     store's retry contract answers "repeated" with the revision it made (or
+  //     makes it now); if that revision is the head, the envelope is rebased and
+  //     its later words recover; if the head moved on after it, or the store
+  //     refuses (409), both versions are kept and the choice is yours;
+  //   - an envelope based on an older revision with no request to resend was
+  //     written beside another writer's saves: both versions are kept.
+  // Prose is never combined by this code, and matching text is never taken as
+  // proof of identity. The reload path (a restore) keeps the same rule.
   async open(id, opts = {}) {
     if (!id) return false;
     if (id === this.id && !opts.reload) return true;
@@ -296,35 +315,54 @@ export class DocumentSession {
     if (r.status === 404) return this.openUnsaved(id);
     if (!r.ok || r.data.error) return false;
     const d = r.data;
-    let newer = null;
-    if (!opts.reload) {
-      try {
-        const envs = await recovery.forDocument(id);
-        // an envelope with edits this tab never got acknowledged, based on the
-        // head as it stands; older envelopes (no ack_seq) are judged by their text
-        const unsent = e => (e.ack_seq === undefined ? e.body !== d.body : e.seq > e.ack_seq);
-        newer = envs.filter(e => e.base_revision === d.revision && !e.abandoned && unsent(e)).sort((a, b) => (b.at || '').localeCompare(a.at || ''))[0] || null;
-        // an envelope that holds exactly the head — the same words and the same
-        // structure (for a plain head, the structure its words parse to) — has
-        // nothing to recover: reopening it must not become a rewrite
-        if (newer && newer.body === d.body) {
-          const headStructure = d.doc_json ? canonicalString(d.doc_json) : (newer.structure ? canonicalString(parsePlain(d.body)) : null);
-          const envStructure = newer.structure ? canonicalString(newer.structure) : null;
-          if (headStructure === envStructure) newer = null;
-        }
-      } catch (e) { /* no recovery store: nothing to recover from */ }
+    let envs = [];
+    try { envs = (await recovery.forDocument(id)).filter(e => !e.abandoned); } catch (e) { envs = []; }   // no recovery store: nothing to recover from
+    // an envelope with edits its tab never got acknowledged; older envelopes (no ack_seq) are judged by their text
+    const unsent = e => (e.ack_seq === undefined ? e.body !== d.body : e.seq > e.ack_seq);
+    const holdsHead = e => {
+      if (e.body !== d.body) return false;
+      const headStructure = d.doc_json ? canonicalString(d.doc_json) : (e.structure ? canonicalString(parsePlain(d.body)) : null);
+      const envStructure = e.structure ? canonicalString(e.structure) : null;
+      return headStructure === envStructure;
+    };
+    let newer = envs.filter(unsent).sort((a, b) => (b.at || '').localeCompare(a.at || ''))[0] || null;
+    let unreconciled = null;                         // an envelope kept whole beside a head it does not descend from
+    if (newer && newer.base_revision !== d.revision) {
+      const res = await this.reconcile(newer, d);    // never throws; never discards
+      if (res.kind === 'rebased') newer = res.envelope;
+      else { unreconciled = newer; newer = null; }
     }
+    if (newer && holdsHead(newer)) newer = null;     // exactly the head: nothing to recover, and reopening must not become a rewrite
     const localState = this.localState;
     this.blank();
     Object.assign(this, { id: d.doc_id, title: d.title || '', title_is_manual: !!d.title_is_manual, revision: d.revision | 0,
       fingerprint: d.fingerprint || '', savedAt: d.saved_at || '', origin: d.origin || '', status: 'saved', localState,
       lastCheckpointAt: Date.now(), createdAt: d.created_at || '', rich: !!d.doc_json });
     this.saveIdentity();
+    if (unreconciled) {
+      // both versions stand: the head on the server, these words in the editor
+      // and in this tab's envelope (an envelope from another tab is left as it
+      // is); nothing is saved until you choose
+      const e = unreconciled;
+      this.adapter.setText(e.body, { structure: e.structure || null });
+      this.title = e.title || this.title; this.title_is_manual = !!e.title_is_manual;
+      this.revision = e.base_revision | 0; this.fingerprint = e.base_fingerprint || '';
+      this.seq = Math.max(1, e.seq | 0); this.ackSeq = Math.min(this.seq - 1, e.ack_seq | 0);
+      this.conflict = { head: _headOf(d), mine: e.body, mineStructure: e.structure || null, at: e.at || '', why: 'unreconciled',
+                        detail: e.pending ? 'a save this browser sent was answered with a later head than the one it made' : 'these words were never sent, and the document was saved elsewhere meanwhile' };
+      this.status = 'conflict'; this.recovered = true; this.record(); this.renderStatus();
+      if (this.hooks.onConflict) this.hooks.onConflict(this);
+      if (this.hooks.onOpened) this.hooks.onOpened(this);
+      return true;
+    }
     if (newer) {
       this.adapter.setText(newer.body, { structure: newer.structure || null });
       this.title = newer.title || this.title; this.title_is_manual = !!newer.title_is_manual;
       try { if (newer.selection) this.adapter.setSelection(newer.selection.start, newer.selection.end, newer.selection.direction); if (newer.scroll && this.adapter.setScroll) this.adapter.setScroll(newer.scroll); } catch (e) {}
       this.seq = 1; this.status = 'pending'; this.record(); this.flush(); this.recovered = true;
+      // an envelope from another tab now lives in this tab's editor and envelope:
+      // it is marked taken, so a later reopening does not offer it a second time
+      if (newer.tab_id && newer.tab_id !== this.tab) { try { await recovery.write({ ...newer, abandoned: true, taken_by: this.tab, taken_at: new Date().toISOString() }); } catch (e) {} }
     } else {
       this.adapter.setText(d.body, { structure: d.doc_json || null });
       this.recovered = false; this.record();
@@ -332,6 +370,28 @@ export class DocumentSession {
     this.renderStatus();
     if (this.hooks.onOpened) this.hooks.onOpened(this);
     return true;
+  }
+
+  // An envelope based on an older revision than the head. Its pending request,
+  // if any, is resent exactly (same id, same payload): the store answers with
+  // the revision that request made — already, or now. The envelope is rebased
+  // onto that revision only when it IS the head; every other answer keeps both
+  // versions. Returns {kind: 'rebased', envelope} or {kind: 'kept'}.
+  async reconcile(e, d) {
+    if (!e.pending || !e.pending.payload || !e.pending.request_id) return { kind: 'kept', why: 'no request to resend' };
+    let r, a;
+    try {
+      r = await fetch('/api/notebook/documents/' + encodeURIComponent(e.doc_id), { method: 'PUT', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(e.pending.payload) });
+      a = await r.json();
+    } catch (err) {
+      return { kind: 'kept', why: 'the store could not be asked' };
+    }
+    if (!r.ok || a.error || typeof a.revision !== 'number') return { kind: 'kept', why: r.status === 409 ? 'the head moved before that save landed' : ('the store answered ' + r.status) };
+    if (a.revision !== d.revision) return { kind: 'kept', why: 'the head moved on after that save landed' };
+    const fixed = { ...e, ack_seq: Math.max(e.ack_seq | 0, e.pending.seq | 0), base_revision: a.revision | 0, base_fingerprint: a.fingerprint || '', pending: null };
+    try { await recovery.write(fixed); } catch (err) { /* the rebased copy could not be written; the old one stands */ }
+    return { kind: 'rebased', envelope: fixed };
   }
 
   // A document the server never received (the tab closed before its first

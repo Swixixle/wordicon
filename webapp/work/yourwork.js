@@ -37,6 +37,12 @@ export class YourWork {
     v.appendChild(this.list);
     this.more = el('div', { class: 'row' });
     v.appendChild(this.more);
+    // the index's own account of itself — its population, generation and stores — and the rebuild,
+    // in a disclosure at the end: available, never the headline (the review of 6e5b59c)
+    this.aboutLine = el('div', { class: 'small-text muted', id: 'work-about' });
+    const about = el('details', { class: 'work-about' }, [el('summary', { text: 'About this index' }), this.aboutLine,
+      el('div', { class: 'row' }, [el('button', { class: 'btn small', type: 'button', text: 'Rebuild the index', title: 'Reads every store again into a new generation; the current one stays until the new one is complete', onclick: async () => { const r = await postJSON('/api/work/reindex', {}); toast(r.ok ? ((r.data.rebuilt ? 'Rebuilt: ' + (r.data.items || 0) + ' items' : 'Not rebuilt — the last working index stays') + (r.data.failed && r.data.failed.length ? ' — incomplete: ' + r.data.failed.join('; ') : '')) : ('Not rebuilt: ' + (r.data.error || r.status)), 6000); this.state.cursor = null; this.load(); } })])]);
+    v.appendChild(about);
     this.built = true;
   }
 
@@ -79,16 +85,17 @@ export class YourWork {
     sinceSel.addEventListener('change', () => { s.since = sinceSel.value; s.cursor = null; this.load(); });
     f.appendChild(sinceSel);
     f.appendChild(chip(s.archived === 'only' ? 'Archived only' : 'Show archived', s.archived === 'only', () => { s.archived = s.archived === 'only' ? 'no' : 'only'; s.cursor = null; this.load(); }, 'Archived items leave ordinary listings and keep their history'));
-    f.appendChild(el('button', { class: 'btn small', type: 'button', text: 'Rebuild the index', title: 'Reads every store again into a new generation; the current one stays until the new one is complete', onclick: async () => { const r = await postJSON('/api/work/reindex', {}); toast(r.ok ? ((r.data.rebuilt ? 'Rebuilt: ' + (r.data.items || 0) + ' items' : 'Not rebuilt — the last working index stays') + (r.data.failed && r.data.failed.length ? ' — incomplete: ' + r.data.failed.join('; ') : '')) : ('Not rebuilt: ' + (r.data.error || r.status)), 6000); s.cursor = null; this.load(); } }));
   }
 
   renderHealth() {
     const h = this.state.health || {};
     const pend = Object.entries(h.pending || {}).filter(([, v]) => v !== null && v > 0);
-    let text = (h.population || '') + (h.last_refresh_at ? ' · refreshed ' + whenOf(h.last_refresh_at) : '') + (h.fts ? '' : ' · plain matching (no full-text engine)');
+    // the headline: how many items are searchable and how fresh; the index's internals (stores, generation) in About
+    let text = (h.items === undefined ? '' : h.items + ' item' + (h.items === 1 ? '' : 's') + ' searchable') + (h.last_refresh_at ? ' · refreshed ' + whenOf(h.last_refresh_at) : '') + (h.fts ? '' : ' · plain matching (no full-text engine)');
     if (h.updating || h.incomplete) text = 'Search is updating; some recent work may be missing' + (pend.length ? ' (' + pend.map(([k, v]) => v + ' ' + k + (v === 1 ? ' change' : ' changes') + ' pending').join(', ') + ')' : '') + (h.incomplete ? ' — ' + h.incomplete : '') + ' · ' + text;
     this.healthLine.textContent = text;
     this.healthLine.classList.toggle('warn', !!(h.updating || h.incomplete));
+    if (this.aboutLine) this.aboutLine.textContent = (h.population || '') + (h.built_at ? ' · built ' + whenOf(h.built_at) : '') + ' — a derived index; every hit reopens the authoritative record';
   }
 
   renderList() {
@@ -117,13 +124,14 @@ export class YourWork {
       toast(it.archived ? 'Back in the listings.' : 'Archived — kept, hidden from ordinary listings; the Archived filter shows it.');
       this.state.cursor = null; this.load();
     } }));
-    const meta = [it.kind_label || it.kind, it.tool && it.tool !== it.kind ? it.tool : '', it.status, it.changed_at ? 'changed ' + whenOf(it.changed_at) : '', it.created_at && it.created_at !== it.changed_at ? 'created ' + whenOf(it.created_at) : ''].filter(Boolean).join(' · ');
+    const toolWord = it.tool_label || it.tool || '';
+    const meta = [it.kind_label || it.kind, toolWord && toolWord !== it.kind ? toolWord : '', it.status, it.changed_at ? 'changed ' + whenOf(it.changed_at) : '', it.created_at && it.created_at !== it.changed_at ? 'created ' + whenOf(it.created_at) : ''].filter(Boolean).join(' · ');
     return el('div', { class: 'card op work-item' + (it.archived ? ' archived' : ''), dataset: { item: it.item_id, kind: it.kind } }, [
       el('div', { class: 'row' }, [el('span', { class: 'chip', text: it.kind_label || it.kind }), el('span', { class: 'result-title', text: it.title || '(untitled)' }), el('span', { class: 'muted small-text', style: 'margin-left:auto', text: whenOf(it.changed_at || it.created_at) })]),
       it.snippet ? el('div', { class: 'kv work-snippet', text: it.snippet }) : null,
       el('div', { class: 'muted small-text', text: meta }),
       el('div', { class: 'acts' }, acts),
-      el('details', {}, [el('summary', { text: 'Details' }), el('div', { class: 'small-text muted', text: it.item_id + (it.related && it.related.length ? ' · related: ' + it.related.join(', ') : '') })]),
+      el('details', {}, [el('summary', { text: 'Details' }), el('div', { class: 'small-text muted', text: it.item_id + (it.tool && it.tool !== toolWord ? ' · action ' + it.tool : '') + (it.related && it.related.length ? ' · related: ' + it.related.join(', ') : '') })]),
     ]);
   }
 }

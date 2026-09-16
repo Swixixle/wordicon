@@ -114,9 +114,28 @@ const DRAFT = 'The house had two doors and we only ever used one.\n\nWhen the se
   await page.waitForFunction(() => /Sending to EthicalAlt/.test(document.getElementById('results-body').textContent), null, { timeout: 20000, polling: 100 }).catch(() => {});
   await page.click('a[data-page="work"]'); await page.waitForTimeout(200);
   await shot(page, errs, '14a-result-running', 'an investigation in flight: Running · Sending to EthicalAlt');
-  await page.waitForFunction(() => /Failed/.test(document.getElementById('results-body').textContent) && !/Sending to EthicalAlt/.test(document.getElementById('results-body').textContent), null, { timeout: 60000, polling: 300 }).catch(() => {});
+  await page.waitForFunction(() => /Outcome unknown/.test(document.getElementById('results-body').textContent) && !/Sending to EthicalAlt/.test(document.getElementById('results-body').textContent), null, { timeout: 60000, polling: 300 }).catch(() => {});
   await page.waitForTimeout(600);
-  await shot(page, errs, '14-result-error', 'a failed investigation (the fixture producer answered 500): a known failure, named');
+  await shot(page, errs, '14-result-error', 'an investigation the fixture producer answered with a 500 after delivery: outcome UNKNOWN — delivered; whether it accepted or ran the work is not known; nothing sent again');
+  // a complete investigation: the start, the unsigned export kept with its hash, the receipt verified under the pinned key
+  await page.click('a[data-page="investigate"]'); await page.waitForTimeout(500);
+  await page.fill('.card[data-producer="ethicalalt"] input.inv-subject', 'Exemplar Holdings');
+  await page.click('.card[data-producer="ethicalalt"] button:has-text("Start an investigation")');
+  await page.waitForSelector('#proposal-card'); await page.click('#proposal-card .btn.primary');
+  await page.click('a[data-page="work"]');
+  await page.waitForFunction(() => /Signed receipt: signature verified/.test(document.getElementById('results-body').textContent), null, { timeout: 60000, polling: 300 }).catch(() => {});
+  await page.waitForTimeout(600);
+  await shot(page, errs, '14b-result-complete', 'a complete investigation: start ok · delivered; the unsigned export kept (bytes, sha256); the receipt verified under the pinned key, correlated by investigation id; the three replies as chips');
+  await page.click('a[data-page="investigate"]'); await page.waitForTimeout(500);
+  await page.evaluate(() => { const d = document.querySelector('.card[data-producer="ethicalalt"] details.contract'); if (d) d.open = true; });
+  await page.waitForTimeout(300);
+  await shot(page, errs, '12b-investigate-contract', 'the contract disclosure: the producer’s revision, each route with its file:line, auth, reply and side effects, and the package route NOT served by main');
+  await page.click('a[data-page="work"]'); await page.waitForTimeout(300);
+  await page.evaluate(() => window.__work.actions.choose('explore.recheck'));
+  await page.waitForSelector('#concept-picker', { timeout: 10000 }).catch(() => {});
+  await page.waitForTimeout(400);
+  await shot(page, errs, '25-concept-picker', 'Re-check this concept: the shelf as ruled, one press proposes; nothing is sent until Start');
+  await page.evaluate(() => { window.__work.results.custom = null; window.__work.results.render(); });
   // a partial run from the record
   await page.evaluate(t => window.__work.places.open('/?trace=' + t), PARTIAL_TRACE);
   await page.waitForTimeout(4000);
@@ -141,7 +160,7 @@ const DRAFT = 'The house had two doors and we only ever used one.\n\nWhen the se
   await shot(page, errs, '20-help', 'Help, with the workspace’s rule and its door');
   await page.click('a[data-page="work"]'); await page.waitForTimeout(300);
   await page.click('#doc-menu-btn'); await page.waitForTimeout(200);
-  await shot(page, errs, '21-doc-menu', 'the document menu: New, Rename, Duplicate, Open another, Versions, plain copy, exports, Archive');
+  await shot(page, errs, '21-doc-menu', 'the document menu: New, Rename, Duplicate, Open another, Versions, plain copy, exports (text, Markdown, Word, print), Archive');
   await page.keyboard.press('Escape');
   await page.click('#doc-menu-btn'); await page.click('button[data-doc="versions"]'); await page.waitForTimeout(600);
   await shot(page, errs, '22-versions', 'Versions: checkpoints and events; restore makes a new revision');

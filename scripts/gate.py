@@ -36,6 +36,7 @@ import json
 import os
 import pathlib
 import secrets
+import time
 
 import wordicon_cli as cli
 
@@ -59,24 +60,81 @@ def sessions_log() -> pathlib.Path:
     return auth_dir() / "sessions.jsonl"
 
 
+MASTER_BYTES = 32
+
+
+def _write_secret(p: pathlib.Path, data: bytes, *, exclusive: bool) -> bool:
+    """Put `data` at `p` so that no reader ever sees a partial or empty
+    secret: written whole to a private temp file (0600, fsynced) in the
+    same directory, then made visible in ONE step. Exclusive: link() the
+    temp name to `p`, which fails if `p` already exists — so of any number
+    of concurrent first callers exactly one mints and the rest read what it
+    minted (the review of 6e5b59c: the check-then-write mint let two
+    minters overwrite each other and every session MAC'd under the loser's
+    key stopped verifying). Not exclusive (a rotation): replace() — the
+    old secret is whole until the instant the new one is. Returns whether
+    THIS call placed the file."""
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(f".{p.name}.tmp-{os.getpid()}-{secrets.token_hex(4)}")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        if exclusive:
+            try:
+                os.link(tmp, p)                 # atomic and exclusive: EEXIST if another minter won
+            except FileExistsError:
+                return False
+            except OSError:
+                # a filesystem without hard links: exclusive create of the final
+                # name itself (still one minter; a reader may see the file for an
+                # instant before its bytes, and ensure_master refuses a short read)
+                try:
+                    fd2 = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                except FileExistsError:
+                    return False
+                with os.fdopen(fd2, "wb") as f2:
+                    f2.write(data); f2.flush(); os.fsync(f2.fileno())
+        else:
+            os.replace(tmp, p)
+        return True
+    finally:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+
+
 def ensure_master() -> bytes:
     """Load the master secret, minting it on first use — 0600, under the
-    ignored state directory, never printed, never in git."""
+    ignored state directory, never printed, never in git. The mint is
+    exclusive (see _write_secret): concurrent first callers agree on one
+    secret. A secret of the wrong length is refused rather than used —
+    a MAC under an empty or truncated key would recognize tokens that
+    were never issued."""
     p = master_path()
     if not p.exists():
-        auth_dir().mkdir(parents=True, exist_ok=True)
-        p.write_bytes(secrets.token_bytes(32))
-        os.chmod(p, 0o600)
-    return p.read_bytes()
+        _write_secret(p, secrets.token_bytes(32), exclusive=True)
+    data = p.read_bytes()
+    for _ in range(3):
+        if len(data) == MASTER_BYTES:
+            break
+        time.sleep(0.01)                        # the no-hard-link fallback's instant between create and bytes
+        data = p.read_bytes()
+    if len(data) != MASTER_BYTES:
+        raise RuntimeError(f"the gate's master secret at {p} is {len(data)} bytes, not {MASTER_BYTES} — refusing to "
+                           "recognize any session under it; rotate it (wordicon gate rotate) or restore auth/ from a vault")
+    return data
 
 
 def rotate_master() -> None:
     """New master secret. Every session token in the world stops
     verifying at this instant — the sessions log keeps its history, but
-    no stored MAC matches under the new key."""
-    auth_dir().mkdir(parents=True, exist_ok=True)
-    master_path().write_bytes(secrets.token_bytes(32))
-    os.chmod(master_path(), 0o600)
+    no stored MAC matches under the new key. Replaced atomically: no
+    reader sees a half-written key."""
+    _write_secret(master_path(), secrets.token_bytes(32), exclusive=False)
     _append({"type": "rotation", "at": cli._now()})
 
 

@@ -1,0 +1,190 @@
+{
+ "source": "stableStringify, server/services/investigationReceipt.js:21-31 @1a71460a9bbae62124f9cf774f25f4c05c0b1f61, run under v22.22.2",
+ "note": "input is the value as JSON; output is the exact string the producer signs for it. A verifier that does not reproduce output for input cannot verify the producer's receipts.",
+ "vectors": [
+  {
+   "input": null,
+   "output": "null"
+  },
+  {
+   "input": true,
+   "output": "true"
+  },
+  {
+   "input": false,
+   "output": "false"
+  },
+  {
+   "input": 0,
+   "output": "0"
+  },
+  {
+   "input": 0,
+   "output": "0"
+  },
+  {
+   "input": 1,
+   "output": "1"
+  },
+  {
+   "input": 1,
+   "output": "1"
+  },
+  {
+   "input": 1.5,
+   "output": "1.5"
+  },
+  {
+   "input": 100,
+   "output": "100"
+  },
+  {
+   "input": 1e+21,
+   "output": "1e+21"
+  },
+  {
+   "input": 100000000000000000000,
+   "output": "100000000000000000000"
+  },
+  {
+   "input": 123456789012345680000,
+   "output": "123456789012345680000"
+  },
+  {
+   "input": 1e-7,
+   "output": "1e-7"
+  },
+  {
+   "input": 0.000001,
+   "output": "0.000001"
+  },
+  {
+   "input": 1e-7,
+   "output": "1e-7"
+  },
+  {
+   "input": 1e-10,
+   "output": "1e-10"
+  },
+  {
+   "input": 3.14159,
+   "output": "3.14159"
+  },
+  {
+   "input": -2.5e-8,
+   "output": "-2.5e-8"
+  },
+  {
+   "input": 9007199254740992,
+   "output": "9007199254740992"
+  },
+  {
+   "input": 12345678901234567000,
+   "output": "12345678901234567000"
+  },
+  {
+   "input": "",
+   "output": "\"\""
+  },
+  {
+   "input": "plain",
+   "output": "\"plain\""
+  },
+  {
+   "input": "quote \" backslash \\ slash /",
+   "output": "\"quote \\\" backslash \\\\ slash /\""
+  },
+  {
+   "input": "tab\tnewline\nreturn\rbackspace\bformfeed\f",
+   "output": "\"tab\\tnewline\\nreturn\\rbackspace\\bformfeed\\f\""
+  },
+  {
+   "input": "control \u0001 \u001f del ",
+   "output": "\"control \\u0001 \\u001f del \""
+  },
+  {
+   "input": "unicode é ü 日本 😀",
+   "output": "\"unicode é ü 日本 😀\""
+  },
+  {
+   "input": "line sep   para sep  ",
+   "output": "\"line sep   para sep  \""
+  },
+  {
+   "input": "lone surrogate \ud800 here",
+   "output": "\"lone surrogate \\ud800 here\""
+  },
+  {
+   "input": "pair 😀 ok",
+   "output": "\"pair 😀 ok\""
+  },
+  {
+   "input": [],
+   "output": "[]"
+  },
+  {
+   "input": {},
+   "output": "{}"
+  },
+  {
+   "input": [
+    1,
+    "two",
+    null,
+    [
+     3,
+     {
+      "b": 2,
+      "a": 1
+     }
+    ]
+   ],
+   "output": "[1,\"two\",null,[3,{\"a\":1,\"b\":2}]]"
+  },
+  {
+   "input": {
+    "9": 8,
+    "10": 7,
+    "b": 1,
+    "a": 2,
+    "": 3,
+    "é": 4,
+    "z": 5,
+    "Z": 6,
+    "😀": 9,
+    "￿": 10
+   },
+   "output": "{\"\":3,\"10\":7,\"9\":8,\"Z\":6,\"a\":2,\"b\":1,\"z\":5,\"é\":4,\"😀\":9,\"￿\":10}"
+  },
+  {
+   "input": {
+    "receipt_id": "e3b0c442-98fc-4c14-9afb-f4c8996fb924",
+    "subject": {
+     "brand_name": "Exemplar Holdings",
+     "brand_slug": "exemplar-holdings",
+     "ultimate_parent": "Exemplar Holdings"
+    },
+    "incident_count": 4,
+    "category_summary": [
+     {
+      "category": "labor",
+      "count": 2,
+      "overflow": 0
+     },
+     {
+      "category": "environment",
+      "count": 2,
+      "overflow": 1
+     }
+    ],
+    "source_urls": [
+     "https://example.org/a",
+     "https://example.org/b"
+    ],
+    "overall_concern_level": null,
+    "investigation_id": "op_fixture"
+   },
+   "output": "{\"category_summary\":[{\"category\":\"labor\",\"count\":2,\"overflow\":0},{\"category\":\"environment\",\"count\":2,\"overflow\":1}],\"incident_count\":4,\"investigation_id\":\"op_fixture\",\"overall_concern_level\":null,\"receipt_id\":\"e3b0c442-98fc-4c14-9afb-f4c8996fb924\",\"source_urls\":[\"https://example.org/a\",\"https://example.org/b\"],\"subject\":{\"brand_name\":\"Exemplar Holdings\",\"brand_slug\":\"exemplar-holdings\",\"ultimate_parent\":\"Exemplar Holdings\"}}"
+  }
+ ]
+}

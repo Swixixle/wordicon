@@ -98,12 +98,15 @@ export class Results {
       if (!['done', 'complete', 'failed', 'unknown'].includes(t.status)) this.poll();
     });
   }
-  // "Check status / recover result": the record and the result files read again; nothing is sent
+  // "Check status / recover result": the record and the result files read again. For an
+  // investigation the server may READ the producer again (never start again) — and says so:
+  // the reply's `sent` and `what` decide the words here, never an assumption.
   async recover(t) {
     const r = await postJSON('/api/operations/' + encodeURIComponent(t.id) + '/recover', {});
     if (!r.ok) { toast('Not recovered: ' + (r.data.error || r.status)); return; }
-    t.status = r.data.status; t.last = { ...(t.last || {}), status: r.data.status, recovery: r.data.recovery };
-    toast('Checked from the record — nothing was sent. ' + (r.data.recovery && r.data.recovery.why || ''), 6000);
+    t.status = r.data.status; t.last = { ...(t.last || {}), status: r.data.status, recovery: r.data.recovery, investigation: r.data.investigation || (t.last || {}).investigation };
+    if (r.data.sent === true) toast('Checked — and read the producer again: ' + (r.data.what || []).join('; ') + '. Nothing was started again.', 8000);
+    else toast('Checked from the record — nothing was sent. ' + (r.data.recovery && r.data.recovery.why || ''), 6000);
     this.render(); this.poll();
     if (this.hooks.onActivity) this.hooks.onActivity();
   }
@@ -203,6 +206,7 @@ export class Results {
     const scopeLine = sc.kind === 'selection' ? `Scope: your selection — ${sc.words} word${sc.words === 1 ? '' : 's'}, ${sc.chars} character${sc.chars === 1 ? '' : 's'}, sent exactly as selected.`
                     : sc.kind === 'document' ? `Scope: the whole draft — ${sc.words} word${sc.words === 1 ? '' : 's'}, ${sc.chars} characters, sent exactly as written.`
                     : sc.kind === 'description' ? `Scope: what you named — “${sc.head}”.`
+                    : sc.kind === 'concept' ? `Scope: a concept you keep${sc.title ? ' — “' + sc.title + '”' : ''}, its definition sent as accepted: “${sc.head}”.`
                     : `Scope: ${sc.kind}${sc.head ? ' — “' + sc.head + '”' : ''}.`;
     const lane = d.lane || {};
     const card = el('div', { class: 'card', id: 'proposal-card' }, [
@@ -254,15 +258,22 @@ export class Results {
     if (t.kind === 'investigation') {
       const inv = d.investigation || {};
       const pst = d.producer_state || {};
+      const isSnapshot = (d.result_ref && d.result_ref.kind === 'snapshot') || /snapshot/.test(d.action_id || (p && p.action_id) || '');
+      const said = Object.entries(pst).filter(([k]) => !['outcome', 'delivery', 'nothing_sent'].includes(k)).map(([k, v]) => k.replace(/_/g, ' ') + ': ' + (v === null ? 'null' : typeof v === 'object' ? JSON.stringify(v) : String(v))).slice(0, 8);
       card.appendChild(el('div', { class: 'kv', text: 'Producer: ' + (d.producer || '—') + (inv.upstream_id ? ' · upstream id ' + inv.upstream_id : '') }));
-      card.appendChild(el('div', { class: 'kv', text: 'Start: ' + (inv.start || 'not sent') + (pst.status ? ' · the producer says: ' + pst.status : '') + (pst.message ? ' — ' + pst.message : '') }));
-      card.appendChild(el('div', { class: 'kv', text: 'Signed export: ' + (inv.artifact || 'not retrieved') + ' · receipt: ' + (inv.receipt || 'none') + ' — a valid signature says the bytes are the producer’s, not that the research is true' }));
-      if (inv.deposition_id) card.appendChild(el('div', { class: 'row' }, [el('span', { class: 'chip', text: 'in custody: ' + inv.deposition_id }), el('button', { class: 'btn', type: 'button', text: 'Open the Investigation rooms', onclick: () => { this.places.open('/investigation'); if (this.hooks.onPlace) this.hooks.onPlace(); } })]));
+      card.appendChild(el('div', { class: 'kv', text: (isSnapshot ? 'Snapshot request: ' : 'Start: ') + (inv.start || 'not sent') + (inv.delivery ? ' · delivery: ' + inv.delivery.replace(/_/g, ' ') : '') }));
+      if (said.length) card.appendChild(el('div', { class: 'kv muted small-text', text: 'The producer says — ' + said.join(' · ') }));
+      if (!isSnapshot) card.appendChild(el('div', { class: 'kv', text: 'Kept from the producer: ' + (inv.artifact || 'not retrieved') }));
+      card.appendChild(el('div', { class: 'kv', text: (isSnapshot ? 'Signed snapshot: ' : 'Signed receipt: ') + (inv.receipt || 'none') + ' — a valid signature says the bytes are the producer’s under the key you pinned, not that the research is true' }));
+      if (inv.kept && inv.kept.length) card.appendChild(el('div', { class: 'row' }, inv.kept.map(k => el('span', { class: 'chip', title: 'sha256 ' + k.sha256, text: k.name + ' · ' + k.bytes + ' bytes' }))));
       if (['failed', 'unknown'].includes(t.status)) card.appendChild(el('div', { class: 'row' }, [
-        el('button', { class: 'btn small', type: 'button', text: 'Check status / recover result', title: 'Reads the record; retrieves the export again by its id if the start was answered; never starts again', onclick: () => this.recover(t) }),
+        el('button', { class: 'btn small', type: 'button', text: 'Check status / recover result', title: 'Reads the record; if the start was answered and the signed record is missing, reads the producer again by id (and asks EthicalAlt for the receipt again — a write it stores); never starts again; says what it sent', onclick: () => this.recover(t) }),
         el('button', { class: 'btn small', type: 'button', text: 'Start another attempt', title: 'A new operation under a new key; the producer is asked again', onclick: () => this.anotherAttempt(t) }),
       ]));
-      card.appendChild(el('details', {}, [el('summary', { text: 'Details' }), el('div', { class: 'small-text muted', text: `operation ${t.id} · snapshot ${d.snapshot_id || '—'}${rec ? ' · ' + rec.dispatch_intents + ' dispatch intent' + (rec.dispatch_intents === 1 ? '' : 's') + ' recorded, ' + rec.dispatch_ends + ' ended' : ''}` })]));
+      if (t.status === 'complete' && !inv.verified && !isSnapshot && inv.start === 'ok') card.appendChild(el('div', { class: 'row' }, [
+        el('button', { class: 'btn small', type: 'button', text: 'Ask for the signed record again', title: 'Reads the producer again by id and, for EthicalAlt, asks for the receipt again (a write it stores); never starts again; says what it sent', onclick: () => this.recover(t) }),
+      ]));
+      card.appendChild(el('details', {}, [el('summary', { text: 'Details' }), el('div', { class: 'small-text muted', text: `operation ${t.id} · snapshot ${d.snapshot_id || '—'}${rec ? ' · ' + rec.dispatch_intents + ' dispatch intent' + (rec.dispatch_intents === 1 ? '' : 's') + ' recorded, ' + rec.dispatch_ends + ' ended' : ''}${inv.receipt_id ? ' · receipt id ' + inv.receipt_id : ''}${inv.kept && inv.kept.length ? ' · kept: ' + inv.kept.map(k => k.name + ' sha256 ' + k.sha256).join(', ') : ''} · ${inv.package_contract || ''}` })]));
     }
     if (t.kind === 'reading' && d.reading) {
       const v = d.reading;

@@ -58,9 +58,19 @@ FETCH_TIMEOUT_S = 15
 FETCH_MAX_BYTES = 8_000_000                   # a sealed case or a deep profile is well under a megabyte
 KEY_ID_PREFIX = "ed25519:sha256:"
 
-# The producers this block knows, as their own contracts declare them.
-# Object types, signing methods and the export paths are the producer's;
-# Nikodemus only dispatches on them.
+# The producers this block knows, as the PACKAGE contract declares them
+# (nikodemus.deposition.v1 — the signed export each producer's block107
+# branch adds). Object types, signing methods and the export paths are the
+# producer's; Nikodemus only dispatches on them.
+#
+# Corrected after the review of 6e5b59c (finding 3): at the revisions the
+# adapters are pinned to (scripts/producers.CONTRACTS — Open Case origin/main
+# 4dc1709, EthicalAlt main 1a71460) NEITHER producer's main serves
+# export_path; each serves it only on an unpushed local branch
+# (block107/export-contract, block107/export-v2). An import by id against a
+# deployment of main lands as http_404 — a named failure, never "nothing
+# found". locate_path is the listing main DOES serve, so a connection check
+# tells the truth about reachability.
 PRODUCERS = {
     "open_case": {
         "display": "Open Case",
@@ -68,7 +78,9 @@ PRODUCERS = {
         "methods": ("open_case.seal.v1",),
         "schemas": ("open-case-full-1", "open-case-full-2", "open-case-full-3", "open-case-full-4"),
         "export_path": "/api/v1/cases/{id}/export",
-        "locate_path": "/api/v1/cases/exportable",
+        "export_path_served_by": "branch block107/export-contract (17a82f8) only — not origin/main 4dc1709",
+        "locate_path": "/api/v1/cases",
+        "locate_items_key": "cases",
         "url_patterns": (r"/cases/([0-9a-fA-F-]{36})", r"/api/v1/cases/([0-9a-fA-F-]{36})"),
         "id_pattern": r"^[0-9a-fA-F-]{36}$",
         "auth": "bearer",
@@ -83,7 +95,9 @@ PRODUCERS = {
         "methods": ("ethicalalt.export.v2",),
         "schemas": ("ethicalalt.profile_export.v2",),
         "export_path": "/api/profiles/{id}/export/v2",
+        "export_path_served_by": "branch block107/export-v2 (443c764, 84986ab) only — not main 1a71460",
         "locate_path": "/api/profiles/index",
+        "locate_items_key": "",           # main answers a bare JSON array
         "url_patterns": (r"/profile/([a-z0-9][a-z0-9-]{0,120})", r"/api/profiles/([a-z0-9][a-z0-9-]{0,120})"),
         "id_pattern": r"^[a-z0-9][a-z0-9-]{0,120}$",
         "auth": "none",
@@ -382,6 +396,7 @@ def load_connectors(include_disabled: bool = False) -> "list[dict]":
              "supported_schemas": list(p.get("schemas", ())),
              "supported_object_types": list(p.get("object_types", ())),
              "signing_methods": list(p.get("methods", ())),
+             "package_export_served_by": p.get("export_path_served_by", ""),     # the review of 6e5b59c: not main, at the pinned revisions
              "credential_configured": bool(c.get("credential_ref")) and _credential_present(c.get("credential_ref", "")),
              "last_attempt": mine[-1] if mine else None,
              "last_success_at": okays[-1].get("recorded_at") if okays else "",
@@ -773,7 +788,12 @@ def locate(connector: dict, query: str = "") -> dict:
         return {"ok": False, **{k: v for k, v in res.items() if k != "ok"}}
     _record_attempt(connector["connector_id"], "located", "", ok=True)
     obj = res["json"]
-    items = obj.get("items") if isinstance(obj, dict) else obj
+    if isinstance(obj, dict):
+        items = obj.get(spec.get("locate_items_key") or "items")
+        if items is None:
+            items = obj.get("items")
+    else:
+        items = obj
     if not isinstance(items, list):
         items = []
     q = (query or "").strip().lower()

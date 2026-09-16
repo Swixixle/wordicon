@@ -81,17 +81,58 @@ export class Actions {
       return;
     }
     if (a.kind === 'note' || a.kind === 'ruling' || a.kind === 'apply') { toast(a.label + ' is offered on a result, a word or a candidate — not from here.'); return; }
+    // an action whose subject is a concept you keep (Re-check this concept) is chosen from the shelf,
+    // never guessed from the draft: the picker lists the accepted concepts and prepares the one chosen
+    if (a.subjects && a.subjects.includes('concept') && !a.subjects.includes('selection') && !a.subjects.includes('document')) { await this.pickConcept(actionId); return; }
     await this.prepare(actionId);
+  }
+
+  // ---- the concept picker: the shelf as ruled, one press to propose ----------------
+  async pickConcept(actionId) {
+    const a = this.byId[actionId];
+    const r = await getJSON('/api/concepts');
+    if (!r.ok) { toast('The shelf could not be read: ' + (r.data && r.data.error || r.status)); return; }
+    const all = r.data.concepts || [];
+    const host = el('div', { class: 'card', id: 'concept-picker' }, [
+      el('div', { class: 'result-title', text: a.label + ' — choose a concept you keep' }),
+      el('div', { class: 'kv muted small-text', text: (r.data.population || '') + ' · ' + all.length + ' concept' + (all.length === 1 ? '' : 's') + '. Choosing one proposes the action on it; nothing is sent until Start.' }),
+    ]);
+    const list = el('div', { class: 'concept-list' });
+    const filter = el('input', { type: 'search', class: 'inv-subject', placeholder: 'filter by name or definition', 'aria-label': 'Filter concepts' });
+    const draw = () => {
+      list.textContent = '';
+      const q = filter.value.trim().toLowerCase();
+      const rows = all.filter(c => !q || (c.name + ' ' + c.definition).toLowerCase().includes(q)).slice(0, 60);
+      if (!rows.length) list.appendChild(el('div', { class: 'muted small-text', text: all.length ? 'No concept matches that filter.' : 'The shelf is empty — nothing has been accepted yet.' }));
+      for (const c of rows) {
+        list.appendChild(el('div', { class: 'kv concept-row' }, [
+          el('button', { class: 'btn small', type: 'button', text: c.name || '(unnamed)', title: c.definition, dataset: { concept: c.concept_id || c.id }, onclick: () => {
+            this.results.custom = null;
+            this.prepare(actionId, { kind: 'concept', concept: { title: c.name, definition: c.definition, concept_id: c.concept_id || c.id, plain_gloss: c.plain_gloss } });
+          } }),
+          el('span', { class: 'muted small-text', text: ' ' + (c.definition || '').slice(0, 140) + ((c.definition || '').length > 140 ? '…' : '') }),
+        ]));
+      }
+    };
+    filter.addEventListener('input', draw);
+    host.appendChild(el('div', { class: 'row' }, [filter, el('button', { class: 'btn small', type: 'button', text: 'Close', onclick: () => { this.results.custom = null; this.results.render(); } })]));
+    host.appendChild(list);
+    draw();
+    this.results.showCustom(host);
+    this.layout.setResults(true);
+    setTimeout(() => filter.focus(), 0);
   }
 
   async prepare(actionId, subjectOverride) {
     const a = this.byId[actionId];
     if (this.session.adapter.isComposing && this.session.adapter.isComposing()) { toast('Finish the character being composed first — the capture waits for it.'); return; }
     const subject = subjectOverride || this.subjectNow();
-    if (!subject.text || !subject.text.trim()) { toast('Nothing is written or selected yet.'); return; }
+    if (subject.kind !== 'concept' && (!subject.text || !subject.text.trim())) { toast('Nothing is written or selected yet.'); return; }
     const r = await postJSON('/api/actions/prepare', { action_id: actionId, subject, inputs: {} });
     if (!r.ok) {
-      this.results.showNotice(r.data.error || ('HTTP ' + r.status), r.data.choices ? r.data.choices.map(c => ({ label: c.label, onClick: () => this.prepare(c.id, subject) })) : []);
+      const choices = (r.data.choices || []).map(c => ({ label: c.label, onClick: () => this.prepare(c.id, subject) }));
+      if (a.subjects && a.subjects.includes('concept') && subject.kind !== 'concept') choices.push({ label: 'Choose a concept you keep', onClick: () => this.pickConcept(actionId) });
+      this.results.showNotice(r.data.error || ('HTTP ' + r.status), choices);
       this.layout.setResults(true);
       return;
     }

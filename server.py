@@ -1654,6 +1654,27 @@ def api_notebook_get(doc_id):
     return jsonify(d)
 
 
+@app.route("/api/notebook/documents/<doc_id>/export.docx")
+def api_notebook_export_docx(doc_id):
+    """The head as a Word document, built here from its structure (or its
+    plain body as paragraphs) — headings, lists, quotes, bold, italic,
+    links. The text is written exactly; nothing is sent anywhere."""
+    import docx_export
+    try:
+        d = nbk.get(doc_id)
+    except nbk.NotebookError as e:
+        return _nbk_error(e)
+    if d is None:
+        return jsonify({"error": "no document with that id"}), 404
+    try:
+        data = docx_export.docx_for_document(d)
+    except ValueError as e:
+        return jsonify({"error": f"the document's structure does not validate: {e}"}), 422
+    name = re.sub(r"[^\w\- ]+", "", (d.get("display_title") or "document"))[:60].strip() or "document"
+    return Response(data, mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    headers={"Content-Disposition": f'attachment; filename="{name}.docx"', "X-Document-Revision": str(d.get("revision"))})
+
+
 @app.route("/api/notebook/documents/<doc_id>", methods=["PUT"])
 def api_notebook_put(doc_id):
     """One save. The browser names the revision and fingerprint its copy was
@@ -3864,35 +3885,59 @@ def _execution_for_proposal(prepared: dict, a: dict, rd: dict, adapter: str) -> 
             "lane": lane.get("lane"), "model": lane.get("model"), "outbound": a.get("outbound")}
 
 
+def _investigation_result_ref(started: dict, art: dict | None) -> dict:
+    """What the row keeps of an investigation: the ids, the bytes kept (each
+    with its hash), the verification of the signed record — apart from the
+    live reply."""
+    art = art or {}
+    kept = [x for x in (started.get("reply_kept"), art.get("artifact"), art.get("receipt")) if isinstance(x, dict) and x.get("sha256")]
+    return {"upstream_id": started["upstream_id"], "object_id": started.get("object_id", ""), "reply_kept": started.get("reply_kept"),
+            "artifact": art.get("artifact"), "receipt": art.get("receipt"), "verification": art.get("verification") or "",
+            "artifact_outcome": art.get("outcome", ""), "kept": kept, "kind": started.get("kind", "start")}
+
+
 def _run_investigation(op_id: str, spec: dict) -> None:
-    """One POST at the boundary, then the signed artifact through the import
-    verifier; the operation's row says what the producer said, what was
-    imported and how it verified — apart from each other."""
+    """One POST at the boundary, then the producer's artifact and, where it
+    issues one, its signed record — kept byte for byte under the operation;
+    the operation's row says what the producer said, what was kept and how
+    the signed record verified — apart from each other. Delivery is kept
+    apart from outcome (producers.AdapterError)."""
     session_id = "nk_" + hashlib.sha256((op_id + _now_iso()).encode("utf-8")).hexdigest()[:16]
     try:
         with vault.corpus_write():
             try:
                 started = producers.start(op_id, spec, session_id)
             except producers.AdapterError as e:
-                # not sent → failed (nothing left); answered with an error → failed (a known refusal);
-                # unreachable → unknown (the request may have arrived; never sent again by itself)
-                ops.mark(op_id, "unknown" if e.outcome == "unknown" else "failed", last_error=str(e),
-                         local_state={"not_sent": "Not sent", "answered": "Refused by the producer", "unknown": "Sent; no answer came back"}[e.outcome],
-                         producer_state={"nothing_sent": e.nothing_sent, "outcome": e.outcome})
+                # not sent → failed (nothing left); delivered and refused (4xx) → failed (a known refusal);
+                # delivered and answered with an error (5xx, not JSON, oversized, a redirect) → UNKNOWN: whether the
+                # producer accepted or ran the work is not known; unreachable → unknown (the request may have arrived).
+                # Never sent again by itself in any of these.
+                status_word = "failed" if e.outcome in ("not_sent", "refused") else "unknown"
+                ops.mark(op_id, status_word, last_error=str(e),
+                         local_state={"not_sent": "Not sent", "refused": "Delivered; refused by the producer",
+                                      "error_after_delivery": "Delivered; the producer answered with an error — whether it ran is not known",
+                                      "unknown": "Sent; no answer came back"}.get(e.outcome, "Failed"),
+                         producer_state={"nothing_sent": e.nothing_sent, "outcome": e.outcome, "delivery": e.delivery})
                 return
-            ops.mark(op_id, "running", local_state="The producer answered; retrieving the signed export", producer_state=started.get("producer_state") or {},
-                     result_ref={"upstream_id": started["upstream_id"], "object_id": started.get("object_id", "")}, event_kind="note",
-                     detail={"reply_keys": started.get("reply_keys", []), "object_id": started.get("object_id", "")})
-            art = producers.retrieve(op_id, spec, started.get("object_id", ""))
-            dep = (art or {}).get("deposition") or {}
-            ref = {"upstream_id": started["upstream_id"], "object_id": started.get("object_id", ""), "deposition_id": art.get("deposition_id") or dep.get("deposition_id", ""),
-                   "verification": art.get("verification") or dep.get("verification", ""), "duplicate": bool(art.get("duplicate")),
-                   "artifact_outcome": (art or {}).get("outcome", "imported" if art.get("ok") else "failed")}
+            ops.mark(op_id, "running", local_state=("The producer answered; verifying the snapshot" if started.get("kind") == "snapshot" else
+                                                    "The producer answered; retrieving what it serves"),
+                     producer_state={**(started.get("producer_state") or {}), "outcome": "ok", "delivery": "delivered"},
+                     result_ref=_investigation_result_ref(started, None), event_kind="note",
+                     detail={"reply_keys": started.get("reply_keys", []), "object_id": started.get("object_id", ""), "reply_kept": started.get("reply_kept")})
+            art = producers.retrieve(op_id, spec, started.get("object_id", ""), reply=started.get("reply"))
+            ref = _investigation_result_ref(started, art)
+            ver = art.get("verification") if isinstance(art.get("verification"), dict) else {}
             if art.get("ok"):
-                ops.mark(op_id, "complete", local_state="Complete — the export is in custody" + (" (" + str(ref["verification"]) + ")" if ref["verification"] else "") + (" · already held (same bytes)" if ref["duplicate"] else ""), result_ref=ref)
+                if ver.get("ok"):
+                    word = "Complete — the signed record verified under the pinned key; the bytes are kept"
+                elif art.get("receipt") is None and started.get("kind") != "snapshot":
+                    word = "Complete — the producer's artifact is kept (unsigned); no signed record: " + str(ver.get("why") or "")[:160]
+                else:
+                    word = "Complete — kept; the signed record did NOT verify: " + str(ver.get("why") or "")[:160]
+                ops.mark(op_id, "complete", local_state=word, result_ref=ref)
             else:
-                # the start was answered; the artifact was not retrieved: kept as failed-with-evidence, recoverable by a read
-                ops.mark(op_id, "failed", last_error="the producer answered the start, but its export could not be retrieved or verified: " + str(art.get("outcome") or "") + " — " + str(art.get("detail") or ""),
+                # the start was delivered and answered; the artifact was not retrieved: failed-with-evidence, recoverable by a read
+                ops.mark(op_id, "failed", last_error="the producer answered the start, but its artifact could not be retrieved: " + str(art.get("outcome") or "") + " — " + str(art.get("detail") or ""),
                          local_state="Answered; artifact not retrieved", result_ref=ref)
     except Exception as e:  # noqa: BLE001
         traceback.print_exc()
@@ -4001,6 +4046,20 @@ def api_operations_start():
     adapter = "moira/v1" if a["handler"] == "moira" else ("adapter/" + ((rd.get("producer") or {}).get("adapter_version") or "0") if a["handler"] == "adapter" else "job/v1")
     execution = _execution_for_proposal(prepared, a, rd, adapter)
     kind = "reading" if a["handler"] == "moira" else ("investigation" if a["handler"] == "adapter" else "job")
+    spec = None
+    if a["handler"] == "adapter":
+        # slice F: the adapter validates the frozen subject locally BEFORE anything is reserved — a subject the
+        # producer's contract cannot take makes no operation; the spec rides in the execution so a recovery after
+        # a restart knows what to read again (the review of 6e5b59c: recovery had no spec to act on)
+        snap = snapshots.load(prepared["snapshot_id"]) if prepared.get("snapshot_id") else None
+        if snap is None or not snapshots.verify(snap):
+            return jsonify({"error": "the proposal's snapshot is missing or does not verify; prepare again", "nothing_was_sent": True}), 409
+        try:
+            spec = producers.prepare(a["provider"].split(":", 1)[1], snap.get("text") or "", prepared.get("inputs") or {},
+                                     kind=("snapshot" if a["id"].endswith(".snapshot") else "start"))
+        except producers.AdapterError as e:
+            return jsonify({"error": str(e), "nothing_was_sent": True}), e.status
+        execution["spec"] = {k: v for k, v in spec.items() if k != "readiness"}     # readiness is of the moment; the request is not
     # a repeat of a known key answers from the store before anything else is checked
     try:
         prior_row, created = ops.reserve(request_key=key, kind=kind,
@@ -4047,19 +4106,10 @@ def api_operations_start():
         return jsonify({"operation_id": op_id, "reading_id": rid, "kind": "reading", "status": "running",
                         "prepared_id": pid, "snapshot_id": prepared.get("snapshot_id")})
     if a["handler"] == "adapter":
-        # slice F: an investigation. The proposal froze the subject (a name, or a case id and handle);
-        # the adapter validates it locally, then one POST at the boundary, then the signed artifact
-        # through the import verifier — as an operation in the store like any other.
-        snap = snapshots.load(prepared["snapshot_id"]) if prepared.get("snapshot_id") else None
-        if snap is None or not snapshots.verify(snap):
-            ops.mark(op_id, "failed", last_error="the snapshot is missing or does not verify", local_state="Refused before dispatch")
-            return jsonify({"error": "the proposal's snapshot is missing or does not verify; prepare again", "nothing_was_sent": True}), 409
-        producer = a["provider"].split(":", 1)[1]
-        try:
-            spec = producers.prepare(producer, snap.get("text") or "", prepared.get("inputs") or {})
-        except producers.AdapterError as e:
-            ops.mark(op_id, "failed", last_error=str(e), local_state="Refused before dispatch")
-            return jsonify({"error": str(e), "nothing_was_sent": True}), e.status
+        # slice F: an investigation. The proposal froze the subject (a name; or a case id, a handle and a
+        # subject); the adapter validated it locally above, then one POST at the boundary, then what the
+        # producer serves, kept — as an operation in the store like any other.
+        producer = spec["producer"]
         if not _dispatching():
             return jsonify({"operation_id": op_id, "kind": "investigation", "status": "queued", "dispatched": False,
                             "note": "reserved, not dispatched: " + OPS_DISPATCHER.why, "prepared_id": pid, "snapshot_id": prepared.get("snapshot_id")})
@@ -4193,15 +4243,20 @@ def api_operation_recover(op_id):
             op = ops.get(op["op_id"])
         did = producers.recover(op)
         if did.get("recovered"):
-            dep = federation.get_deposition(did.get("deposition_id", "")) or {}
-            ops.mark(op["op_id"], "complete", local_state="Complete — the export is in custody (recovered)",
-                     result_ref={**(op.get("result_ref") or {}), "deposition_id": dep.get("deposition_id", ""), "verification": dep.get("verification", ""), "artifact_outcome": "imported"},
-                     event_kind="recover", detail={"did": did.get("did")})
+            res = did.get("result") or {}
+            ver = res.get("verification") if isinstance(res.get("verification"), dict) else {}
+            old = op.get("result_ref") or {}
+            started = {"upstream_id": old.get("upstream_id", ""), "object_id": old.get("object_id", ""), "reply_kept": old.get("reply_kept"), "kind": old.get("kind", "start")}
+            ops.mark(op["op_id"], "complete",
+                     local_state=("Complete — the signed record verified under the pinned key; the bytes are kept (recovered)" if ver.get("ok")
+                                  else "Complete — the artifact is kept (recovered); " + ("no signed record: " if res.get("receipt") is None else "the signed record did NOT verify: ") + str(ver.get("why") or "")[:160]),
+                     result_ref=_investigation_result_ref(started, res), event_kind="recover", detail={"did": did.get("did"), "sent": did.get("what")})
         else:
-            ops.event(op["op_id"], "recover", detail={"did": did.get("did"), "artifact": did.get("artifact")})
+            ops.event(op["op_id"], "recover", detail={"did": did.get("did"), "artifact": did.get("artifact"), "sent": did.get("what")})
         op = ops.get(op["op_id"])
-        return jsonify({"operation_id": op["op_id"], "status": op["status"], "recovery": _recovery_of(op), "investigation": producers.status(op), "sent": False,
-                        "note": did.get("did")})
+        # a recovery that READ the producer again says so: sent is true and `what` names the requests
+        return jsonify({"operation_id": op["op_id"], "status": op["status"], "recovery": _recovery_of(op), "investigation": producers.status(op),
+                        "sent": bool(did.get("sent")), "what": did.get("what") or [], "note": did.get("did")})
     rec = _recovery_of(op)
     with JOBS_LOCK:
         live = op["op_id"] in JOBS and (JOBS[op["op_id"]].get("status") not in ("complete", "failed"))
@@ -4300,6 +4355,7 @@ def api_producers():
     return jsonify({"producers": {k: {**{kk: vv for kk, vv in v.items() if kk != "subject"}, "subject": v.get("subject", ""),
                                       "readiness": {"lookup": producers.readiness(k, "lookup"), "start": producers.readiness(k, "start")}}
                                   for k, v in producers.ADAPTERS.items()},
+                    "package_contract": producers.PACKAGE_CONTRACT,
                     "population": "every producer this workspace knows an adapter for; readiness derived at this request"})
 
 
@@ -4331,6 +4387,21 @@ def api_work():
     except (workindex.IndexError_, ValueError) as e:
         return jsonify({"error": str(e)}), 400
     return jsonify(out)
+
+
+@app.route("/api/concepts")
+def api_concepts():
+    """The accepted concepts as a light list for a picker: identity, name,
+    definition, gloss — the shelf as ruled, nothing derived. A concept
+    subject needs its definition (a title alone is a handle), so the list
+    carries it whole."""
+    rows = []
+    for c in cli.load_accepted_concepts():
+        rows.append({"concept_id": c.get("concept_id", "") or "", "id": c.get("id", "") or "", "name": c.get("name", "") or c.get("title", "") or "",
+                     "definition": c.get("definition", "") or "", "plain_gloss": c.get("plain_gloss", "") or "", "accepted_at": c.get("accepted_at", "") or "",
+                     "alias_of": c.get("alias_of", "") or ""})
+    rows.sort(key=lambda r: r["name"].lower())
+    return jsonify({"concepts": rows, "count": len(rows), "population": "every accepted concept on the shelf, as ruled"})
 
 
 @app.route("/api/work/reindex", methods=["POST"])
@@ -6152,6 +6223,32 @@ def ops_startup_report() -> dict:
     return summary
 
 
+def startup_vault() -> dict:
+    """What a serving process does about backups at start — one place, so a
+    test can call it. Normal: seal at start (a thread), the scheduler, a seal
+    at shutdown. PREVIEW (WORDICON_PREVIEW=1, the review of 6e5b59c, finding
+    2): none of those, said out loud, whatever vault configuration the root
+    carries — a copied store names the owner's real destination and history."""
+    import atexit
+    if vault.preview_mode():
+        print("PREVIEW: backups are OFF in this process — nothing is sealed at start, on a timer or at shutdown, "
+              "nothing is pruned, nothing is drilled; the vault configuration in this root, if any, is not acted on.")
+        return {"preview": True, "started": False, "scheduler": False, "shutdown_seal": False}
+    _vst = vault.status()
+    if _vst["initialized"]:
+        print(f"Vault: {_vst['n_vaults']} vault(s), "
+              f"{_vst['total_bytes'] // 1024} KB at {vault.destination()}")
+        threading.Thread(target=lambda: vault.backup(reason="start"),
+                         daemon=True).start()
+    else:
+        print("Vault: NOT INITIALIZED — the corpus exists on this disk only. "
+              "Set up encrypted backups with: python3 scripts/vault.py init")
+    vault.start_scheduler()
+    atexit.register(lambda: bool(vault.load_config())
+                    and vault.backup(reason="shutdown", stage_timeout=10))
+    return {"preview": False, "started": bool(_vst["initialized"]), "scheduler": True, "shutdown_seal": True}
+
+
 if __name__ == "__main__":
     import sys as _sys
     if "--rotate-secret" in _sys.argv:
@@ -6223,19 +6320,7 @@ if __name__ == "__main__":
     print("Jobs run in the background: this Terminal window and your Mac need to "
           "stay open and awake for a submitted job to finish, even though the "
           "phone app itself can be closed.\n")
-    _vst = vault.status()
-    if _vst["initialized"]:
-        print(f"Vault: {_vst['n_vaults']} vault(s), "
-              f"{_vst['total_bytes'] // 1024} KB at {vault.destination()}")
-        threading.Thread(target=lambda: vault.backup(reason="start"),
-                         daemon=True).start()
-    else:
-        print("Vault: NOT INITIALIZED — the corpus exists on this disk only. "
-              "Set up encrypted backups with: python3 scripts/vault.py init")
-    vault.start_scheduler()
-    import atexit
-    atexit.register(lambda: bool(vault.load_config())
-                    and vault.backup(reason="shutdown", stage_timeout=10))
+    startup_vault()
     # threaded=True so a poll request (GET /api/jobs/<id>) isn't blocked behind
     # a job submission — the job itself already runs on its own thread, this
     # is just about the dev server being able to serve more than one request

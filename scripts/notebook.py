@@ -21,7 +21,11 @@ writers drained is consistent). Three tables:
 ``save_requests`` every save the server accepted, by the request id the
                   browser minted for it: a retry whose reply was lost gets
                   the SAME acknowledgement back, and a request id reused
-                  for different data is an error, not a second write.
+                  for different data — or, since the versioned request
+                  fingerprint, for the same data under a different
+                  checkpoint reason, base or origin — is an error, not a
+                  second write. Rows from before that column compare by
+                  content, as they always did.
 ``checkpoints``   a copy of the document at a revision, with the reason it
                   was taken (an explicit save, a new page, a timed interval,
                   a replacement about to happen). Never pruned here.
@@ -152,6 +156,14 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
                           ("fp_version", "INTEGER NOT NULL DEFAULT 1")):
             if col not in have:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    # the review of 6e5b59c: a repeat is the same REQUEST, not only the same
+    # content — the checkpoint reason, base, origin and the presence of
+    # structure are part of what was asked. Additive: a row written before
+    # this column has NULL and compares by content, as it always did.
+    have = {r[1] for r in conn.execute("PRAGMA table_info(save_requests)").fetchall()}
+    for col, decl in (("request_fp", "TEXT"), ("request_fp_version", "INTEGER")):
+        if col not in have:
+            conn.execute(f"ALTER TABLE save_requests ADD COLUMN {col} {decl}")
     conn.execute("UPDATE meta SET value = ? WHERE key = 'schema' AND CAST(value AS INTEGER) < ?",
                  (str(SCHEMA_VERSION), SCHEMA_VERSION))
     # The guard against a binary that does not know the structure: an older
@@ -190,6 +202,24 @@ def fingerprint(title: str, title_is_manual: bool, body: str) -> str:
     canon = json.dumps({"b": body, "m": bool(title_is_manual), "t": title},
                        ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return "fp_" + hashlib.sha256(canon.encode("utf-8")).hexdigest()[:32]
+
+
+REQUEST_FP_VERSION = 1
+
+
+def request_fingerprint(doc_id: str, content_fp: str, base_revision: int, base_fingerprint: str,
+                        checkpoint_reason: str | None, origin: str, structured: bool) -> str:
+    """What a save request ASKED, canonical: the document, the content
+    fingerprint (title, its manual flag, the exact body and, for a rich
+    document, the structure and its versions), the base it was made from,
+    the checkpoint reason it carried (or none), its origin and whether
+    structure was sent. Two requests under one id that differ in any of
+    these are two intents, and the second is refused — a retry carries the
+    same request. Versioned so a later form is never compared to this one."""
+    canon = json.dumps({"v": REQUEST_FP_VERSION, "d": doc_id, "fp": content_fp, "br": int(base_revision),
+                        "bf": base_fingerprint or "", "cr": checkpoint_reason, "o": origin or "", "s": bool(structured)},
+                       ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return f"rq{REQUEST_FP_VERSION}_" + hashlib.sha256(canon.encode("utf-8")).hexdigest()[:32]
 
 
 def auto_title(body: str) -> str:
@@ -453,6 +483,7 @@ def save(doc_id: str, *, title: str, title_is_manual: bool, body: str, base_revi
     # its versions; a plain document keeps the v1 form so nothing old is rehashed
     fp = ds.fingerprint_v2(title, title_is_manual, body, json.loads(doc_text), sch, proj) if doc_text is not None \
         else fingerprint(title, title_is_manual, body)
+    rq = request_fingerprint(doc_id, fp, base_revision, base_fingerprint, checkpoint_reason, origin, doc_text is not None)
     now = _now()
 
     conn = _connect()
@@ -464,12 +495,21 @@ def save(doc_id: str, *, title: str, title_is_manual: bool, body: str, base_revi
                 if prior["doc_id"] != doc_id or prior["fingerprint"] != fp:
                     raise NotebookError("this request id was already used for different data — "
                                         "a retry must carry the same payload", 400)
+                # the same content under the same id, but a different request: another
+                # checkpoint reason, base or origin (a row from before the request
+                # fingerprint existed has none and compares by content, as it did)
+                if prior["request_fp"] is not None and prior["request_fp"] != rq:
+                    raise NotebookError("this request id was already used for a different request — the same words, "
+                                        "but another checkpoint reason, base or origin; a retry must carry the same "
+                                        "request, and a new intent gets a new request id", 400,
+                                        error_class="request_intent_differs")
                 head = conn.execute("SELECT * FROM documents WHERE doc_id = ?", (doc_id,)).fetchone()
                 conn.execute("COMMIT")
                 return {"doc_id": doc_id, "request_id": request_id, "revision": int(prior["revision"]),
                         "fingerprint": prior["fingerprint"], "saved_at": prior["saved_at"],
                         "created": False, "repeated": True, "checkpoint": None,
-                        "head_revision": int(head["revision"]) if head else None}
+                        "head_revision": int(head["revision"]) if head else None,
+                        "request_fp_version": prior["request_fp_version"]}
             head = conn.execute("SELECT * FROM documents WHERE doc_id = ?", (doc_id,)).fetchone()
             checkpoint = None
             events = []
@@ -512,8 +552,8 @@ def save(doc_id: str, *, title: str, title_is_manual: bool, body: str, base_revi
                         "WHERE doc_id = ?",
                         (title, int(title_is_manual), body, revision, fp, now, doc_text, sch, proj, fpv, doc_id))
             conn.execute(
-                "INSERT INTO save_requests (request_id, doc_id, fingerprint, revision, saved_at) "
-                "VALUES (?, ?, ?, ?, ?)", (request_id, doc_id, fp, revision, now))
+                "INSERT INTO save_requests (request_id, doc_id, fingerprint, revision, saved_at, request_fp, request_fp_version) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)", (request_id, doc_id, fp, revision, now, rq, REQUEST_FP_VERSION))
             if checkpoint_reason is not None:
                 row = conn.execute("SELECT * FROM documents WHERE doc_id = ?", (doc_id,)).fetchone()
                 checkpoint = _insert_checkpoint(conn, row, checkpoint_reason, now)
@@ -527,7 +567,8 @@ def save(doc_id: str, *, title: str, title_is_manual: bool, body: str, base_revi
             raise
         return {"doc_id": doc_id, "request_id": request_id, "revision": revision, "fingerprint": fp,
                 "saved_at": now, "created": created, "repeated": False, "checkpoint": checkpoint,
-                "head_revision": revision, "rich": doc_text is not None, "fp_version": fpv, "events": events}
+                "head_revision": revision, "rich": doc_text is not None, "fp_version": fpv, "events": events,
+                "request_fp_version": REQUEST_FP_VERSION}
     finally:
         conn.close()
 

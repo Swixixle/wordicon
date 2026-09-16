@@ -46,6 +46,7 @@ a { color: var(--accent); }
 .chip { font-size: 11px; border: 1px solid var(--line); border-radius: 10px; padding: 1px 8px; color: var(--write-panel-ink); white-space: nowrap; }
 .chip.count { border-color: var(--accent); color: var(--accent); }
 .chip.good { border-color: var(--good); color: var(--good); }
+.chip.warn { border-color: var(--bad); color: var(--bad); }
 .chip.bad { border-color: var(--bad); color: var(--bad); }
 .card { border: 1px solid var(--line); background: var(--write-panel); border-radius: 4px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .linkish { background: none; border: 0; color: var(--write-panel-ink); cursor: pointer; padding: 0; font-size: 13px; }
@@ -221,3 +222,8 @@ details > summary { cursor: pointer; color: var(--write-panel-ink); font-size: 1
 @media (max-width: 520px) {
   .header-right { flex-basis: 100%; justify-content: flex-end; margin-left: 0; }
 }
+
+/* the concept picker (a subject chosen from the shelf, never guessed from the draft) */
+.concept-list { display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow: auto; margin-top: 8px; }
+.concept-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.concept-row .btn { flex-shrink: 0; }

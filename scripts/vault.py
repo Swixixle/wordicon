@@ -74,6 +74,18 @@ def local_state() -> pathlib.Path:
     return pathlib.Path(cli.LOCAL_STATE)
 
 
+def preview_mode() -> bool:
+    """workspace-v2 correction (the review of 6e5b59c, finding 2). A PREVIEW
+    process — WORDICON_PREVIEW=1 — never seals, schedules, prunes or drills,
+    whatever this root's vault configuration says. A store copied for a
+    preview carries the owner's vault/config.json (a destination outside the
+    root: the real backups) and vault/vault.jsonl (the history that arms
+    retention); a directory override alone would leave this process able to
+    write into that destination and to prune it. The switch is read per
+    call, so a test can prove both sides of it."""
+    return os.environ.get("WORDICON_PREVIEW", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 def vault_conf_dir() -> pathlib.Path:
     return local_state() / "vault"
 
@@ -569,6 +581,11 @@ def _sha(b: bytes) -> str:
 # backup: stage under the exclusive lock, manifest, seal, VERIFY, rename
 
 def backup(reason: str = "manual", stage_timeout: float = 0) -> str:
+    if preview_mode():
+        # nothing sealed, nothing logged into the copied history, nothing said
+        # as a failure: the preview has no backups by design, and says so once
+        _LAST_FAILURE["msg"] = ""
+        return ""
     cfg = load_config()
     if not cfg:
         _LAST_FAILURE["msg"] = ("vault not initialized — run "
@@ -776,6 +793,8 @@ def drill(identity_str: str, blob: str = "", off_device: bool = False) -> dict:
     vault's own manifest — the live corpus may legitimately have moved on
     and is reported only as context. Runs the verification in a child
     process with external egress poisoned and scratch state."""
+    if preview_mode():
+        raise RuntimeError("a preview does not drill: it holds no vaults of its own and must not touch the ones its copied configuration names")
     target = pathlib.Path(blob) if blob else newest_vault()
     if not target or not target.exists():
         raise RuntimeError("no vault to drill")
@@ -932,6 +951,8 @@ def prune() -> "list[str]":
     pre-disaster vaults, or anything else this machine did not seal) is
     never pruned at all. After a disaster, that means the old vaults are
     untouchable until the owner's verified history exists again."""
+    if preview_mode():
+        return []           # a preview never touches the destination its copied configuration names
     rows = _log_rows()
     if not any(r.get("type") == "drilled" for r in rows):
         return []           # never prune before one vault has passed a drill
@@ -983,6 +1004,13 @@ def prune() -> "list[str]":
 # status — three cloud states, ages, and staleness that turns red by itself
 
 def status() -> dict:
+    if preview_mode():
+        # said plainly, and without reading the destination the copied
+        # configuration names: this process backs nothing up
+        return {"initialized": bool(load_config()), "preview": True,
+                "last_seal_at": "", "last_seal_verification": "", "last_drill_at": "", "last_drill_vault": "",
+                "cloud": "preview — backups are off in this process", "n_vaults": 0, "total_bytes": 0,
+                "dirty_seconds": 0, "stale_red": False, "failure": ""}
     rows = _log_rows()
     sealed = [r for r in rows if r.get("type") == "sealed"]
     drilled = [r for r in rows if r.get("type") == "drilled"]
@@ -999,7 +1027,7 @@ def status() -> dict:
         cloud = "sealed locally — cloud synchronization unverified"
     dirty_for = (time.monotonic() - _DIRTY["since"]) if _DIRTY["since"] else 0
     stale = bool(_DIRTY["since"]) and dirty_for > CEILING_SECONDS
-    return {"initialized": bool(load_config()),
+    return {"initialized": bool(load_config()), "preview": False,
             "last_seal_at": (last_seal or {}).get("at", ""),
             # a seal's verification is payload-only, and says so; drill
             # rows are the only carriers of owner-recovery verification
@@ -1019,6 +1047,8 @@ def status() -> dict:
 # the scheduler: quiet-debounce + the staleness ceiling
 
 def start_scheduler():
+    if preview_mode():
+        return              # a preview seals nothing on a timer either
     def loop():
         while True:
             time.sleep(30)

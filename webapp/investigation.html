@@ -163,7 +163,7 @@ function renderConnectors() {
     <div class="item" data-connector="${esc(c.connector_id)}">
       <span class="tag ${esc(c.producer)}">${esc((STATE.producers[c.producer] || {}).display || c.producer)}</span>
       <strong>${esc(c.display)}</strong> <code>${esc(c.connector_id)}</code> · ${c.enabled ? '<span class="ok">enabled</span>' : '<span class="warn">disabled</span>'}
-      <div class="foot">origin <code>${esc(c.origin)}</code>${c.dev_loopback ? ' · development loopback' : ''} · capabilities: read-only (locate, import, verify); mutating: none</div>
+      <div class="foot">origin <code>${esc(c.origin)}</code>${c.dev_loopback ? ' · development loopback' : ''} · capabilities: read-only (locate, import, verify); mutating: none${c.package_export_served_by ? ' · <span class="warn">the signed package route is served by ' + esc(c.package_export_served_by) + ' — an import from a deployment of main lands as a named 404</span>' : ''}</div>
       <div class="foot">status: <span class="${c.last_attempt && c.last_attempt.ok ? 'ok' : (c.last_attempt ? 'bad' : 'muted')}">${esc(c.status)}</span>${c.last_attempt ? ' · last attempt ' + esc(c.last_attempt.recorded_at) + ' (' + esc(c.last_attempt.outcome) + ')' : ''}${c.last_success_at ? ' · last reachable ' + esc(c.last_success_at) : ''}</div>
       <div class="foot">credential: ${c.credential_ref ? '<code>' + esc(c.credential_ref) + '</code> ' + (c.credential_configured ? '<span class="ok">set in the server environment</span>' : '<span class="warn">NOT set in the server environment</span>') : 'none (this producer needs none)'} · depositions ${c.depositions}${c.latest_deposition ? ' · latest <code>' + esc(c.latest_deposition) + '</code>' : ''}</div>
       <div class="foot">trusted keys: ${(c.trusted_keys || []).length ? c.trusted_keys.map(k => '<code>' + esc(short(k.key_id, 36)) + '</code> ' + esc(k.label || '') + ' <button class="quiet" onclick="unpinKey(\'' + esc(c.connector_id) + '\',\'' + esc(k.key_id) + '\')">unpin</button>').join(' ') : '<span class="warn">none pinned — nothing from this instrument can verify until you pin its public key</span>'}</div>
@@ -220,7 +220,7 @@ async function locateObjects() {
   note.textContent = `${r.d.count} object(s) in the producer's own list${q ? ' matching "' + q + '"' : ''} — nothing imported`; note.className = 'foot';
   out.innerHTML = (r.d.items || []).slice(0, 40).map(it => {
     const id = it.id || it.brand_slug || it.slug || '';
-    const label = it.title || it.brand_name || it.name || id;
+    const label = it.title || it.brand_name || it.display_name || it.name || id;   // Open Case's cases[] carry title; EthicalAlt's index (main) display_name
     return `<div class="item"><strong>${esc(label)}</strong> <code>${esc(id)}</code>${it.sealed === false ? ' <span class="warn">unsealed</span>' : ''}${it.self_contained === false ? ' <span class="warn">legacy seal</span>' : ''} <button class="quiet" onclick="document.getElementById('imp-object').value='${esc(id)}'; importObject()">Import</button></div>`;
   }).join('') || '<div class="foot">nothing listed</div>';
 }

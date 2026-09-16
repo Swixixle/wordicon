@@ -11224,6 +11224,13 @@ function vaultAge(iso) {
 function vaultStripState(v) {
   if (!v) return {red: true, quiet: false, hidden: false,
                   text: 'Vault status UNREACHABLE — backups may not be running'};
+  if (v.preview) {
+    // a preview process (WORDICON_PREVIEW=1) backs nothing up, by design, and
+    // the strip says so in red for as long as it runs — this is state, not
+    // explanation, so it never goes quiet
+    return {red: true, quiet: false, hidden: false,
+            text: 'PREVIEW — backups are OFF in this process: nothing is sealed, scheduled, pruned or drilled here'};
+  }
   if (!v.initialized) {
     return {red: true, quiet: false, hidden: false,
             text: 'No vault — the corpus exists on this disk only. '
@@ -11248,6 +11255,10 @@ async function loadVaultStrip() {
   try {
     const v = await (await fetch('/api/vault/status')).json();
     el.style.color = 'var(--muted)';
+    if (v.preview) {
+      const st = vaultStripState(v);
+      el.textContent = st.text; red(); setQuiet(false, el.textContent); return;
+    }
     if (!v.initialized) {
       el.textContent = 'No vault — the corpus exists on this disk only. '
         + 'Set up encrypted backups: python scripts/vault.py init';

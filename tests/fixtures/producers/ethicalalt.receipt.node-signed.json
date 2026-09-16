@@ -1,0 +1,44 @@
+{
+ "receipt_id": "7d3c1f2e-5a4b-4c6d-8e9f-0a1b2c3d4e5f",
+ "signed_receipt": {
+  "receipt_id": "7d3c1f2e-5a4b-4c6d-8e9f-0a1b2c3d4e5f",
+  "subject": {
+   "brand_name": "Exemplar Holdings",
+   "brand_slug": "exemplar-holdings",
+   "ultimate_parent": "Exemplar Holdings"
+  },
+  "investigated_at": "2026-09-01T10:00:00.000Z",
+  "generated_at": "2026-09-16T09:00:00.000Z",
+  "incident_count": 4,
+  "category_summary": [
+   {
+    "category": "labor",
+    "count": 2,
+    "overflow": 0
+   },
+   {
+    "category": "environment",
+    "count": 2,
+    "overflow": 1
+   }
+  ],
+  "source_urls": [
+   "https://example.org/exemplar/labor-2025",
+   "https://example.org/exemplar/spill-2024"
+  ],
+  "source_count": 2,
+  "incidents_hash": "4a5b6c7d8e9f00112233445566778899aabbccddeeff00112233445566778899",
+  "data_source": "deep_research+database",
+  "last_deep_researched": "2026-09-01T10:00:00.000Z",
+  "disclaimer": "This receipt documents public records and credible reporting. It is not a legal finding. Sources are linked directly and independently verifiable.",
+  "methodology_url": "https://ethicalalt-client.onrender.com/methodology",
+  "issuer": "EthicalAlt / Nikodemus Systems",
+  "schema_version": "1.0",
+  "overall_concern_level": "significant",
+  "investigation_id": "op_node_signed_fixture"
+ },
+ "signature": "ed25519:W5ryJPhCbnSZxaMI2sCe947ybmHr2DNJ5IZuycICD4GIE42OKXXWMRmb7eGqmWq-NRuUWD7a4JcZIisx1axvDA",
+ "public_key": "MCowBQYDK2VwAyEAxojI-QeyVFZIje46OqEQ8z_f-RhnAh_U666ck_OhTFI",
+ "verify_url": "https://ethicalalt-client.onrender.com/verify/7d3c1f2e-5a4b-4c6d-8e9f-0a1b2c3d4e5f",
+ "cached": false
+}

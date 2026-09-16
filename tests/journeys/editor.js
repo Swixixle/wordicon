@@ -40,6 +40,7 @@ const NAME = 'editor-' + ENGINE;
 
   await page.goto(BASE + '/work');
   await page.waitForSelector('.pm-editor');
+  await page.waitForFunction(() => !!(window.__work && window.__work.session), null, { timeout: 10000, polling: 100 });
   await page.waitForTimeout(500);
   ok(errs.length === 0, 'no page errors on /work: ' + JSON.stringify(errs));
 
@@ -398,6 +399,7 @@ const NAME = 'editor-' + ENGINE;
   page2.on('pageerror', e => errs.push('tab two: ' + String(e.message)));
   await page2.goto(BASE + '/work');
   await page2.waitForSelector('.pm-editor');
+  await page2.waitForFunction(() => !!(window.__work && window.__work.session && window.__work.session.id), null, { timeout: 10000, polling: 100 });
   await page2.evaluate(id => window.__work.session.open(id), id17);
   await page2.waitForTimeout(300);
   ok((await page2.evaluate(() => window.__work.session.tab)) !== (await page.evaluate(() => window.__work.session.tab)), 'the second tab has its own tab id, so the two envelopes never overwrite each other');
@@ -463,6 +465,7 @@ const NAME = 'editor-' + ENGINE;
   page19.on('pageerror', e => errs19.push(String(e.message)));
   await page19.goto(BASE + '/work');
   await page19.waitForSelector('.pm-editor');
+  await page19.waitForFunction(() => !!(window.__work && window.__work.session), null, { timeout: 10000, polling: 100 });
   await page19.evaluate(() => window.__work.session.newDocument(''));      // a fresh context reopens the record's latest document otherwise
   await page19.waitForTimeout(150);
   await page19.click('.pm-editor');
@@ -480,6 +483,93 @@ const NAME = 'editor-' + ENGINE;
   ok(/refused to keep a copy/.test(meta19b) && !/Saved locally/.test(meta19b) && d19b.body === 'Nowhere but here', 'with the server gone as well, the room says the words are not on the server and this browser kept no copy — never "saved locally" — and the last complete copy stands on the server: ' + JSON.stringify(meta19b) + ' · server: ' + JSON.stringify(d19b.body));
   ok(errs19.length === 0, 'no page errors with storage unavailable: ' + JSON.stringify(errs19));
   await ctx19.close();
+
+  // ---- the review of 6e5b59c, finding 1: a save the server COMMITTED whose reply never reached the browser ----
+  // The request goes through to the server; the response is cut before the client sees it (route.fetch, then
+  // abort). Words typed after that, and formatting, must survive a reload in the same tab and an opening in a
+  // fresh tab; when the head moved on after the committed save, both versions are kept and nothing is combined.
+  const cutReply = (id, n = 1) => { let left = n; return page.route(docUrl(id), async route => { if (route.request().method() === 'PUT' && left > 0) { left -= 1; await route.fetch(); await route.abort('failed'); } else { await route.continue(); } }); };
+  const stopRetry = () => page.evaluate(() => { const s = window.__work.session; if (s.retryTimer) clearTimeout(s.retryTimer); s.retryTimer = null; if (s.timer) clearTimeout(s.timer); s.timer = null; });
+  const envelopesOf = id => page.evaluate(async id => { const r = await import('/work/recovery.js'); return (await r.forDocument(id)).map(e => ({ tab: e.tab_id, base: e.base_revision, seq: e.seq, ack: e.ack_seq, body: e.body, pending: !!e.pending, abandoned: !!e.abandoned })); }, id);
+
+  // 20. same tab: the committed save's reply is lost, more words follow, the page reloads
+  await fresh();
+  await page.keyboard.type('Saved alpha');
+  await settledOn();
+  const id20 = (await sess()).id;
+  const rev20 = (await sess()).revision;
+  await cutReply(id20);
+  await page.keyboard.type(' committed');
+  await page.waitForFunction(() => window.__work.session.status === 'local', null, { timeout: 8000, polling: 50 });
+  const srv20 = await getDoc(id20);
+  ok(srv20.revision === rev20 + 1 && srv20.body === 'Saved alpha committed', 'the server committed the save whose reply was cut (revision ' + srv20.revision + ')');
+  await page.keyboard.type(' UNSENT BETA');
+  await page.waitForTimeout(250);
+  await stopRetry();
+  const env20 = (await envelopesOf(id20)).find(e => !e.abandoned);
+  ok(env20 && env20.base === rev20 && env20.pending && env20.seq > env20.ack && /UNSENT BETA$/.test(env20.body), 'before the reload the envelope is based on the old revision, still names the request it sent, and holds the later words');
+  await page.unroute(docUrl(id20));
+  await page.reload(); await page.waitForSelector('.pm-editor'); await page.waitForTimeout(800);
+  const settledOrConflict = p => p.waitForFunction(() => { const s = window.__work.session; return s.status === 'conflict' || (!s.inflight && s.seq === s.ackSeq && s.status === 'saved'); }, null, { timeout: 15000, polling: 100 }).catch(() => {});
+  await settledOrConflict(page);
+  const after20 = await sess();
+  ok(after20.id === id20 && (await text()) === 'Saved alpha committed UNSENT BETA' && after20.recovered === true && after20.status === 'saved', 'after the reload every later word is in the editor: the sent request was resent under its own id, answered as already committed, the envelope rebased onto that revision, and the rest recovered (status ' + after20.status + ')');
+  const srv20b = await getDoc(id20);
+  ok(srv20b.body === 'Saved alpha committed UNSENT BETA' && srv20b.revision === rev20 + 2, 'and saved as the next revision — no duplicate, nothing combined by guesswork');
+
+  // 21. formatting only after the cut reply, opened in a FRESH tab: the other tab's envelope is reconciled and then marked taken
+  await fresh();
+  await page.keyboard.type('Bold later');
+  await settledOn();
+  const id21 = (await sess()).id;
+  const rev21 = (await sess()).revision;
+  await cutReply(id21);
+  await page.keyboard.type(' words');
+  await page.waitForFunction(() => window.__work.session.status === 'local', null, { timeout: 8000, polling: 50 });
+  await select(0, 4); await page.keyboard.press('ControlOrMeta+b');        // a formatting-only edit after the committed save
+  await page.waitForTimeout(250);
+  await stopRetry();
+  await page.unroute(docUrl(id21));
+  const tab2 = await ctx.newPage();
+  tab2.on('pageerror', e => errs.push('tab two (21): ' + String(e.message)));
+  await tab2.goto(BASE + '/work'); await tab2.waitForSelector('.pm-editor');
+  await tab2.waitForFunction(() => !!(window.__work && window.__work.session && window.__work.session.id), null, { timeout: 10000, polling: 100 });
+  await tab2.evaluate(id => window.__work.session.open(id), id21);
+  await settledOrConflict(tab2);
+  const st21 = await tab2.evaluate(() => JSON.stringify(window.__work.editor.getStructure()));
+  ok((await tab2.evaluate(() => window.__work.editor.getText())) === 'Bold later words' && st21.includes('"strong"') && (await tab2.evaluate(() => window.__work.session.recovered)) === true, 'a fresh tab reconciles the first tab’s envelope (the committed words acknowledged, the bold recovered) and saves it');
+  const srv21 = await getDoc(id21);
+  ok(srv21.revision === rev21 + 2 && srv21.rich && JSON.stringify(srv21.doc_json).includes('"strong"'), 'the head carries the formatting as the next revision');
+  const envs21 = await envelopesOf(id21);
+  ok(envs21.some(e => e.abandoned) && !envs21.some(e => !e.abandoned && e.base !== srv21.revision && e.seq > e.ack), 'the first tab’s envelope is marked taken, so it will not be offered again');
+  await tab2.close();
+
+  // 22. the committed save's reply is lost AND the head moved on afterwards: both versions are kept, nothing combined
+  await fresh();
+  await page.keyboard.type('Ours first');
+  await settledOn();
+  const id22 = (await sess()).id;
+  const rev22 = (await sess()).revision;
+  await cutReply(id22);
+  await page.keyboard.type(' committed');
+  await page.waitForFunction(() => window.__work.session.status === 'local', null, { timeout: 8000, polling: 50 });
+  await page.keyboard.type(' then more');
+  await page.waitForTimeout(250);
+  await stopRetry();
+  await page.unroute(docUrl(id22));
+  const head22 = await getDoc(id22);                                   // revision rev22+1, 'Ours first committed'
+  const body22 = head22.body + ' — elsewhere';
+  const other22 = await put(id22, { title: '', title_is_manual: false, body: body22, base_revision: head22.revision, base_fingerprint: head22.fingerprint, request_id: 'req_elsewhere_22_' + Date.now(),
+    doc_json: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: body22 }] }] }, doc_schema: 1, projection_version: 1 });   // the head is structured, so the other writer is a structured client too
+  ok(other22.status === 200 && other22.data.revision === rev22 + 2, 'another writer moved the head on after the committed save');
+  await page.reload(); await page.waitForSelector('.pm-editor'); await page.waitForTimeout(1200);
+  const c22 = await sess();
+  ok(c22.status === 'conflict' && (await text()) === 'Ours first committed then more' && /does not descend|do not descend|Nothing was overwritten and nothing was combined/.test(await page.textContent('#results-body')), 'the words typed after the committed save are in the editor, the head is untouched, and the room says both are kept: ' + JSON.stringify((await page.textContent('#doc-meta')).slice(0, 80)));
+  ok((await getDoc(id22)).body === 'Ours first committed — elsewhere', 'the other writer’s head stands');
+  await page.click('#results-body button:has-text("Keep mine as a new document")');
+  await settledOn();
+  const kept22 = (await sess()).id;
+  ok(kept22 !== id22 && (await getDoc(kept22)).body === 'Ours first committed then more' && (await getDoc(id22)).body === 'Ours first committed — elsewhere', 'Keep mine as a new document: both versions are on the server under their own ids');
 
   ok(errs.length === 0, 'no page errors across the editor journey: ' + JSON.stringify(errs));
   await browser.close();
