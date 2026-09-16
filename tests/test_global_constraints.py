@@ -4,11 +4,27 @@
 import re
 import re as _re
 import contextlib as _contextlib
+import os as _os_tm
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+
+# workspace-v2 slice A: the suite is a test process, said before the first
+# application import. Report 79 found this file making real Anthropic calls
+# on the owner's Mac because the server picked the live gateway whenever
+# ANTHROPIC_API_KEY was set. With the switch on, wordicon_cli installs the
+# socket guard, reads no .env, refuses to construct a provider, and the
+# server answers the mock whatever the environment holds — proven below by
+# _check_test_mode_fails_closed with a sentinel key present.
+_os_tm.environ["WORDICON_TEST_MODE"] = "1"
+import tempfile as _tempfile_tm
+_SCRATCH_TM = Path(_tempfile_tm.mkdtemp(prefix="wordicon_test_state_"))
+_os_tm.environ["WORDICON_STATE"] = str(_SCRATCH_TM)
+_os_tm.environ.setdefault("WORDICON_TEST_EGRESS_LOG", str(_SCRATCH_TM / "egress_denied.jsonl"))
+import testmode  # noqa: E402
 import wordicon_cli as cli  # noqa: E402
+import state_root  # noqa: E402
 
 # ---- the suite does not get to write in the owner's corpus ---------------
 #
@@ -27,7 +43,7 @@ import wordicon_cli as cli  # noqa: E402
 import shutil as _shutil
 import tempfile as _tempfile
 
-_SCRATCH = Path(_tempfile.mkdtemp(prefix="wordicon_test_state_"))
+_SCRATCH = _SCRATCH_TM
 _REAL_STATE = cli.LOCAL_STATE
 _REDIRECTED = {
     "LOCAL_STATE": _SCRATCH,
@@ -53,6 +69,10 @@ _REDIRECTED = {
 }
 for _name, _path in _REDIRECTED.items():
     setattr(cli, _name, _path)
+# slice A: and everything the list above does not name — every Path in every
+# scripts module that points under the real store is rebased by where it
+# points, not by its name (scripts/state_root.py).
+_REBASED = state_root.apply(_SCRATCH)
 _SCRATCH.mkdir(exist_ok=True)
 (_SCRATCH / "receipts").mkdir(exist_ok=True)
 (_SCRATCH / "results").mkdir(exist_ok=True)
@@ -5207,6 +5227,107 @@ def _check_carry_back():
     return out
 
 
+def _check_test_mode_fails_closed(server):
+    """Slice A. Three independent refusals, each proven with the thing it
+    refuses actually attempted: (1) a direct socket to a public address and
+    a name lookup are refused by the guard and logged without secrets;
+    (2) with a SENTINEL key and model in the environment, server_gateway()
+    still answers the mock and make_gateway('anthropic') refuses;
+    (3) notify stays off with sentinel mail credentials set; (4) the suite
+    is not on the repository's own store, and the server resolved the same
+    root the suite did. A check that cannot run is a failure here, not a
+    skip: this is the guard the rest of the suite stands on."""
+    import socket as _sk
+    out = []
+    st = testmode.status()
+    if not (st["active"] and st["installed"]):
+        return [f"TESTMODE: not active/installed in the suite process: {st}"]
+    # 1. the guard
+    before = len(testmode.denied())
+    try:
+        _sk.create_connection(("1.1.1.1", 443), timeout=2)
+        out.append("TESTMODE: a direct connection to 1.1.1.1:443 was NOT refused")
+    except testmode.EgressDenied:
+        pass
+    except OSError as e:
+        out.append(f"TESTMODE: the direct connection failed for the wrong reason ({type(e).__name__}: {e}) — "
+                   "the guard did not refuse it")
+    try:
+        _sk.getaddrinfo("api.anthropic.com", 443)
+        out.append("TESTMODE: resolving api.anthropic.com was NOT refused")
+    except testmode.EgressDenied:
+        pass
+    except OSError as e:
+        out.append(f"TESTMODE: the lookup failed for the wrong reason ({type(e).__name__}: {e})")
+    try:
+        _sk.create_connection(("127.0.0.1", testmode.DEFAULT_REAL_APP_PORT), timeout=2)
+        out.append("TESTMODE: a connection to the real application's port was NOT refused")
+    except testmode.EgressDenied:
+        pass
+    except OSError as e:
+        out.append(f"TESTMODE: the real-port connection failed for the wrong reason ({type(e).__name__}: {e})")
+    recs = testmode.denied()[before:]
+    if len(recs) < 3:
+        out.append(f"TESTMODE: expected three refusals recorded, saw {len(recs)}")
+    else:
+        hosts = {r["host"] for r in recs}
+        if "1.1.1.1" not in hosts or "api.anthropic.com" not in hosts:
+            out.append(f"TESTMODE: the refusals do not name what was refused: {sorted(hosts)}")
+        for r in recs:
+            blob = str(r)
+            if "sk-" in blob or "Authorization" in blob:
+                out.append("TESTMODE: a refusal record carries something that looks like a secret")
+        if not all(r.get("where") for r in recs):
+            out.append("TESTMODE: a refusal record has no calling frames")
+    logp = Path(st["log"])
+    if not logp.exists() or "1.1.1.1" not in logp.read_text(encoding="utf-8"):
+        out.append(f"TESTMODE: the refusal log {logp} does not carry the refused host")
+    # 2. the sentinel key changes nothing
+    import os as _os
+    saved = {k: _os.environ.get(k) for k in ("ANTHROPIC_API_KEY", "WORDICON_MODEL")}
+    try:
+        _os.environ["ANTHROPIC_API_KEY"] = "sk-ant-test-sentinel-not-a-key"
+        _os.environ["WORDICON_MODEL"] = "claude-test-sentinel"
+        gw = server.server_gateway()
+        if gw.is_external or gw.name != "mock":
+            out.append(f"TESTMODE: with a sentinel key set, server_gateway() answered {gw.name!r} (external={gw.is_external})")
+        # a provider gateway built directly in a test process cannot send:
+        # its transport refuses, and the refusal is recorded like a socket's
+        pg = cli.make_gateway("anthropic", "claude-test-sentinel")
+        n0 = len(testmode.denied())
+        try:
+            pg.client.messages.create(model="claude-test-sentinel", max_tokens=5,
+                                      messages=[{"role": "user", "content": "canary"}])
+            out.append("TESTMODE: a provider gateway built in a test process SENT a request")
+        except Exception as e:  # noqa: BLE001 — the SDK wraps the refusal; what matters is that it was refused
+            recs = testmode.denied()[n0:]
+            if not recs or not any(r.get("kind") == "http" for r in recs):
+                out.append(f"TESTMODE: the provider call failed ({type(e).__name__}) but no http refusal was recorded")
+        # 3. notifications
+        _os.environ["WORDICON_NOTIFY_EMAIL_FROM"] = "sentinel@example.invalid"
+        _os.environ["WORDICON_NOTIFY_EMAIL_APP_PASSWORD"] = "sentinel-not-a-password"
+        import notify as _notify
+        if _notify._configured():
+            out.append("TESTMODE: notify reports itself configured in a test process")
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                _os.environ.pop(k, None)
+            else:
+                _os.environ[k] = v
+        _os.environ.pop("WORDICON_NOTIFY_EMAIL_FROM", None)
+        _os.environ.pop("WORDICON_NOTIFY_EMAIL_APP_PASSWORD", None)
+    # 4. the data root
+    if state_root.is_repository_store(cli.LOCAL_STATE):
+        out.append("TESTMODE: the suite is running on the repository's own local_state")
+    if Path(server.STATE_ROOT).resolve() != Path(cli.LOCAL_STATE).resolve():
+        out.append(f"TESTMODE: the server resolved {server.STATE_ROOT} but the suite writes to {cli.LOCAL_STATE}")
+    stray = [k for k, v in _REBASED.items() if not str(v).startswith(str(_SCRATCH))]
+    if stray:
+        out.append(f"TESTMODE: rebased paths outside the scratch root: {stray[:5]}")
+    return out
+
+
 def main() -> int:
     failures = FAILURES
     # block 113, hoisted: pure checks on a pure function, before anything
@@ -5343,6 +5464,7 @@ def main() -> int:
     shaped = server._shape_operation_result("decompose", gw.name, result)
     if shaped.get("global_constraints") != gc:
         failures.append("server did not pass global_constraints through")
+    failures.extend(_check_test_mode_fails_closed(server))
     failures.extend(_check_map_focus_routes(server, _paired))
     failures.extend(_check_moira_routes(server, _paired))
     failures.extend(_check_notebook_b(server, _paired))
@@ -20652,6 +20774,7 @@ console.log(out.join('\\n'));
             return self._send(404, b'{"detail":"not found"}')
     _srv107 = _hs107.ThreadingHTTPServer(("127.0.0.1", 0), _Producer107)
     _port107 = _srv107.server_address[1]
+    testmode.allow_port(_port107)   # slice A: the one loopback fixture this check may reach
     _thr107.Thread(target=_srv107.serve_forever, daemon=True).start()
     _base107 = f"http://127.0.0.1:{_port107}"
     _os107.environ["NIK_TEST_OPEN_CASE_KEY"] = "open_case_" + "7" * 64     # a credential-shaped value, present only in the environment

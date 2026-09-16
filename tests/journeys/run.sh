@@ -16,6 +16,12 @@ export JOURNEY_OUT="${JOURNEY_OUT:-$JOURNEY_DIR/out}"
 export JOURNEY_PORT="${JOURNEY_PORT:-8499}"
 mkdir -p "$JOURNEY_OUT"
 unset ANTHROPIC_API_KEY
+# workspace-v2 slice A: every process of this run — the seeder, the scratch
+# server, the drill children — is a test process on the scratch root, and
+# says so before its first import (scripts/testmode.py, scripts/state_root.py).
+export WORDICON_TEST_MODE=1
+export WORDICON_STATE="$JOURNEY_STATE"
+export WORDICON_TEST_EGRESS_LOG="$JOURNEY_DIR/egress_denied.jsonl"
 echo "journeys: dir=$JOURNEY_DIR port=$JOURNEY_PORT out=$JOURNEY_OUT"
 
 # the browser must be there — a missing browser is a failure, not a skip

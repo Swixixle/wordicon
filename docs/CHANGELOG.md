@@ -1,5 +1,40 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.36.0 — workspace-v2, slice A: the test environment fails closed
+
+The first slice of the build authorized on 2026-09-16 (branch `workspace-v2`;
+docs/workspace-v2-progress.md is the resumable state). Nothing the owner uses
+changed in this slice; what changed is what a TEST process is allowed to do.
+
+Report 79 found the constraint suite making real Anthropic calls on the
+owner's Mac: `server_gateway()` chose the live gateway whenever
+ANTHROPIC_API_KEY was set, and several checks posted jobs through the route
+without pinning a mock. `env -u ANTHROPIC_API_KEY` was the workaround. Now
+one switch, `WORDICON_TEST_MODE=1`, is read before the first application
+import and honoured by three independent layers (scripts/testmode.py): a
+socket guard that refuses every outbound connection and name lookup except
+loopback ports it was told about — the real application's own port refused
+even when listed — and logs each refusal without secrets; the server's
+gateway choice, which answers the mock whatever the environment holds, and a
+provider gateway built directly, which gets a transport that refuses to send;
+and the fixture stand-ins for readers, Moira, speech and mail. A test
+process reads no `.env`. The suite proves all of it with the refused things
+actually attempted and a SENTINEL key present, and the check fails by name
+when either the gateway choice or the guard is sabotaged.
+
+The data root is now resolved once per process (scripts/state_root.py):
+explicit, else WORDICON_STATE, else a root the process already chose by
+hand, else the repository's own local_state — and applied to every Path in
+every scripts module by where it points, not by a hand-kept list of names.
+The server prints the root in its banner and, in test mode, refuses to serve
+the repository's own store. The first version of this took the process's
+current root as the only old one and sent the journeys' seeded fixtures into
+the container clone's real store; the resolution order above is the repair,
+and `run.sh` now exports the root and the switch for every process of a run.
+
+Suite: exit 0 with the new canary. Journeys: 25, 983 checks, exit 0, under
+test mode, no refusal logged — nothing in a journey tries to leave.
+
 ## v1.35.7 — The two new journeys run in the engine they said they ran in
 
 A correction to v1.35.1 and v1.35.2, which each announced "a new WebKit

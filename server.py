@@ -53,6 +53,8 @@ def _load_dotenv() -> None:
     Deliberately dependency-free: KEY=value, # comments, optional quotes,
     and a real environment variable always wins over the file."""
     path = REPO_ROOT / ".env"
+    if os.environ.get("WORDICON_TEST_MODE", "").strip().lower() in ("1", "true", "yes", "on"):
+        return   # slice A: a test process reads no .env
     if not path.exists():
         return
     for line in path.read_text().splitlines():
@@ -71,6 +73,10 @@ from flask import Flask, Response, g, jsonify, redirect, request, send_from_dire
 from werkzeug.exceptions import ClientDisconnected  # noqa: E402  (block 106b: a body that ends before its declared length)
 
 import wordicon_cli as cli  # noqa: E402
+import testmode  # noqa: E402  (slice A: the environment that fails closed — already active if WORDICON_TEST_MODE is set)
+import state_root  # noqa: E402  (slice A: one data root for every subsystem, resolved here, once)
+STATE_ROOT = state_root.apply_from_env()
+testmode.assert_isolated(STATE_ROOT, REPO_ROOT)
 import library as library  # noqa: E402  (the Library wing — zero model calls)
 import clinic  # noqa: E402  (the medical wing — docs/adr-medical-wing.md)
 import gate  # noqa: E402
@@ -806,7 +812,11 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
 
 def server_gateway() -> cli.Gateway:
     """Decided once per request from server-side environment only — the
-    phone never sends or sees a key."""
+    phone never sends or sees a key. In test mode the answer is the mock,
+    whatever the environment holds (slice A: a key present in a test
+    process must change nothing)."""
+    if testmode.active():
+        return cli.make_gateway("mock", None)
     if os.environ.get("ANTHROPIC_API_KEY"):
         model = os.environ.get("WORDICON_MODEL")
         if not model:
@@ -5283,6 +5293,10 @@ if __name__ == "__main__":
     gate.ensure_master()
     code = gate.new_pairing_code()
     print(f"\n{BRAND['name']} server starting on port {port}.")
+    print(f"State root: {state_root.describe(STATE_ROOT)}")
+    if testmode.active():
+        print("TEST MODE: outbound connections refused, providers refused, .env unread "
+              f"(allowed loopback ports: {sorted(testmode.allowed_ports()) or 'none'}).")
     if host == "0.0.0.0":
         print("LAN: ON — reachable by devices on this Wi-Fi, behind the gate.")
         print("On your PHONE (same Wi-Fi as this computer), open:")

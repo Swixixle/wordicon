@@ -14,6 +14,17 @@ DIR = pathlib.Path(os.environ.get("JOURNEY_DIR", "/tmp/anat"))
 STATE = pathlib.Path(os.environ.get("JOURNEY_STATE", str(DIR / "state")))
 PORT = int(os.environ.get("JOURNEY_PORT", "8499"))
 
+# workspace-v2 slice A: the environment that fails closed. Set BEFORE the
+# first application import so wordicon_cli reads it on its first line: the
+# socket guard goes in, .env stays unread, providers refuse to construct,
+# and the server resolves its data root from WORDICON_STATE — the scratch
+# directory, verified at import against the repository's own store.
+os.environ["WORDICON_TEST_MODE"] = "1"
+os.environ["WORDICON_STATE"] = str(STATE)
+os.environ["JOURNEY_PORT"] = str(PORT)
+os.environ.setdefault("WORDICON_TEST_EGRESS_LOG", str(DIR / "egress_denied.jsonl"))
+import testmode  # noqa: E402
+
 import wordicon_cli as cli  # noqa: E402
 REDIRECT = ("JUDGMENTS_LOG", "RECEIPTS_DIR", "RESULTS_DIR", "ACCEPTED_CONCEPTS_PATH", "EDGES_LOG", "WARPS_LOG",
             "WARP_NOTES_LOG", "BENCH_CORRECTIONS", "CONCEPT_NAMES_LOG", "BENCH_DIR", "INPUTS_LOG", "WAYFINDER_LOG",
@@ -56,6 +67,7 @@ speech.ENGINE = speech.MockEngine()   # block 106: the journeys transcribe with 
 import mock_producer  # noqa: E402
 import federation  # noqa: E402
 _producer, PRODUCER_PORT = mock_producer.start(int(os.environ.get("JOURNEY_PRODUCER_PORT", "0")))
+testmode.allow_port(PRODUCER_PORT)   # the one loopback port the server may connect to besides itself
 os.environ[mock_producer.OC_KEY_ENV] = "open_case_" + "j" * 64
 _pbase = f"http://127.0.0.1:{PRODUCER_PORT}"
 federation.register_connector("open-case-dev", "open_case", _pbase, display="Open Case (scratch)",
@@ -67,5 +79,6 @@ DIR.mkdir(parents=True, exist_ok=True)
 (DIR / "producer_port").write_text(str(PRODUCER_PORT))
 (DIR / "token").write_text(gate.issue_session("journeys")["token"])
 (DIR / "cookie").write_text(gate.SESSION_COOKIE)
-print(f"journey server: state={STATE} port={PORT} gateway=poisoned key=absent producers=127.0.0.1:{PRODUCER_PORT}", flush=True)
+print(f"journey server: state={STATE} port={PORT} gateway=poisoned key=absent producers=127.0.0.1:{PRODUCER_PORT} "
+      f"testmode={testmode.status()}", flush=True)
 server.app.run(host="127.0.0.1", port=PORT, debug=False, threaded=True)

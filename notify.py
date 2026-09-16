@@ -38,6 +38,9 @@ SMTP_PORT = 587
 
 
 def _configured() -> bool:
+    # slice A: a test process sends no mail, whatever the environment holds
+    if os.environ.get("WORDICON_TEST_MODE", "").strip().lower() in ("1", "true", "yes", "on"):
+        return False
     return bool(os.environ.get("WORDICON_NOTIFY_EMAIL_FROM") and
                 os.environ.get("WORDICON_NOTIFY_EMAIL_APP_PASSWORD"))
 

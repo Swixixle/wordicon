@@ -43,7 +43,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+_REAL_REPO_ROOT = REPO_ROOT   # never patched; the .env guard below compares against it
 sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+# workspace-v2 slice A: test mode is read before anything that could reach a
+# provider is imported, and before .env is read — a real key in the file
+# must never enter a test process (scripts/testmode.py).
+import testmode  # noqa: E402
 
 from wordicon_corpus import receipts as receipts_mod  # noqa: E402
 from wordicon_corpus import schema_loader  # noqa: E402
@@ -56,6 +63,8 @@ def _load_dotenv() -> None:
     running the server can't end up on different gateways from the same
     config. A real environment variable always wins over the file."""
     path = REPO_ROOT / ".env"
+    if testmode.active() and path.resolve() == _REAL_REPO_ROOT / ".env":
+        return   # a test process reads no .env: whatever key is there stays out
     if not path.exists():
         return
     try:
@@ -3789,9 +3798,13 @@ class AnthropicAPIGateway(Gateway):
         # max_retries=0: WE own the retry (one, visible, logged) rather
         # than the SDK stacking invisible backoff inside an invisible
         # timeout. timeout applies per HTTP request.
+        # slice A: in a test process the client is built on a transport that
+        # refuses every request (and logs the refusal), so the class can be
+        # constructed for the attempt-loop checks but can never send.
+        extra = {"http_client": testmode.poisoned_http_client()} if testmode.active() else {}
         self.client = anthropic.Anthropic(api_key=api_key,
                                            timeout=self.CALL_TIMEOUT_S,
-                                           max_retries=0)
+                                           max_retries=0, **extra)
         self.model = model
 
     def _retryable(self) -> tuple:

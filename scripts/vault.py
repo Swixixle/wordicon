@@ -753,6 +753,13 @@ def _drill_worker(state_dir: str) -> int:
             raise AssertionError("drill attempted a network socket")
     socket.socket = _NoNet
     st = pathlib.Path(state_dir)
+    # slice A: this child declares its own root before the server can
+    # resolve one from the environment it inherited — the restored corpus,
+    # not whatever root the parent was on.
+    import os as _os
+    _os.environ["WORDICON_STATE"] = str(st)
+    import state_root as _sr
+    _sr.apply(st)
     cli.LOCAL_STATE = st
     cli.RESULTS_DIR = st / "results"
     cli.RECEIPTS_DIR = st / "receipts"
