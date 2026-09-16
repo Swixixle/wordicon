@@ -82,6 +82,22 @@ export class Results {
     this.poll();
     if (this.hooks.onActivity) this.hooks.onActivity();
   }
+  // open an operation or a reading by id from Your work: tracked from the record, then read once
+  open(id, kind) {
+    if (!this.tracked.has(id)) this.tracked.set(id, { id, kind, status: 'unknown', prepared: null, label: kind === 'reading' ? 'Readers' : 'Operation', startedAt: '', last: null, fromStore: true });
+    this.selected = id;
+    this.showTab('results');
+    const t = this.tracked.get(id);
+    getJSON('/api/operations/' + encodeURIComponent(id)).then(r => {
+      if (!r.ok) { t.status = 'unknown'; t.last = { error: r.data.error }; this.render(); return; }
+      const d = r.data;
+      t.last = d; t.kind = d.kind || kind; t.startedAt = d.created_at || t.startedAt;
+      t.status = d.kind === 'reading' ? (d.reading && d.reading.pending === 0 ? 'done' : 'running') : (d.status || 'unknown');
+      if (d.action_id && this.hooks.labelOf) t.label = this.hooks.labelOf(d.action_id);
+      this.render();
+      if (!['done', 'complete', 'failed', 'unknown'].includes(t.status)) this.poll();
+    });
+  }
   // "Check status / recover result": the record and the result files read again; nothing is sent
   async recover(t) {
     const r = await postJSON('/api/operations/' + encodeURIComponent(t.id) + '/recover', {});

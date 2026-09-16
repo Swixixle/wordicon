@@ -46,6 +46,8 @@ The living contract of the workspace build (authorized 2026-09-16; the instructi
 
 **D21 — the legacy job route answers from the store after a restart (slice D).** A job the process no longer holds is no longer a 404: the store says complete (with its result's id), failed (with its reason) or, for an unknown outcome, a terminal failed with the sentence that says it may have run — so the legacy page's poller stops instead of polling a ghost, and the journey that mocks a lost job keeps its meaning.
 
+**D22 — Your work is a derived index that says what it is (slice E).** Items carry store, kind and native id; the index is rebuilt into a new generation and never an authority; the notebook reaches it through an outbox row in the save's transaction, file stores through append offsets and update signals read back from the authoritative file, the operations store through its event sequence. A search is local; the words are bound as parameters and quoted as literal FTS terms; a malformed query falls back to literal matching. The health line measures pending work and the page says "updating" instead of an exhaustive no. Two identical documents are two items; a run and a document are never linked by their text or by a legacy hash — only by a recorded operation id. Archive is a ruling in the record that hides from ordinary listings and erases nothing.
+
 ## Parity checklist
 
 Status words: **reached** (a labelled control in the shell reaches it and a test proves it), **inside** (opens inside the shell as the existing page, with return), **legacy** (reachable only through "The previous interface" under More tools), **pending** (not yet wired; the slice that will).
@@ -54,7 +56,7 @@ Status words: **reached** (a labelled control in the shell reaches it and a test
 |---|---|---|---|---|
 | Writing: draft, autosave, first-line title, reopen, word count | `/api/notebook/*`, `notebook.sqlite3` | Work — the structured editor (the plain editor for documents the schema cannot hold) | reached | `work.js` §2, §11; `editor.js` §2, §4, §9 |
 | Rename, duplicate (structure kept), versions with restore-as-new, plain copy, export as text / Markdown / Print | notebook routes; `/restore`, `/plain-copy` | Document ▾ menu | reached | `editor.js` §10, §12; suite `_check_document_contract` |
-| Archive | new flag (slice E) | Document ▾ → Archive | pending (E) | — |
+| Archive | `work_archive.jsonl` (a ruling; the index reads it) | Your work → Archive on any item; Document ▾ → Archive | reached (Your work); the Document menu's Archive routes to Your work | `work.js` §10 |
 | Formatting (bold, italic, H1–H3, lists, quote, link), find/replace | structure beside the text | header toolbar and keys; ⌘F | reached | `editor.js` §5–§7 |
 | Applying a candidate word to the draft | `/applications` events | a result card made from a selection | reached (guarded) | `editor.js` §8 |
 | Conflict: keep both, mine as new / open saved | notebook 409 | a notice in Results with the two ways out | reached | notebook journey (legacy); the shell's own two-tab case is owed to G |
@@ -73,6 +75,6 @@ Status words: **reached** (a labelled control in the shell reaches it and a test
 | Rulings (accept / reject / revise), judgments | `/api/judge` | the full result view inside the shell | inside | legacy journeys |
 | Library: sources, anchors, crossings, support rulings, works, media, recordings/transcripts | `/api/library/*`, `/api/media/*`, `/api/works` | Sources tab lists; Attach and Open the Library open the Library inside | inside | — |
 | Investigations: connectors, depositions, identity rulings, rooms | `/api/connectors`, `/api/depositions`, `/api/investigations` | Investigate cards (readiness derived) + Investigation rooms inside | inside; start pending (F) | `work.js` §10 |
-| Your work: everything retained, searchable | (slice E index) | Your work | pending (E) — lists the notebook and the last thirty runs | `work.js` §10 |
+| Your work: everything retained, searchable | `work_index.sqlite3` (derived); `/api/work*` | Your work: search, kind/date/archive filters, reopen, archive, rebuild | reached | `work.js` §10; suite `_check_work_index` |
 | Durable operations, honest recovery after restart | `operations.sqlite3`; `/api/operations*` | Results → Activity (from the record); Check status / recover result; Start another attempt | reached | `work.js` §12; suite `_check_durable_operations` (two real killed processes) |
 | Settings, pairing, Vault, notifications, encounter switch, epochs, Keeper | Home/About, `/pair` | Settings (opens the previous interface) | legacy | — |

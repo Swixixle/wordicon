@@ -6044,6 +6044,199 @@ def _check_durable_operations(server, paired):
     return out
 
 
+def _check_work_index(server, paired):
+    """Slice E. Your work is a derived index and behaves like one: it is
+    rebuilt into a new generation and the old one stays current when the
+    new one fails; the notebook reaches it through an outbox row written in
+    the save's own transaction (a crash between save and index is repaired
+    by draining it; an index failure never touches a save); yesterday's
+    body text is found beyond the recent rows; identical titles and bodies
+    stay distinct items; no run is linked to a document by similarity or a
+    legacy hash; a malformed or hostile query is bound, never spliced, and
+    never a crash; the health line measures pending work and says
+    "updating" instead of promising an exhaustive no; archive hides from
+    ordinary listings, keeps everything, survives a rebuild and has its own
+    filter; the routes answer through the gate; the page never puts user
+    text through innerHTML."""
+    import importlib, json as _json, sqlite3 as _sq, tempfile as _tf, time as _time
+    out = []
+    wi = importlib.import_module("workindex")
+    nbk = importlib.import_module("notebook")
+    REPO = Path(__file__).resolve().parents[1]
+    tmp = Path(_tf.mkdtemp(prefix="wordicon_work_"))
+    state_root.apply(tmp)
+    try:
+        # a store: forty recent documents, one from yesterday with a word of its own, two twins
+        for i in range(40):
+            nbk.save(f"doc_recent_{i:03d}", title="", title_is_manual=False, body=f"Recent draft number {i} about ordinary matters.", base_revision=0, base_fingerprint="", request_id=f"req_wi_recent_{i:03d}")
+        nbk.save("doc_yesterday_01", title="", title_is_manual=False, body="An old draft with the word quinquireme in it, from yesterday.", base_revision=0, base_fingerprint="", request_id="req_wi_yesterday")
+        src = _sq.connect(str(nbk.db_path()))
+        src.execute("UPDATE documents SET saved_at = ?, created_at = ? WHERE doc_id = 'doc_yesterday_01'", ("2026-09-15T03:00:00Z", "2026-09-15T02:00:00Z"))   # a fixed past, so the item sorts beyond the recent rows
+        src.commit(); src.close()
+        for did in ("doc_twin_a", "doc_twin_b"):
+            nbk.save(did, title="Twin", title_is_manual=True, body="the same words in two documents", base_revision=0, base_fingerprint="", request_id="req_wi_" + did)
+        # a run whose input is a document's exact text: similarity must not link them
+        (tmp / "results").mkdir(parents=True, exist_ok=True)
+        (tmp / "results" / "trace_cli_wiA.json").write_text(_json.dumps({"mode": "forge", "trace_id": "trace_cli_wiA", "created_at": "2026-09-16T01:00:00+00:00", "input_text": "the same words in two documents",
+                                                                        "candidates": [{"title": "Twin Word", "definition": "a coined word for twins"}]}), encoding="utf-8")
+        with open(tmp / "inputs.jsonl", "a", encoding="utf-8") as f:
+            f.write(_json.dumps({"object_type": "input", "job_id": "job_wi_legacy1", "mode": "forge", "text": "the same words in two documents", "created_at": "2026-09-16T01:00:00+00:00"}) + "\n")
+        r = wi.rebuild()
+        if not r.get("rebuilt") or r.get("generation") != 1 or r.get("failed"):
+            out.append(f"E: the first rebuild did not build generation 1 cleanly: {r}")
+        h = wi.health()
+        if h["items"] < 44 or h["incomplete"] or h.get("updating"):
+            out.append(f"E: after the rebuild the index is not whole: {h}")
+        if not h["fts"]:
+            out.append("E: this Python's sqlite has no FTS5 — the index falls back to literal matching (recorded, not a failure)")
+            out.pop()
+        # yesterday's body is found beyond the recent rows
+        recent = wi.search("", kind="writing", limit=30)
+        if any(i["native_id"] == "doc_yesterday_01" for i in recent["items"]):
+            out.append("E: yesterday's document is among the thirty most recent — the test cannot tell search from listing")
+        hit = wi.search("quinquireme")
+        if [i["native_id"] for i in hit["items"]] != ["doc_yesterday_01"] or hit["mode"] not in ("fts", "like"):
+            out.append(f"E: yesterday's body text was not found by its word: {[(i['native_id'], i['kind']) for i in hit['items']]} mode {hit['mode']}")
+        old_created, old_changed = "2026-09-15T02:00:00Z", "2026-09-15T03:00:00Z"   # the values written above, compared exactly
+        if hit["items"] and (hit["items"][0]["created_at"] != old_created or hit["items"][0]["changed_at"] != old_changed):
+            out.append("E: created and changed times are not kept apart")
+        # twins stay distinct; the run and the input are not linked to a document by their text
+        twins = wi.search("same words in two documents")
+        kinds = sorted(i["item_id"] for i in twins["items"])
+        if sum(1 for i in twins["items"] if i["kind"] == "writing") != 2 or len(set(kinds)) != len(kinds):
+            out.append(f"E: two identical documents must be two items: {kinds}")
+        run_item = next((i for i in twins["items"] if i["kind"] == "run"), None)
+        inp_item = next((i for i in twins["items"] if i["kind"] == "input"), None)
+        if run_item is None or inp_item is None:
+            out.append("E: the run and its input are not both found by the words")
+        else:
+            if any(":writing:" in x for x in run_item["related"] + inp_item["related"]):
+                out.append("E: a run or an input was linked to a document by its text — similarity is not a link")
+            if inp_item["related"] != ["operations:operation:job_wi_legacy1"]:
+                out.append(f"E: an input's only link is its operation by id: {inp_item['related']}")
+        # the outbox: a save is indexed after the fact, from the row written in the save's transaction
+        ack = nbk.save("doc_outbox_01", title="", title_is_manual=False, body="Words about a heliotrope.", base_revision=0, base_fingerprint="", request_id="req_wi_outbox_1")
+        h2 = wi.health()
+        if h2["pending"].get("notebook") != 1 or not h2.get("updating"):
+            out.append(f"E: a fresh save is not a measured pending change: {h2['pending']} updating={h2.get('updating')}")
+        before = wi.search("heliotrope")
+        if before["items"] or before.get("exhaustive"):
+            out.append("E: before the refresh, a no-match while updating was reported as exhaustive")
+        rf = wi.refresh()
+        after = wi.search("heliotrope")
+        if [i["native_id"] for i in after["items"]] != ["doc_outbox_01"] or after["items"][0]["version"] != str(ack["revision"]) or wi.health()["pending"].get("notebook") != 0:
+            out.append(f"E: the outbox was not drained into the index: {rf} {[i['native_id'] for i in after['items']]}")
+        ack2 = nbk.save("doc_outbox_01", title="", title_is_manual=False, body="Words about a heliotrope, and then a cassowary.", base_revision=ack["revision"], base_fingerprint=ack["fingerprint"], request_id="req_wi_outbox_2")
+        wi.refresh()
+        cas = wi.search("cassowary")
+        if [i["native_id"] for i in cas["items"]] != ["doc_outbox_01"] or cas["items"][0]["version"] != str(ack2["revision"]):
+            out.append("E: a later revision did not replace the item under its native revision")
+        # an index failure never touches a save; the outbox row waits and is repaired
+        real = wi.db_path
+        wi.db_path = lambda: Path("/proc/version/cannot/work_index.sqlite3")
+        try:
+            ack3 = nbk.save("doc_outbox_02", title="", title_is_manual=False, body="Saved while the index is unwritable: a pangolin.", base_revision=0, base_fingerprint="", request_id="req_wi_outbox_3")
+            if ack3.get("revision") != 1 or nbk.get("doc_outbox_02") is None:
+                out.append("E: a save failed because the index was unwritable")
+            try:
+                wi.search("pangolin")
+                out.append("E: search against an unwritable index path did not raise")
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            wi.db_path = real
+        wi.refresh()
+        if [i["native_id"] for i in wi.search("pangolin")["items"]] != ["doc_outbox_02"]:
+            out.append("E: the save made while the index was unavailable was not indexed once it came back")
+        # hostile and malformed queries: bound, never spliced; never a crash
+        for q in ('"(unbalanced AND NOT', "'; DROP TABLE items; --", 'x" OR 1=1 --', "*", "NEAR(a b)", "col:value"):
+            try:
+                res = wi.search(q)
+            except Exception as e:  # noqa: BLE001
+                out.append(f"E: query {q!r} crashed the index: {type(e).__name__}: {e}")
+                continue
+            if res.get("mode") not in ("fts", "like", "recent"):
+                out.append(f"E: query {q!r} answered without a mode")
+        c_ = wi._connect()
+        try:
+            if not c_.execute("SELECT name FROM sqlite_master WHERE name = 'items'").fetchone():
+                out.append("E: the items table is gone after a hostile query")
+        finally:
+            c_.close()
+        # a rebuild is a new generation; a failing adapter is reported, a wholly failed rebuild keeps the old generation
+        r2 = wi.rebuild()
+        if r2.get("generation") != 2:
+            out.append(f"E: a rebuild did not make generation 2: {r2}")
+        cc = wi._connect()
+        try:
+            if cc.execute("SELECT COUNT(*) FROM items WHERE gen != 2").fetchone()[0] != 0:
+                out.append("E: rows of an old generation survived the switch")
+        finally:
+            cc.close()
+        real_adapters = wi._adapters
+        def broken():
+            raise RuntimeError("adapter exploded, deliberately")
+        wi._adapters = lambda: [("broken", lambda conn, gen, full: broken())]
+        try:
+            r3 = wi.rebuild()
+        finally:
+            wi._adapters = real_adapters
+        if r3.get("rebuilt") is not False or wi.generation() != 2 or not wi.search("cassowary")["items"]:
+            out.append(f"E: a rebuild in which every adapter failed did not keep generation 2 current: {r3.get('rebuilt')} gen {wi.generation()}")
+        wi._adapters = lambda: real_adapters() + [("broken", lambda conn, gen, full: broken())]
+        try:
+            r4 = wi.rebuild()
+        finally:
+            wi._adapters = real_adapters
+        if not r4.get("rebuilt") or not any("broken" in x for x in r4.get("failed", [])) or not wi.health()["incomplete"]:
+            out.append(f"E: a rebuild with one failing adapter must complete and say it is incomplete: {r4.get('rebuilt')} {r4.get('failed')}")
+        if wi.search("nothing-of-the-sort-here").get("exhaustive"):
+            out.append("E: an incomplete index promised an exhaustive no")
+        wi.rebuild()
+        # archive: hidden from listings, kept, filterable, survives a rebuild
+        wid = "notebook:writing:doc_yesterday_01"
+        wi.archive(wid, True)
+        if any(i["item_id"] == wid for i in wi.search("quinquireme")["items"]) or not any(i["item_id"] == wid for i in wi.search("quinquireme", archived="only")["items"]):
+            out.append("E: archive did not hide the item from ordinary listings and show it under the archive filter")
+        if nbk.get("doc_yesterday_01") is None or not (tmp / "work_archive.jsonl").exists():
+            out.append("E: archiving touched the document or left no ruling in the record")
+        wi.rebuild()
+        if any(i["item_id"] == wid for i in wi.search("quinquireme")["items"]):
+            out.append("E: the archive ruling did not survive a rebuild")
+        wi.archive(wid, False)
+        if not any(i["item_id"] == wid for i in wi.search("quinquireme")["items"]):
+            out.append("E: unarchiving did not bring the item back")
+        one = wi.resolve(wid)
+        if not one or one["open"] != {"document": "doc_yesterday_01"} or not one.get("exists") or "quinquireme" not in one.get("body", ""):
+            out.append(f"E: resolving an item does not say how to reopen it: {one and one.get('open')}")
+        page1 = wi.search("", kind="writing", limit=10)
+        page2 = wi.search("", kind="writing", limit=10, cursor=page1["next_cursor"])
+        if not page1["next_cursor"] or set(i["item_id"] for i in page1["items"]) & set(i["item_id"] for i in page2["items"]):
+            out.append("E: paging is not stable")
+    finally:
+        state_root.apply(_SCRATCH)
+    # the routes, through the gate
+    c = server.app.test_client()
+    if c.get("/api/work").status_code != 401:
+        out.append("E: Your work answers an unpaired device")
+    paired(c)
+    g = c.get("/api/work?q=laughed&limit=5").get_json() or {}
+    if "items" not in g or "health" not in g or "population" not in g or "exhaustive" not in g:
+        out.append(f"E: the route does not answer with items, health, population and exhaustiveness: {list(g)}")
+    if c.get("/api/work/nothing:here:x").status_code != 404 or c.post("/api/work/nothing:here:x/archive", json={"archived": True}).status_code != 404:
+        out.append("E: an unknown item is not a 404")
+    if c.get("/api/work?archived=bogus&limit=1").status_code != 200:
+        out.append("E: a bad filter value is not tolerated")
+    src = (REPO / "webapp" / "work" / "yourwork.js").read_text(encoding="utf-8")
+    if "innerHTML" in src or "html:" in src:
+        out.append("E: yourwork.js puts text through innerHTML")
+    if "api/moira" in src or "/api/jobs" in src:
+        out.append("E: yourwork.js reaches a store directly instead of the index")
+    if "work_index.sqlite3" not in (REPO / "scripts" / "vault.py").read_text(encoding="utf-8"):
+        out.append("E: the derived index is not excluded from the Vault")
+    return out
+
+
 def main() -> int:
     failures = FAILURES
     # block 113, hoisted: pure checks on a pure function, before anything
@@ -6184,6 +6377,7 @@ def main() -> int:
     failures.extend(_check_workspace_registry(server, _paired))
     failures.extend(_check_document_contract(server, _paired))
     failures.extend(_check_durable_operations(server, _paired))
+    failures.extend(_check_work_index(server, _paired))
     failures.extend(_check_map_focus_routes(server, _paired))
     failures.extend(_check_moira_routes(server, _paired))
     failures.extend(_check_notebook_b(server, _paired))

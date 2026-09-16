@@ -131,6 +131,17 @@ details > summary { cursor: pointer; color: var(--write-panel-ink); font-size: 1
 .apply-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 3px 0; }
 .apply-block > summary { padding: 4px 0; }
 .page-view { padding: 18px 22px; background: var(--write-panel); overflow: auto; gap: 12px; }
+/* ---- Your work (slice E) ---- */
+.work-search { display: flex; flex-direction: column; gap: 6px; }
+.work-search input[type="search"] { width: 100%; max-width: 900px; background: var(--ground); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; font-size: 15px; }
+.work-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.work-filters select { background: var(--ground); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; font-size: 12px; }
+.chip-btn { font-size: 12px; border: 1px solid var(--line); border-radius: 12px; padding: 3px 10px; color: var(--write-panel-ink); background: transparent; cursor: pointer; }
+.chip-btn.on { border-color: var(--accent); color: var(--write-ink); background: var(--hover); }
+.chip-btn:hover { background: var(--hover); }
+.work-list { display: flex; flex-direction: column; gap: 8px; max-width: 900px; }
+.work-item.archived { opacity: .7; }
+.work-snippet { color: var(--text); }
 .page-view h1 { font-size: 20px; margin: 0 0 8px 0; }
 .place-view { background: var(--ground); }
 .place-bar { display: flex; gap: 12px; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--line); }

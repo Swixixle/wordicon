@@ -134,6 +134,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at  TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS document_events_doc ON document_events (doc_id, created_at);
+        CREATE TABLE IF NOT EXISTS index_outbox (
+            seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_id      TEXT NOT NULL,
+            revision    INTEGER NOT NULL,
+            at          TEXT NOT NULL,
+            done        INTEGER NOT NULL DEFAULT 0
+        );
         INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', '1');
     """)
     # v2, additive and idempotent: the structure beside the exact text, on the
@@ -510,6 +517,10 @@ def save(doc_id: str, *, title: str, title_is_manual: bool, body: str, base_revi
             if checkpoint_reason is not None:
                 row = conn.execute("SELECT * FROM documents WHERE doc_id = ?", (doc_id,)).fetchone()
                 checkpoint = _insert_checkpoint(conn, row, checkpoint_reason, now)
+            # slice E: the index learns of this save from a row written in the
+            # SAME transaction — a crash after the commit and before the index
+            # is repaired by draining this; an index failure cannot touch the save
+            conn.execute("INSERT INTO index_outbox (doc_id, revision, at) VALUES (?, ?, ?)", (doc_id, revision, now))
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")

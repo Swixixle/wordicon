@@ -94,6 +94,7 @@ import inquiry  # noqa: E402  (the Inquiry — block 111 phase 1; a question kep
 import actions  # noqa: E402  (workspace-v2 slice B: the action registry — every control, one definition)
 import snapshots  # noqa: E402  (workspace-v2 slice B: immutable input snapshots)
 import operations as ops  # noqa: E402  (workspace-v2 slice D: the durable operations store; JOBS is its projection)
+import workindex  # noqa: E402  (workspace-v2 slice E: the derived Your work index — rebuildable, never authority)
 
 # One dispatcher per store (slice D). The lock is taken when this process
 # first dispatches (or when it starts serving and reconciles), never on
@@ -4190,6 +4191,57 @@ def api_operation_attempt(op_id):
                     "cost": "this attempt sends the frozen text again; the earlier attempt's outcome is " + op["status"] + " and stays on record"})
 
 
+# ---- workspace-v2 (slice E): Your work — the derived index -------------------------
+#
+# Everything the record keeps, found locally. GET /api/work reads the index
+# (after a bounded incremental refresh, so a save a moment ago is found);
+# a hit says how to reopen the authoritative record and nothing more. The
+# words never reach a model. Archive is a ruling in the record; the index
+# reads it. Rebuild is explicit.
+
+@app.route("/api/work")
+def api_work():
+    try:
+        workindex.refresh(max_age_s=5.0)
+    except Exception as e:  # noqa: BLE001 — a failed refresh is reported by the health line, never a 500
+        print(f"[work index] refresh failed: {e}")
+    a = request.args
+    try:
+        out = workindex.search(str(a.get("q") or "")[:500], kind=str(a.get("kind") or "")[:40], tool=str(a.get("tool") or "")[:80],
+                               status=str(a.get("status") or "")[:60], since=str(a.get("since") or "")[:40], until=str(a.get("until") or "")[:40],
+                               archived=(a.get("archived") if a.get("archived") in ("no", "only", "all") else "no"),
+                               cursor=str(a.get("cursor") or "")[:200], limit=int(a.get("limit") or 30))
+    except (workindex.IndexError_, ValueError) as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(out)
+
+
+@app.route("/api/work/reindex", methods=["POST"])
+def api_work_reindex():
+    return jsonify(workindex.rebuild())
+
+
+@app.route("/api/work/health")
+def api_work_health():
+    return jsonify(workindex.health())
+
+
+@app.route("/api/work/<path:item_id>/archive", methods=["POST"])
+def api_work_archive(item_id):
+    data = request.get_json(silent=True) or {}
+    if workindex.resolve(item_id) is None:
+        return jsonify({"error": "no such item in the index"}), 404
+    return jsonify(workindex.archive(item_id, bool(data.get("archived", True)), by="owner"))
+
+
+@app.route("/api/work/<path:item_id>")
+def api_work_item(item_id):
+    d = workindex.resolve(item_id)
+    if d is None:
+        return jsonify({"error": "no such item in the index — it may be archived under another generation, or the index may need a rebuild"}), 404
+    return jsonify(d)
+
+
 @app.route("/api/jobs/<job_id>")
 def api_get_job(job_id):
     with JOBS_LOCK:
@@ -5968,10 +6020,18 @@ def _ops_startup() -> dict:
 
 
 def ops_startup_report() -> dict:
-    """The serving process's startup reconciliation, said out loud."""
+    """The serving process's startup reconciliation, said out loud; then the
+    Your work index catches up with the record and keeps reconciling the
+    file stores on a timer (slice E)."""
     summary = _ops_startup()
     print(f"[operations] startup: reconciled {len(summary['reconciled'])}, resumed {len(summary['resumed'])}, "
           f"left queued {len(summary['left_queued'])} (dispatching: {summary['dispatching']})")
+    try:
+        h = workindex.refresh()
+        print(f"[work index] {h.get('population', '')}" + (f" — incomplete: {h.get('incomplete')}" if h.get("incomplete") else ""))
+        workindex.start_periodic(60.0)
+    except Exception as e:  # noqa: BLE001
+        print(f"[work index] startup refresh failed: {e}")
     return summary
 
 

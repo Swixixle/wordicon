@@ -29,9 +29,15 @@ const session = new DocumentSession(editor, {
 const layout = new Layout(shell, { focusEditor: () => editor.focus() });
 const places = new Places({ onOpen: () => { hideViews(); document.getElementById('place-view').hidden = false; }, onClose: () => showPage(currentPage) });
 const applier = new Applier(session, editor, { onRecorded: () => {} });
-const results = new Results(session, layout, places, { onPlace: () => {}, onActivity: () => renderActivity(), applyControls: (t, text) => applier.controls(t, text) });
+const results = new Results(session, layout, places, { onPlace: () => {}, onActivity: () => renderActivity(), applyControls: (t, text) => applier.controls(t, text),
+  labelOf: id => (actions.byId[id] && actions.byId[id].label) || (id || '').replace(/^legacy:\/api\/jobs:/, 'a run: ') });
 const actions = new Actions(session, layout, places, results, { onPlace: () => {} });
-const yourwork = new YourWork(session, places, { onOpenDocument: () => showPage('work'), onPlace: () => {} });
+const yourwork = new YourWork(session, places, {
+  onOpenDocument: () => showPage('work'),
+  onPlace: () => {},
+  onOpenOperation: id => { results.open(id, 'job'); showPage('work'); layout.setResults(true); },
+  onOpenReading: id => { results.open(id, 'reading'); showPage('work'); layout.setResults(true); },
+});
 const investigate = new Investigate(actions, places, {});
 
 let currentPage = 'work';
@@ -319,7 +325,7 @@ function bindDocMenu() {
       w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + session.displayTitle().replace(/</g, '&lt;') + '</title><style>body{font:16px/1.5 Georgia,serif;max-width:68ch;margin:40px auto;color:#111}blockquote{border-left:3px solid #999;margin-left:0;padding-left:14px}</style></head><body>' + html + '</body></html>');
       w.document.close(); w.focus(); setTimeout(() => w.print(), 250);
     }
-    else if (what === 'archive') toast('Archive arrives with the index (slice E); nothing is ever deleted.');
+    else if (what === 'archive') { showPage('yourwork'); toast('Archive from Your work: the draft’s card has Archive. Nothing is ever deleted.'); }
   });
   document.addEventListener('keydown', e => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); session.checkpoint('save'); toast('Checkpoint requested.'); }
