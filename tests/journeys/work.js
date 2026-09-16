@@ -113,17 +113,27 @@ const path = require('path');
   await page.waitForTimeout(600);   // the results tab re-renders itself after an edit
   ok(/This draft changed\. Review the earlier version before applying changes\./.test(await page.textContent('#results-body')), 'after typing, the card says the draft changed and to review the earlier version');
 
-  // 5. hiding and showing the sides never touches the editor
-  await page.evaluate(() => { const t = document.querySelector('.pm-editor'); t.__marker = 'same-element'; window.__work.editor.focus(); window.__work.editor.setSelection(3, 9); });
+  // 5. hiding and showing the sides never touches the editor — not its element, its BACKWARD selection, its scroll, or a save still pending
+  await page.evaluate(() => { const t = document.querySelector('.pm-editor'); t.__marker = 'same-element'; const e = window.__work.editor; e.focus(); e.setSelection(e.getText().length, e.getText().length); });
+  await page.keyboard.type('\n\n' + 'A line to scroll past.\n\n'.repeat(25) + 'Pending words.');    // long enough to scroll; the last words are not yet acknowledged
+  await page.evaluate(() => { const e = window.__work.editor; e.setSelection(3, 9, 'backward'); e.setScroll(240); });
+  const before5 = await page.evaluate(() => { const s = window.__work.session; const e = window.__work.editor; return { pending: s.seq > s.ackSeq, scroll: e.getScroll(), dir: e.getSelection().direction }; });
   await page.click('#tools-toggle'); await page.click('#results-toggle'); await page.click('#tools-toggle'); await page.click('#results-toggle');
-  const same = await page.evaluate(() => { const t = document.querySelector('.pm-editor'); const s = window.__work.editor.getSelection(); return { marker: t.__marker, sel: [s.start, s.end], n: document.querySelectorAll('.pm-editor').length }; });
+  const same = await page.evaluate(() => { const t = document.querySelector('.pm-editor'); const e = window.__work.editor; const s = e.getSelection(); return { marker: t.__marker, sel: [s.start, s.end], dir: s.direction, scroll: e.getScroll(), n: document.querySelectorAll('.pm-editor').length, text: e.getText() }; });
   ok(same.marker === 'same-element' && same.n === 1, 'the editor element survived four toggles');
   ok(same.sel[0] === 3 && same.sel[1] === 9, 'the selection survived the toggles: ' + JSON.stringify(same.sel));
+  ok(before5.dir === 'backward' && same.dir === 'backward', 'and its direction (anchor after head) survived: ' + same.dir);
+  ok(before5.scroll > 0 && same.scroll === before5.scroll, 'and the scroll position survived: ' + same.scroll + 'px');
+  ok(before5.pending && /Pending words\.$/.test(same.text), 'a save still pending when the sides toggled kept its words');
+  await page.waitForFunction(() => { const s = window.__work.session; return !s.inflight && s.seq === s.ackSeq && s.status === 'saved'; }, null, { timeout: 15000, polling: 100 });
+  ok(/Pending words\.$/.test((await (await page.request.get(BASE + '/api/notebook/documents/' + (await page.evaluate(() => window.__work.session.id)))).json()).body), 'and that save landed after the toggles');
+  await page.evaluate(() => { const e = window.__work.editor; e.setScroll(0); e.focus(); });
+  for (let i = 0; i < 6 && /Pending words\.$/.test(await page.evaluate(() => window.__work.editor.getText())); i++) { await page.keyboard.press('ControlOrMeta+z'); await page.waitForTimeout(150); }   // the long typing back out
   await page.evaluate(() => window.__work.editor.focus());
   await page.keyboard.press('ControlOrMeta+z');
   await page.waitForTimeout(200);
   const afterUndo = await page.evaluate(() => window.__work.editor.getText());
-  ok(!/ More\.$/.test(afterUndo), 'undo still works after the toggles (the last typing came back out)');
+  ok(!/ More\.$/.test(afterUndo) && !/Pending words\.$/.test(afterUndo), 'undo still works after the toggles (the last typing came back out)');
   ok((await page.getAttribute('#shell', 'data-tools')) === 'open' && (await page.getAttribute('#shell', 'data-results')) === 'open', 'both sides are open again');
 
   // 6. Focus hides both sides and the secondary controls; Exit focus restores what was open
@@ -178,7 +188,11 @@ const path = require('path');
   await page.waitForSelector('#proposal-card');
   ok(/3 \(one per reader\)/.test(await page.textContent('#proposal-card')), 'the readers proposal says three calls, one per reader');
   await page.click('#proposal-card .btn.primary');
+  // the writer keeps writing while the readers read: the arrival must not take the caret
+  await page.click('.pm-editor'); await page.keyboard.press('End'); await page.keyboard.type(' Still typing.');
   await page.waitForFunction(() => /3 of 3 readers answered/.test(document.getElementById('results-body').textContent), null, { timeout: 30000, polling: 200 });
+  await page.waitForTimeout(300);
+  ok((await page.evaluate(() => window.__work.editor.hasFocus())) && /Still typing\.$/.test(await page.evaluate(() => window.__work.editor.getText())), 'the reading arrived without stealing the caret; the words typed meanwhile are in the draft');
   const reading = await page.textContent('#results-body');
   ok(/3 of 3 readers answered/.test(reading), 'all three readers answered: ' + (reading.match(/\d of \d readers answered/) || [''])[0]);
   ok(/readers answer separately|nothing here combines them/.test(reading), 'and nothing combines them');
