@@ -87,6 +87,7 @@ import recovery  # noqa: E402  (the Recovery Review — block 103; reads the que
 import speech  # noqa: E402  (Speak to Nikodemus — block 106; the transcription adapter, local only)
 import federation  # noqa: E402  (connected instruments — block 107; Open Case and EthicalAlt behind the membrane, manual pull only)
 import carry  # noqa: E402  (Carry Back — block 123; the bridge from a workup to the writing room. No model, no network)
+import notes  # noqa: E402  (the owner's own notes beside the work — his prose, never a model's, kept apart from carries)
 import map_focus  # noqa: E402  (Map · focus — one place's ring, read-only. No model, no network, no write)
 import moira  # noqa: E402  (Professor Moira — block 125; three readers beside the draft, each on its own call)
 import notebook as nbk  # noqa: E402  (the writer's notebook — stage B; the document store the room was missing. No model, no network)
@@ -1885,6 +1886,67 @@ def api_carry_used(carry_id):
 def api_carry_note(carry_id):
     data = request.get_json(silent=True) or {}
     return jsonify({"ok": True, "event": carry.note_carry(carry_id, str(data.get("note") or ""))})
+
+
+# ---- the owner's own notes (scripts/notes.py) --------------------------------
+# His prose, beside the work, one scratchpad per document. Separate routes
+# and a separate store from carries on purpose: a carry is the model's words
+# travelling under "may be useful while revising", a note is his own. The
+# page renders them apart because the record keeps them apart.
+
+
+def _note_refusal(e: "notes.NoteRefused"):
+    body = {"error": str(e), "code": e.code, "your_words_are_not_lost": True}
+    body.update(e.detail)
+    return jsonify(body), 409 if e.code == "conflict" else 400
+
+
+@app.route("/api/notes")
+def api_notes():
+    doc_id = request.args.get("doc_id", "") or ""
+    if not doc_id.strip():
+        return jsonify({"error": "name the document whose notes you want", "code": "no_document"}), 400
+    return jsonify({"notes": notes.for_document(doc_id), "summary": notes.summary(doc_id),
+                    "means": "the owner's own words, typed beside the work",
+                    "is_not": ["a model result", "a carry", "accepted", "supported", "verified"]})
+
+
+@app.route("/api/notes", methods=["POST"])
+def api_note_write():
+    data = request.get_json(silent=True) or {}
+    try:
+        n = notes.write_note(doc_id=str(data.get("doc_id") or ""),
+                             body=str(data.get("body") or ""),
+                             request_id=str(data.get("request_id") or ""),
+                             tab_id=str(data.get("tab_id") or ""))
+    except notes.NoteRefused as e:
+        return _note_refusal(e)
+    return jsonify({"ok": True, "note": n})
+
+
+@app.route("/api/notes/<note_id>", methods=["PUT"])
+def api_note_edit(note_id):
+    data = request.get_json(silent=True) or {}
+    try:
+        n = notes.edit_note(note_id=note_id, body=str(data.get("body") or ""),
+                            base_revision=int(data.get("base_revision") or 0),
+                            request_id=str(data.get("request_id") or ""))
+    except notes.NoteRefused as e:
+        return _note_refusal(e)
+    except (TypeError, ValueError):
+        return jsonify({"error": "base_revision must be a whole number", "code": "bad_revision",
+                        "your_words_are_not_lost": True}), 400
+    return jsonify({"ok": True, "note": n})
+
+
+@app.route("/api/notes/<note_id>", methods=["DELETE"])
+def api_note_remove(note_id):
+    try:
+        n = notes.remove_note(note_id)
+    except notes.NoteRefused as e:
+        return _note_refusal(e)
+    return jsonify({"ok": True, "note": n,
+                    "kept": "the words stay in the record; the note is out of the list"})
 
 
 @app.route("/api/carry/<carry_id>/retarget", methods=["POST"])
