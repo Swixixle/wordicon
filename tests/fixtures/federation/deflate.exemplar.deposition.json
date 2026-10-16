@@ -1,0 +1,177 @@
+{
+ "schema": "nikodemus.deposition.v1",
+ "producer": {
+  "id": "deflate",
+  "display": "Deflate Lens",
+  "version": "0.15.2+deposition"
+ },
+ "object": {
+  "type": "reading_run",
+  "id": "r_fixture0001"
+ },
+ "recorded_at": "2026-10-16T00:00:00Z",
+ "payload_media_type": "application/json",
+ "payload_sha256": "b7e5dd38d2b89586eb93954e099789982ed088aa7365726ec90bf9f312450750",
+ "signature": {
+  "algorithm": "Ed25519",
+  "method": "deflate.deposition.v1",
+  "trusted_key_id": "ed25519:sha256:388be1638fa0e245353036dbf7b94b6a580c06094f68abc56d192e38feb7f84d",
+  "value": "dk1Sz8qSo3P8JjOIyDqhvNahmN7+jGLlSCY/LflFAd60ErApK7X/pAWSoK9Y6Sl3Ha0yhyuzUPTHqIA5rvmAAw=="
+ },
+ "gaps": [
+  {
+   "kind": "earlier_transcript_versions",
+   "detail": "1 earlier text version(s) are named by SHA-256 in claims.run.transcript.earlierVersions; versions edited before 0.12.1 kept only the hash, not the text"
+  },
+  {
+   "kind": "source_audio_not_retained",
+   "detail": "the uploaded recording was deleted after transcription, by design; its name, size and SHA-256 are in claims.run.import.file"
+  }
+ ],
+ "source_times": [],
+ "payload": {
+  "schema": "deflate-lens/deposition@1",
+  "claims": {
+   "schema": "deflate-lens/claims@0.7",
+   "exportedAt": "2026-10-16T00:00:00.000Z",
+   "generator": "deflate-lens local app",
+   "run": {
+    "id": "r_fixture0001",
+    "title": "The Exemplar Hour",
+    "kind": "transcript",
+    "parseMode": "transcript",
+    "example": true,
+    "source": {
+     "url": "https://example.org/exemplar-hour",
+     "label": "Exemplar Hour",
+     "date": "2026-10-01"
+    },
+    "sourceIdentity": {
+     "state": "needs_confirmation",
+     "match": {
+      "method": "title-lookup"
+     }
+    },
+    "transcript": {
+     "updatedAt": "2026-10-02T00:00:00.000Z",
+     "characters": 119,
+     "sha256": "f73edb87cdca9a9c5a06cb051882aab92428dd83621c057f70062f8c76f30aa6",
+     "parseMode": "transcript",
+     "earlierVersions": [
+      {
+       "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "chars": 100,
+       "replacedAt": "2026-10-01T12:00:00Z"
+      }
+     ]
+    },
+    "speakers": [
+     {
+      "key": "HOST",
+      "name": "Avery Exemplar",
+      "namedBy": "identification",
+      "how": "named in the episode listing",
+      "inText": true
+     },
+     {
+      "key": "GUEST",
+      "name": "GUEST",
+      "namedBy": "unnamed",
+      "how": "no one says a name",
+      "inText": true
+     }
+    ],
+    "jcs_exercise": {
+     "big": 1e+21,
+     "tiny": 1e-7,
+     "whole": 10,
+     "neg": -1.5,
+     "text": "quotes “curly” and straight \"x\", emoji 😀, accents café"
+    }
+   },
+   "passagesHeld": [
+    {
+     "id": "p002",
+     "title": "The held half",
+     "turnStart": 3,
+     "turnEnd": 4,
+     "reasons": [
+      "quote not found in the text"
+     ]
+    }
+   ],
+   "passages": [
+    {
+     "id": "p001",
+     "title": "The fifteen percent claim",
+     "turnStart": 1,
+     "turnEnd": 2,
+     "speakerNames": [
+      "Avery Exemplar",
+      "GUEST"
+     ],
+     "analyzedAt": "2026-10-02T01:00:00Z",
+     "analyzedBy": "fixture",
+     "model": "fixture-model",
+     "readingRev": 1,
+     "earlierReadings": 0,
+     "basedOn": {
+      "inputHash": "f73edb87cdca9a9c5a06cb051882aab92428dd83621c057f70062f8c76f30aa6"
+     },
+     "fidelity": "faithful",
+     "quoteCheck": {
+      "matched": 1,
+      "quotes": 2
+     },
+     "stale": []
+    }
+   ],
+   "claims": [
+    {
+     "id": "p001-c1",
+     "passageId": "p001",
+     "speaker": "Avery Exemplar",
+     "speakerKey": "HOST",
+     "text": "It is 15% better today.",
+     "type": "claim",
+     "displayType": "Checkable claim",
+     "status": "receipt",
+     "turns": [
+      1,
+      1
+     ],
+     "provisional": [
+      "speaker preparation is unresolved"
+     ],
+     "relations": {
+      "supports": 0,
+      "contradicts": 1,
+      "mentions": 0,
+      "unstated": 0
+     },
+     "receipts": [
+      {
+       "rid": "rc1",
+       "kind": "link",
+       "url": "https://example.org/report",
+       "relation": "contradicts",
+       "relationBy": "a person",
+       "at": "2026-10-03T00:00:00Z"
+      }
+     ],
+     "searches": [],
+     "candidatesPending": 0,
+     "rejections": []
+    }
+   ],
+   "patterns": []
+  },
+  "transcript": {
+   "included": true,
+   "text": "HOST: Welcome back to The Exemplar Hour — it’s 15% better today.\nGUEST: “Half a million,” she said. 1.5 degrees. Done.\n",
+   "characters": 119,
+   "sha256": "f73edb87cdca9a9c5a06cb051882aab92428dd83621c057f70062f8c76f30aa6",
+   "note": "the run's transcript as saved now; claims.run.transcript names the original input's hash and earlier versions by hash"
+  }
+ }
+}

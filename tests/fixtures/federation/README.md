@@ -31,3 +31,14 @@ Python-signed packages, one verifier.
 These prove interoperability of the contract. They do not prove
 production connectivity: the real deep-research profiles live only in
 EthicalAlt's production database, and the real cases in Open Case's.
+
+W1 (adr-extraction, 2026-10-16) adds the third producer's golden package:
+`deflate.exemplar.deposition.json`, signed by the deposition module added
+to the owner's deflate-lens 0.15.2 tree (`../producers/make_deflate_fixtures.mjs`
+carries its canonicalization and signing verbatim — the generator and
+its test-only key live there because THIS directory is scanned against
+holding private key material); the fixture is the contract, and a drift
+in either side's canonicalization fails the W1 suite block by name. The key beside it is test-only. The payload's
+`claims.run.jcs_exercise` carries the numbers and strings RFC 8785 is
+touchiest about, so the fixture is also the cross-language
+canonicalization proof.

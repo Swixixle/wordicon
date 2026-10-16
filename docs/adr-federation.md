@@ -200,3 +200,17 @@ byte-identical; no model is constructed on any path; nothing from the
 corpus reaches a request; no credential reaches the store, a page, a
 fixture or a log; reading works with the producer offline; the gate
 holds.
+
+## Amendment (W1, adr-extraction, 2026-10-16): a third instrument
+
+Deflate Lens joined through the same door, unchanged: registered, its key
+pinned out of band, one signed record pulled at a time, exact bytes into
+custody, the producer's words attributed to the producer. Two differences
+from the first two, both declared rather than smoothed: its deposition
+routes are an addition to the owner's tree (stock Deflate serves none —
+the contract's export_path_served_by says so), and its payload carries the
+retained transcript text, because Deflate's own export names transcripts
+by hash without the text and deletes audio after transcription — the text
+is what survives, so the text travels, and what did not survive rides as
+named gaps. Federation, not a merger, held: no seat re-scores a reading,
+and a Deflate run converges with nothing until the owner declares it.

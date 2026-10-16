@@ -24373,6 +24373,109 @@ console.log(out.join('\\n'));
     if len(_ad.get("relationship_classes", [])) != 4:
         _f107("the anatomy gained a fifth relationship class")
 
+    # ---- W1 (adr-extraction, 2026-10-16): Deflate joins the same door ----
+    #
+    # The records connection the owner ruled first. Deflate Lens exports a
+    # signed nikodemus.deposition.v1 package per reading run — Ed25519 over
+    # the RFC 8785 canonical payload, signed by the deposition module ADDED
+    # to the owner's tree (stock 0.15.2 and origin/main e25f7c2 serve no
+    # deposition routes; export_path_served_by says so and this block pins
+    # that honesty). The golden package here was signed by the producer's
+    # own code (make_deflate_fixtures.mjs carries it verbatim), so what this
+    # block proves, by name: the Node signature verifies under the Python
+    # verifier byte for byte; it SURVIVES key reordering (RFC 8785 equality
+    # across the two implementations, exercised on the numbers and strings
+    # the RFC is touchiest about); a changed payload byte and a mismatched
+    # object id each fail by name; the payload carries the transcript TEXT
+    # (hashes alone are the gap this wing exists to close — Deflate's claims
+    # export names transcripts by SHA-256 without the text, and audio is
+    # deleted after transcription); what is not retained arrives as named
+    # gaps, never smoothed over; and the representation keeps Deflate's
+    # words attributed to Deflate — a reading is its model's, reviewed by
+    # its own second pass, never independent validation, never a Nikodemus
+    # finding. Live fetch through a mock producer is not repeated here: the
+    # fetcher is producer-agnostic and proven above; what is deflate-shaped
+    # is the envelope, the method and the representation, all exercised on
+    # the import chokepoint itself.
+    def _fW1(msg):
+        failures.append(f"W1: {msg}")
+
+    _dfl_spec = _fed.PRODUCERS.get("deflate") or {}
+    if _dfl_spec.get("export_path") != "/api/deposition/runs/{id}/export" or _dfl_spec.get("locate_path") != "/api/deposition/runs" \
+            or _dfl_spec.get("locate_items_key") != "runs" or _dfl_spec.get("methods") != ("deflate.deposition.v1",) \
+            or _dfl_spec.get("object_types") != ("reading_run",) or _dfl_spec.get("auth") != "none":
+        _fW1(f"the Deflate contract moved: {_dfl_spec}")
+    if "absent from stock" not in _dfl_spec.get("export_path_served_by", ""):
+        _fW1("the contract no longer says the deposition routes are an addition, not stock Deflate")
+    _dfl_vocab = _dfl_spec.get("vocabulary") or {}
+    for _phrase in ("not independent validation", "does not prove the card reads them fairly", "never verification of the claim"):
+        if not any(_phrase in v for v in _dfl_vocab.values()):
+            _fW1(f"the Deflate vocabulary lost its attribution: {_phrase!r}")
+    _dfl_bytes = (_fx107 / "deflate.exemplar.deposition.json").read_bytes()
+    _dfl_pub = (_fx107 / "deflate.fixture.pub.b64").read_text().strip()
+    _dfl_env = _json107.loads(_dfl_bytes)
+    _fed.register_connector("dfl", "deflate", _base107, display="Deflate (dev)", dev_loopback=True)
+    _kid_dfl = _fed.pin_key("dfl", _dfl_pub, label="fixture")["key_id"]
+    if _kid_dfl != _dfl_env["signature"]["trusted_key_id"]:
+        _fW1("the key fingerprint computed here differs from the one Deflate's code computed")
+    _r_dfl = _fed.import_package(_fed.get_connector("dfl"), _dfl_bytes, how="package")
+    if not (_r_dfl["verification"]["ok"] and _r_dfl["representation"]):
+        _fW1(f"the golden Deflate package does not verify: {_r_dfl['verification']}")
+
+    def _reorderW1(x):
+        if isinstance(x, dict):
+            return {k: _reorderW1(x[k]) for k in reversed(list(x))}
+        return [_reorderW1(i) for i in x] if isinstance(x, list) else x
+    _shuffled = _json107.dumps(_reorderW1(_dfl_env), ensure_ascii=False).encode("utf-8")
+    _r_shuf = _fed.import_package(_fed.get_connector("dfl"), _shuffled, how="package")
+    if not _r_shuf["verification"]["ok"]:
+        _fW1(f"key order changed the canonical bytes — RFC 8785 equality with the producer broke: {_r_shuf['verification']}")
+    if _r_shuf.get("prior_version_of") != _r_dfl["deposition_id"]:
+        _fW1("the reordered bytes did not link to the prior verified deposition of the same run")
+    _tampered = _json107.loads(_dfl_bytes)
+    _tampered["payload"]["transcript"]["text"] += " "
+    _r_tam = _fed.import_package(_fed.get_connector("dfl"), _json107.dumps(_tampered).encode("utf-8"), how="package")
+    if _r_tam["verification"]["ok"] or "does not match" not in _r_tam["verification"]["why"]:
+        _fW1(f"a changed transcript byte did not fail by name: {_r_tam['verification']}")
+    _misnamed = _json107.loads(_dfl_bytes)
+    _misnamed["object"]["id"] = "r_other0001"
+    _r_mis = _fed.import_package(_fed.get_connector("dfl"), _json107.dumps(_misnamed).encode("utf-8"), how="package")
+    if _r_mis["verification"]["ok"] or "signed payload is" not in _r_mis["verification"]["why"]:
+        _fW1(f"an envelope naming another run than its signed payload did not fail by name: {_r_mis['verification']}")
+    _dep_dfl = _fed.get_deposition(_r_dfl["deposition_id"])
+    _rep_dfl = _fed.deposition_representation(_dep_dfl)
+    if not _rep_dfl or _rep_dfl.get("producer") != "deflate":
+        _fW1("no representation was derived for the verified Deflate package")
+    else:
+        if not (_rep_dfl.get("transcript") or {}).get("included") or not (_rep_dfl.get("transcript") or {}).get("sha256"):
+            _fW1(f"the representation does not say the transcript text travelled: {_rep_dfl.get('transcript')}")
+        _kinds = _rep_dfl.get("counts") or {}
+        if not (_kinds.get("reading") and _kinds.get("reading_held") and _kinds.get("claim") and _kinds.get("speaker")):
+            _fW1(f"the representation lost a kind: {_kinds}")
+        _reads = [i for i in _rep_dfl["items"] if i["kind"] == "reading"]
+        if not _reads or any("not independent validation" not in (i.get("attributed_to") or "") for i in _reads):
+            _fW1("a Deflate reading is not attributed to Deflate's own model on the item itself")
+        _clms = [i for i in _rep_dfl["items"] if i["kind"] == "claim"]
+        if not _clms or any("means verified" not in (i.get("status_attributed_to") or "") for i in _clms):
+            _fW1("a claim status arrived without Deflate's own 'none of these means verified'")
+        _gkinds = {g.get("kind") for g in _rep_dfl.get("gaps") or []}
+        if not {"earlier_transcript_versions", "source_audio_not_retained"} <= _gkinds:
+            _fW1(f"what Deflate no longer holds is not carried as named gaps: {_gkinds}")
+    _pl_dfl = _dfl_env["payload"]
+    if _fed._payload_native_id("deflate", _pl_dfl) != "r_fixture0001":
+        _fW1("the native id is not read from claims.run.id")
+    if _fed._signed_message("deflate.deposition.v1", "00", _pl_dfl) != _fed.canonical_json(_pl_dfl):
+        _fW1("the Deflate method does not sign the canonical payload bytes")
+    _inv_w1 = (_root107 / "webapp" / "investigation.html").read_text(encoding="utf-8")
+    if '<option value="deflate">' not in _inv_w1:
+        _fW1("the register form does not offer the Deflate instrument")
+    if "Open Case, EthicalAlt and Deflate Lens stay their own systems" not in _inv_w1:
+        _fW1("the page's own account of the instruments does not name all three")
+    _adr_w1 = " ".join((_root107 / "docs" / "adr-extraction.md").read_text(encoding="utf-8").split())
+    for _need in ("the text travels", "signed `nikodemus.deposition.v1`", "pinned to a named Deflate revision"):
+        if _need not in _adr_w1:
+            _fW1(f"the extraction ADR lost {_need!r}")
+
     # ================= slice 1: the four repairs the shell does not wait for ==========
     # Defects the redesign named but that stand on their own (revision 3 of
     # the interface design, §14 slice 1). Each is a place where the page

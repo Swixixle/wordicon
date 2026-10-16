@@ -64,3 +64,12 @@ They prove that the adapters implement the producers' contracts as their
 source defines them, and that the verifiers reproduce the producers'
 signing. They do not prove that any deployment runs these revisions: live
 starts stay disabled until the owner records that ruling on the connector.
+
+W1 (adr-extraction, 2026-10-16): `make_deflate_fixtures.mjs` and its
+test-only key live here for the same reason the other keys do, but its
+signed outputs are golden depositions and are written into
+`../federation/`. Deflate's deposition routes are an addition to the
+owner's deflate-lens 0.15.2 tree, not stock; the generator carries the
+added module's canonicalization and signing verbatim (checked against
+the module at build time, 2026-10-16); the committed fixture is the
+contract both sides are held to.

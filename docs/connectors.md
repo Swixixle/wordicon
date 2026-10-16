@@ -1,4 +1,4 @@
-# Connected instruments — how to use Open Case and EthicalAlt with Nikodemus
+# Connected instruments — how to use Open Case, EthicalAlt and Deflate Lens with Nikodemus
 
 Block 107 (`docs/adr-federation.md`). Manual pull only. Nothing here polls,
 refreshes, investigates, or calls a model.
@@ -144,7 +144,35 @@ custody stays readable, verifiable, and seated.
 - Open Case `legacy`: a pre-2026-04-02 seal without an embedded payload;
   held as legacy, unverifiable from the export.
 
+## Deflate Lens (W1 of adr-extraction, 2026-10-16)
+
+Deflate runs on this computer at `http://127.0.0.1:3123`. Its deposition
+routes are an ADDITION to the owner's tree (deflate-lens 0.15.2 +
+`server/deposition.js`); stock Deflate serves none, so a stock install
+answers the connection check with `http_404` — a named failure, never
+"nothing found". To connect:
+
+1. Start Deflate, then open `http://127.0.0.1:3123/api/deposition/key`
+   and copy `public_key_b64`. That page is the out-of-band channel: same
+   machine, the producer's own mouth, never a package.
+2. On `/investigation`, register the instrument: producer Deflate Lens,
+   base URL `http://127.0.0.1:3123` (loopback is a development endpoint —
+   tick that), no credential (it needs none).
+3. Pin the key you copied. The fingerprint shown must equal the one the
+   key page shows: `ed25519:sha256:…` computed over the raw 32-byte key,
+   the same computation all three producers share.
+4. Bring a record in by its run id (the instrument's own list offers
+   them). The package carries Deflate's whole claims export AND the
+   transcript text; what Deflate no longer holds — earlier text versions
+   kept only by hash, source audio deleted after transcription — arrives
+   as named gaps in the envelope.
+
+A Deflate reading stays Deflate's model's, reviewed by its own second
+pass — not independent validation, and never a Nikodemus finding; a
+"matched" quote is presence in the transcript, not fairness; a receipt is
+a person's stated relevance judgment, never verification.
+
 ## What this block does not do
 
-No commands toward either producer (investigate, refresh, snapshot, deep
-research, receipt). No bulk synchronization. No model call. No polling.
+No commands toward any producer (investigate, refresh, snapshot, deep
+research, receipt, read). No bulk synchronization. No model call. No polling.

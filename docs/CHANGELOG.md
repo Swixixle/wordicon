@@ -1,5 +1,37 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.42.0 — W1: Deflate joins the federation door
+
+The records connection the extraction rulings put first, shipped the same
+day, both sides. Deflate Lens — the owner's transcript-reading app — now
+exports one signed `nikodemus.deposition.v1` package per reading run:
+Ed25519 over the RFC 8785 canonical payload, served by a deposition
+module ADDED to the owner's live tree (deflate-lens 0.15.2; stock Deflate
+and its GitHub main serve no deposition routes, and the pinned contract
+says so rather than smoothing it). The payload carries Deflate's whole
+claims export PLUS the retained transcript text — Deflate's own export
+names transcripts by SHA-256 without the text and deletes audio after
+transcription, so the text is what survives and the text travels; what
+did not survive rides in the envelope as named gaps, never reconstructed.
+
+Nikodemus's side: the third producer contract beside Open Case's and
+EthicalAlt's (import only — Nikodemus never starts a reading), a
+representation that keeps Deflate's words attributed to Deflate (a
+reading is its model's, reviewed by its own second pass — not independent
+validation; "matched" is presence, not fairness; a receipt is a person's
+stated relevance judgment), the register form and the page's own account
+naming all three instruments, and the anatomy's instruments organ brought
+current.
+
+Proven in the W1 suite block on a golden package signed by the producer's
+own code: Node signs, Python verifies byte for byte; reordering every
+object's keys changes nothing (RFC 8785 equality across the two
+implementations, exercised on the numbers and strings the RFC is
+touchiest about); a changed transcript byte and an envelope naming a run
+its signed payload is not each fail by name; the gaps and attributions
+survive into the representation. The key is pinned out of band from
+Deflate's own key page — a key inside a package stays ignored.
+
 ## v1.41.3 — The extraction rulings, recorded (documentation only)
 
 The owner's "Maximum Data Extraction Proposal" (drafted with another

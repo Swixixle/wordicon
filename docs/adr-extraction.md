@@ -1,6 +1,7 @@
 # ADR — maximum extraction: the owner's data, mined by the major models
 
-Status: accepted (the rulings below), nothing built yet. Date: 2026-10-16.
+Status: accepted; W1 (the records connection) shipped the same day, both
+sides. Date: 2026-10-16.
 The proposal this answers is the owner's "Maximum Data Extraction Proposal"
 (drafted with another model, 2026-10-16); this document records what was
 ruled, what already exists, what is new, and the order it gets built in.
@@ -69,23 +70,40 @@ GitHub snapshot the proposal inspected — several of its "gaps" are built:
 - **Lineage already recorded** — carries, sprout parentage, Map edges,
   Your-work search.
 
+The spine, in the owner's accepted ordering: sources → events → model
+runs → findings → connections → feedback → memory, with training
+datasets generated later, optionally, from the same records.
+
 ## What is new (the gap map, in build order)
 
-- **W1 — the records connection.** In Deflate: an exporter that emits
-  signed `nikodemus.deposition.v1` packages and publishes a key for
-  pinning. The package must carry the retained transcript snapshot
-  itself: verified in Deflate's own code (e25f7c2), its claims export
-  carries the transcript's SHA-256 and version references without the
-  text, and uploaded recordings are deleted after transcription — text is
-  what survives, so text travels. In Nikodemus: a Deflate adapter
-  contract beside Open Case's and EthicalAlt's, pinned to a named Deflate
-  revision, tested first against synthetic signed packages. Blocked on
-  reaching the owner's local Deflate (0.15.1 reported; GitHub holds
-  0.14.8 — the adapter pins what it can actually see).
+- **W1 — the records connection. SHIPPED 2026-10-16.** In Deflate: an
+  exporter that emits signed `nikodemus.deposition.v1` packages (Ed25519
+  over the RFC 8785 canonical payload) and serves its key for pinning
+  out of band — `server/deposition.js` plus three GET routes, added to
+  the owner's live tree, which turned out to be deflate-lens 0.15.2 in
+  `~/Downloads/deflate-lens-0.15.2` (newer than the 0.15.1 the proposal
+  reported; GitHub still holds 0.14.8). The package carries the retained
+  transcript snapshot itself: verified in Deflate's own code, its claims
+  export names the transcript by SHA-256 and version references without
+  the text, and uploaded recordings are deleted after transcription —
+  the text is what survives, so the text travels, and what does not
+  survive rides in the envelope as named gaps. In Nikodemus: the Deflate
+  producer contract beside Open Case's and EthicalAlt's, pinned to a
+  named Deflate revision (0.15.2 + the added module, which stock Deflate
+  does not serve — the contract says so), a representation that keeps
+  Deflate's words attributed to Deflate, and a W1 suite block whose
+  golden package was signed by the producer's own code: Node signs,
+  Python verifies, key reordering changes nothing (RFC 8785 equality
+  across the two implementations), a changed byte fails by name.
 - **W2 — capture at revision boundaries.** Draft revisions
   content-addressed in their own store; searches; attempt-before-execution
   and failure events; dispositions; lineage edges. Each new event type
-  disclosed on `/ledger` beside what is never recorded.
+  disclosed on `/ledger` beside what is never recorded. An edit is
+  CANDIDATE FEEDBACK, never an automatic preference pair: the original,
+  the edit and the context are kept together, and "original rejected /
+  edit chosen" is a judgment no pipeline files on its own — a shortening
+  for one audience, a changed task and a one-detail correction all look
+  like edits, and only analysis under review may read them as more.
 - **W3 — extraction jobs and findings.** A versioned pass catalog; job
   identity = source version × pass version × model × context manifest;
   intent persisted before dispatch, results before success; raw provider

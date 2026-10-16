@@ -107,6 +107,37 @@ PRODUCERS = {
             "allegation_response": "EthicalAlt's allegation response types 1–3, paired with the allegation they answer",
         },
     },
+    # Deflate Lens (W1 of the extraction rulings, docs/adr-extraction.md,
+    # 2026-10-16): the owner's transcript-reading instrument joins the same
+    # door. Import only — Nikodemus never starts a Deflate reading. Unlike
+    # the other two, the export routes are not on a producer branch: stock
+    # Deflate (0.15.2 and origin/main e25f7c2 alike) serves no deposition
+    # routes at all; the deposition module this block ADDS to the owner's
+    # 0.15.2 tree serves them. The payload carries Deflate's own claims
+    # export whole, PLUS the retained transcript snapshot — verified in
+    # Deflate's source: its claims export names transcripts by SHA-256
+    # without the text, and uploaded recordings are deleted after
+    # transcription, so the text is what survives and the text travels.
+    "deflate": {
+        "display": "Deflate Lens",
+        "object_types": ("reading_run",),
+        "methods": ("deflate.deposition.v1",),
+        "schemas": ("deflate-lens/deposition@1",),
+        "export_path": "/api/deposition/runs/{id}/export",
+        "export_path_served_by": "the deposition module added to the owner's tree (server/deposition.js, routes in server/app.js) — "
+                                 "absent from stock deflate-lens 0.15.2 and from origin/main e25f7c2 (0.14.8)",
+        "locate_path": "/api/deposition/runs",
+        "locate_items_key": "runs",
+        "url_patterns": (r"/api/deposition/runs/([A-Za-z0-9][A-Za-z0-9_-]{0,79})",),
+        "id_pattern": r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$",
+        "auth": "none",
+        "vocabulary": {
+            "reading": "a Deflate reading is the model's interpretation of a passage, reviewed by a second pass of the same model — "
+                       "Deflate's own words: not independent validation; never a Nikodemus finding",
+            "verbatim": "'matched' means the quoted words are in the saved transcript — Deflate's own words: it does not prove the card reads them fairly",
+            "receipt": "a Deflate receipt records a person's stated judgment of a document's relevance (supports / contradicts / mentions) — never verification of the claim",
+        },
+    },
 }
 RELATION_STATES = ("proposed_same_entity", "declared_same_entity", "affiliate_of", "parent_of",
                    "political_committee_of", "recipient_of", "rejected_match", "unresolved")
@@ -582,6 +613,8 @@ def _payload_native_id(producer: str, payload) -> str:
         return str(((payload.get("case") or {}).get("id")) or "")
     if producer == "ethicalalt":
         return str(((payload.get("profile") or {}).get("brand_slug")) or "")
+    if producer == "deflate":
+        return str((((payload.get("claims") or {}).get("run")) or {}).get("id") or "")
     return ""
 
 
@@ -654,6 +687,8 @@ def _signed_message(method: str, digest_hex: str, payload) -> bytes:
         return digest_hex.encode("utf-8")           # Open Case signs the hex digest string
     if method == "ethicalalt.export.v2":
         return canonical_json(payload)              # EthicalAlt v2 signs the canonical bytes
+    if method == "deflate.deposition.v1":
+        return canonical_json(payload)              # Deflate signs the canonical bytes (RFC 8785 on both sides)
     raise ValueError(f"unknown signing method {method}")
 
 
@@ -810,6 +845,8 @@ def build_representation(producer: str, env: dict) -> dict:
         return _rep_open_case(env, payload)
     if producer == "ethicalalt":
         return _rep_ethicalalt(env, payload)
+    if producer == "deflate":
+        return _rep_deflate(env, payload)
     return {"producer": producer, "rep_rev": REP_REV, "items": []}
 
 
@@ -851,6 +888,59 @@ def _rep_open_case(env: dict, payload: dict) -> dict:
             "schema_version": payload.get("schema_version"), "sealed_at": (env.get("seal") or {}).get("last_signed_at") or env.get("recorded_at") or case.get("last_signed_at") or "",
             "items": items, "gaps": gaps, "names": sorted(n for n in names if n), "vocabulary": PRODUCERS["open_case"]["vocabulary"],
             "legacy": bool((env.get("legacy") or {}).get("self_contained") is False), "counts": {k: sum(1 for i in items if i["kind"] == k) for k in ("evidence", "signal", "source_check")}}
+
+
+def _rep_deflate(env: dict, payload: dict) -> dict:
+    """Deflate's records in Deflate's words: readings are the model's,
+    reviewed by its own second pass; 'matched' is presence in the
+    transcript, never fairness; a receipt is a person's stated relevance
+    judgment. Nothing here is re-scored, and the transcript — when the
+    package carries it, which the exporter always does — stays the
+    producer's text, hashed, never edited."""
+    claims_doc = payload.get("claims") or {}
+    run = claims_doc.get("run") or {}
+    rid = str(run.get("id") or env["object"]["id"])
+    items = []
+    for p in claims_doc.get("passages") or []:
+        q = p.get("quoteCheck") or {}
+        items.append({"kind": "reading", "ref": f"deflate:passage:{p.get('id', '')}", "title": p.get("title") or "",
+                      "turns": [p.get("turnStart"), p.get("turnEnd")], "speakers": p.get("speakerNames") or [],
+                      "model": p.get("model") or "", "analyzed_by": p.get("analyzedBy") or "", "analyzed_at": p.get("analyzedAt") or "",
+                      "reading_rev": p.get("readingRev"), "earlier_readings": p.get("earlierReadings"),
+                      "fidelity": p.get("fidelity") or "", "quotes_matched": q.get("matched"), "quotes_total": q.get("quotes"),
+                      "stale": p.get("stale") or [], "based_on_text_sha256": ((p.get("basedOn") or {}).get("inputHash")) or "",
+                      "attributed_to": "Deflate's model reading, reviewed by its own second pass — not independent validation", "signed": True})
+    for h in claims_doc.get("passagesHeld") or []:
+        items.append({"kind": "reading_held", "ref": f"deflate:passage:{h.get('id', '')}", "title": h.get("title") or "",
+                      "reasons": h.get("reasons") or [], "signed": True,
+                      "attributed_to": "held by Deflate's own gate — never shown as a finished reading"})
+    for c in claims_doc.get("claims") or []:
+        items.append({"kind": "claim", "ref": f"deflate:claim:{c.get('id', '')}", "text": c.get("text") or "",
+                      "type": c.get("displayType") or c.get("type") or "", "speaker": c.get("speaker") or "",
+                      "status": c.get("status") or "", "status_attributed_to": "Deflate's export's own meaning: none of these statuses means verified",
+                      "relations": c.get("relations") or {}, "receipts": len(c.get("receipts") or []),
+                      "provisional": c.get("provisional") or [], "signed": True})
+    for s in run.get("speakers") or []:
+        items.append({"kind": "speaker", "ref": f"deflate:speaker:{rid}:{s.get('key', '')}", "name": s.get("name") or "",
+                      "named_by": s.get("namedBy") or "", "how": s.get("how") or "", "in_text": bool(s.get("inText")), "signed": True})
+    gaps, seen_gaps = [], set()
+    for g in list(env.get("gaps") or []) + list(payload.get("gaps") or []):
+        key = json.dumps(g, sort_keys=True, ensure_ascii=False)
+        if key not in seen_gaps:
+            seen_gaps.add(key); gaps.append(g)
+    tr = payload.get("transcript") or {}
+    src = run.get("source") or {}
+    ident = run.get("sourceIdentity") or {}
+    names = {run.get("title")} | {s.get("name") for s in run.get("speakers") or []}
+    return {"producer": "deflate", "rep_rev": REP_REV, "object_id": rid,
+            "subject": {"ref": f"deflate:run:{rid}", "name": run.get("title") or rid, "kind": run.get("kind") or "transcript",
+                        "source_url": src.get("url") or "", "source_label": src.get("label") or "",
+                        "source_identity_state": ident.get("state") or "",
+                        "source_identity_attributed_to": "Deflate — a person's statement about the match, never a check of the transcript"},
+            "schema_version": claims_doc.get("schema") or payload.get("schema"),
+            "transcript": {"included": bool(tr.get("included")), "characters": tr.get("characters"), "sha256": tr.get("sha256") or ""},
+            "items": items, "gaps": gaps, "names": sorted(n for n in names if n), "vocabulary": PRODUCERS["deflate"]["vocabulary"],
+            "counts": {k: sum(1 for i in items if i["kind"] == k) for k in ("reading", "reading_held", "claim", "speaker")}}
 
 
 def _ea_partial_reasons(prof: dict, completeness: dict) -> "list[str]":
