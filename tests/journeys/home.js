@@ -82,7 +82,19 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
     const apiAfter = await (await page.request.get(BASE + '/api/home')).json();
     const recRow = (apiAfter.pending.items || []).find(i => i.source === 'recovery_review');
     const recovered = (apiAfter.continue || []).find(c => c.kind === 'concept' && c.title === 'Quorum Pedagogy');
-    ok(recRow && /^1 accepted-but-absent concept, receipt-only/.test(recRow.label) && recovered && recovered.shelf && recovered.shelf.via === 'concept_id' && /^2026-09/.test(recovered.when || ''), 'Home counts one case left and the recovered concept is a Continue card by its minted id, dated by the ruling: ' + JSON.stringify([recRow && recRow.label, recovered && recovered.shelf, recovered && recovered.when]).slice(0, 200));
+    // DATED BY THE RULING, and the ruling was made a moment ago by this
+    // journey — so the date to compare against is today's, computed now.
+    // This read /^2026-09/ and passed only during the month it was written
+    // (2026-09-16); on 2026-10-16 it failed on an unchanged product, which
+    // is a test that expires rather than a defect it found. The check's real
+    // intent is that the card carries the ruling's own recorded clock. Note
+    // what the old form could actually catch: in September every date in a
+    // fresh fixture store began "2026-09", so the literal was indis-
+    // tinguishable from "has a date at all" — it asserted less than it
+    // looked like it did, and then expired. Today's date is the real
+    // assertion, because the ruling is made inside this run.
+    const ruledDay = new Date().toISOString().slice(0, 10);
+    ok(recRow && /^1 accepted-but-absent concept, receipt-only/.test(recRow.label) && recovered && recovered.shelf && recovered.shelf.via === 'concept_id' && (recovered.when || '').slice(0, 10) === ruledDay, 'Home counts one case left and the recovered concept is a Continue card by its minted id, dated by the ruling: ' + JSON.stringify([recRow && recRow.label, recovered && recovered.shelf, recovered && recovered.when, ruledDay]).slice(0, 240));
     await page.goto(BASE + '/'); await page.waitForTimeout(1200);
     const rulingColors = await page.$$eval('#ruling-area .rule-row', rows => rows.map(r => getComputedStyle(r).borderLeftColor + '|' + getComputedStyle(r).color));
     ok(rulingColors.every(c => !c.includes('224, 138, 138')), 'the rulings band is not failure-red');
