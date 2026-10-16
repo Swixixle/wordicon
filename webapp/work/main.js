@@ -2,7 +2,7 @@
 // editors, the formatting bar, find and replace, versions and the guarded
 // application of a suggestion). Wires the modules; holds no business logic
 // of its own.
-import { el, toast, getJSON, whenOf } from './util.js';
+import { el, toast, getJSON, postJSON, whenOf } from './util.js';
 import { DocumentSession } from './session.js';
 import { EditorSwitch } from './editors.js';
 import { Layout } from './layout.js';
@@ -12,6 +12,10 @@ import { Actions } from './actions.js';
 import { YourWork } from './yourwork.js';
 import { Investigate } from './investigate.js';
 import { Intake } from './intake.js';
+import { Ledger } from './ledger.js';
+
+// the Ledger's reporter: attention events only, owned and disclosed (2026-10-16)
+const ledgerRep = new Ledger();
 import { Applier } from './apply.js';
 import { toMarkdown, toHTML } from '/work/document.js';
 
@@ -23,18 +27,19 @@ editor.mount(document.getElementById('editor-host'));
 var syncNotesDoc = null;                  // set below, once Results exists
 const session = new DocumentSession(editor, {
   onStatus: s => { renderHeader(s); renderDrafts(s); if (syncNotesDoc) syncNotesDoc(); },
-  onOpened: s => { renderHeader(s); renderDrafts(s); showPage('work'); renderToolbar(); if (syncNotesDoc) syncNotesDoc(); if (s.recovered) toast('Opened with unsent changes recovered from this browser (newer than the saved copy).'); },
+  onOpened: s => { renderHeader(s); renderDrafts(s); showPage('work'); renderToolbar(); if (syncNotesDoc) syncNotesDoc(); ledgerRep.note('document_opened', { id: s.id || '', title: s.displayTitle() }); if (s.recovered) toast('Opened with unsent changes recovered from this browser (newer than the saved copy).'); },
   onConflict: s => renderConflict(s),
   onApplicationCommitted: () => { results.render(); },
 });
 
 const layout = new Layout(shell, { focusEditor: () => editor.focus() });
-const places = new Places({ onOpen: () => { hideViews(); document.getElementById('place-view').hidden = false; }, onClose: () => showPage(currentPage) });
+const places = new Places({ onOpen: m => { hideViews(); document.getElementById('place-view').hidden = false; ledgerRep.note('place_opened', { title: (m && m.name) || '' }); }, onClose: () => { ledgerRep.note('place_closed', {}); showPage(currentPage); } });
 const applier = new Applier(session, editor, { onRecorded: () => {} });
 const results = new Results(session, layout, places, { onPlace: () => {}, onActivity: () => renderActivity(), applyControls: (t, text) => applier.controls(t, text),
   prepareAction: (id, subject) => actions.prepare(id, subject),
   // the door from a result back to the writing it came from (his ask, 2026-10-16)
   openDocument: async id => { if (!id) return; if (await session.open(id)) showPage('work'); else toast('That document could not be opened from the record.'); },
+  onView: (id, kind) => ledgerRep.note('result_viewed', { id: id || '', kind: kind || '' }),
   labelOf: id => (actions.byId[id] && actions.byId[id].label) || (id || '').replace(/^legacy:\/api\/jobs:/, 'a run: ') });
 syncNotesDoc = () => results.syncNotesDocument();
 const intake = new Intake(results, layout, places);
@@ -59,6 +64,7 @@ function showPage(name) {
   hideViews();
   document.getElementById(PAGES[name]).hidden = false;
   shell.dataset.page = name;
+  ledgerRep.note('page_shown', { page: name });
   for (const a of document.querySelectorAll('.dest')) a.classList.toggle('on', a.dataset.page === name);
   renderToolbar();
   if (name === 'yourwork') yourwork.render();
@@ -262,6 +268,25 @@ function renderSettings() {
   else if (PREVIEW.on) v.appendChild(el('div', { class: 'kv warn', text: 'This process is a preview (started with WORDICON_PREVIEW=1): it seals no backups at start, on a timer or at shutdown, prunes and drills nothing, and sends no notification — whatever vault configuration its data root carries. Its writing is kept in its own data root only.' }));
   v.appendChild(el('div', { class: 'row' }, [el('button', { class: 'btn', type: 'button', text: 'Open the previous interface (new tab)', onclick: () => window.open('/', '_blank', 'noopener') }), el('button', { class: 'btn', type: 'button', text: 'Devices and pairing', onclick: () => window.open('/pair', '_blank', 'noopener') })]));
   v.appendChild(el('div', { class: 'kv' }, ['Arrangement: Tools and Results remember whether they are open and how wide, per screen size. ', el('button', { class: 'btn small', type: 'button', text: 'Forget the arrangement', onclick: () => { try { Object.keys(localStorage).filter(k => k.startsWith('nikodemus.work.layout.')).forEach(k => localStorage.removeItem(k)); } catch (e) {} toast('Forgotten. Reload to see the defaults.'); } })]));
+  // the Ledger (2026-10-16): the switch is HERE, visible and named — the
+  // owner's trail is captured in the light or not at all
+  const ledRow = el('div', { class: 'kv' }, [
+    el('span', { text: 'The Ledger — your own trail: which doors, pages, documents and results had your attention, and when it came and went. Events only — no keystrokes, no content. It lives in your store, the Vault seals it, and it is shown only to you. ' }),
+  ]);
+  const ledBtn = el('button', { class: 'btn small', type: 'button', text: '…' });
+  const ledState = el('span', { class: 'muted small-text', text: '' });
+  let ledOn = true;
+  const drawLed = () => { ledBtn.textContent = ledOn ? 'Turn the Ledger off' : 'Turn the Ledger on'; ledState.textContent = ledOn ? ' recording' : ' off — nothing new is recorded; what was written is kept'; };
+  getJSON('/api/ledger/config').then(r => { ledOn = !(r.ok && r.data && r.data.enabled === false); drawLed(); }).catch(drawLed);
+  ledBtn.addEventListener('click', async () => {
+    const r = await postJSON('/api/ledger/config', { enabled: !ledOn });
+    ledOn = !(r.ok && r.data && r.data.enabled === false);
+    ledgerRep.setEnabled(ledOn); drawLed();
+    toast(ledOn ? 'The Ledger is recording again.' : 'The Ledger is off. Nothing new is recorded; your trail so far is kept.');
+  });
+  ledRow.appendChild(ledBtn); ledRow.appendChild(ledState);
+  ledRow.appendChild(el('button', { class: 'btn small', type: 'button', style: 'margin-left:8px', text: 'Open your trail (new tab)', onclick: () => window.open('/ledger', '_blank', 'noopener') }));
+  v.appendChild(ledRow);
 }
 
 function renderHelp() {
@@ -285,6 +310,7 @@ function renderHelp() {
     'Undo is the editor’s own for this sitting. Checkpoints and the recovery copy in this browser are what persist; they are not continuous undo.',
     'Your work lists what is kept. Investigate shows the instruments and whether each can be started from here.',
     'The previous interface, the constitution and the anatomy are the quiet links at the foot of Tools; nothing was removed.',
+    'The Ledger (⌘K: “trail”) keeps your own trail — which doors, pages, documents and results had your attention, and when. Events only, never keystrokes or content; it lives in your store, the Vault seals it, and Settings turns it off. Shown only to you, at /ledger.',
   ];
   for (const l of lines) v.appendChild(el('div', { class: 'kv', text: l }));
   // the workspace's rule, as the constitution states it (verbatim), with its door
@@ -430,6 +456,7 @@ function bindIntake() {
 
 async function boot() {
   bindDocMenu(); bindSelection(); bindDestinations(); bindFind(); bindIntake(); actions.bindAsk();
+  ledgerRep.init();
   layout.hooks.onChange = () => { if (layout.state.results) results.seen(); };
   await actions.load();
   results.loadRecent(id => (actions.byId[id] && actions.byId[id].label) || (id || '').replace(/^legacy:\/api\/jobs:/, 'a run: '));
@@ -465,7 +492,7 @@ async function boot() {
       chip.title = r.data.preview_backup_refusal;
     }
   }).catch(() => {});
-  window.__work = { session, layout, results, actions, places, editor, applier };   // for the journeys: state, not a control surface
+  window.__work = { session, layout, results, actions, places, editor, applier, ledger: ledgerRep };   // for the journeys: state, not a control surface
 }
 const PREVIEW = { on: false, own: false };
 boot();

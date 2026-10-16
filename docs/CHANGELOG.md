@@ -1,5 +1,44 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.40.0 — The Ledger: the owner's own trail, owned by the owner
+
+His ruling (2026-10-16): "I kind of even want key strokes and all the
+bullshit algorhythmic ways the big tech companies monitor us… I like the
+idea of taking all routes, saved info time stamped and documented in a
+retrievable way." Ruled with him: events first — the structured attention
+layer those platforms actually mine — and NO keystrokes for now; that
+refusal is pinned in the suite, not merely intended.
+
+What the Ledger is: an append-only, monthly-filed JSONL stream in the
+store (local_state/ledger/) holding exactly nine event kinds — session
+start and end, page shown, place opened and closed, document opened,
+result viewed, attention leaving and returning to the tab. Each line keeps
+two clocks, named: the page's (the owner's local time, offset stated) and
+the store's UTC receive time. Events carry ids and short titles, never
+bodies. The inversion is the design: same instrument as the platforms,
+custody flipped — it lives in his store, the Vault seals it with his
+writing, and it is shown to the only person it is for.
+
+The shape is law, not intention: an unknown type, an oversized batch or an
+oversized field refuses the WHOLE batch by name; a disabled ledger refuses
+appends by name and keeps what was written (off is a stop, never an
+eraser); the routes answer only paired devices. The page reports through
+webapp/work/ledger.js — batched, sendBeacon at pagehide, silenced at once
+by a 409 — and the acts themselves (prepares, Starts, rulings) stay in
+their own records: the Ledger holds ATTENTION, which no record held.
+
+Doors: the trail page at /ledger (day view, plain sentences, a summary,
+export of the day as .jsonl, and the full negative disclosure: what it
+never records); the visible switch and a door on Settings; ⌘K answers
+"trail" and "ledger". The rail is unchanged — still 13.
+
+Proven by _check_ledger (gate, both clocks, refusals by name, the pinned
+inventory with its no-keystrokes rule, off-keeps-everything, append-only
+growth, the disclosure pins) with a 3-mutation battery (a key-shaped type
+sneaking in, the switch stopping switching, unknown types kept silently —
+each caught by name), and by the doors journey: the day's trail holds the
+movements the journey itself just made.
+
 ## v1.39.0 — The door back to the writing; the anatomy thesis stands down
 
 His ask, minutes into using the three doors: "an easily accessible button

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Ledger — your own trail</title>
+<script src="/brand.js"></script>
+<style>
+  :root { --bg: #0d1526; --panel: #121c33; --text: #e7ecf3; --muted: #94a1b2; --accent: #78aaff; --line: #2b4a86; --write-bg: #0f2350; --write-ink: #ffd97d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 22px 16px 60px; }
+  h1 { font-size: 22px; margin: 0 0 2px; }
+  a { color: var(--accent); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12.5px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-top: 14px; }
+  .lbl { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button, input[type="date"] { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 7px 12px; font-size: 13.5px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  .entry { display: flex; gap: 12px; padding: 5px 0; border-bottom: 1px solid rgba(43, 74, 134, .35); font-size: 13.5px; }
+  .entry:last-child { border-bottom: 0; }
+  .entry .t { color: var(--write-ink); font-variant-numeric: tabular-nums; flex: 0 0 64px; }
+  .entry .what .title { color: var(--accent); }
+  .sum { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; }
+  .sum b { color: var(--write-ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>The Ledger — your own trail</h1>
+  <div class="muted small"><a href="/work">← back to the workspace</a> · shown only to you</div>
+
+  <div class="card">
+    <div class="lbl">What this is, exactly</div>
+    <p style="margin:6px 0">The behavioral layer the big platforms harvest in the dark, captured here in the light and owned by you: which doors you opened, which pages you stood in, which documents and results had your attention, and when it came and went. Every entry is timestamped twice — the page’s clock and the store’s receive clock — appended to a file in your store that is never rewritten, and sealed into the encrypted Vault with your writing.</p>
+    <p class="muted small" style="margin:6px 0 0">What it never records: keystrokes, the content of anything, or a single event from outside this application. The switch is in the workspace’s Settings; off means nothing new is recorded and everything already written is kept. The exact event kinds: session start and end, page shown, place opened and closed, document opened, result viewed, attention leaving and returning to the tab.</p>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <input type="date" id="day" aria-label="Day to read">
+      <button id="load" type="button">Read the day</button>
+      <button id="export" type="button" title="Downloads the loaded events exactly as the store holds them (JSONL)">Export the day (.jsonl)</button>
+      <span class="muted small" id="state"></span>
+    </div>
+    <div class="sum" id="summary" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <div class="lbl">The trail</div>
+    <div id="trail"><p class="muted small">Pick a day and press Read.</p></div>
+  </div>
+</div>
+<script>
+  const SENTENCE = {
+    session_start: () => 'sat down at the desk',
+    session_end: () => 'left the desk',
+    page_shown: s => 'stood in ' + (s.page || 'a page'),
+    place_opened: s => 'opened <span class="title">' + esc(s.title || 'a place') + '</span>',
+    place_closed: () => 'closed the place, back to the writing',
+    document_opened: s => 'opened the document <span class="title">“' + esc(s.title || s.id || 'untitled') + '”</span>',
+    result_viewed: s => 'looked at a ' + (s.kind === 'reading' ? 'reading' : 'result'),
+    visibility_hidden: () => 'attention left the tab',
+    visibility_visible: () => 'attention returned',
+  };
+  function esc(x) { return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  let loaded = [];
+  async function load() {
+    const day = document.getElementById('day').value;
+    if (!day) return;
+    document.getElementById('state').textContent = 'reading…';
+    const r = await fetch('/api/ledger?day=' + encodeURIComponent(day), { credentials: 'same-origin' });
+    const d = await r.json();
+    loaded = d.events || [];
+    document.getElementById('state').textContent = (d.enabled === false ? 'the Ledger is OFF · ' : '') + loaded.length + ' event(s)' + (d.truncated ? ' (newest shown)' : '');
+    const trail = document.getElementById('trail');
+    if (!loaded.length) { trail.innerHTML = '<p class="muted small">Nothing recorded for this day' + (d.enabled === false ? ' — the Ledger is switched off in Settings' : '') + '.</p>'; renderSummary(); return; }
+    trail.innerHTML = loaded.map(e => {
+      const t = (e.at || e.received_at || '').slice(11, 19);
+      const f = SENTENCE[e.type];
+      return '<div class="entry"><span class="t">' + esc(t) + '</span><span class="what">' + (f ? f(e.subject || {}) : esc(e.type)) + '</span></div>';
+    }).join('');
+    renderSummary();
+  }
+  function renderSummary() {
+    const by = {};
+    for (const e of loaded) by[e.type] = (by[e.type] || 0) + 1;
+    const first = loaded[0], last = loaded[loaded.length - 1];
+    const parts = [];
+    if (first) parts.push('<span>first <b>' + esc((first.at || '').slice(11, 16)) + '</b></span><span>last <b>' + esc((last.at || '').slice(11, 16)) + '</b></span>');
+    for (const [k, n] of Object.entries(by)) parts.push('<span>' + esc(k.replace(/_/g, ' ')) + ' <b>' + n + '</b></span>');
+    document.getElementById('summary').innerHTML = parts.join('');
+  }
+  document.getElementById('load').addEventListener('click', load);
+  document.getElementById('export').addEventListener('click', () => {
+    if (!loaded.length) return;
+    const blob = new Blob([loaded.map(e => JSON.stringify(e)).join('\n') + '\n'], { type: 'application/jsonl' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'ledger-' + document.getElementById('day').value + '.jsonl';
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  const today = new Date(); today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+  document.getElementById('day').value = today.toISOString().slice(0, 10);
+  load();
+</script>
+</body>
+</html>

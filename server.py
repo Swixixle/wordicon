@@ -94,6 +94,7 @@ import notebook as nbk  # noqa: E402  (the writer's notebook — stage B; the do
 import inquiry  # noqa: E402  (the Inquiry — block 111 phase 1; a question kept, branched and returnable. Zero model calls)
 import actions  # noqa: E402  (workspace-v2 slice B: the action registry — every control, one definition)
 import snapshots  # noqa: E402  (workspace-v2 slice B: immutable input snapshots)
+import ledger  # noqa: E402  (2026-10-16: the owner's own trail — attention events, owned, disclosed, sealed)
 import operations as ops  # noqa: E402  (workspace-v2 slice D: the durable operations store; JOBS is its projection)
 import workindex  # noqa: E402  (workspace-v2 slice E: the derived Your work index — rebuildable, never authority)
 import producers  # noqa: E402  (workspace-v2 slice F: investigation adapters — contracts pinned, live starts by the owner's ruling)
@@ -3894,6 +3895,36 @@ def work_static(name):
     if not re.fullmatch(r"[A-Za-z0-9_./-]+\.(js|css|svg|map|json)", name) or ".." in name:
         return jsonify({"error": "no such file"}), 404
     return send_from_directory(WEBAPP_DIR / "work", name)
+
+
+@app.route("/api/ledger", methods=["GET", "POST"])
+def api_ledger():
+    """The Ledger: the owner's own trail. POST appends the page's reported
+    attention events (shape enforced, refused whole and by name on any
+    violation, refused while the Settings switch is off); GET reads a day
+    or everything since an instant, oldest first. Nothing here reaches a
+    model or the network: this is record-keeping of his own movements, for
+    him, in his store, sealed by the Vault with everything else."""
+    if request.method == "POST":
+        d = request.get_json(force=True, silent=True) or {}
+        out = ledger.append(d.get("events") or [])
+        return jsonify(out), (409 if out.get("refused") else 200)
+    return jsonify(ledger.read(day=request.args.get("day", ""), since=request.args.get("since", "")))
+
+
+@app.route("/api/ledger/config", methods=["GET", "POST"])
+def api_ledger_config():
+    """The visible switch. Off refuses new appends by name and keeps what
+    was already written — turning the ledger off is not an eraser."""
+    if request.method == "POST":
+        d = request.get_json(force=True, silent=True) or {}
+        return jsonify(ledger.set_enabled(bool(d.get("enabled"))))
+    return jsonify({"enabled": ledger.enabled()})
+
+
+@app.route("/ledger")
+def ledger_page():
+    return send_from_directory(WEBAPP_DIR, "ledger.html")
 
 
 @app.route("/api/snapshots/<snapshot_id>")

@@ -6473,6 +6473,86 @@ console.log(JSON.stringify({rail, ids: bar.map(b=>b.id), acts: bar.map(b=>b.act)
     return out
 
 
+def _check_ledger(server, paired):
+    """2026-10-16, his ruling ("I like the idea of taking all routes, saved
+    info time stamped and documented in a retrievable way" — events first,
+    no keystrokes): the Ledger holds the attention events the owner's page
+    reports — owned, disclosed, gated, append-only, refused whole and by
+    name on any shape violation, silent while the Settings switch is off,
+    and sealed with the store the Vault already seals. It reaches no model
+    and no network; the no-keystrokes ruling is pinned in its inventory."""
+    out = []
+    import ledger as _led
+    import json as _json
+    c = paired(server.app.test_client())
+    if server.app.test_client().post("/api/ledger", json={"events": [{"type": "page_shown", "at": "t", "subject": {}}]}).status_code != 401:
+        out.append("LEDGER: an unpaired device can write the owner's trail")
+    if server.app.test_client().get("/api/ledger").status_code != 401:
+        out.append("LEDGER: an unpaired device can read the owner's trail")
+    r = c.post("/api/ledger", json={"events": [
+        {"type": "page_shown", "at": "2026-10-16T09:00:00-04:00", "subject": {"page": "work"}},
+        {"type": "document_opened", "at": "2026-10-16T09:01:00-04:00", "subject": {"id": "doc_l", "title": "A draft"}}]})
+    if r.status_code != 200 or (r.get_json() or {}).get("kept") != 2:
+        out.append(f"LEDGER: a well-shaped batch was not kept: {r.status_code} {r.get_json()}")
+    g = c.get("/api/ledger?day=2026-10-16").get_json() or {}
+    evs = [e for e in g.get("events", []) if (e.get("subject") or {}).get("id") == "doc_l"]
+    if not evs or not evs[0].get("received_at") or not evs[0].get("at"):
+        out.append(f"LEDGER: the read-back lost an event or one of its two clocks: {str(g)[:300]}")
+    for payload, name in (
+            ([{"type": "keystroke", "at": "t", "subject": {}}], "does not hold"),
+            ([{"type": "page_shown", "at": "t", "subject": {}}] * 101, "at most"),
+            ([{"type": "page_shown", "at": "t", "subject": {"title": "x" * 200}}], "longer than the ledger keeps")):
+        rr = c.post("/api/ledger", json={"events": payload})
+        if rr.status_code != 409 or name not in ((rr.get_json() or {}).get("error") or ""):
+            out.append(f"LEDGER: a bad batch was not refused by name ({name}): {rr.status_code} {rr.get_json()}")
+    if set(_led.EVENT_TYPES) != {"session_start", "session_end", "page_shown", "place_opened", "place_closed",
+                                 "document_opened", "result_viewed", "visibility_hidden", "visibility_visible"}:
+        out.append(f"LEDGER: the event inventory moved without a ruling: {sorted(_led.EVENT_TYPES)}")
+    if any("key" in t for t in _led.EVENT_TYPES):
+        out.append("LEDGER: a key-shaped event type appeared — keystrokes were ruled OUT (events first)")
+    c.post("/api/ledger/config", json={"enabled": False})
+    try:
+        roff = c.post("/api/ledger", json={"events": [{"type": "page_shown", "at": "t", "subject": {}}]})
+        if roff.status_code != 409 or "off" not in ((roff.get_json() or {}).get("error") or ""):
+            out.append(f"LEDGER: with the switch off an append was not refused by name: {roff.status_code} {roff.get_json()}")
+        goff = c.get("/api/ledger?day=2026-10-16").get_json() or {}
+        if not [e for e in goff.get("events", []) if (e.get("subject") or {}).get("id") == "doc_l"] or goff.get("enabled") is not False:
+            out.append("LEDGER: turning the ledger off erased or hid what was written — off only stops NEW events")
+    finally:
+        c.post("/api/ledger/config", json={"enabled": True})
+    files = sorted(_led._dir().glob("events-*.jsonl"))
+    before = sum(len(x.read_text(encoding="utf-8").splitlines()) for x in files)
+    c.post("/api/ledger", json={"events": [{"type": "session_start", "at": "t", "subject": {}}]})
+    after = sum(len(x.read_text(encoding="utf-8").splitlines()) for x in sorted(_led._dir().glob("events-*.jsonl")))
+    if after != before + 1:
+        out.append(f"LEDGER: an append did not extend the files by exactly its events ({before} -> {after})")
+    pg = c.get("/ledger")
+    if pg.status_code != 200 or b"shown only to you" not in pg.data:
+        out.append("LEDGER: the trail page is not served with its disclosure")
+    lh = Path("webapp/ledger.html").read_text(encoding="utf-8")
+    for need, why in (("What it never records", "the negative disclosure"), ("keystrokes", "the no-keystrokes sentence"),
+                      ("timestamped twice", "the two-clocks note"), ("Export the day", "the export door"),
+                      ("sealed into the encrypted Vault", "the custody sentence")):
+        if need not in lh:
+            out.append(f"LEDGER: the trail page lost {why} ({need!r})")
+    wj = Path("webapp/work/ledger.js").read_text(encoding="utf-8")
+    for need in ("sendBeacon", "'/api/ledger'", "visibilitychange", "session_start", "409"):
+        if need not in wj:
+            out.append(f"LEDGER: the reporter lost {need!r}")
+    mj = Path("webapp/work/main.js").read_text(encoding="utf-8")
+    for need, why in (("ledgerRep.init()", "the reporter's start"), ("page_shown", "the page event"),
+                      ("document_opened", "the document event"), ("place_opened", "the place event"),
+                      ("result_viewed", "the view event"), ("Turn the Ledger", "the visible switch"),
+                      ("Open your trail", "the Settings door to the trail")):
+        if need not in mj:
+            out.append(f"LEDGER: main.js lost {why} ({need!r})")
+    import actions as _ac
+    a = _ac.BY_ID.get("more.ledger") or {}
+    if a.get("handler") != "standalone" or a.get("route") != "/ledger" or a.get("rail") is not False:
+        out.append(f"LEDGER: the \u2318K door is missing or wrong: {a.get('handler')}/{a.get('route')}/{a.get('rail')}")
+    return out
+
+
 def _check_concept_picker(server, paired):
     """The review of 6e5b59c (completeness): an action whose subject is a
     concept you keep (Re-check this concept) is chosen from the shelf as
@@ -8369,6 +8449,7 @@ def main() -> int:
     failures.extend(_check_gate_mint_race())
     failures.extend(_check_workspace_registry(server, _paired))
     failures.extend(_check_workspace_doors(server, _paired))
+    failures.extend(_check_ledger(server, _paired))
     failures.extend(_check_document_contract(server, _paired))
     failures.extend(_check_docx_export(server, _paired))
     failures.extend(_check_concept_picker(server, _paired))

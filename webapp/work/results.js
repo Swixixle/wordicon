@@ -105,6 +105,7 @@ export class Results {
   open(id, kind) {
     if (!this.tracked.has(id)) this.tracked.set(id, { id, kind, status: 'unknown', prepared: null, label: kind === 'reading' ? 'Readers' : 'Operation', startedAt: '', last: null, fromStore: true });
     this.selected = id;
+    if (this.hooks.onView) this.hooks.onView(id, kind);     // the Ledger: a result had his attention
     this.showTab('results');
     const t = this.tracked.get(id);
     getJSON('/api/operations/' + encodeURIComponent(id)).then(r => {
@@ -388,7 +389,7 @@ export class Results {
         el('div', {}, [el('span', { text: t.prepared ? t.prepared.label : (t.label || t.kind) }), el('span', { class: 'muted', text: ' · ' + whenOf(t.startedAt) })]),
         el('div', { class: 'state ' + cls, text: st + (cls === 'running' && d.progress ? ' · ' + d.progress : '') }),
         el('div', { class: 'acts' }, [
-          el('button', { class: 'linkish', type: 'button', text: 'Open', onclick: () => { this.selected = t.id; this.render(); } }),
+          el('button', { class: 'linkish', type: 'button', text: 'Open', onclick: () => { this.selected = t.id; if (this.hooks.onView) this.hooks.onView(t.id, t.kind); this.render(); } }),
           cls === 'running' ? el('button', { class: 'linkish', type: 'button', text: 'Check status', onclick: () => this.poll() }) : null,
         ]),
       ]);

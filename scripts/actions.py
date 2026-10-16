@@ -209,6 +209,12 @@ ACTIONS = [
        aliases=("constitution", "what is nikodemus", "the law"), result_type="view", legacy_entry="/constitution"),
     _a("more.anatomy", "Anatomy", group="more", kind="view", rail=False, subjects=("none",), handler="standalone", route="/anatomy",
        aliases=("anatomy",), result_type="view", legacy_entry="/anatomy (standalone)"),
+    _a("more.ledger", "Your trail (the Ledger)", group="more", kind="view", rail=False,
+       subjects=("none",), handler="standalone", route="/ledger",
+       aliases=("ledger", "trail", "my trail", "the ledger", "your trail"),
+       result_type="view", legacy_entry="none — born in the workspace era (2026-10-16)",
+       note="the owner's own attention trail: events only, no keystrokes, no content; "
+            "disclosed on its own page, sealed by the Vault, switched in Settings"),
     _a("more.legacy", "The previous interface", group="more", kind="view", rail=False, subjects=("none",), handler="standalone", route="/",
        aliases=("legacy", "old interface", "previous interface", "home"), result_type="view", legacy_entry="/"),
     # ---- recorded on a result, a word, a draft (not shown in Tools) ----------

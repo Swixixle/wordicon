@@ -124,6 +124,21 @@ const { webkit } = require('playwright');
   await page.click('#exit-focus');
   ok(await page.isVisible('#draft-actions'), 'Exit focus restores the bar');
 
+  // 9. the Ledger (2026-10-16): the day's trail holds the movements this
+  // journey just made, each entry with both clocks; the trail page serves
+  // with its negative disclosure
+  await page.evaluate(() => window.__work.ledger.flush());
+  await page.waitForTimeout(700);
+  const day = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const led = await (await page.request.get(BASE + '/api/ledger?day=' + day)).json();
+  const types = (led.events || []).map(e => e.type);
+  ok(types.includes('session_start') && types.includes('page_shown') && types.includes('document_opened'),
+     'the Ledger holds the movements this journey made: ' + JSON.stringify(Array.from(new Set(types))));
+  const de = (led.events || []).find(e => e.type === 'document_opened');
+  ok(!!(de && de.at && de.received_at), 'an entry carries both clocks');
+  const lp = await page.request.get(BASE + '/ledger');
+  ok(lp.status() === 200 && /What it never records/.test(await lp.text()), 'the trail page serves with its negative disclosure');
+
   ok(errs.length === 0, 'no page errors through the doors: ' + JSON.stringify(errs));
   await browser.close();
   finish('doors');
