@@ -1431,6 +1431,7 @@
 
 
 
+<script src="/deeper.js"></script>
 <script>
 // The visible name has one source: config/brand.json, served as /brand.js.
 // Static markup carries data-brand; a sentence assembled in JS calls this, so a
@@ -1700,6 +1701,7 @@ const MODE_STYLE = {
   deep:       {v: '--mode-source',  label: 'full workup'},
   crossbreed: {v: '--mode-sprout',  label: 'rabbithole'},
   sprout:     {v: '--mode-sprout',  label: 'parallels'},
+  deepen:     {v: '--mode-source',  label: 'go deeper'},
   refract:    {v: '--mode-refract', label: 'related words'},
   revise:     {v: '--mode-forge',   label: 'revise'},
   // Shares refract's green rather than claiming a fifth hue: the palette
@@ -1728,7 +1730,11 @@ function groupHistory(runs) {
     // Deduped WITHIN a run first: a forge that named the same thing three
     // times produced one subject, not three.
     const titles = [...new Set((g.titles || []).filter(t => (t || '').trim()))];
-    const key = titles.length ? titles.join(' \u00b7 ').toLowerCase() : 'x:' + (g.trace_id || '');
+    // A deeper subject is the exact saved source thread, never its title:
+    // two works can share a name, and a follow-up can use a different title.
+    const key = g.operation === 'deepen'
+      ? 'deepen:' + (g.subject_key || g.trace_id || '')
+      : (titles.length ? titles.join(' \u00b7 ').toLowerCase() : 'x:' + (g.trace_id || ''));
     let row = byKey.get(key);
     if (!row) {
       row = {key, titles, created_at: g.created_at, runs: [], decisions: []};
@@ -2033,7 +2039,7 @@ async function loadHistory() {
     const byTrace = new Map();
     d.items.forEach(it => {
       if (!byTrace.has(it.trace_id)) {
-        byTrace.set(it.trace_id, {trace_id: it.trace_id, operation: it.operation,
+        byTrace.set(it.trace_id, {trace_id: it.trace_id, operation: it.operation, subject_key: it.subject_key || '',
                                    created_at: it.created_at, titles: [], decisions: []});
         historyRuns.push(byTrace.get(it.trace_id));
       }
@@ -2672,6 +2678,12 @@ async function loadPastResult(traceId, shelf, label, restoring, revealSection, r
   // recording it as one would put a warp on the map for every walk to the
   // Bench and back.
   if (shelf && !restoring) recordWarp(cameFrom, traceId, label || (d.input_text || '').slice(0, 60), shelf);
+  if (d.mode === 'deepen') {
+    lastSubmission = null;
+    area.innerHTML = buildDeeperHtml(d);
+    markOnScreen(traceId, d.title || 'Go deeper');
+    return;
+  }
   if (d.mode === 'sprout') {
     lastSubmission = null;
     const holderId = `sprout-record-${++sproutAreaN}`;
@@ -4394,6 +4406,7 @@ function buildSproutHtml(res, areaId) {
         ${t.locator ? `<p class="body muted" style="font-size:12.5px"><em>Check it:</em> ${escapeHtml(t.locator)}</p>` : ''}
         ${reviewerProseHtml(t.review_note, (res.citations || []).length)}
         <button class="judge-btn" style="margin-top:6px;font-size:12px" onclick="sproutFromSeed('${seedKey}', '${areaId}')">⤷ sprout from this</button>
+        ${deeperThreadControl(res, ti)}
         ${carryBtn(res.trace_id || '', 'thread',
                    {index: ti, title: t.anchor_name || '', work: t.culture_or_work || ''},
                    [t.anchor_name || '', t.culture_or_work || '', t.reading || t.parallel || '', t.divergence ? 'Where it breaks: ' + t.divergence : ''].filter(Boolean).join(' — '),

@@ -254,7 +254,7 @@ else
     sleep 0.5
     if ! kill -0 $WORK_PID 2>/dev/null; then echo "FAIL the workspace scratch server died:"; cat "$JOURNEY_DIR_WORK/out/server.log"; status=1; break; fi
   done
-  for j in work doors; do
+  for j in work doors deeper; do
     echo "== journey: $j"
     (cd "$HERE" && env JOURNEY_DIR="$JOURNEY_DIR_WORK" JOURNEY_STATE="$JOURNEY_DIR_WORK/state" JOURNEY_OUT="$JOURNEY_OUT" JOURNEY_PORT="$JOURNEY_PORT_WORK" node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
     rc=$?
@@ -315,6 +315,6 @@ for eng in chromium webkit; do
     grep -qF "ok   $need" "$JOURNEY_OUT/editor-$eng.log" || { echo "== editor-$eng: missing check: $need"; status=1; }
   done
 done
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/work.log "$JOURNEY_OUT"/doors.log "$JOURNEY_OUT"/editor-chromium.log "$JOURNEY_OUT"/editor-webkit.log "$JOURNEY_OUT"/notes-chromium.log "$JOURNEY_OUT"/notes-webkit.log "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log "$JOURNEY_OUT"/constitution.log "$JOURNEY_OUT"/anchorfit.log "$JOURNEY_OUT"/carry.log "$JOURNEY_OUT"/wayfinder.log "$JOURNEY_OUT"/map.log "$JOURNEY_OUT"/moira.log "$JOURNEY_OUT"/notebook.log "$JOURNEY_OUT"/related.log "$JOURNEY_OUT"/narrowing.log "$JOURNEY_OUT"/gloss.log | awk '{s+=$2} END {print s+0}')
+total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/work.log "$JOURNEY_OUT"/doors.log "$JOURNEY_OUT"/deeper.log "$JOURNEY_OUT"/editor-chromium.log "$JOURNEY_OUT"/editor-webkit.log "$JOURNEY_OUT"/notes-chromium.log "$JOURNEY_OUT"/notes-webkit.log "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log "$JOURNEY_OUT"/constitution.log "$JOURNEY_OUT"/anchorfit.log "$JOURNEY_OUT"/carry.log "$JOURNEY_OUT"/wayfinder.log "$JOURNEY_OUT"/map.log "$JOURNEY_OUT"/moira.log "$JOURNEY_OUT"/notebook.log "$JOURNEY_OUT"/related.log "$JOURNEY_OUT"/narrowing.log "$JOURNEY_OUT"/gloss.log | awk '{s+=$2} END {print s+0}')
 echo "== journeys: $total checks, exit $status"
 exit $status

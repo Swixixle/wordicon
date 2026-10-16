@@ -95,15 +95,32 @@ datasets generated later, optionally, from the same records.
   golden package was signed by the producer's own code: Node signs,
   Python verifies, key reordering changes nothing (RFC 8785 equality
   across the two implementations), a changed byte fails by name.
-- **W2 — capture at revision boundaries.** Draft revisions
-  content-addressed in their own store; searches; attempt-before-execution
-  and failure events; dispositions; lineage edges. Each new event type
-  disclosed on `/ledger` beside what is never recorded. An edit is
-  CANDIDATE FEEDBACK, never an automatic preference pair: the original,
-  the edit and the context are kept together, and "original rejected /
-  edit chosen" is a judgment no pipeline files on its own — a shortening
-  for one audience, a changed task and a one-detail correction all look
-  like edits, and only analysis under review may read them as more.
+- **W1 follow-ons, recorded 2026-10-16:** (a) one REAL import is the
+  owner's press, not a test's — after both apps restart, register the
+  instrument, pin the key, pull an existing reading, and confirm its
+  transcript, claims and gaps arrived whole; the automated proofs do not
+  establish that the two RUNNING copies are connected until that press.
+  (b) A Deflate entry needs its own door into Go deeper: an adapter that
+  carries the exact run, claim and transcript location into the
+  exploration with its evidence labels intact — the shipped first slice
+  starts from Sprout threads only.
+- **W2 — capture at revision boundaries.** Ruled forward on 2026-10-16:
+  local capture advances now while paid analysis stays press-to-run.
+  Draft revisions content-addressed in their own store; searches;
+  attempt-before-execution and failure events; dispositions; lineage
+  edges. The interaction inventory he named joins the event set
+  deliberately — opening a record, attempting an import, following a
+  question (Go deeper steps included), carrying material, applying an
+  edit — which amends the Ledger's pinned nine-event inventory as a
+  ruling, not a drift; each new type is disclosed on `/ledger` beside
+  what is never recorded. Visibility and activity intervals stay
+  measurements of visibility and activity — never a claim that something
+  was read or understood. An edit is CANDIDATE FEEDBACK, never an
+  automatic preference pair: the original, the edit and the context are
+  kept together, and "original rejected / edit chosen" is a judgment no
+  pipeline files on its own — a shortening for one audience, a changed
+  task and a one-detail correction all look like edits, and only
+  analysis under review may read them as more.
 - **W3 — extraction jobs and findings.** A versioned pass catalog; job
   identity = source version × pass version × model × context manifest;
   intent persisted before dispatch, results before success; raw provider

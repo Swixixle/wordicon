@@ -6128,7 +6128,7 @@ def _check_test_mode_fails_closed(server):
     import os as _os
     saved = {k: _os.environ.get(k) for k in ("ANTHROPIC_API_KEY", "WORDICON_MODEL")}
     try:
-        _os.environ["ANTHROPIC_API_KEY"] = "sk-ant-test-sentinel-not-a-key"
+        _os.environ["ANTHROPIC_API_KEY"] = "test-sentinel-not-a-provider-key"
         _os.environ["WORDICON_MODEL"] = "claude-test-sentinel"
         gw = server.server_gateway()
         if gw.is_external or gw.name != "mock":
@@ -6190,7 +6190,7 @@ def _check_workspace_registry(server, paired):
     listing = _ac.listing(server.server_gateway)
     modes = {a["mode"] for a in listing["actions"] if a["mode"]}
     if modes != set(_ac.JOB_MODES) or set(_ac.JOB_MODES) != {"auto", "deep", "forge", "crack", "decompose", "riff", "play", "revise",
-                                                             "sprout", "refract", "verify", "archetype", "recheck", "etymon"}:
+                                                         "sprout", "deepen", "refract", "verify", "archetype", "recheck", "etymon"}:
         out.append(f"REGISTRY: the registry does not name every /api/jobs mode: {sorted(modes)}")
     if listing["lane"]["lane"] != "mock" or listing["lane"]["external"]:
         out.append(f"REGISTRY: in a test process the lane is not the mock: {listing['lane']}")
@@ -6512,6 +6512,52 @@ console.log(JSON.stringify({rail, ids: bar.map(b=>b.id), acts: bar.map(b=>b.act)
     # 8. Settings tells the truth over a beta that backs itself up
     if "preview with its own backups" not in mainjs:
         out.append("DOORS: Settings still says every preview seals nothing — false over a beta that seals its own")
+    return out
+
+
+def _check_deeper_wing():
+    """Go deeper (16 October 2026) arrived from another builder with its
+    behavioural pins in pytest files — tests/test_deeper.py and
+    tests/test_deeper_integration.py: the selection resolved from the
+    record and never from client prose, no dispatch without a frozen
+    proposal and an explicit Start, one dispatch per request key across
+    double clicks and lost replies, raw replies kept whole, a changed
+    model lane refusing to dispatch, recovery without replay. The owner's
+    verification command is THIS suite, so the suite runs them here: a
+    wing whose tests exist but never run in his command would be
+    decoration. A missing pytest is a REPORTED skip, never a silent pass.
+    The integration itself is also pinned: the action keeps rail=False
+    (the Explore rail stays the ruled five) and the deeper journey rides
+    the journey runner's work loop and its totals."""
+    out = []
+    root = Path(cli.__file__).parent.parent
+    for f in ("tests/test_deeper.py", "tests/test_deeper_integration.py", "scripts/deeper.py", "webapp/deeper.js"):
+        if not (root / f).exists():
+            out.append(f"DEEPER: {f} is missing — the wing shipped without its parts")
+    if out:
+        return out
+    _runsh = (root / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
+    if "for j in work doors deeper; do" not in _runsh:
+        out.append("DEEPER: the deeper journey does not run in the journey runner's work loop")
+    if '"$JOURNEY_OUT"/deeper.log' not in _runsh:
+        out.append("DEEPER: the deeper journey's checks are not counted in the runner's total")
+    import actions as _acD
+    _dpn = _acD.BY_ID.get("explore.deepen") or {}
+    if _dpn.get("rail") is not False:
+        out.append("DEEPER: explore.deepen is on the rail — the Explore rail is the ruled five, and this door lives on a saved thread")
+    try:
+        import pytest  # noqa: F401
+    except ImportError:
+        SKIPPED.append("the Go deeper pytest pins did not run (pytest is not importable here — pip install -r requirements.txt)")
+        return out
+    import subprocess as _spD
+    import sys as _sysD
+    r = _spD.run([_sysD.executable, "-m", "pytest", "tests/test_deeper.py", "tests/test_deeper_integration.py",
+                  "-q", "-p", "no:cacheprovider"],
+                 cwd=root, capture_output=True, text=True, timeout=600)
+    if r.returncode != 0:
+        tail = (r.stdout + "\n" + r.stderr).strip().splitlines()[-12:]
+        out.append("DEEPER: the wing's own pins fail:\n      " + "\n      ".join(tail))
     return out
 
 
@@ -8492,6 +8538,7 @@ def main() -> int:
     failures.extend(_check_workspace_registry(server, _paired))
     failures.extend(_check_workspace_doors(server, _paired))
     failures.extend(_check_ledger(server, _paired))
+    failures.extend(_check_deeper_wing())
     failures.extend(_check_document_contract(server, _paired))
     failures.extend(_check_docx_export(server, _paired))
     failures.extend(_check_concept_picker(server, _paired))

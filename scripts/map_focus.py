@@ -192,6 +192,12 @@ def edge_specs_from_snapshot(snap: dict, by_trace: "dict[str, dict] | None" = No
                  cli._node("run", trace, title), "pipeline")
         return out
 
+    if mode == "deepen":
+        if snap.get("parent_trace_id"):
+            spec("continued_from", cli._node("run", snap["parent_trace_id"], ""),
+                 cli._node("run", trace, snap.get("title") or ""), "pipeline")
+        return out
+
     if mode == "refract":
         src_meta = snap.get("source") or {}
         title = src_meta.get("title") or ""

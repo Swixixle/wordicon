@@ -3063,6 +3063,9 @@ class MockGateway(Gateway):
         return text, []
 
     def complete(self, prompt: str) -> str:
+        if prompt.startswith("You are the Go deeper stage of Nikodemus."):
+            import deeper
+            return json.dumps(deeper.fixture_response())
         # Branch on each prompt's own opening line rather than sniffing for
         # JSON-shape substrings — those substrings moved around when
         # generation and Bone-attachment split into separate calls, and
@@ -5991,6 +5994,11 @@ def build_overworld() -> dict:
             if s.get("parent_trace_id"):
                 synth("continued_from", _node("run", s["parent_trace_id"], ""),
                       run_node, trace, detail=(s.get("via") or "")[:200])
+
+        elif mode == "deepen":
+            if s.get("parent_trace_id"):
+                synth("continued_from", _node("run", s["parent_trace_id"], ""),
+                      run_node, trace, detail=(s.get("question") or "")[:200])
 
         elif mode == "refract":
             seed_title = (s.get("source") or {}).get("title", "")

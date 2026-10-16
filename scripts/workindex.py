@@ -376,6 +376,9 @@ def _scan_results(conn, gen, full: bool):
             src_ = snap.get("source") or {}
             text = snap.get("input_text") or snap.get("source_text") or src_.get("passage") or src_.get("definition") or ""
             defs = [c.get("definition", "") for c in (snap.get("candidates") or []) if isinstance(c, dict) and c.get("definition")]
+            if mode == "deepen":
+                titles = [snap.get("title") or "Go deeper"]
+                defs = [str(snap.get(k) or "") for k in ("question", "explanation", "context_notes", "source_guidance")]
             title = (" · ".join(titles[:3]) if titles else (src_.get("title") or snap.get("summary") or trace))
             status = "partial" if snap.get("partial") else ("complete" if (titles or snap.get("summary") or mode == "refract") else "recorded")
             items.append(_item("results", "run", trace, title=(mode + ": " if mode else "") + str(title)[:200], body=(text + "\n\n" + "\n".join(defs)).strip(),

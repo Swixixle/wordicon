@@ -40,7 +40,7 @@ REGISTRY_VERSION = 1
 
 # The complete /api/jobs mode inventory at 17894e3, kept whole (§5).
 JOB_MODES = ("auto", "deep", "forge", "crack", "decompose", "riff", "play", "revise",
-             "sprout", "refract", "verify", "archetype", "recheck", "etymon")
+             "sprout", "deepen", "refract", "verify", "archetype", "recheck", "etymon")
 
 GROUPS = ("on_draft", "explore", "investigate", "more", "record")
 KINDS = ("view", "dispatch", "lookup", "note", "ruling", "apply")
@@ -91,6 +91,16 @@ ACTIONS = [
        inputs=("concept",), mutation="record", outbound_fields=("concept title", "concept definition"), recipient="model",
        provider="model", calls="1", result_type="run", legacy_entry="a candidate card's Sprout door",
        note="wants a concept; from a selection, Analyze this passage comes first"),
+    _a("explore.deepen", "Go deeper", group="explore", kind="dispatch", rail=False,
+       # rail=False: the Explore rail stays the ruled five — this door lives on a
+       # saved Sprout thread (a result), and the palette answers its aliases.
+       subjects=("result",), handler="job", mode="deepen", aliases=("go deeper", "explore this work"),
+       inputs=("saved Sprout thread or deeper step", "follow-up question"), mutation="record",
+       outbound_fields=("exact selected thread and its source caveats", "question", "disclosed recent exploration context"),
+       recipient="model and provider's search service when available", provider="model",
+       calls="1 model stage; provider search and transport retries may add usage", result_type="run",
+       legacy_entry="a Sprout thread's Go deeper button",
+       note="follows the selected work or idea; opening a proposal starts nothing; curiosity is not a ruling"),
     _a("explore.refract", "Find related words", group="explore", kind="dispatch",
        subjects=("selection", "concept", "description"), handler="job", mode="refract",
        aliases=("refract", "related words", "explore other languages", "synonyms", "antonyms", "other languages", "find related words and contrasts"),
@@ -425,7 +435,19 @@ def prepare(action_id: str, subject: dict, inputs: dict, server_gateway) -> dict
         raise PrepareError(f"{a['label']} does not take a {kind}; it takes: {', '.join(a['subjects'])}", 409)
     rd = readiness(a, server_gateway)
     snap = None
-    if kind in ("document", "selection", "description", "word"):
+    deeper_context = None
+    if a["mode"] == "deepen":
+        import deeper
+        try:
+            deeper_context = deeper.build_context(subject or {}, inputs or {})
+        except ValueError as e:
+            raise PrepareError(str(e), 400) from e
+        # All of the context, including the exact source identity and question,
+        # is covered by the snapshot hash before a proposal can be started.
+        snap = snapshots.make(kind="description", text=json.dumps(deeper_context, ensure_ascii=False, sort_keys=True),
+                              title="Go deeper")
+        snapshots.write(snap)
+    elif kind in ("document", "selection", "description", "word"):
         text = str((subject or {}).get("text") or "")
         if not text.strip():
             raise PrepareError("nothing is selected or written yet", 400)
@@ -455,6 +477,9 @@ def prepare(action_id: str, subject: dict, inputs: dict, server_gateway) -> dict
                  else ("unknown until it runs; the record will say" if a["provider"] != "none" else "none")),
         "available": rd["available"], "reason": rd["reason"],
     }
+    if deeper_context is not None:
+        disclosure["exploration"] = deeper_context
+        disclosure["source_standing"] = "Model reading and source leads; no passage has been admitted or verified by this action."
     extra = {}
     if a["mode"] == "refract":
         extra["entry"] = "selection" if kind == "selection" else ("description" if kind == "description" else "concept")
@@ -505,7 +530,9 @@ def job_payload(prepared: dict) -> dict:
         raise PrepareError("the proposal's snapshot is missing or does not verify; prepare again", 409)
     mode = a["mode"]
     payload = {"mode": mode, "provenance": "typed" if snap["kind"] in ("document", "selection") else "door"}
-    if mode in ("sprout", "archetype", "recheck", "revise"):
+    if mode == "deepen":
+        payload["deepen_context"] = json.loads(snap["text"])
+    elif mode in ("sprout", "archetype", "recheck", "revise"):
         payload["original"] = dict(snap.get("concept") or {})
     elif mode == "refract":
         entry = prepared["inputs"].get("entry", "concept")

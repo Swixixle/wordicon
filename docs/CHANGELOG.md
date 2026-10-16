@@ -1,5 +1,32 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.42.1 — Go deeper: a focused exploration lane, received and integrated
+
+A saved Sprout thread now offers "↓ Go deeper": follow that particular
+person, work or idea on its own terms — a proposal that freezes the exact
+saved thread, its source standing and the question under a snapshot hash
+before Start; suggested next questions and free follow-ups, each with its
+own proposal; a reopenable trail back to earlier answers and the original
+selection; questions, raw replies, source leads and prompt identities
+kept whole in the result for later mining. Provider citations are leads,
+never verification; a strained parallel is a verdict on the parallel,
+never on the work; curiosity is not acceptance, and nothing here rules,
+admits a source or touches a draft. One request key survives double
+clicks, lost replies, Close and reload — one dispatch, durably.
+
+Provenance, plainly: this wing was built by another model (Codex) against
+the saved r88 baseline and arrived as a patch with its own tests. It was
+cross-examined and integrated onto the current line with three named
+adjustments: the action carries rail=False (the Explore rail stays the
+ruled five; the palette answers "go deeper"), the new journey rides the
+journey runner's work loop and its totals, and the wing's 46 pytest pins
+now run inside the constraint suite itself — the owner's one verification
+command covers them, with a missing pytest a reported skip. The
+constitution gained the lane's paragraph; Recent, Your-work search, the
+Map and the Overworld carry deepen runs. Verification was redone here in
+full on the integrated tree; live answers and Safari remain unverified
+until the owner's own first press.
+
 ## v1.42.0 — W1: Deflate joins the federation door
 
 The records connection the extraction rulings put first, shipped the same

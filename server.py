@@ -702,6 +702,11 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
 
     try:
         gateway = server_gateway()
+        if mode == "deepen":
+            execution = (ops.get(job_id) or {}).get("execution") or {}
+            actual_model = (getattr(gateway, "model", "") or "") if gateway.is_external else ""
+            if execution.get("lane") != gateway.name or (execution.get("model") or "") != actual_model:
+                raise RuntimeError("the model lane changed before dispatch; prepare Go deeper again — nothing was sent")
     except Exception as e:
         # The full traceback goes to the terminal — a bare str(e) here once
         # cost an hour of blind theorizing (the brew-python truststore
@@ -803,6 +808,12 @@ def _run_job_body(job_id: str, mode: str, input_text: str) -> None:
             cli_result = cli.run_decompose(input_text, gateway, interactive=False, on_progress=on_progress,
                                              avoid_titles=avoid_titles, prior_attempts=prior_attempts)
             result = _shape_operation_result(mode, gateway.name, cli_result)
+        elif mode == "deepen":
+            import deeper
+            with JOBS_LOCK:
+                context = JOBS[job_id]["deepen_context"]
+            result = deeper.run(context, gateway, on_progress=on_progress)
+            result["gateway"] = gateway.name
         elif mode == "sprout":
             with JOBS_LOCK:
                 original = JOBS[job_id].get("original") or {}
@@ -3607,9 +3618,9 @@ def _create_job_from(data: dict, op_id: str | None = None):
     the reply says so."""
     mode = data.get("mode")
     if mode not in ("auto", "deep", "forge", "crack", "decompose", "riff", "play", "revise",
-                    "sprout", "refract", "verify", "archetype", "recheck", "etymon"):
+                    "sprout", "deepen", "refract", "verify", "archetype", "recheck", "etymon"):
         return jsonify({"error": "mode must be 'auto', 'deep', 'forge', 'crack', 'decompose', "
-                                 "'riff', 'play', 'revise', 'sprout', 'refract', 'archetype', "
+                                 "'riff', 'play', 'revise', 'sprout', 'deepen', 'refract', 'archetype', "
                                  "'recheck', 'etymon', or 'verify'"}), 400
     # The gesture rides only the deep workup (the chooser's Interpret /
     # Put-it-on-trial choices); Play is its own mode, and anything else
@@ -3628,7 +3639,18 @@ def _create_job_from(data: dict, op_id: str | None = None):
     related_entry = None
     retry_anchor, retry_stance, retry_match_text = None, None, None
     verify_candidate = None
-    if mode == "sprout":
+    deepen_context = None
+    if mode == "deepen":
+        # This new action has no legacy bypass: only the internally rebuilt
+        # payload of an immutable proposal can reach the dispatcher.
+        if op_id is None:
+            return jsonify({"error": "Go deeper requires a frozen proposal and an explicit Start", "nothing_was_sent": True}), 409
+        deepen_context = data.get("deepen_context")
+        if not isinstance(deepen_context, dict) or not deepen_context:
+            return jsonify({"error": "the exploration context is missing; prepare again", "nothing_was_sent": True}), 400
+        parent_trace_id = deepen_context.get("parent_trace_id") or ""
+        input_text = "Go deeper: " + str(deepen_context.get("question") or "Explore the selected work")
+    elif mode == "sprout":
         original = data.get("original") or {}
         if not original.get("title") or not original.get("definition"):
             return jsonify({"error": "sprout requires original.title and original.definition"}), 400
@@ -3818,6 +3840,7 @@ def _create_job_from(data: dict, op_id: str | None = None):
         JOBS[job_id] = {
             "id": job_id, "mode": mode, "gesture": gesture, "input_text": input_text,
             "original": original, "claims_detail": claims_detail,
+            "deepen_context": deepen_context,
             "owner_note": owner_note, "prior_friction": prior_friction,
             "wordify": wordify, "parent_trace_id": parent_trace_id, "via": via,
             "parent_door_id": parent_door_id,
@@ -4159,6 +4182,12 @@ def api_operations_start():
     if a is None:
         return jsonify({"error": "the proposal names an action the registry no longer has"}), 409
     rd = actions.readiness(a, server_gateway)
+    if a.get("mode") == "deepen":
+        proposed_lane = (prepared.get("disclosure") or {}).get("lane") or {}
+        current_lane = rd.get("lane") or {}
+        if any(proposed_lane.get(k) != current_lane.get(k) for k in ("lane", "model", "external")):
+            return jsonify({"error": "the model lane changed since this proposal; prepare again before starting",
+                            "nothing_was_sent": True}), 409
     adapter = "moira/v1" if a["handler"] == "moira" else ("adapter/" + ((rd.get("producer") or {}).get("adapter_version") or "0") if a["handler"] == "adapter" else "job/v1")
     execution = _execution_for_proposal(prepared, a, rd, adapter)
     kind = "reading" if a["handler"] == "moira" else ("investigation" if a["handler"] == "adapter" else "job")
@@ -4423,6 +4452,9 @@ def api_operation_attempt(op_id):
     execution = _execution_for_proposal(prepared, a, rd, adapter)
     old_exec = op.get("execution") or {}
     changed = [k for k in ("lane", "model", "registry_version", "adapter", "action_id") if old_exec.get(k) != execution.get(k)]
+    if changed and a.get("mode") == "deepen":
+        return jsonify({"error": "the Go deeper plan changed; prepare a new proposal before another attempt",
+                        "nothing_was_sent": True}), 409
     if changed and not data.get("accept_changed_plan"):
         return jsonify({"error": "the plan changed since the first attempt (" + ", ".join(changed) + "); confirm the new plan to start another attempt",
                         "changed": {k: {"was": old_exec.get(k), "now": execution.get(k)} for k in changed}, "nothing_was_sent": True}), 409
@@ -5922,6 +5954,17 @@ def api_history():
         # a partial receipt (the record holds some — the Keeper's own
         # fixtures prove the shape) must not 500 the page that lists it
         trace_id = receipt.get("trace_id") or path.stem
+        # Focused readings do not produce candidate concepts. They still
+        # belong in Recent, using the result's real mode and selected subject.
+        snap = _read_result_file(trace_id)
+        if isinstance(snap, dict) and snap.get("mode") == "deepen":
+            root = (snap.get("context") or {}).get("root") or {}
+            items.append({"trace_id": trace_id, "operation": "deepen",
+                          "created_at": snap.get("created_at", ""),
+                          "title": snap.get("source_title") or snap.get("title") or "Go deeper",
+                          "decision": None, "receipt_id": receipt.get("receipt_id", path.stem),
+                          "subject_key": str(root.get("trace_id") or trace_id) + ":" + str(root.get("thread_index", ""))})
+            continue
         judgments = judgments_by_trace.get(trace_id, [])
         decision_by_title = {j.get("candidate_text", ""): j.get("decision", "") for j in judgments}
         for c in receipt.get("candidates", []):
