@@ -1624,6 +1624,22 @@ def _check_preview_isolation(server):
             out.append(f"G-beta: the status does not carry the refusal: { {k: _stb.get(k) for k in ('preview', 'preview_own_backups', 'preview_backup_refusal')} }")
         if fingerprint_dest() != before:
             out.append("G-beta: the owner's destination changed while the config was merely asked about")
+        # the CALLER honors the state (2026-10-16, found live: every preview
+        # was painted red before vaultStripState was consulted, so a beta
+        # sealing its own vaults wore the alarm of the beta that sealed
+        # nothing, and lit the attention dot over a healthy backup)
+        _idxC = (Path("webapp/index.html")).read_text(encoding="utf-8")
+        if "el.textContent = st.text; red(); setQuiet(false, el.textContent); return;" in _idxC:
+            _f100("the vault strip paints every preview red before consulting the state — "
+                  "a sealing beta must not wear the alarm of one that seals nothing")
+        _pvC = _idxC[_idxC.index("if (v.preview) {"):]
+        _pvC = _pvC[:_pvC.index("return;")]
+        if "if (st.red)" not in _pvC or "setQuiet(true" not in _pvC:
+            _f100("the preview strip's caller does not honor st.red / calm the quiet dot for a healthy sealing beta")
+        _mjC = (Path("webapp/work/main.js")).read_text(encoding="utf-8")
+        if "chip.classList.remove('warn')" not in _mjC:
+            _f100("the workspace chip keeps the warn coat over a beta that backs itself up")
+
 
         # the preview's OWN config: the owner's existing recipient, a destination of its own
         _owner_cfg_text = _v.config_path().read_text()

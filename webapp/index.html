@@ -11273,8 +11273,14 @@ async function loadVaultStrip() {
     const v = await (await fetch('/api/vault/status')).json();
     el.style.color = 'var(--muted)';
     if (v.preview) {
+      // state, never hidden — but red only when the STATE says so (2026-10-16:
+      // a beta sealing its own vaults wore the alarm color of the beta that
+      // sealed nothing, and lit the attention dot over a healthy backup)
       const st = vaultStripState(v);
-      el.textContent = st.text; red(); setQuiet(false, el.textContent); return;
+      el.textContent = st.text;
+      if (st.red) { red(); setQuiet(false, el.textContent); }
+      else { el.style.color = 'var(--muted)'; el.hidden = false; setQuiet(true, st.text); }
+      return;
     }
     if (!v.initialized) {
       el.textContent = 'No vault — the corpus exists on this disk only. '

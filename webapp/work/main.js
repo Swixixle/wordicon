@@ -486,6 +486,7 @@ async function boot() {
       // "backups off" over a process that is sealing — state, never hidden,
       // and the two acts a preview still never performs are in the title
       chip.textContent = 'Preview · backs itself up';
+      chip.classList.remove('warn');   // a healthy, sealing beta is state, not an alarm
       chip.title = 'This preview seals encrypted backups of its own store to its own destination. It still never prunes old vaults and never drills from a preview.';
     } else if (r.data.preview_backup_refusal) {
       chip.textContent = 'Preview · backups off (asked, refused)';
