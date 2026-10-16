@@ -78,6 +78,9 @@ These are the written contracts that sit under it.
   authorities stay separate.
 - [`adr-shortcut-deviation.md`](./adr-shortcut-deviation.md) — a deviation
   record: what was ruled, what was built, and why the difference stands.
+- [`adr-extraction.md`](./adr-extraction.md) — maximum extraction: the three
+  rulings of 2026-10-16 (revision-boundary capture, the standing egress
+  scope, records first), the reuse/gap map, and the build order W1–W6.
 
 ## Evaluation and benchmarks
 

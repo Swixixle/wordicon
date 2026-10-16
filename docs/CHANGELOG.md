@@ -1,5 +1,22 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.41.3 — The extraction rulings, recorded (documentation only)
+
+The owner's "Maximum Data Extraction Proposal" (drafted with another
+model) was read whole, cross-examined, and ruled on the same day. Three
+rulings, each taken with its price named: capture at revision boundaries
+with the replay/keystroke layer staying pinned out until a pass consumes
+it; a standing egress scope — everything captured, drafts included,
+dispatched to the named providers under a named cap — as a deliberate
+constitutional amendment that ships with its wing (W5) and not before,
+today's press-to-run law holding until then; and the build starting with
+the records connection, Deflate joining through the federation door that
+already exists. `docs/adr-extraction.md` holds the rulings, the reuse/gap
+map against the live line (much of what the proposal lists as gaps is
+built: the Ledger, encounters, snapshots, receipts, the Vault, the
+federation), and the build order W1–W6. Nothing was instrumented and
+nothing was spent by writing it down.
+
 ## v1.41.2 — The meaning leads its row
 
 His ruling (2026-10-16): "The definitions should be the more prominent
