@@ -287,3 +287,28 @@ details > summary { cursor: pointer; color: var(--write-panel-ink); font-size: 1
 .snapshot-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 46vh; overflow: auto;
   background: var(--write-bg); color: var(--write-ink); border-radius: 8px; padding: 14px 16px;
   font: inherit; margin: 8px 0; }
+
+/* ---- the stacked section is a pinned sheet (2026-10-16) ----------------
+   At narrow widths the results section used to sit in the flow BELOW a
+   60%-minimum editor: its tabs switched content the owner could not see
+   without scrolling down to it, and opening it smooth-scrolled the desk
+   ("not legible… dynamic in a bad way while in use"). It is a sheet now:
+   pinned to the foot of the view while open, a bounded height, ONE
+   scrollbar inside — the draft scrolls above it, the sheet holds still. */
+.shell[data-narrow="yes"] .work-view { display: flex; flex-direction: column; }  /* the editor grows, so a short draft still leaves the sheet flush at the foot; sticky holds it there once the draft overflows */
+.shell[data-narrow="yes"] .stacked { position: sticky; bottom: 0; z-index: 7;
+  display: flex; flex-direction: column; max-height: 46vh; min-height: 180px;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, .45); }
+.shell[data-narrow="yes"] .stacked #stacked-body { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+.shell[data-narrow="yes"] .stacked #stacked-body .panel-body { overflow: visible; flex: none; }  /* one scrollbar: the sheet's, not one per box */
+
+/* ---- the bar folds (2026-10-16: "a way to minimize the top bar section…
+   takes up too much realestate") — a small toggle shrinks the three acts
+   to one slim row; the choice is this device's, remembered like the
+   panel widths ------------------------------------------------------- */
+.draft-actions .bar-fold { margin-left: auto; align-self: center; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 13px; padding: 4px 6px; }
+.draft-actions .bar-fold:hover { color: var(--accent); }
+.draft-actions.compact { padding: 5px 16px; }
+.draft-actions.compact .big { flex-direction: row; align-items: center; gap: 8px; min-width: 0; padding: 4px 12px; border-radius: 7px; }
+.draft-actions.compact .big .big-label { font-size: 13px; }
+.draft-actions.compact .big .big-sub { display: none; }

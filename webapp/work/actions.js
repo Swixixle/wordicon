@@ -3,7 +3,7 @@
 // GET /api/actions; the page never invents a control. Selecting an action
 // PREPARES it (a frozen proposal, nothing sent); the proposal's Start
 // dispatches once under a request key. Opening a view starts nothing.
-import { getJSON, postJSON, el, requestKey, toast } from './util.js';
+import { getJSON, postJSON, el, requestKey, toast, prefs } from './util.js';
 
 const MODE_DOT = { decompose: 'var(--mode-source)', crack: 'var(--mode-source)', deep: 'var(--mode-source)', sprout: 'var(--mode-sprout)', refract: 'var(--mode-refract)', forge: 'var(--mode-forge)' };
 const GROUP_TITLES = { on_draft: 'On this draft', explore: 'Explore', investigate: 'Investigate', more: 'Places' };
@@ -88,6 +88,11 @@ export class Actions {
     const host = document.getElementById('draft-actions');
     if (!host) return;
     host.textContent = '';
+    // the fold (2026-10-16, the owner: "a way to minimize the top bar
+    // section… takes up too much realestate"): compact is one slim row,
+    // remembered per device like the panel widths — never a record event
+    const compact = !!prefs.get('bar.compact', false);
+    host.classList.toggle('compact', compact);
     for (const m of barModel(this.byId)) {
       const off = m.act !== 'intake' && !(m.a.readiness && m.a.readiness.available);
       const b = el('button', { class: 'big' + (off ? ' off' : ''), type: 'button',
@@ -101,6 +106,12 @@ export class Actions {
       });
       host.appendChild(b);
     }
+    const fold = el('button', { class: 'bar-fold', type: 'button', dataset: { bar: 'fold' },
+                                'aria-pressed': String(compact),
+                                title: compact ? 'Full-size buttons' : 'Shrink these to one slim row',
+                                text: compact ? '⌄ expand' : '⌃ shrink' });
+    fold.addEventListener('click', () => { prefs.set('bar.compact', !compact); this.renderBar(); });
+    host.appendChild(fold);
     host.hidden = !host.childElementCount;
   }
 

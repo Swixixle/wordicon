@@ -160,6 +160,19 @@ const path = require('path');
   ok(await page.isVisible('#stacked #results-tabs') && (await page.$$('#stacked #results-tabs .tab')).length === 4, 'and its four tabs (Results, Feedback, Notes, Sources) came down with it');
   await page.click('#stacked #results-tabs .tab[data-tab="feedback"]');
   ok((await page.getAttribute('#stacked #results-tabs .tab[data-tab="feedback"]', 'aria-selected')) === 'true', 'a tab in the section still switches');
+  // the section is a pinned sheet with the note surface aboard (2026-10-16:
+  // the in-flow section sat below the fold and the Notes tab showed nothing)
+  const sheet = await page.evaluate(() => {
+    const st = document.getElementById('stacked'), wv = document.getElementById('work-view');
+    wv.scrollTop = 0;                     // the sheet must hold at the foot of the VIEW wherever the draft is scrolled
+    const r = st.getBoundingClientRect(), w = wv.getBoundingClientRect();
+    return { pinned: Math.abs(r.bottom - w.bottom) < 6, h: Math.round(r.height), notesInside: !!st.querySelector('#notes-host') };
+  });
+  ok(sheet.pinned && sheet.h >= 150, 'the stacked section is a pinned sheet at the foot of the view: ' + JSON.stringify(sheet));
+  ok(sheet.notesInside, 'the note surface moved down with the tabs');
+  await page.click('#stacked #results-tabs .tab[data-tab="notes"]');
+  await page.waitForTimeout(250);
+  ok(await page.isVisible('#stacked #notes-host'), 'the Notes tab shows the note surface in the section');
   await page.click('#stacked #results-tabs .tab[data-tab="results"]');
   const hdr = await page.evaluate(() => { const h = document.getElementById('header'); return { sw: h.scrollWidth, cw: h.clientWidth, rows: new Set(Array.from(h.children).filter(e => !e.hidden).map(e => Math.round(e.getBoundingClientRect().top))).size }; });
   ok(hdr.sw <= hdr.cw && hdr.rows >= 2, 'the header wraps its formatting bar onto its own row rather than overlapping (' + hdr.rows + ' rows, no overflow)');

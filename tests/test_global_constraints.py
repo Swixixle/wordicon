@@ -6467,6 +6467,26 @@ console.log(JSON.stringify({rail, ids: bar.map(b=>b.id), acts: bar.map(b=>b.act)
     anat = Path("webapp/anatomy.html").read_text(encoding="utf-8")
     if 'class="grid2"' in anat or 'id="thesis"' not in anat:
         out.append("DOORS: the anatomy thesis is back to holding half the desk (or gone) — it is a slim band below the organ detail")
+    # 10. the narrow desk, legible (2026-10-16: "the four different options
+    # does not work there… not legible… takes up too much realestate…
+    # dynamic in a bad way while in use"): the note surface MOVES with the
+    # tabs, the stacked section is a pinned sheet with one scrollbar,
+    # opening it no longer scroll-jumps the desk, and the bar folds to one
+    # slim row and remembers on this device
+    lj = Path("webapp/work/layout.js").read_text(encoding="utf-8")
+    if "stackedBody.appendChild(notes)" not in lj or "this.results.appendChild(notes)" not in lj:
+        out.append("DOORS: the note surface does not move with the tabs — the Notes tab shows nothing in the stacked section")
+    if "scrollIntoView" in lj:
+        out.append("DOORS: opening the stacked section scroll-jumps the desk again")
+    wcss = Path("webapp/work/work.css").read_text(encoding="utf-8")
+    for need, why in (('.shell[data-narrow="yes"] .stacked { position: sticky; bottom: 0;', "the pinned sheet"),
+                      ("one scrollbar: the sheet", "the single-scrollbar rule"),
+                      (".draft-actions.compact .big .big-sub { display: none; }", "the folded bar")):
+        if need not in wcss:
+            out.append(f"DOORS: work.css lost {why}")
+    wa10 = Path("webapp/work/actions.js").read_text(encoding="utf-8")
+    if "bar.compact" not in wa10 or "bar-fold" not in wa10:
+        out.append("DOORS: the bar lost its fold, or the fold forgot how to remember")
     # 8. Settings tells the truth over a beta that backs itself up
     if "preview with its own backups" not in mainjs:
         out.append("DOORS: Settings still says every preview seals nothing — false over a beta that seals its own")

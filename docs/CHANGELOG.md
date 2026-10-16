@@ -1,5 +1,31 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.40.1 — The narrow desk, legible; the bar folds
+
+Three findings from the owner, minutes into living with it (2026-10-16):
+
+"The four different options does not work there" — correct, and worse than
+it looked: at narrow widths the tabs moved down into the stacked section
+but the NOTE SURFACE did not (slice J keeps that element alive rather than
+rebuilt, and the move-down forgot it), so the Notes tab revealed an element
+marooned inside the hidden side panel: nothing. The surface moves with the
+tabs now, both ways, same element, undo stack intact.
+
+"Not legible… dynamic in a bad way while in use" — the stacked section sat
+IN THE FLOW below a 60%-minimum editor: content switched below the fold,
+and opening it smooth-scrolled the desk. It is a pinned sheet now: stuck to
+the foot of the view while open, bounded height, ONE scrollbar inside (the
+per-box scrollers are gone), the draft scrolling above it, no scroll jump.
+
+"A way to minimize the top bar section… takes up too much realestate" —
+the bar folds: a small ⌃ shrinks the three acts to one slim row (subtitles
+off), remembered per device like the panel widths, never a record event.
+
+Proven in _check_workspace_doors §10, the doors journey (fold, shrink
+measured in px, remembered, unfold) and the work journey's narrow section
+(the sheet pinned at the foot, the note surface aboard, the Notes tab
+showing it).
+
 ## v1.40.0 — The Ledger: the owner's own trail, owned by the owner
 
 His ruling (2026-10-16): "I kind of even want key strokes and all the

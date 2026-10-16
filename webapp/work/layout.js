@@ -84,9 +84,15 @@ export class Layout {
     // the results body — and its tabs (Results, Feedback, Notes, Sources) — live
     // in ONE place: the side when beside, the stacked section when below
     const body = document.getElementById('results-body');
+    const notes = document.getElementById('notes-host');
     const stackedBody = document.getElementById('stacked-body');
-    if (stackedOn && body.parentElement !== stackedBody) stackedBody.appendChild(body);
-    if (!stackedOn && body.parentElement !== this.results) this.results.appendChild(body);
+    // the note surface MOVES with the tabs (slice J: the element that holds
+    // his words is never rebuilt — moving keeps its undo stack). It was left
+    // behind in the hidden side panel, so the Notes tab in the stacked
+    // section showed nothing at all (the owner, 2026-10-16: "the four
+    // different options does not work there").
+    if (stackedOn && body.parentElement !== stackedBody) { stackedBody.appendChild(notes); stackedBody.appendChild(body); }
+    if (!stackedOn && body.parentElement !== this.results) { this.results.appendChild(notes); this.results.appendChild(body); }   // same order as the side holds them: notes above, body below
     const tabs = document.getElementById('results-tabs');
     const stackedHead = document.getElementById('stacked-head'), sideHead = this.results.querySelector('.panel-head');
     if (tabs && stackedOn && tabs.parentElement !== stackedHead) stackedHead.insertBefore(tabs, document.getElementById('back-to-writing'));
@@ -117,7 +123,10 @@ export class Layout {
   setResults(open) {
     const s = this.state;
     s.results = !!open; this.save(); this.apply();
-    if (s.narrow && open) { const st = document.getElementById('stacked'); st.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+    // no scroll jump: at narrow widths the section is a pinned sheet at the
+    // foot of the view — it is simply there when open (the owner, 2026-10-16:
+    // the old in-flow section sat below the fold, "not legible", and the
+    // smooth scroll made the desk "dynamic in a bad way")
   }
   toggleTools(opener) { this.setTools(!this.state.tools, opener); }
   toggleResults() { this.setResults(!this.state.results); }

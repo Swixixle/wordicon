@@ -16,7 +16,13 @@ export class Ledger {
       const d = await r.json();
       this.enabled = d.enabled !== false;
     } catch (e) { /* the reporter never blocks the room */ }
-    document.addEventListener('visibilitychange', () => this.note(document.hidden ? 'visibility_hidden' : 'visibility_visible', {}));
+    document.addEventListener('visibilitychange', () => {
+      this.note(document.hidden ? 'visibility_hidden' : 'visibility_visible', {});
+      // hand the queue over ONLY when hiding (a plain-string beacon —
+      // teardown-safe). Returning to a tab does no work at all: a reporter
+      // that acts on arrival perturbs the very attention it records.
+      if (document.hidden) this.flush(true);
+    });
     window.addEventListener('pagehide', () => { this.note('session_end', {}); this.flush(true); });
     this.note('session_start', {});
   }
@@ -35,7 +41,11 @@ export class Ledger {
     this.queue.push({ type, at: this.localISO(), subject: subject || {} });
     if (this.queue.length > 500) this.queue.splice(0, this.queue.length - 500);   // attention data, not a debt: cap, never balloon
     if (this.queue.length >= 20) { this.flush(); return; }
-    if (!this.timer) this.timer = setTimeout(() => this.flush(), 15000);
+    // no timer while the tab is hidden: a reporter that wakes a background
+    // tab changes how the rest of the page behaves while away (polls run
+    // that throttling would have held) — attention data must not create
+    // attention; the queue hands over at the visibility boundary instead
+    if (!this.timer && !document.hidden) this.timer = setTimeout(() => this.flush(), 15000);
   }
 
   flush(beacon) {
@@ -44,7 +54,11 @@ export class Ledger {
     const events = this.queue.splice(0, 100);
     const body = JSON.stringify({ events });
     if (beacon && navigator.sendBeacon) {
-      try { navigator.sendBeacon('/api/ledger', new Blob([body], { type: 'application/json' })); return; } catch (e) { /* fall through */ }
+      // a PLAIN-STRING beacon: text/plain is a simple request, so WebKit's
+      // teardown never flags it (a json-typed Blob at pagehide surfaced as
+      // "access control checks" page errors); the store force-parses the
+      // body whatever the type says
+      try { navigator.sendBeacon('/api/ledger', body); return; } catch (e) { /* fall through */ }
     }
     fetch('/api/ledger', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body })
       .then(r => { if (r.status === 409) this.enabled = false; })    // the switch is off; stop reporting until it is turned back on

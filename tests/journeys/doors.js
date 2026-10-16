@@ -33,6 +33,18 @@ const { webkit } = require('playwright');
   ok(JSON.stringify(bar) === JSON.stringify(['Get feedback', 'Analyze', 'Add a file']),
      'the bar offers the three acts: ' + JSON.stringify(bar));
 
+  // 1b. the bar folds to one slim row and remembers (2026-10-16: "a way to
+  // minimize the top bar section… takes up too much realestate")
+  const tall = await page.evaluate(() => document.getElementById('draft-actions').getBoundingClientRect().height);
+  await page.click('#draft-actions button[data-bar="fold"]');
+  await page.waitForTimeout(150);
+  const short = await page.evaluate(() => document.getElementById('draft-actions').getBoundingClientRect().height);
+  ok(short < tall - 15 && await page.isHidden('#draft-actions .big .big-sub'), 'the bar folds to one slim row: ' + Math.round(tall) + 'px -> ' + Math.round(short) + 'px');
+  ok(await page.evaluate(() => { try { return JSON.parse(localStorage.getItem('nikodemus.work.bar.compact')) === true; } catch (e) { return false; } }), 'and the fold is remembered on this device');
+  await page.click('#draft-actions button[data-bar="fold"]');
+  await page.waitForTimeout(150);
+  ok(await page.isVisible('#draft-actions .big .big-sub'), 'and unfolds');
+
   // 2. the rail is the short set; nothing folded is drawn, no group renders empty
   const railIds = await page.$$eval('#tool-groups button.item', els => els.map(e => e.dataset.action));
   ok(railIds.length === 13, 'the rail lists 13 doors (was 36): ' + railIds.length + ' ' + JSON.stringify(railIds));
