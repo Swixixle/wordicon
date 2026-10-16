@@ -6467,6 +6467,12 @@ console.log(JSON.stringify({rail, ids: bar.map(b=>b.id), acts: bar.map(b=>b.act)
     anat = Path("webapp/anatomy.html").read_text(encoding="utf-8")
     if 'class="grid2"' in anat or 'id="thesis"' not in anat:
         out.append("DOORS: the anatomy thesis is back to holding half the desk (or gone) — it is a slim band below the organ detail")
+    # 10b. the front door (his ruling, 2026-10-16: "I like the old interface
+    # much more"): the old desk is the default and the workspace is one door
+    # away FROM it — the old header carries a Workspace link, so neither
+    # desk is ever a dead end
+    if 'href="/work"' not in Path("webapp/index.html").read_text(encoding="utf-8"):
+        out.append("DOORS: the old desk lost its door to the workspace — the ruling was one door away, not a wall")
     # 10. the narrow desk, legible (2026-10-16: "the four different options
     # does not work there… not legible… takes up too much realestate…
     # dynamic in a bad way while in use"): the note surface MOVES with the
