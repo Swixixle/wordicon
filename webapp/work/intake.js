@@ -19,7 +19,7 @@ function fmtBytes(n) {
 
 export class Intake {
   constructor(results, layout, places) {
-    this.results = results; this.layout = layout; this.places = places;
+    this.results = results; this.layout = layout; this.places = places;   // kept for the shell's shape; the intake is its own dialog
     this.queue = [];     // { file, status: queued|admitting|stored|refused, artifact, rep, needs_model, error }
   }
 
@@ -28,9 +28,34 @@ export class Intake {
     this.render();
   }
 
+  close() {
+    const ov = document.getElementById('work-intake-overlay');
+    if (ov) ov.hidden = true;
+  }
+
+  // Its own dialog, like Ask — not a card in the side panel, which renders
+  // as a short strip below the draft on a narrow desk and buried the
+  // controls (the owner, 2026-10-16: "the upload button is not functional").
+  overlay() {
+    let ov = document.getElementById('work-intake-overlay');
+    if (!ov) {
+      ov = el('div', { id: 'work-intake-overlay', class: 'intake', hidden: true });
+      ov.addEventListener('click', e => { if (e.target === ov) this.close(); });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && !ov.hidden) this.close(); });
+      document.getElementById('shell').appendChild(ov);
+    }
+    return ov;
+  }
+
   render() {
-    const host = el('div', { id: 'work-intake' }, [
-      el('div', { class: 'result-title', text: 'Add a file' }),
+    const ov = this.overlay();
+    ov.hidden = false;
+    ov.textContent = '';
+    const host = el('div', { id: 'work-intake', class: 'intake-box', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Add a file' }, [
+      el('div', { class: 'row', style: 'justify-content: space-between; align-items: baseline' }, [
+        el('div', { class: 'result-title', text: 'Add a file' }),
+        el('button', { class: 'btn small', type: 'button', text: 'Close ✕', 'aria-label': 'Close the intake', onclick: () => this.close() }),
+      ]),
       el('div', { class: 'kv muted small-text', text: 'This version takes ' + KINDS + '. Admitting stores the file unchanged in the Library and derives one text representation beside it — locally for text and PDF. Nothing is read by a model on admission; an image’s text is a separate vision call you press for by name.' }),
     ]);
     const input = el('input', { type: 'file', multiple: true, accept: ACCEPT, style: 'display:none', 'aria-label': 'Choose files to add' });
@@ -62,8 +87,7 @@ export class Intake {
       el('button', { class: 'linkish', type: 'button', text: 'open the full intake (previous interface)', onclick: () => this.places.open('/#bring') }),
       el('span', { text: '.' }),
     ]));
-    this.results.showCustom(host);
-    this.layout.setResults(true);
+    ov.appendChild(host);
   }
 
   rowFor(q, i) {

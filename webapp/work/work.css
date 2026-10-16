@@ -260,19 +260,23 @@ details > summary { cursor: pointer; color: var(--write-panel-ink); font-size: 1
    The owner could not find "how to make it run" in a rail of small links —
    the acts he reaches for live on the draft itself now, and Focus still
    clears them away with the rest of the chrome. ------------------------- */
-.draft-actions { display: flex; gap: 10px; flex-wrap: wrap; padding: 10px 16px 2px; }
+.draft-actions { display: flex; gap: 10px; flex-wrap: wrap; padding: 10px 16px;
+  position: sticky; top: 0; z-index: 6;              /* the work view scrolls; the three acts stay where the hand expects them */
+  background: var(--ground); border-bottom: 1px solid var(--line); }
 .draft-actions .big { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 150px;
-  background: var(--panel-2, var(--card)); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+  background: var(--write-panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
   padding: 9px 14px; cursor: pointer; text-align: left; }
 .draft-actions .big:hover { border-color: var(--accent); }
 .draft-actions .big .big-label { font-size: 14px; font-weight: 600; color: var(--accent); }
-.draft-actions .big .big-sub { font-size: 11.5px; color: var(--muted, #8a93a6); }
+.draft-actions .big .big-sub { font-size: 11.5px; color: var(--muted); }
 .draft-actions .big.off { opacity: .55; cursor: not-allowed; }
 .shell[data-focus="on"] .draft-actions { display: none !important; }
 
 /* ---- the intake (drop or choose; stored on Admit, never on arrival) ---- */
 .drop-hint { position: fixed; inset: 0; z-index: 60; background: rgba(5, 12, 30, .55); display: flex; align-items: center; justify-content: center; pointer-events: none; }
 .drop-hint-box { background: var(--write-panel); border: 2px dashed var(--accent); color: var(--text); border-radius: 10px; padding: 18px 26px; font-size: 15px; box-shadow: 0 10px 30px rgba(0,0,0,.6); }
+.intake { position: fixed; inset: 0; z-index: 40; background: rgba(5, 12, 30, .55); display: flex; align-items: flex-start; justify-content: center; padding-top: 9vh; }
+.intake-box { width: min(640px, 92vw); max-height: 78vh; overflow: auto; background: var(--write-panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.6); }
 .intake-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .intake-row { padding: 8px 10px; }
 .intake-row .warn { color: var(--bad, #e06c75); }

@@ -6400,6 +6400,8 @@ console.log(JSON.stringify({rail, ids: bar.map(b=>b.id), acts: bar.map(b=>b.act)
         out.append("DOORS: the intake's one admission POST does not live in admitQueued — something stores a file without the press")
     if "/represent'" not in ij or "one vision call" not in ij:
         out.append("DOORS: the image's reading lost its own named press")
+    if "work-intake-overlay" not in ij or "Escape" not in ij:
+        out.append("DOORS: the intake is not its own dialog with an Escape — a side-panel card buries its controls on a narrow desk")
     # 6. the new module is served with the shell
     c = paired(server.app.test_client())
     if c.get("/work/intake.js").status_code != 200:

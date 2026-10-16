@@ -95,6 +95,9 @@ const { webkit } = require('playwright');
   await page.waitForFunction(() => /stored in the Library as the source/.test(document.getElementById('work-intake').textContent), null, { timeout: 8000, polling: 100 });
   ok(posts.filter(p => p === 'POST /api/upload').length === beforeUp + 1, 'Admit posted exactly one /api/upload');
   ok(/text derived from the file itself/.test(await page.textContent('#work-intake')), 'and the text derived locally, no model call');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  ok(await page.isHidden('#work-intake-overlay'), 'Escape closes the intake dialog');
 
   // 7. the about-pages kept doors — in the footer now
   for (const id of ['foot-constitution', 'foot-anatomy', 'foot-legacy']) {

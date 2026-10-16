@@ -109,7 +109,10 @@ export class Actions {
     const b = el('button', { class: 'item' + (off ? ' off' : ''), type: 'button', dataset: { action: a.id }, title: a.readiness ? a.readiness.reason : '' });
     if (a.mode && MODE_DOT[a.mode]) b.appendChild(el('span', { class: 'dot', style: 'background:' + MODE_DOT[a.mode] }));
     b.appendChild(el('span', { text: a.label }));
-    const sub = a.mode && a.mode !== a.label.toLowerCase() && a.group === 'explore' ? capital(a.mode) : (off ? shortReason(a) : '');
+    // the old mode names (Sprout, Refract, Etymon…) stopped being sublabels
+    // (2026-10-16, the owner met "— Etymon" with "etymon is …?"): the plain
+    // label is the name; the old names still answer in Ask as aliases
+    const sub = off ? shortReason(a) : '';
     if (sub) b.appendChild(el('span', { class: 'sub', text: '— ' + sub }));
     b.addEventListener('click', () => this.choose(a.id, b));
     return b;
@@ -218,7 +221,7 @@ export class Actions {
     pop.appendChild(el('div', { class: 'head' }, [el('span', { class: 'lbl', text: `On your selection · ${words} word${words === 1 ? '' : 's'}` }), el('span', { class: 'muted small-text', text: '⌘.' })]));
     for (const id of POPOVER_ROUTES) {
       const a = this.byId[id]; if (!a) continue;
-      const b = el('button', { class: 'route', type: 'button', text: a.label + (a.mode && a.group !== 'on_draft' ? ' — ' + capital(a.mode) : (id === 'analyze.decompose' ? ' — Decompose' : '')) });
+      const b = el('button', { class: 'route', type: 'button', text: a.label });
       b.addEventListener('click', () => { pop.hidden = true; this.prepare(id); });
       pop.appendChild(b);
     }
@@ -305,7 +308,6 @@ export class Actions {
   }
 }
 
-function capital(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 function shortReason(a) {
   const r = (a.readiness && a.readiness.reason) || '';
   if (r.length <= 34) return r;
