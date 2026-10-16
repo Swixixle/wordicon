@@ -1590,13 +1590,134 @@ def _check_preview_isolation(server):
         idx = (Path(cli.__file__).parent.parent / "webapp" / "index.html").read_text(encoding="utf-8")
         if "v.preview" not in idx or "PREVIEW — backups are OFF in this process" not in idx:
             out.append("G-preview: the Home strip does not render the preview state")
-        mainjs = (Path(cli.__file__).parent.parent / "webapp" / "work" / "main.js").read_text(encoding="utf-8")
+        def mainjs2():
+            return (Path(cli.__file__).parent.parent / "webapp" / "work" / "main.js").read_text(encoding="utf-8")
+        mainjs = mainjs2()
         if "preview-chip" not in mainjs or "/api/vault/status" not in mainjs:
             out.append("G-preview: the workspace header does not show the preview state")
         import notify as _nt
         _os2.environ["WORDICON_NOTIFY_EMAIL_FROM"] = "a@b"; _os2.environ["WORDICON_NOTIFY_EMAIL_APP_PASSWORD"] = "x"
         if _nt._configured():
             out.append("G-preview: a preview would send notifications")
+
+        # ---- BETA BACKUPS (2026-10-16, his ruling: "fix the backup problem —
+        # that was always our plan"). A preview may seal ITS OWN store, and
+        # only its own: the launcher must ask (WORDICON_PREVIEW_BACKUPS=1) AND
+        # the root's config must carry the preview_own mark that init_vault
+        # never writes and the preview copy never carries. Everything above —
+        # the stand-down on an inherited config — must stay exactly true, and
+        # pruning and drilling stay refused however the gate is set.
+        _os2.environ["WORDICON_PREVIEW_BACKUPS"] = "1"
+        # asked, but the config is the owner's copy: refuse BY NAME, seal nothing
+        if _v.preview_own_backups():
+            out.append("G-beta: an inherited owner config satisfied the own-backups gate")
+        if _v.backup(reason="manual") != "":
+            out.append("G-beta: a preview sealed on an inherited config because the launcher asked")
+        _ref = _v.preview_backup_refusal()
+        if "not marked" not in _ref:
+            out.append(f"G-beta: the refusal does not say the config is not the preview's own: {_ref!r}")
+        _repb = server.startup_vault()
+        if _repb.get("started") or _repb.get("scheduler") or "not marked" not in (_repb.get("refusal") or ""):
+            out.append(f"G-beta: startup with an inherited config did not stand down with the reason: {_repb}")
+        _stb = _v.status()
+        if _stb.get("preview_own_backups") or "not marked" not in (_stb.get("preview_backup_refusal") or ""):
+            out.append(f"G-beta: the status does not carry the refusal: { {k: _stb.get(k) for k in ('preview', 'preview_own_backups', 'preview_backup_refusal')} }")
+        if fingerprint_dest() != before:
+            out.append("G-beta: the owner's destination changed while the config was merely asked about")
+
+        # the preview's OWN config: the owner's existing recipient, a destination of its own
+        _owner_cfg_text = _v.config_path().read_text()
+        own_dest = tmp / "beta-vaults"
+        _v.init_preview_own(got["config"]["recipient"], str(own_dest))
+        if not _v.preview_own_backups():
+            out.append("G-beta: a marked own config with its own destination did not open the gate")
+        _own_name = _v.backup(reason="manual")
+        _own_files = sorted(x.name for x in own_dest.glob("wordicon-vault-*.enc")) if own_dest.exists() else []
+        if not _own_name or _own_name not in _own_files:
+            out.append(f"G-beta: the beta did not seal into its own destination ({_v._LAST_FAILURE['msg']})")
+        _rows_own = [r for r in _v._log_rows() if r.get("type") == "sealed" and r.get("name") == _own_name]
+        if not _rows_own or not _rows_own[-1].get("payload_verified_locally"):
+            out.append("G-beta: the beta's seal is not in its history as locally verified")
+        if fingerprint_dest() != before:
+            out.append("G-beta: the beta's own seal touched the owner's destination")
+        # retention and the drill stay closed in a preview, gate or no gate.
+        # Two prunable old vaults are placed in the OWN destination first —
+        # with their sealed rows already in this log and a drill stamp on the
+        # record, the retention rule WOULD take one of them in a non-preview
+        # process — so a gate that quietly became own-aware returns work here
+        # instead of an empty list that proves nothing.
+        for _nameo, _ageo in fake:
+            (own_dest / _nameo).write_bytes(b"sealed bytes " + _nameo.encode())
+            (own_dest / (_nameo + ".json")).write_text(_json.dumps({"blob_sha256": "x", "bytes": 13}))
+            _os2.utime(own_dest / _nameo, (now - _ageo, now - _ageo))
+        if _v.prune() != []:
+            out.append("G-beta: an own-backups preview pruned")
+        if any(not (own_dest / _n).exists() for _n, _a in fake):
+            out.append("G-beta: an own-backups preview removed a vault from its destination")
+        try:
+            _v.drill(got["identity"])
+            out.append("G-beta: an own-backups preview drilled")
+        except RuntimeError as e:
+            if "preview" not in str(e):
+                out.append(f"G-beta: the own-mode drill refusal does not say why: {e}")
+        _sto = _v.status()
+        if not (_sto.get("preview") and _sto.get("preview_own_backups")) or _sto.get("preview_backup_refusal"):
+            out.append(f"G-beta: an own-backups status does not say what it is: { {k: _sto.get(k) for k in ('preview', 'preview_own_backups', 'preview_backup_refusal')} }")
+        _own_files = sorted(x.name for x in own_dest.glob("wordicon-vault-*.enc"))
+        if _sto.get("n_vaults") != len(_own_files):
+            out.append(f"G-beta: the status counts {_sto.get('n_vaults')} vault(s) where the own destination holds {len(_own_files)}")
+        # the maker refuses what must never be configured
+        try:
+            _v.init_preview_own("not-a-recipient", str(own_dest)); out.append("G-beta: a non-recipient was accepted")
+        except ValueError:
+            pass
+        try:
+            _v.init_preview_own(got["config"]["recipient"], str(_v.DEFAULT_DESTINATION)); out.append("G-beta: the live default destination was accepted for a beta")
+        except ValueError:
+            pass
+        # the startup branch is wired to the same gate (asserted on the source:
+        # calling it here would leave the scheduler's forever-thread running
+        # inside the suite, polling whatever store later checks point at)
+        _srvsrc = (Path(cli.__file__).parent.parent / "server.py").read_text(encoding="utf-8")
+        _branch = _srvsrc.split("def startup_vault", 1)[1].split("\ndef ", 1)[0]
+        for needb in ("preview_own_backups()", "PREVIEW with its own backups",
+                      "Nothing is ever pruned or drilled from a preview",
+                      'vault.backup(reason="start")', "vault.start_scheduler()"):
+            if needb not in _branch:
+                out.append(f"G-beta: startup_vault lost {needb!r}")
+        # the strip and the chip say the real state — driven, not read
+        _fn = idx.split("function vaultStripState(")[1]
+        _fn = "function vaultStripState(" + _fn[:_fn.index("\n}") + 2]
+        _drive = subprocess.run(["node", "-e", "const vaultAge = () => 'just now';\n" + _fn + """
+const own = vaultStripState({preview: true, preview_own_backups: true, last_seal_at: new Date().toISOString(), cloud: 'sealed locally — cloud synchronization unverified', n_vaults: 2, total_bytes: 4096, failure: '', stale_red: false});
+const refused = vaultStripState({preview: true, preview_own_backups: false, preview_backup_refusal: 'beta backups were requested but the config is not marked as this preview own - nothing is sealed'});
+const plain = vaultStripState({preview: true, preview_own_backups: false, preview_backup_refusal: ''});
+console.log(JSON.stringify({own, refused, plain}));
+"""], capture_output=True, text=True, timeout=60)
+        try:
+            _states = _json.loads(_drive.stdout.strip().splitlines()[-1])
+        except Exception:
+            _states = None
+        if not _states:
+            out.append(f"G-beta: the strip function could not be driven: {_drive.stderr[-200:]}")
+        else:
+            if _states["own"]["red"] or "its own backups" not in _states["own"]["text"] or "never pruned or drilled" not in _states["own"]["text"]:
+                out.append(f"G-beta: a sealing beta's strip is wrong: {_states['own']}")
+            if not _states["refused"]["red"] or "not marked" not in _states["refused"]["text"]:
+                out.append(f"G-beta: the asked-and-refused strip does not carry the reason: {_states['refused']}")
+            if not _states["plain"]["red"] or "backups are OFF in this process" not in _states["plain"]["text"]:
+                out.append(f"G-beta: the plain preview strip changed: {_states['plain']}")
+        if "Preview · backs itself up" not in mainjs2() or "preview_own_backups" not in mainjs2():
+            out.append("G-beta: the workspace chip cannot say the beta backs itself up")
+        _v.config_path().write_text(_json.dumps({**_json.loads(_v.config_path().read_text()),
+                                                 "destination": str(_v.DEFAULT_DESTINATION)}))
+        if _v.preview_own_backups():
+            out.append("G-beta: a marked config pointing at the LIVE DEFAULT destination opened the gate")
+        if "default" not in _v.preview_backup_refusal():
+            out.append(f"G-beta: the default-destination refusal does not say so: {_v.preview_backup_refusal()!r}")
+        # hand the environment back exactly as the sections below expect it
+        _v.config_path().write_text(_owner_cfg_text)
+        _os2.environ.pop("WORDICON_PREVIEW_BACKUPS", None)
 
         # ---- the guard OFF (documented absence): the copied configuration seals INTO the destination and prunes it ----
         _os2.environ.pop("WORDICON_PREVIEW", None)
@@ -1671,6 +1792,7 @@ def _check_preview_isolation(server):
             _os2.environ.pop("WORDICON_PREVIEW", None)
         else:
             _os2.environ["WORDICON_PREVIEW"] = saved_env
+        _os2.environ.pop("WORDICON_PREVIEW_BACKUPS", None)
         _os2.environ.pop("WORDICON_NOTIFY_EMAIL_FROM", None); _os2.environ.pop("WORDICON_NOTIFY_EMAIL_APP_PASSWORD", None)
         state_root.apply(_SCRATCH)
         _v._DIRTY.update(saved_dirty); _v._LAST_FAILURE.update(saved_fail)

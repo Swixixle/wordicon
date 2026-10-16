@@ -86,6 +86,92 @@ def preview_mode() -> bool:
     return os.environ.get("WORDICON_PREVIEW", "").strip().lower() in ("1", "true", "yes", "on")
 
 
+# The one place the default destination is spelled, so the own-backups
+# guard below can refuse it by identity rather than by resemblance.
+DEFAULT_DESTINATION = (pathlib.Path.home() / "Library" / "Mobile Documents"
+                       / "com~apple~CloudDocs" / "Wordicon Vault")
+
+
+def preview_backups_requested() -> bool:
+    """The launcher's half of the beta-backup handshake (2026-10-16, his
+    ruling: "fix the backup problem — that was always our plan"). Set by
+    nikodemus_beta.py when beta.json says "backups": true. On its own it
+    enables nothing."""
+    return os.environ.get("WORDICON_PREVIEW_BACKUPS", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def preview_own_backups() -> bool:
+    """May THIS preview seal backups? Only when every one of these holds:
+    the process is a preview, the launcher asked out loud, and the root's
+    vault config is marked as THIS preview's own — a mark init_vault never
+    writes and the preview copy never carries (scripts/preview.py copies a
+    store WITHOUT its vault/), so it exists only because someone deliberately
+    configured this store's own backups — with an explicit destination that
+    is not the live default. The reason for all the ceremony is the hazard
+    the preview stand-down was built against: a copied store names the
+    OWNER'S real destination, and a process that acts on an inherited config
+    writes into, and could eventually prune, backups that are not its own.
+    Pruning and drilling stay refused in a preview regardless — this gate
+    opens sealing and nothing else."""
+    if not (preview_mode() and preview_backups_requested()):
+        return False
+    cfg = load_config()
+    if cfg.get("preview_own") is not True:
+        return False
+    dest = str(cfg.get("destination") or "").strip()
+    if not dest:
+        return False
+    try:
+        if pathlib.Path(dest).expanduser().resolve() == DEFAULT_DESTINATION.expanduser().resolve():
+            return False
+    except OSError:
+        return False
+    return True
+
+
+def preview_backup_refusal() -> str:
+    """'' when nothing is being refused; otherwise the plain sentence for the
+    case where the launcher asked for beta backups and this root's config
+    cannot carry them — printed at startup and carried on /api/vault/status
+    so the strip can say it instead of a silent stand-down."""
+    if not (preview_mode() and preview_backups_requested()) or preview_own_backups():
+        return ""
+    cfg = load_config()
+    if not cfg:
+        return ("beta backups were requested but this root has no vault configuration of its own — "
+                "nothing is sealed; set one up with vault.init_preview_own(recipient, dest)")
+    if cfg.get("preview_own") is not True:
+        return ("beta backups were requested but the vault configuration in this root is not marked as "
+                "this preview's own — it may be an owner's copied config, and a preview never acts on "
+                "that; nothing is sealed")
+    return ("beta backups were requested but the configured destination is missing or is the live "
+            "default — a beta seals only to its own explicit destination; nothing is sealed")
+
+
+def init_preview_own(recipient: str, dest: str) -> dict:
+    """Create a PREVIEW'S OWN vault config: an existing recipient (the owner's
+    one public key — one secret, one place, no new custody ritual) and an
+    explicit destination of its own. Never generates an identity, never
+    returns a secret, refuses the live default destination."""
+    recipient = (recipient or "").strip()
+    if not recipient.startswith("age1"):
+        raise ValueError("init_preview_own needs an age recipient (the public key), not an identity or nothing")
+    d = pathlib.Path(dest).expanduser()
+    if str(d.resolve()) == str(DEFAULT_DESTINATION.expanduser().resolve()):
+        raise ValueError("a preview's own vault may not use the live default destination")
+    cfg = {"schema": VAULT_SCHEMA, "recipient": recipient,
+           "recipient_fingerprint": fingerprint(recipient),
+           "pyrage_version": importlib.metadata.version("pyrage"),
+           "destination": str(d),
+           "preview_own": True,
+           "created_at": cli._now()}
+    vault_conf_dir().mkdir(parents=True, exist_ok=True)
+    config_path().write_text(json.dumps(cfg, indent=1))
+    _log({"type": "init", "recipient_fingerprint": cfg["recipient_fingerprint"],
+          "pyrage_version": cfg["pyrage_version"], "preview_own": True})
+    return {"config": cfg}
+
+
 def vault_conf_dir() -> pathlib.Path:
     return local_state() / "vault"
 
@@ -110,9 +196,7 @@ def load_config() -> dict:
 
 def destination() -> pathlib.Path:
     cfg = load_config()
-    return pathlib.Path(cfg.get("destination") or (
-        pathlib.Path.home() / "Library" / "Mobile Documents"
-        / "com~apple~CloudDocs" / "Wordicon Vault"))
+    return pathlib.Path(cfg.get("destination") or DEFAULT_DESTINATION)
 
 
 def _log(row: dict) -> None:
@@ -581,9 +665,10 @@ def _sha(b: bytes) -> str:
 # backup: stage under the exclusive lock, manifest, seal, VERIFY, rename
 
 def backup(reason: str = "manual", stage_timeout: float = 0) -> str:
-    if preview_mode():
+    if preview_mode() and not preview_own_backups():
         # nothing sealed, nothing logged into the copied history, nothing said
-        # as a failure: the preview has no backups by design, and says so once
+        # as a failure: a preview without its own marked configuration has no
+        # backups by design, and says so once
         _LAST_FAILURE["msg"] = ""
         return ""
     cfg = load_config()
@@ -1004,10 +1089,13 @@ def prune() -> "list[str]":
 # status — three cloud states, ages, and staleness that turns red by itself
 
 def status() -> dict:
-    if preview_mode():
+    if preview_mode() and not preview_own_backups():
         # said plainly, and without reading the destination the copied
-        # configuration names: this process backs nothing up
-        return {"initialized": bool(load_config()), "preview": True,
+        # configuration names: this process backs nothing up. When the
+        # launcher ASKED and the config could not carry it, the reason rides
+        # along so the page can say why instead of standing down in silence.
+        return {"initialized": bool(load_config()), "preview": True, "preview_own_backups": False,
+                "preview_backup_refusal": preview_backup_refusal(),
                 "last_seal_at": "", "last_seal_verification": "", "last_drill_at": "", "last_drill_vault": "",
                 "cloud": "preview — backups are off in this process", "n_vaults": 0, "total_bytes": 0,
                 "dirty_seconds": 0, "stale_red": False, "failure": ""}
@@ -1027,7 +1115,11 @@ def status() -> dict:
         cloud = "sealed locally — cloud synchronization unverified"
     dirty_for = (time.monotonic() - _DIRTY["since"]) if _DIRTY["since"] else 0
     stale = bool(_DIRTY["since"]) and dirty_for > CEILING_SECONDS
-    return {"initialized": bool(load_config()), "preview": False,
+    return {"initialized": bool(load_config()),
+            # an own-backups preview reports its REAL sealing state: the strip
+            # must never show a sealing process as one that seals nothing
+            "preview": preview_mode(), "preview_own_backups": preview_own_backups(),
+            "preview_backup_refusal": "",
             "last_seal_at": (last_seal or {}).get("at", ""),
             # a seal's verification is payload-only, and says so; drill
             # rows are the only carriers of owner-recovery verification
@@ -1047,8 +1139,8 @@ def status() -> dict:
 # the scheduler: quiet-debounce + the staleness ceiling
 
 def start_scheduler():
-    if preview_mode():
-        return              # a preview seals nothing on a timer either
+    if preview_mode() and not preview_own_backups():
+        return              # a preview without its own config seals nothing on a timer either
     def loop():
         while True:
             time.sleep(30)

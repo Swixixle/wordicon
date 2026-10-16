@@ -422,7 +422,21 @@ async function boot() {
   results.render();
   layout.apply();
   // a preview process says so in the header for as long as it runs (state, never hidden)
-  getJSON('/api/vault/status').then(r => { if (r.ok && r.data && r.data.preview) { document.getElementById('preview-chip').hidden = false; PREVIEW.on = true; } }).catch(() => {});
+  getJSON('/api/vault/status').then(r => {
+    if (!(r.ok && r.data && r.data.preview)) return;
+    const chip = document.getElementById('preview-chip');
+    chip.hidden = false; PREVIEW.on = true;
+    if (r.data.preview_own_backups) {
+      // the beta seals its own store (2026-10-16): the chip must not say
+      // "backups off" over a process that is sealing — state, never hidden,
+      // and the two acts a preview still never performs are in the title
+      chip.textContent = 'Preview · backs itself up';
+      chip.title = 'This preview seals encrypted backups of its own store to its own destination. It still never prunes old vaults and never drills from a preview.';
+    } else if (r.data.preview_backup_refusal) {
+      chip.textContent = 'Preview · backups off (asked, refused)';
+      chip.title = r.data.preview_backup_refusal;
+    }
+  }).catch(() => {});
   window.__work = { session, layout, results, actions, places, editor, applier };   // for the journeys: state, not a control surface
 }
 const PREVIEW = { on: false };

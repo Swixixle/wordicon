@@ -11224,12 +11224,28 @@ function vaultAge(iso) {
 function vaultStripState(v) {
   if (!v) return {red: true, quiet: false, hidden: false,
                   text: 'Vault status UNREACHABLE — backups may not be running'};
-  if (v.preview) {
-    // a preview process (WORDICON_PREVIEW=1) backs nothing up, by design, and
-    // the strip says so in red for as long as it runs — this is state, not
-    // explanation, so it never goes quiet
+  if (v.preview && !v.preview_own_backups) {
+    // a preview process (WORDICON_PREVIEW=1) without its own marked vault
+    // config backs nothing up, by design, and the strip says so in red for
+    // as long as it runs — this is state, not explanation, so it never goes
+    // quiet. When the launcher ASKED for beta backups and the config could
+    // not carry them, the producer's own reason is shown instead of a
+    // silent stand-down.
     return {red: true, quiet: false, hidden: false,
-            text: 'PREVIEW — backups are OFF in this process: nothing is sealed, scheduled, pruned or drilled here'};
+            text: v.preview_backup_refusal
+              ? 'PREVIEW — backups are OFF: ' + v.preview_backup_refusal
+              : 'PREVIEW — backups are OFF in this process: nothing is sealed, scheduled, pruned or drilled here'};
+  }
+  if (v.preview && v.preview_own_backups) {
+    // the beta sealing its own store (2026-10-16): real sealing state, with
+    // the preview named — and the two acts a preview still never performs
+    // said out loud, because "backups on" must not read as "retention on"
+    const bits = ['PREVIEW with its own backups — sealed ' + vaultAge(v.last_seal_at), v.cloud,
+                  v.n_vaults + ' vault(s)', 'never pruned or drilled from a preview'];
+    if (v.failure) bits.push(v.failure);
+    else if (v.stale_red) bits.push('unsealed changes for ' + Math.round(v.dirty_seconds / 60) + ' min');
+    return {red: !!(v.failure || v.stale_red), quiet: !(v.failure || v.stale_red), hidden: false,
+            text: bits.join(' · ')};
   }
   if (!v.initialized) {
     return {red: true, quiet: false, hidden: false,

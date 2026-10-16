@@ -1,5 +1,38 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.37.1 — A beta may seal its own backups, and only its own
+
+The preview stand-down (the review of 6e5b59c) exists because a copied store
+carries the OWNER'S vault configuration — the real destination, the history
+that arms retention — and a process acting on an inherited config writes
+into, and could eventually prune, backups that are not its own. That hazard
+is unchanged and still proven.
+
+What changed: the owner's beta is now where his real writing lives, and a
+store of real writing with no backups is its own hazard. So a preview may
+seal — when the launcher asks out loud (WORDICON_PREVIEW_BACKUPS=1, set from
+beta.json "backups": true) AND the root's vault config carries
+"preview_own": true with an explicit destination that is not the live
+default. That mark is written only by vault.init_preview_own(recipient,
+dest), which takes the owner's EXISTING recipient (one secret, one place, no
+new custody ritual) and refuses the live default destination. init_vault
+never writes the mark and scripts/preview.py never copies vault/ at all, so
+an inherited config can never satisfy the gate; when the launcher asks and
+the config cannot carry it, the refusal is printed and rides
+/api/vault/status instead of a silent stand-down.
+
+With the gate open: seal at start, the quiet-debounce scheduler, a seal at
+shutdown — into the beta's own destination, logged in the beta's own
+history, each payload verified locally. Still NEVER pruned and NEVER drilled
+from a preview, gate or no gate: drill() and prune() refuse on preview_mode()
+alone, and the strip says "never pruned or drilled from a preview" so
+"backups on" cannot be read as "retention on". The Home strip and the
+workspace chip render all three states — off, asked-and-refused with the
+producer's reason, sealing — and _check_preview_isolation drives each,
+including the four-vault layout retention would act on, so an own-aware
+prune gate returns work instead of a vacuous empty list. Five sabotage
+mutations, each caught by name.
+
 ## v1.37.0 — workspace-v2 slice J: his own notes beside the work
 
 A place to write his own prose while reading something else, one scratchpad per document, in the Results panel above the carried list. The two are now separate in the record and on the page: a note is `owner_authored` and says it is not a carry, a result or an acceptance; a carry stays the model's words under "may be useful while revising" and gains a control to annotate it in his own voice — beside the carried text, never over it (the excerpt is byte-identical after an annotation, pinned).

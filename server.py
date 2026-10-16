@@ -6321,10 +6321,30 @@ def startup_vault() -> dict:
     2): none of those, said out loud, whatever vault configuration the root
     carries — a copied store names the owner's real destination and history."""
     import atexit
-    if vault.preview_mode():
+    if vault.preview_mode() and not vault.preview_own_backups():
+        refusal = vault.preview_backup_refusal()
         print("PREVIEW: backups are OFF in this process — nothing is sealed at start, on a timer or at shutdown, "
-              "nothing is pruned, nothing is drilled; the vault configuration in this root, if any, is not acted on.")
-        return {"preview": True, "started": False, "scheduler": False, "shutdown_seal": False}
+              "nothing is pruned, nothing is drilled; the vault configuration in this root, if any, is not acted on."
+              + (f"\nPREVIEW: {refusal}" if refusal else ""))
+        return {"preview": True, "started": False, "scheduler": False, "shutdown_seal": False,
+                "refusal": refusal}
+    if vault.preview_mode():
+        # A preview with its OWN marked vault configuration (2026-10-16, his
+        # ruling — the beta is where his real writing now lives). It seals at
+        # start, on the quiet-debounce timer and at shutdown, to its own
+        # explicit destination under his existing recovery key. It still
+        # NEVER prunes and NEVER drills: drill() and prune() refuse on
+        # preview_mode() alone, this gate does not reach them, and the line
+        # below says so rather than leaving it to be inferred.
+        print(f"PREVIEW with its own backups: this beta seals to {vault.destination()} "
+              f"(its own destination, its own history) at start, on the quiet timer and at shutdown. "
+              f"Nothing is ever pruned or drilled from a preview.")
+        threading.Thread(target=lambda: vault.backup(reason="start"), daemon=True).start()
+        vault.start_scheduler()
+        atexit.register(lambda: vault.preview_own_backups()
+                        and vault.backup(reason="shutdown", stage_timeout=10))
+        return {"preview": True, "preview_own_backups": True, "started": True,
+                "scheduler": True, "shutdown_seal": True}
     _vst = vault.status()
     if _vst["initialized"]:
         print(f"Vault: {_vst['n_vaults']} vault(s), "
