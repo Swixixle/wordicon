@@ -1,5 +1,24 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.42.2 — The lanes ruled: cheap by measurement, local by custody (documentation only)
+
+Asked whether to "start using cheap models that learn as well," ruled the
+same hour. W4 gains a local open-weights lane beside the provider
+adapters — free per call, and the mechanical passes it serves never
+leave the machine, shrinking what the standing scope must ever cover —
+with routing decided by a calibration harness that counts missed and
+false findings per lane per pass type before any lane is trusted; no
+lane swap before the corpus is measured, no cost optimization of a
+pipeline that has spent one call. W6 records the plain fact under the
+question: frozen API models never learn from this data; the record is
+what learns. The training gate stands, with one admitted exception — a
+small local model fine-tuned for one mechanical classification pass,
+only after the generic local model measurably fails at it. Also live
+today, between entries: the first real Go deeper run (74 s, one allowed
+web search that returned ten leads, the model's own "every attempt hit a
+usage limit" contradicted by its own acquisition record — the two kept
+apart on the page exactly as the law requires).
+
 ## v1.42.1 — Go deeper: a focused exploration lane, received and integrated
 
 A saved Sprout thread now offers "↓ Go deeper": follow that particular

@@ -129,13 +129,23 @@ datasets generated later, optionally, from the same records.
   disagreements preserved — consensus is never verification; a coverage
   matrix that names what was NOT captured or analyzed. First measured
   runs here set W5's cap value.
-- **W4 — the other two providers.** OpenAI and Google adapters beside
-  Anthropic's; keys in the existing secret mechanism, never in the
-  corpus; structured outputs per provider, validated locally; batch
-  where offered; measured routing — all three for calibration samples
-  and disputed or consequential findings, one for bulk literal passes,
-  the matrix saying which depth each segment got. Account data-use and
-  retention terms checked at build time, not assumed.
+- **W4 — the other providers, and the lanes.** OpenAI and Google
+  adapters beside Anthropic's; keys in the existing secret mechanism,
+  never in the corpus; structured outputs per provider, validated
+  locally; batch where offered. Ruled 2026-10-16 ("yes go"): a LOCAL
+  open-weights lane joins them — Ollama is already on the machine —
+  free per call, and the mechanical passes it serves never leave the
+  machine at all, which shrinks what the standing scope (W5) ever has
+  to cover; local models fabricate structure more often, and the
+  findings store's evidence-span requirement is the net that catches
+  it. Routing is measured, never assumed: a calibration harness runs
+  the same hand-checked sample through every lane per pass type and
+  counts missed and false findings before any lane is trusted with
+  bulk work — cheap lanes for bulk literal passes, full depth for
+  calibration samples and disputed or consequential findings, the
+  matrix saying which depth each segment got. No lane swap happens
+  before the corpus is measured. Account data-use and retention terms
+  checked at build time, not assumed.
 - **W5 — the standing scope.** Ruling 2 becomes law: scope = everything
   captured, named providers, named cap, dispatches in the Ledger,
   disable-queues-never-drops. Constitution amended in the same commit;
@@ -144,6 +154,14 @@ datasets generated later, optionally, from the same records.
   that actually change later retrieval; recorded/stated/inferred kept
   distinct; training-ready exports later, authorship and rights
   preserved; nothing fine-tuned until a measured need beats retrieval.
+  Ruled beside the lanes (2026-10-16): frozen API models never learn
+  from this data — nothing sent to a provider makes any model smarter
+  about the owner — so what learns is the RECORD: corrections that
+  change later retrieval, the dataset accumulating under his custody.
+  The one admitted exception to the training gate is a small local
+  model fine-tuned for ONE mechanical classification pass, and only
+  after the calibration harness shows the generic local model failing
+  at it: a trained screwdriver, never a personal model.
 
 ## Refused, and why it stays refused
 
