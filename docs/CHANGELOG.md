@@ -1,5 +1,51 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.41.2 — The meaning leads its row
+
+His ruling (2026-10-16): "The definitions should be the more prominent
+part of the descriptions following the words… colored to stand out the
+most." On the Concepts shelf the definition was the dimmest text on its
+own row — muted grey at the far end, behind the ruling chip and a band of
+salmon standing flags. The metadata outshouted the meaning.
+
+The row now reads in the order the record actually ranks things: the word,
+then what it means — directly beside its name, in the writing room's ink
+(the one colour here that already means "the words themselves", 13.2:1 on
+this ground, a step larger than before) — then the chips, ruling and
+standing, closing the row. The open row's full definition wears the same
+ink. The chips themselves are untouched: a warning still looks like a
+warning; it just no longer outranks the meaning it is a footnote to.
+
+Pinned in §75 beside the two-band checks: the definition must sit between
+its word and the chips, and must wear the ink. Sabotaged both ways —
+reorder the row or re-grey the definition and the pin fails by name.
+
+## v1.41.1 — A sealing beta sheds the alarm colour
+
+"Says preview in red." The strip caller painted EVERY preview red before
+consulting the state that knew better — a beta sealing its own backups
+(v1.37.1) reported in the same alarm colour as a preview whose work is
+unprotected, and fed the header's attention dot while doing it. The caller
+now honours the state it was already given: a sealing beta reports in the
+quiet muted voice, red stays for the previews that have something to be
+red about. The caller's behaviour is pinned (the state function alone had
+been tested — driving the state and never the caller is the gap that let
+this ship), and sabotage confirms reverting the caller fails by name.
+
+## v1.41.0 — The old desk is the front door
+
+His ruling (2026-10-16): "To be totally honest… I like the old interface
+much more, and this new one we aren't connecting on." The original desk —
+Write, Explore, Library, the Bench, Home — serves at `/` again; the
+workspace keeps everything it gained and stands one door away, through a
+Workspace link in the desk's quiet header line. The launcher, the webloc
+and the desktop command all open `/`. Nothing was demolished: the two
+desks share the same store, the same records, the same laws.
+
+The written record was brought current in the follow-up commit — README,
+docs index, capability census — and run through an adversarial review
+pass, findings fixed rather than filed.
+
 ## v1.40.1 — The narrow desk, legible; the bar folds
 
 Three findings from the owner, minutes into living with it (2026-10-16):

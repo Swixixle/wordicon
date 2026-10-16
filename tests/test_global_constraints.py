@@ -13316,6 +13316,19 @@ console.log(JSON.stringify({
     _rowsrc75 = _pg75[_pg75.index("function wordRowHtml"):_pg75.index("// One archive row")]
     if "${chip}${standingChips(w, true)}" not in _rowsrc75:
         failures.append("75: the ruling chip and the standing chips are not both on the row")
+    # The meaning leads what follows the word (his ruling, 2026-10-16): the
+    # definition sits directly beside its name, in the writing room's ink,
+    # and the chips — ruling, then standing — close the row. The defect this
+    # pins out is the shelf as it shipped before: the row's own metadata
+    # outshouting its meaning, the definition the dimmest text on the row.
+    _defpos75 = _rowsrc75.find('class="w-def"')
+    _chippos75 = _rowsrc75.find("${chip}${standingChips(w, true)}")
+    if _defpos75 < 0 or not (-1 < _defpos75 < _chippos75):
+        failures.append("75: the definition does not sit between its word and the chips")
+    _defcss75 = _pg75[_pg75.index(".word-row .w-def"):]
+    _defcss75 = _defcss75[:_defcss75.index("}")]
+    if "var(--write-ink)" not in _defcss75:
+        failures.append("75: the definition does not wear the ink — the row's metadata outshouts its meaning")
 
     # ---- 78. THE SOURCES, READ AS THEMSELVES --------------------------
     #
