@@ -3896,6 +3896,23 @@ def work_static(name):
     return send_from_directory(WEBAPP_DIR / "work", name)
 
 
+@app.route("/api/snapshots/<snapshot_id>")
+def api_snapshot(snapshot_id):
+    """The immutable capture a run was made from — the exact text, returned
+    only when the record still hashes to its own id (2026-10-16, his ask:
+    'an easily accessible button to take you to the original piece of
+    writing that I had submitted'). The whole text here is deliberate:
+    snapshots.summary() keeps it off cards, and this door exists to show the
+    writing itself. A capture that no longer verifies is refused by name,
+    never displayed as if it were what the run read."""
+    rec = snapshots.load(snapshot_id)
+    if rec is None or not snapshots.verify(rec):
+        return jsonify({"error": "no such snapshot, or it no longer verifies against its own id"}), 404
+    out = snapshots.summary(rec)
+    out["text"] = rec.get("text", "")
+    return jsonify(out)
+
+
 @app.route("/api/actions")
 def api_actions():
     """The registry with readiness derived from the record; no provider call."""

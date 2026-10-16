@@ -72,6 +72,20 @@ const { webkit } = require('playwright');
   ok(op.status === 'complete', 'the bar’s Analyze completed through the one job path: ' + op.status);
   ok(typeof op.snapshot_id === 'string' && op.snapshot_id.startsWith('snap_'), 'the routed run links to its immutable snapshot');
 
+  // 4b. the door back to the writing (his ask, 2026-10-16): from the result,
+  // one press opens the document it came from; another shows the exact capture
+  const origDoc = await page.evaluate(() => window.__work.session.id);
+  await page.evaluate(() => window.__work.session.newDocument(''));
+  await page.waitForTimeout(400);
+  ok((await page.evaluate(() => window.__work.session.id)) !== origDoc, 'a second document is open, so the door has somewhere to return from');
+  await page.click('#results-body button[data-door="writing"]');
+  await page.waitForFunction(id => window.__work.session.id === id, origDoc, { timeout: 8000, polling: 100 });
+  ok(true, 'the result’s door opens the writing it came from');
+  ok((await page.evaluate(() => document.getElementById('shell').dataset.page)) === 'work', 'and lands in Work');
+  await page.click('#results-body button[data-door="captured"]');
+  await page.waitForFunction(() => /The writing, as captured/.test(document.getElementById('results-body').textContent), null, { timeout: 8000, polling: 100 });
+  ok(/He threw it once, cleanly, and the room laughed/.test(await page.textContent('#results-body')), 'the capture shows the exact text the run read');
+
   // 5. Get feedback from the bar proposes the three readers; Close starts nothing
   const before5 = posts.filter(p => p === 'POST /api/operations').length;
   await page.click('button[data-bar="feedback.readers"]');

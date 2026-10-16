@@ -6431,6 +6431,42 @@ console.log(JSON.stringify({rail, ids: bar.map(b=>b.id), acts: bar.map(b=>b.act)
             out.append(f"DOORS: the named press did not derive the image's text: {r3.status_code} {d3}")
         elif not cli.load_representations(aid):
             out.append("DOORS: the press reported a representation that was not stored")
+    # 9. the door back to the writing (2026-10-16, his ask: "an easily
+    # accessible button to take you to the original piece of writing"): the
+    # capture answers whole and verified from its route, gated, and refused
+    # the moment it no longer hashes to its own id; the result card carries
+    # the doors; the legacy record panel can show the whole original; the
+    # anatomy thesis stopped holding half the desk
+    subj9 = {"kind": "selection", "text": "The throw was the point.", "doc_id": "doc_doors",
+             "revision": 2, "seq": 3, "range": {"start": 0, "end": 24}, "units": "codepoint"}
+    rec9 = _ac.prepare("analyze.decompose", subj9, {}, server.server_gateway)
+    r9 = c.get("/api/snapshots/" + rec9["snapshot_id"])
+    d9 = r9.get_json() or {}
+    if r9.status_code != 200 or d9.get("text") != "The throw was the point." or d9.get("doc_id") != "doc_doors" or d9.get("revision") != 2:
+        out.append(f"DOORS: the capture does not answer whole from its route: {r9.status_code} {d9}")
+    if server.app.test_client().get("/api/snapshots/" + rec9["snapshot_id"]).status_code != 401:
+        out.append("DOORS: the capture answers an unpaired device — the writing itself, past the gate")
+    if c.get("/api/snapshots/snap_nonesuch").status_code != 404:
+        out.append("DOORS: an unknown capture is not refused by name")
+    import snapshots as _sn9
+    p9 = _sn9._dir() / f"{rec9['snapshot_id']}.json"
+    t9 = _json.loads(p9.read_text(encoding="utf-8")); t9["text"] = "Tampered."
+    p9.write_text(_json.dumps(t9, sort_keys=True, ensure_ascii=False), encoding="utf-8")
+    if c.get("/api/snapshots/" + rec9["snapshot_id"]).status_code != 404:
+        out.append("DOORS: a capture that no longer verifies is still displayed as if it were what the run read")
+    wr = Path("webapp/work/results.js").read_text(encoding="utf-8")
+    for need, why in (("door: 'writing'", "the open-the-writing door"), ("door: 'captured'", "the as-captured door"),
+                      ("'/api/snapshots/'", "the capture fetch"), ("The writing, as captured", "the capture view"),
+                      ("this.hooks.openDocument", "the hook that opens the document")):
+        if need not in wr:
+            out.append(f"DOORS: results.js lost {why} ({need})")
+    if "openDocument: async id" not in mainjs and "openDocument:" not in Path("webapp/work/main.js").read_text(encoding="utf-8"):
+        out.append("DOORS: main.js no longer wires the open-the-writing hook")
+    if "The original writing, whole" not in Path("webapp/index.html").read_text(encoding="utf-8"):
+        out.append("DOORS: the legacy record panel cut the original to 300 characters with no way to the whole again")
+    anat = Path("webapp/anatomy.html").read_text(encoding="utf-8")
+    if 'class="grid2"' in anat or 'id="thesis"' not in anat:
+        out.append("DOORS: the anatomy thesis is back to holding half the desk (or gone) — it is a slim band below the organ detail")
     # 8. Settings tells the truth over a beta that backs itself up
     if "preview with its own backups" not in mainjs:
         out.append("DOORS: Settings still says every preview seals nothing — false over a beta that seals its own")

@@ -252,6 +252,24 @@ export class Results {
     return card;
   }
 
+  // The capture, whole: the exact text a run was made from, in the room's
+  // own colors, with its verification stated — and a door onward to the
+  // live document when the capture names one.
+  async showSnapshot(id) {
+    if (!id) { toast('This run’s record names no capture.'); return; }
+    const r = await getJSON('/api/snapshots/' + encodeURIComponent(id));
+    if (!r.ok) { toast('The capture could not be read: ' + (r.data && r.data.error || r.status), 6000); return; }
+    const s = r.data;
+    const host = el('div', {}, [
+      el('div', { class: 'result-title', text: 'The writing, as captured' }),
+      el('div', { class: 'kv muted small-text', text: (s.kind === 'selection' ? 'Your selection' : (s.kind === 'document' ? 'The whole draft' : 'The text')) + (s.revision !== null && s.revision !== undefined ? ' at revision ' + s.revision : '') + ' · ' + (s.chars || 0) + ' characters · sha256 ' + String(s.text_sha256 || '').slice(0, 16) + '… · immutable: verified against its own id, this is exactly what the run read' }),
+      el('pre', { class: 'snapshot-text', text: s.text || '' }),
+      s.doc_id && this.hooks.openDocument ? el('div', { class: 'row' }, [el('button', { class: 'btn small', type: 'button', text: 'Open this document in Work', title: 'The document as it stands now — it may have moved on since this capture', onclick: () => this.hooks.openDocument(s.doc_id) })]) : null,
+    ]);
+    this.showCustom(host);
+    this.layout.setResults(true);
+  }
+
   resultCard(t) {
     const p = t.prepared, a = p ? p.label : (t.label || t.kind);
     const d = t.last || {};
@@ -260,8 +278,20 @@ export class Results {
     const rec = d.recovery || null;
     const card = el('div', { class: 'card' }, [
       el('div', { class: 'row', style: 'justify-content: space-between' }, [el('div', { class: 'result-title', text: a }), el('span', { class: 'chip', text: whenOf(t.startedAt) })]),
-      p && p.disclosure.scope && p.disclosure.scope.doc_id ? el('div', { class: 'kv', text: `From this draft, revision ${p.disclosure.scope.revision}${p.disclosure.scope.kind === 'selection' ? ' · your selection “' + p.disclosure.scope.head + '”' : ''}` }) : null,
-      !p && t.fromStore ? el('div', { class: 'kv muted', text: 'From the record' + (d.retry_parent ? ' · another attempt of an earlier operation' : '') + (d.in_process === false ? ' · not running in this process' : '') }) : null,
+      p && p.disclosure.scope && p.disclosure.scope.doc_id ? el('div', { class: 'kv provenance' }, [
+        el('span', { text: `From this draft, revision ${p.disclosure.scope.revision}${p.disclosure.scope.kind === 'selection' ? ' · your selection “' + p.disclosure.scope.head + '”' : ''} ` }),
+        // his ask (2026-10-16): the door back to the original piece of writing, on the result itself
+        el('button', { class: 'btn small', type: 'button', dataset: { door: 'writing' }, text: 'Open the writing', title: 'Opens the document this was made from, as it stands now', onclick: () => this.hooks.openDocument && this.hooks.openDocument(p.disclosure.scope.doc_id) }),
+        (d.snapshot_id || p.snapshot_id) ? el('button', { class: 'linkish', type: 'button', dataset: { door: 'captured' }, text: 'as captured', title: 'The exact text this run was made from — the immutable capture, verified against its own id', onclick: () => this.showSnapshot(d.snapshot_id || p.snapshot_id) }) : null,
+      ]) : null,
+      p && p.disclosure.scope && !p.disclosure.scope.doc_id && (d.snapshot_id || p.snapshot_id) ? el('div', { class: 'kv provenance' }, [
+        el('span', { text: 'Made from text that was not a document of yours ' }),
+        el('button', { class: 'linkish', type: 'button', dataset: { door: 'captured' }, text: 'show it, as captured', onclick: () => this.showSnapshot(d.snapshot_id || p.snapshot_id) }),
+      ]) : null,
+      !p && t.fromStore ? el('div', { class: 'kv muted provenance' }, [
+        el('span', { text: 'From the record' + (d.retry_parent ? ' · another attempt of an earlier operation' : '') + (d.in_process === false ? ' · not running in this process' : '') + ' ' }),
+        d.snapshot_id ? el('button', { class: 'linkish', type: 'button', dataset: { door: 'captured' }, text: 'the writing it was made from', onclick: () => this.showSnapshot(d.snapshot_id) }) : null,
+      ]) : null,
       fresh.text ? el('div', { class: 'kv ' + (fresh.fresh ? 'ok' : 'warn'), text: fresh.text }) : null,
       el('div', { class: 'kv state ' + (t.status === 'failed' || t.status === 'unknown' ? 'bad' : (t.status === 'done' || t.status === 'complete' ? 'good' : 'running')), text: state + (d.progress && !['done', 'complete', 'failed', 'unknown'].includes(t.status) ? ' · ' + d.progress : '') }),
     ]);

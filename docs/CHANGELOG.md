@@ -1,5 +1,53 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.39.0 — The door back to the writing; the anatomy thesis stands down
+
+His ask, minutes into using the three doors: "an easily accessible button
+to take you to the original piece of writing that I had submitted." Every
+run already carried its provenance — the immutable snapshot, the document
+id, the revision — displayed as a sentence and a hash, with no door.
+
+Now: GET /api/snapshots/<id> answers the capture WHOLE — behind the pairing
+gate, and only while the record still hashes to its own id; a tampered
+capture is refused by name, never displayed as if it were what the run
+read (snapshots.summary() still keeps whole text off cards; this route IS
+the whole-text door). On the workspace result card, the provenance line
+became a row of doors: "Open the writing" opens the document this was made
+from, as it stands now; "as captured" shows the exact text the run read, in
+the writing room's own colors, with its verification stated and a door
+onward to the live document. A from-the-record run with no proposal gets
+the capture door off its snapshot id. In the previous interface, the record
+panel's 300-character teaser of the original now opens to the whole text on
+a press ("The original writing, whole — N characters"); the reopened-run
+views already showed it whole and are unchanged.
+
+Separately, the anatomy page (2026-10-16, the owner: the bottom-right
+column "never changes or alters it just takes up humungus amounts of
+realestate"): "The architecture in one sentence" stood as the right half of
+a 50/50 grid, stretched to the height of whatever organ was open beside it.
+It is a slim full-width band below the organ detail now, exactly as tall as
+its own two sentences.
+
+Proven in _check_workspace_doors §9 (the route answers whole, 401 unpaired,
+404 unknown, 404 the moment the text is tampered; the doors pinned in
+results.js and main.js; the legacy whole-text press; the anatomy band) and
+in the doors journey: the run's door returns to the very document the run
+was made from, and the capture view shows the exact sentence the run read.
+
+## v1.38.1 — The doors, hung where the hand finds them
+
+Found live, minutes after v1.38.0 reached the beta. The bar rendered inside
+the scrolling work view: an open results strip or a long draft carried it
+out of sight — on the owner's screen it was never visible at all. The
+intake card rendered into the side panel, which on a narrow desk is a short
+strip below the draft: the title visible, every control below the fold
+("the upload button is not functional" — correct). The bar is sticky above
+the draft now and Focus still clears it; the intake is its own dialog like
+Ask (Escape closes, same at every width). And the old mode names (Sprout,
+Refract, Etymon…) stopped being rail sublabels — the owner met "— Etymon"
+with "etymon is …?"; they remain Ask aliases. The doors journey gained the
+Escape pin; suite and all 31 journeys green.
+
 ## v1.38.0 — The three doors: a bar on the draft, an intake in the workspace, a rail that can be read
 
 The owner's ruling (2026-10-16), verbatim where it matters: "I see no simple

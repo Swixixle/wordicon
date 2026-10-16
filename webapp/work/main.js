@@ -33,6 +33,8 @@ const places = new Places({ onOpen: () => { hideViews(); document.getElementById
 const applier = new Applier(session, editor, { onRecorded: () => {} });
 const results = new Results(session, layout, places, { onPlace: () => {}, onActivity: () => renderActivity(), applyControls: (t, text) => applier.controls(t, text),
   prepareAction: (id, subject) => actions.prepare(id, subject),
+  // the door from a result back to the writing it came from (his ask, 2026-10-16)
+  openDocument: async id => { if (!id) return; if (await session.open(id)) showPage('work'); else toast('That document could not be opened from the record.'); },
   labelOf: id => (actions.byId[id] && actions.byId[id].label) || (id || '').replace(/^legacy:\/api\/jobs:/, 'a run: ') });
 syncNotesDoc = () => results.syncNotesDocument();
 const intake = new Intake(results, layout, places);

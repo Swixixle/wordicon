@@ -280,3 +280,10 @@ details > summary { cursor: pointer; color: var(--write-panel-ink); font-size: 1
 .intake-list { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .intake-row { padding: 8px 10px; }
 .intake-row .warn { color: var(--bad, #e06c75); }
+
+/* ---- the door back to the writing (2026-10-16) ------------------------ */
+.provenance { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.provenance .linkish { color: var(--accent); text-decoration: underline; }
+.snapshot-text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 46vh; overflow: auto;
+  background: var(--write-bg); color: var(--write-ink); border-radius: 8px; padding: 14px 16px;
+  font: inherit; margin: 8px 0; }

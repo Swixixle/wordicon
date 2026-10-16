@@ -1913,7 +1913,8 @@ async function renderSide() {
     const cites = (d.citations || []).length;
     body.innerHTML = `
       <div class="history-meta" style="font-size:12px">${escapeHtml(d.mode || 'run')} · ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}</div>
-      <p class="body" style="font-size:13px">${escapeHtml((d.input_text || '').slice(0, 300))}</p>
+      <p class="body" style="font-size:13px">${escapeHtml((d.input_text || '').slice(0, 300))}${(d.input_text || '').length > 300 ? '…' : ''}</p>
+      ${(d.input_text || '').length > 300 ? `<details><summary class="body muted" style="font-size:12.5px;cursor:pointer">The original writing, whole — ${(d.input_text || '').length} characters</summary><p class="body" style="font-size:13px;white-space:pre-wrap">${escapeHtml(d.input_text)}</p></details>` : ''}
       ${d.summary ? `<p class="body muted" style="font-size:12.5px">${escapeHtml(d.summary)}</p>` : ''}
       ${d.review_mode === 'tool_free' ? `<p class="body muted" style="font-size:12px">The review of this run had no search tool: everything in it is recall.</p>` : ''}
       <p class="body muted" style="font-size:12px">${cites ? cites + ' search result(s) on the record' : 'no search results on this record'}${d.receipt_id ? ' · receipt ' + escapeHtml(String(d.receipt_id).slice(0, 22)) : ''}</p>`;
