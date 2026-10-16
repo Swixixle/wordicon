@@ -11,6 +11,7 @@ import { Results } from './results.js';
 import { Actions } from './actions.js';
 import { YourWork } from './yourwork.js';
 import { Investigate } from './investigate.js';
+import { Intake } from './intake.js';
 import { Applier } from './apply.js';
 import { toMarkdown, toHTML } from '/work/document.js';
 
@@ -34,7 +35,8 @@ const results = new Results(session, layout, places, { onPlace: () => {}, onActi
   prepareAction: (id, subject) => actions.prepare(id, subject),
   labelOf: id => (actions.byId[id] && actions.byId[id].label) || (id || '').replace(/^legacy:\/api\/jobs:/, 'a run: ') });
 syncNotesDoc = () => results.syncNotesDocument();
-const actions = new Actions(session, layout, places, results, { onPlace: () => {} });
+const intake = new Intake(results, layout, places);
+const actions = new Actions(session, layout, places, results, { onPlace: () => {}, onIntake: files => intake.open(files) });
 const yourwork = new YourWork(session, places, {
   onOpenDocument: () => showPage('work'),
   onPlace: () => {},
@@ -254,7 +256,8 @@ function renderSettings() {
   const v = document.getElementById('settings-view'); v.textContent = '';
   v.appendChild(el('h1', { text: 'Settings' }));
   v.appendChild(el('div', { class: 'kv', text: 'Appearance, pairing, the Vault, notifications and the record’s own settings live in the previous interface for now; they are not lost.' }));
-  if (PREVIEW.on) v.appendChild(el('div', { class: 'kv warn', text: 'This process is a preview (started with WORDICON_PREVIEW=1): it seals no backups at start, on a timer or at shutdown, prunes and drills nothing, and sends no notification — whatever vault configuration its data root carries. Its writing is kept in its own data root only.' }));
+  if (PREVIEW.on && PREVIEW.own) v.appendChild(el('div', { class: 'kv', text: 'This process is a preview with its own backups: it seals encrypted backups of its own store to its own destination at start, on the quiet timer and at shutdown. A preview still prunes nothing, drills nothing, and sends no notification.' }));
+  else if (PREVIEW.on) v.appendChild(el('div', { class: 'kv warn', text: 'This process is a preview (started with WORDICON_PREVIEW=1): it seals no backups at start, on a timer or at shutdown, prunes and drills nothing, and sends no notification — whatever vault configuration its data root carries. Its writing is kept in its own data root only.' }));
   v.appendChild(el('div', { class: 'row' }, [el('button', { class: 'btn', type: 'button', text: 'Open the previous interface (new tab)', onclick: () => window.open('/', '_blank', 'noopener') }), el('button', { class: 'btn', type: 'button', text: 'Devices and pairing', onclick: () => window.open('/pair', '_blank', 'noopener') })]));
   v.appendChild(el('div', { class: 'kv' }, ['Arrangement: Tools and Results remember whether they are open and how wide, per screen size. ', el('button', { class: 'btn small', type: 'button', text: 'Forget the arrangement', onclick: () => { try { Object.keys(localStorage).filter(k => k.startsWith('nikodemus.work.layout.')).forEach(k => localStorage.removeItem(k)); } catch (e) {} toast('Forgotten. Reload to see the defaults.'); } })]));
 }
@@ -264,11 +267,12 @@ function renderHelp() {
   v.appendChild(el('h1', { text: 'Help' }));
   const lines = [
     'Write in the blue surface. It saves by itself; the header says when, and counts the words of this draft.',
+    'Above the draft: Get feedback, Analyze and Add a file — the three acts, one press each. Analyze proposes a route through your passage and the record names which; Add a file queues what you drop or choose, and stores it only on Admit. Nothing runs until you press Start on a proposal.',
     'Formatting: bold ⌘B, italic ⌘I, headings, bulleted and numbered lists (⇧⌘8, ⇧⌘9; Tab and ⇧Tab indent and outdent inside a list; Enter on an empty item leaves the list), quotes and links, from the bar or the keys. Enter starts a paragraph; ⇧Enter breaks a line inside one. ⌘F finds and replaces in the draft.',
     'If another tab of this browser holds unsaved words for the document you open, they are listed above the draft as separate copies — kept whole, never combined with what is here, never taken over by being seen: each can become its own document, fill an empty editor, or be deleted by your press. A tab that reopens gets its own unsaved words back; a tab that is gone can have its words brought into an empty editor.',
     'Your words are kept exactly. The plain text that tools read and that exports carry is the text you see; headings, emphasis, lists and links are kept beside it and never sent to a model. A document with characters this editor cannot hold (a carriage return, a control character) opens in plain text, kept exactly, with formatting off.',
     'Pasting keeps paragraphs, headings, lists, quotes, bold, italic and links; anything else arrives as text and the paste says so. ⇧⌘V pastes as plain text.',
-    'Tools (left) holds the destinations and every feature in plain words, grouped. Results (right) holds results, readers’ feedback, revision notes and sources. Each side has its own Hide; the header brings them back.',
+    'Tools (left) holds the destinations and the tools in plain words, grouped: the rail lists the ones reached for daily, and every tool — listed or folded — answers to its name in Ask ⌘K. Results (right) holds results, readers’ feedback, revision notes and sources. Each side has its own Hide; the header brings them back.',
     'Select words and press ⌘. (or use the selection menu) to act on exactly those words. Nothing runs until you press Start on the proposal, which says what leaves this machine and what it costs.',
     'A result made from a selection can be put into the draft — Insert below the selection, or Replace the selection — only while the draft is as it was when the result was made; otherwise you choose the target again. An application is one undo step (⌘Z).',
     'Ask ⌘K finds a tool by name — related words, feedback, analyze, map — and takes a plain request like “investigate Exemplar Holdings”, whose rest becomes what the tool is asked about. It proposes; it never runs by itself.',
@@ -278,7 +282,7 @@ function renderHelp() {
     'Document ▾: New, Rename, Duplicate, Open another, Versions (⌘S makes a checkpoint; a version can be restored as a new revision — nothing is rewritten), Make a plain copy, Export (text is visibly plain; Markdown and Word (.docx) keep the structure; Print for PDF).',
     'Undo is the editor’s own for this sitting. Checkpoints and the recovery copy in this browser are what persist; they are not continuous undo.',
     'Your work lists what is kept. Investigate shows the instruments and whether each can be started from here.',
-    'The previous interface is still there under More tools; nothing was removed.',
+    'The previous interface, the constitution and the anatomy are the quiet links at the foot of Tools; nothing was removed.',
   ];
   for (const l of lines) v.appendChild(el('div', { class: 'kv', text: l }));
   // the workspace's rule, as the constitution states it (verbatim), with its door
@@ -399,10 +403,31 @@ function bindDestinations() {
   // the destinations only — the shell's own data-page attribute is state, not a control
   document.querySelectorAll('a[data-page]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); showPage(a.dataset.page); if (layout.state.narrow) layout.setTools(false); }));
   window.addEventListener('hashchange', () => { const p = location.hash.slice(1); if (PAGES[p]) showPage(p); });
+  // the about-pages moved from the rail to the footer (2026-10-16): still doors, just quieter ones
+  document.getElementById('foot-constitution').addEventListener('click', () => places.open('/constitution'));
+  document.getElementById('foot-anatomy').addEventListener('click', () => window.open('/anatomy', '_blank', 'noopener'));
+  document.getElementById('foot-legacy').addEventListener('click', () => window.open('/', '_blank', 'noopener'));
+}
+
+// ---- the intake's drop (files only; a text drag stays the editor's own) ----------
+function bindIntake() {
+  const hint = document.getElementById('drop-hint');
+  let depth = 0;
+  const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  document.addEventListener('dragenter', e => { if (!hasFiles(e)) return; depth++; hint.hidden = false; });
+  document.addEventListener('dragleave', e => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (!depth) hint.hidden = true; });
+  document.addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+  document.addEventListener('drop', e => {
+    depth = 0; hint.hidden = true;
+    if (!hasFiles(e)) return;             // the legacy lesson (block at the old drop): a drag of WORDS is never an upload
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length) intake.open(files);
+  });
 }
 
 async function boot() {
-  bindDocMenu(); bindSelection(); bindDestinations(); bindFind(); actions.bindAsk();
+  bindDocMenu(); bindSelection(); bindDestinations(); bindFind(); bindIntake(); actions.bindAsk();
   layout.hooks.onChange = () => { if (layout.state.results) results.seen(); };
   await actions.load();
   results.loadRecent(id => (actions.byId[id] && actions.byId[id].label) || (id || '').replace(/^legacy:\/api\/jobs:/, 'a run: '));
@@ -426,6 +451,7 @@ async function boot() {
     if (!(r.ok && r.data && r.data.preview)) return;
     const chip = document.getElementById('preview-chip');
     chip.hidden = false; PREVIEW.on = true;
+    PREVIEW.own = !!r.data.preview_own_backups;
     if (r.data.preview_own_backups) {
       // the beta seals its own store (2026-10-16): the chip must not say
       // "backups off" over a process that is sealing — state, never hidden,
@@ -439,5 +465,5 @@ async function boot() {
   }).catch(() => {});
   window.__work = { session, layout, results, actions, places, editor, applier };   // for the journeys: state, not a control surface
 }
-const PREVIEW = { on: false };
+const PREVIEW = { on: false, own: false };
 boot();

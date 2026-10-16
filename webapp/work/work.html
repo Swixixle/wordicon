@@ -54,7 +54,7 @@
       <div class="rule"></div>
       <div id="tool-groups" class="groups"></div>
       <div class="spacer"></div>
-      <div class="foot-links"><a href="#system" data-page="settings" class="muted">Settings</a><a href="#help" data-page="help" class="muted">Help</a></div>
+      <div class="foot-links"><a href="#system" data-page="settings" class="muted">Settings</a><a href="#help" data-page="help" class="muted">Help</a><button id="foot-constitution" class="linkish muted" type="button" title="the law, with its pins">What is Nikodemus</button><button id="foot-anatomy" class="linkish muted" type="button" title="how the parts work (new tab)">Anatomy</button><button id="foot-legacy" class="linkish muted" type="button" title="every result and every place, as before (new tab)">The previous interface</button></div>
       <div class="grip" id="tools-grip" role="separator" aria-orientation="vertical" aria-label="Resize Tools" tabindex="0" title="Drag, or use ← → to resize"></div>
     </aside>
 
@@ -72,6 +72,7 @@
           <button id="find-close" class="btn small" type="button" aria-label="Close find">✕</button>
         </div>
         <div id="drafts-bar" class="drafts-bar" hidden role="region" aria-label="Unsaved copies of this document from other tabs"></div>
+        <div id="draft-actions" class="draft-actions" role="toolbar" aria-label="On this draft" hidden></div>
         <div id="editor-host" class="editor-host"></div>
         <div id="sel-popover" class="popover" hidden role="menu" aria-label="On your selection"></div>
         <section id="stacked" class="stacked" hidden aria-label="Results below the draft">
@@ -117,6 +118,8 @@
       <div class="muted small-text">Enter proposes; the proposal's Start runs it. Esc closes. Nothing here runs by itself.</div>
     </div>
   </div>
+
+  <div id="drop-hint" class="drop-hint" hidden aria-hidden="true"><div class="drop-hint-box">Drop to queue for the Library — nothing is stored until you press Admit</div></div>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 </div>

@@ -4226,7 +4226,7 @@ def _check_journey_engines():
     construction."""
     out = []
     jdir = Path(cli.__file__).parent.parent / "tests" / "journeys"
-    WEBKIT = {"deep", "moira", "notebook", "related", "resume", "room", "narrowing", "gloss", "work"}
+    WEBKIT = {"deep", "moira", "notebook", "related", "resume", "room", "narrowing", "gloss", "work", "doors"}
     lib = (jdir / "lib.js").read_text(encoding="utf-8")
     at = lib.find("async function launch()")
     body = lib[at: lib.find("\n}\n", at)] if at != -1 else ""
@@ -4268,7 +4268,8 @@ def _check_journey_engines():
     for name, sentence in (("room", "the room is measured in WebKit"),
                            ("narrowing", "the narrowing is measured in WebKit"),
                            ("gloss", "the gloss panel is measured in WebKit"),
-                           ("work", "the workspace is measured in WebKit")):
+                           ("work", "the workspace is measured in WebKit"),
+                           ("doors", "the doors are measured in WebKit")):
         src = (jdir / f"{name}.js").read_text(encoding="utf-8") if (jdir / f"{name}.js").exists() else ""
         if "browser.browserType().name() === 'webkit'" not in src or f"'{sentence}" not in src:
             out.append(f"ENGINE: tests/journeys/{name}.js no longer asks the browser which engine it is and says so in its log")
@@ -6306,6 +6307,134 @@ def _check_workspace_registry(server, paired):
     return out
 
 
+def _check_workspace_doors(server, paired):
+    """2026-10-16, his ruling ("no simple button to analyze, no simple way to
+    upload... we probably need to collapse a lot of the options"): the three
+    acts live on the draft as a bar; the rail lists a short, pinned set and
+    folds the rest WITHOUT removing them from the registry (Ask still answers
+    to every name); the workspace has its own intake; and admission stores
+    without reading — an image's text costs a press that names the vision
+    call (block 117, held in the new door)."""
+    import json as _json, subprocess as _sp, io as _io, struct as _st, zlib as _zl
+    out = []
+    import actions as _ac
+    # 1. every action says whether the rail lists it; the visible sets are pinned
+    for a in _ac.ACTIONS:
+        if not isinstance(a.get("rail"), bool):
+            out.append(f"DOORS: {a['id']} does not say whether the rail lists it")
+    vis = lambda g: [a["id"] for a in _ac.ACTIONS if a["group"] == g and a.get("rail")]
+    if vis("on_draft") != ["feedback.readers", "analyze.decompose", "attach.source"]:
+        out.append(f"DOORS: the on-draft rail set moved: {vis('on_draft')}")
+    if vis("explore") != ["explore.sprout", "explore.refract", "explore.forge", "explore.map", "explore.etymon"]:
+        out.append(f"DOORS: the Explore rail set is not the ruled five: {vis('explore')}")
+    if vis("more") != ["more.bench", "more.clinic", "more.recovery", "more.inquiry", "more.speak"]:
+        out.append(f"DOORS: the Places rail set moved: {vis('more')}")
+    if vis("investigate"):
+        out.append(f"DOORS: the rail shows a second copy of Investigate (it lives whole on the Investigate page): {vis('investigate')}")
+    # 2. folding is presentation, never removal: a folded tool still answers to its name
+    for q, want in (("take this apart", "explore.crack"), ("full workup", "explore.deep"),
+                    ("investigation rooms", "more.rooms"), ("let nikodemus choose", "explore.auto"),
+                    ("the previous interface", "more.legacy")):
+        ids = [x["id"] for x in _ac.match(q)["matches"]]
+        if want not in ids:
+            out.append(f"DOORS: folded tool {want} no longer answers to its name ({q!r} -> {ids})")
+    if any("rail" not in a for a in _ac.listing(server.server_gateway)["actions"]):
+        out.append("DOORS: the listing does not carry rail — the page could not know what to fold")
+    att = _ac.BY_ID["attach.source"]
+    if att["handler"] != "intake" or att["kind"] != "view" or att["provider"] != "none":
+        out.append(f"DOORS: Add a file is not the workspace's own intake view: {att['handler']}/{att['kind']}/{att['provider']}")
+    # 3. the page renders what the registry says: the pure deciders, driven in node
+    wa = Path("webapp/work/actions.js").read_text(encoding="utf-8")
+    missing = [fn for fn in ("export function railItems(", "export function barModel(") if fn not in wa]
+    if missing:
+        out.append(f"DOORS: actions.js lost {missing}")
+    else:
+        _src = wa[wa.index("export function railItems("):]
+        _src = _src[:_src.index("\n}", _src.index("export function barModel(")) + 2].replace("export function", "function")
+        _drive = _sp.run(["node", "-e", _src + """
+const rail = railItems([{group:'explore', rail:false, id:'a'}, {group:'explore', id:'b'}, {group:'explore', rail:true, id:'c'}, {group:'more', rail:true, id:'d'}], 'explore').map(x => x.id);
+const bar = barModel({'feedback.readers': {id:'feedback.readers'}, 'explore.auto': {id:'explore.auto'}, 'attach.source': {id:'attach.source'}});
+console.log(JSON.stringify({rail, ids: bar.map(b=>b.id), acts: bar.map(b=>b.act), labels: bar.map(b=>b.label)}));
+"""], capture_output=True, text=True)
+        if _drive.returncode != 0:
+            out.append(f"DOORS: the rail/bar deciders did not run in node: {_drive.stderr[:300]}")
+        else:
+            d = _json.loads(_drive.stdout)
+            if d["rail"] != ["b", "c"]:
+                out.append(f"DOORS: railItems does not fold rail:false (and only that): {d['rail']}")
+            if d["ids"] != ["feedback.readers", "explore.auto", "attach.source"] or d["acts"] != ["prepare", "prepare", "intake"] \
+               or d["labels"] != ["Get feedback", "Analyze", "Add a file"]:
+                out.append(f"DOORS: the bar is not the three acts as ruled: {d}")
+    if "railItems(this.registry.actions, g)" not in wa or "if (!items.length) continue;" not in wa:
+        out.append("DOORS: renderTools does not render the decider's answer (or shows an emptied group's heading)")
+    if "renderBar" not in wa or "document.getElementById('draft-actions')" not in wa:
+        out.append("DOORS: the bar has no renderer on the page")
+    # 4. the shell carries the bar, the drop hint and the footer doors; Focus clears the bar
+    html = Path("webapp/work/work.html").read_text(encoding="utf-8")
+    for need, why in (('id="draft-actions"', "the bar's element"), ('id="drop-hint"', "the drop hint"),
+                      ('id="foot-constitution"', "the constitution's footer door"),
+                      ('id="foot-anatomy"', "the anatomy's footer door"),
+                      ('id="foot-legacy"', "the previous interface's footer door")):
+        if need not in html:
+            out.append(f"DOORS: work.html lost {why} ({need})")
+    if '.shell[data-focus="on"] .draft-actions' not in Path("webapp/work/work.css").read_text(encoding="utf-8"):
+        out.append("DOORS: Focus does not clear the bar — chrome would sit over the writing")
+    mainjs = Path("webapp/work/main.js").read_text(encoding="utf-8")
+    for need, why in (("function bindIntake", "the drop binding"), ("foot-constitution", "the footer wiring"),
+                      ("files => intake.open(files)", "the bar's door to the intake")):
+        if need not in mainjs:
+            out.append(f"DOORS: main.js lost {why}")
+    if "function bindIntake" in mainjs:
+        _dropsrc = mainjs[mainjs.index("function bindIntake"):]
+        _dropsrc = _dropsrc[:_dropsrc.index("\n}")]
+        _droph = _dropsrc[_dropsrc.index("'drop'"):]
+        if "if (!hasFiles(e)) return;" not in _droph or "e.preventDefault();" not in _droph \
+           or _droph.index("if (!hasFiles(e)) return;") > _droph.index("e.preventDefault();"):
+            out.append("DOORS: the drop handler does not refuse a file-less drag BEFORE preventing default — a drag of WORDS would become an upload (the legacy lesson)")
+        if "admitQueued" in mainjs:
+            out.append("DOORS: the page admits for him — a drop may only queue")
+    # 5. the intake stores on the press, never on arrival; the vision call has its own press
+    ij = Path("webapp/work/intake.js").read_text(encoding="utf-8")
+    if ij.count("'/api/upload'") != 1 or ("async admitQueued" in ij and "async represent" in ij
+                                          and "'/api/upload'" not in ij[ij.index("async admitQueued"):ij.index("async represent")]):
+        out.append("DOORS: the intake's one admission POST does not live in admitQueued — something stores a file without the press")
+    if "/represent'" not in ij or "one vision call" not in ij:
+        out.append("DOORS: the image's reading lost its own named press")
+    # 6. the new module is served with the shell
+    c = paired(server.app.test_client())
+    if c.get("/work/intake.js").status_code != 200:
+        out.append("DOORS: /work/intake.js is not served")
+    # 7. admission spends nothing (block 117 in the new door): text derives
+    # locally; an image is stored UNREAD until the press that names the call
+    r = c.post("/api/upload", data={"file": (_io.BytesIO("a passage he kept".encode()), "kept.txt")},
+               content_type="multipart/form-data")
+    d = r.get_json() or {}
+    if r.status_code != 200 or (d.get("representation") or {}).get("method") != "original_text":
+        out.append(f"DOORS: a text admission did not derive its text locally: {r.status_code} {d}")
+    def _chunk(t, body):
+        return _st.pack(">I", len(body)) + t + body + _st.pack(">I", _zl.crc32(t + body) & 0xffffffff)
+    png = (b"\x89PNG\r\n\x1a\n" + _chunk(b"IHDR", _st.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+           + _chunk(b"IDAT", _zl.compress(b"\x00\x00\x00\x00\x00")) + _chunk(b"IEND", b""))
+    r2 = c.post("/api/upload", data={"file": (_io.BytesIO(png), "page.png")}, content_type="multipart/form-data")
+    d2 = r2.get_json() or {}
+    aid = (d2.get("artifact") or {}).get("artifact_id", "")
+    if r2.status_code != 200 or not d2.get("needs_model") or (d2.get("representation") or {}) != {} or not aid:
+        out.append(f"DOORS: an image admission did not stop before the model: {r2.status_code} {d2}")
+    else:
+        if cli.load_representations(aid):
+            out.append("DOORS: an image admission wrote a representation — a keystroke spends money again")
+        r3 = c.post(f"/api/artifact/{aid}/represent")
+        d3 = r3.get_json() or {}
+        if r3.status_code != 200 or not (d3.get("representation") or {}).get("method"):
+            out.append(f"DOORS: the named press did not derive the image's text: {r3.status_code} {d3}")
+        elif not cli.load_representations(aid):
+            out.append("DOORS: the press reported a representation that was not stored")
+    # 8. Settings tells the truth over a beta that backs itself up
+    if "preview with its own backups" not in mainjs:
+        out.append("DOORS: Settings still says every preview seals nothing — false over a beta that seals its own")
+    return out
+
+
 def _check_concept_picker(server, paired):
     """The review of 6e5b59c (completeness): an action whose subject is a
     concept you keep (Re-check this concept) is chosen from the shelf as
@@ -8201,6 +8330,7 @@ def main() -> int:
     failures.extend(_check_test_mode_fails_closed(server))
     failures.extend(_check_gate_mint_race())
     failures.extend(_check_workspace_registry(server, _paired))
+    failures.extend(_check_workspace_doors(server, _paired))
     failures.extend(_check_document_contract(server, _paired))
     failures.extend(_check_docx_export(server, _paired))
     failures.extend(_check_concept_picker(server, _paired))

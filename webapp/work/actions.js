@@ -6,9 +6,32 @@
 import { getJSON, postJSON, el, requestKey, toast } from './util.js';
 
 const MODE_DOT = { decompose: 'var(--mode-source)', crack: 'var(--mode-source)', deep: 'var(--mode-source)', sprout: 'var(--mode-sprout)', refract: 'var(--mode-refract)', forge: 'var(--mode-forge)' };
-const GROUP_TITLES = { on_draft: 'On this draft', explore: 'Explore', investigate: 'Investigate', more: 'More tools' };
+const GROUP_TITLES = { on_draft: 'On this draft', explore: 'Explore', investigate: 'Investigate', more: 'Places' };
 const POPOVER_ROUTES = ['feedback.readers', 'analyze.decompose', 'explore.refract'];
 const POPOVER_MORE = ['explore.sprout', 'explore.forge', 'explore.crack', 'explore.deep', 'explore.map'];
+
+// The rail lists an action only when the registry says so: rail false folds
+// it out of the rail without removing it from the registry — Ask (⌘K) still
+// matches it by name, and every disclosure still knows it. Pure, so the
+// suite drives the same decision the page renders.
+export function railItems(actions, group) {
+  return actions.filter(a => a.group === group && a.rail !== false);
+}
+
+// The three acts that must never need hunting (the owner, 2026-10-16: "no
+// simple button to analyze, no simple way to upload"). Built from the
+// registry — the page still invents no control; a bar entry is the registry
+// action it names, offered larger.
+export function barModel(byId) {
+  const bar = [];
+  const fb = byId['feedback.readers'];
+  if (fb) bar.push({ id: fb.id, label: 'Get feedback', sub: 'three readers on this draft or your selection', act: 'prepare', a: fb });
+  const an = byId['explore.auto'];
+  if (an) bar.push({ id: an.id, label: 'Analyze', sub: 'Nikodemus proposes the route; the record names it', act: 'prepare', a: an });
+  const at = byId['attach.source'];
+  if (at) bar.push({ id: at.id, label: 'Add a file', sub: 'documents, PDFs, photos — stored unread', act: 'intake', a: at });
+  return bar;
+}
 
 export class Actions {
   constructor(session, layout, places, results, hooks = {}) {
@@ -24,6 +47,7 @@ export class Actions {
     this.registry = r.data;
     this.byId = Object.fromEntries(r.data.actions.map(a => [a.id, a]));
     this.renderTools();
+    this.renderBar();
   }
 
   subjectNow() {
@@ -44,7 +68,8 @@ export class Actions {
     const host = document.getElementById('tool-groups');
     host.textContent = '';
     for (const g of ['on_draft', 'explore', 'investigate', 'more']) {
-      const items = this.registry.actions.filter(a => a.group === g);
+      const items = railItems(this.registry.actions, g);
+      if (!items.length) continue;              // a group whose every action is folded has no heading to click
       const avail = items.filter(a => a.readiness && a.readiness.available).length;
       const count = g === 'investigate' ? `${avail} of ${items.length} available` : (g === 'on_draft' ? '' : String(items.length));
       const det = el('details', { class: 'group', open: this.openGroups.has(g) ? true : null, dataset: { group: g } });
@@ -56,6 +81,27 @@ export class Actions {
       for (const a of items) det.appendChild(this.itemButton(a));
       host.appendChild(det);
     }
+  }
+
+  // ---- the bar: the three acts, visible on the draft itself ------------------
+  renderBar() {
+    const host = document.getElementById('draft-actions');
+    if (!host) return;
+    host.textContent = '';
+    for (const m of barModel(this.byId)) {
+      const off = m.act !== 'intake' && !(m.a.readiness && m.a.readiness.available);
+      const b = el('button', { class: 'big' + (off ? ' off' : ''), type: 'button',
+                               dataset: { bar: m.id },
+                               title: off ? ((m.a.readiness && m.a.readiness.reason) || 'not available') : m.sub });
+      b.appendChild(el('span', { class: 'big-label', text: m.label }));
+      b.appendChild(el('span', { class: 'big-sub', text: m.sub }));
+      b.addEventListener('click', () => {
+        if (m.act === 'intake') { if (this.hooks.onIntake) this.hooks.onIntake(); return; }
+        this.prepare(m.id);
+      });
+      host.appendChild(b);
+    }
+    host.hidden = !host.childElementCount;
   }
 
   itemButton(a) {
@@ -74,6 +120,7 @@ export class Actions {
     const a = this.byId[actionId];
     if (!a) return;
     if (a.kind === 'view') {
+      if (a.handler === 'intake') { if (this.hooks.onIntake) this.hooks.onIntake(); return; }
       if (a.handler === 'unavailable') { toast(a.readiness && a.readiness.reason || 'not available'); return; }
       if (a.handler === 'standalone') { window.open(a.route, '_blank', 'noopener'); return; }
       if (a.route && a.route.startsWith('/#')) { this.places.open('/' + a.route.slice(1)); if (this.hooks.onPlace) this.hooks.onPlace(); return; }

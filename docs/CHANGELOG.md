@@ -1,5 +1,58 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.38.0 — The three doors: a bar on the draft, an intake in the workspace, a rail that can be read
+
+The owner's ruling (2026-10-16), verbatim where it matters: "I see no simple
+button to analyze. no simple way to upload files, photos, documents... We
+probably need to collapse a lot of the options and rooms and simplify." The
+machinery existed; the doors were the failure. Three changes, all
+presentation over the same registry and the same routes — no new model path,
+no new mutation.
+
+THE BAR (#draft-actions on the work view): Get feedback · Analyze · Add a
+file, built from the registry (barModel in work/actions.js — the page still
+invents no control). Get feedback prepares feedback.readers; Analyze
+prepares explore.auto, the routed run whose record names the route it chose;
+Add a file opens the intake. A press proposes; nothing runs without Start on
+the proposal, exactly as from the rail. Focus clears the bar with the rest
+of the chrome.
+
+THE INTAKE (webapp/work/intake.js): drop a file anywhere on /work, or Choose
+files from the bar — arrivals QUEUE, and nothing is stored until the Admit
+press. Admission is the existing /api/upload: the artifact stored unchanged,
+text and PDF deriving their text locally, and an image stored UNREAD — its
+text is a vision call behind its own named button (block 117 holds in the
+new door). A drag of WORDS is refused as an upload before preventDefault
+(the legacy drop's lesson). Audio and EPUB keep their legacy intake, named
+on the card; an authority keeps the Clinic, linked from the card, admitted
+by role, never blended.
+
+THE RAIL: every action now says whether the rail lists it ("rail" on the
+registry; the fold is presentation only, and listing() carries it to the
+page). Visible: On this draft (3), Explore (5 — related ideas, related
+words, build a concept, the Map, word roots), Places (5 — Bench, Clinic,
+Recovery review, Inquiry, Speak). Folded, still in the registry, still
+answering to their names in Ask ⌘K: the nine overlapping Explore verbs, the
+rail's second copy of Investigate (the Investigate page is the one surface,
+and the rooms' door lives on it), Map trails and world, Read aloud, and the
+about-pages — now footer doors (What is Nikodemus, Anatomy, The previous
+interface). 36 rail controls became 13 plus 3 quiet footer links, and no
+place lost its door.
+
+Also: Settings now tells the truth over a beta that backs itself up — the
+preview stand-down paragraph was unconditional, which v1.37.1 had made false
+for a preview with its own backups.
+
+Proven by _check_workspace_doors (the pinned visible sets; fold-is-not-
+removal through actions.match; railItems and barModel driven in node; the
+drop guard's order; the one admission POST living in admitQueued; a text
+admission deriving locally and an image admission writing NO representation
+until the named press; /work/intake.js served; the Settings branch) and by
+the doors journey in WebKit (the bar's three acts; 13 rail doors and three
+groups; Ask reaching a folded verb by name; Analyze from the bar completing
+through the one job path to its snapshot; queue-then-Admit posting exactly
+one /api/upload; the footer doors; Focus clearing and restoring the bar).
+
 ## v1.37.1 — A beta may seal its own backups, and only its own
 
 The preview stand-down (the review of 6e5b59c) exists because a copied store
