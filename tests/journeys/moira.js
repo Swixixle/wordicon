@@ -48,7 +48,7 @@ async function waitFor(page, fn, ms) {
                           value: fs.readFileSync(path.join(DIR, 'token'), 'utf8').trim(),
                           domain: '127.0.0.1', path: '/' }]);
   const page = await ctx.newPage();
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
   const posts = [];
   // stage B: a document save (/api/notebook/) is not a spend and not a run; it is counted by the notebook journey, not here
   // W2: the Ledger's reporter posts the owner's own attention record on its

@@ -26,7 +26,7 @@ const Q = 'Are there pre-Christian figures with descriptions resembling Jesus, a
                           value: fs.readFileSync(path.join(DIR, 'token'), 'utf8').trim(),
                           domain: '127.0.0.1', path: '/' }]);
   const page = await ctx.newPage();
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
   const off = []; page.on('request', r => { if (!r.url().startsWith(BASE)) off.push(r.url()); });
 
   await page.goto(BASE + '/inquiry'); await page.waitForTimeout(900);

@@ -24,7 +24,7 @@ const LIMIT = 4000;
   const browser = await webkit.launch();
   const ctx = await pairedContext(browser, { viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
   // Which engine this actually is, asked of the browser rather than of the
   // import line. The first version of this journey said WebKit in its own
   // header and took lib's launcher, which is Chromium; the log now says.

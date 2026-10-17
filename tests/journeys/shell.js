@@ -12,7 +12,7 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
 (async () => {
   const browser = await launch();
   const ctx = await pairedContext(browser); const page = await ctx.newPage();
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
   page.on('dialog', d => d.dismiss());
   await page.goto(BASE + '/'); await page.waitForTimeout(1200);
   ok(errs.length === 0, 'no page errors on Home: ' + JSON.stringify(errs));

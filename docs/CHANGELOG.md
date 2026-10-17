@@ -1,5 +1,69 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.45.0 — The Deflate door: an imported reading becomes a subject
+
+The federation and the exploration lane meet (ADR extraction, W1
+follow-on (b)). Until now a verified Deflate deposition could be
+imported, re-verified and read — and then sat there: nothing connected
+its readings to the instrument that explores things. Now `explore.deepen`
+takes a `deposition` subject, and `deeper._deposition_root` resolves one
+reading or claim from custody itself: the exact bytes re-hashed against
+the deposition's sha256 and re-verified against the connector's
+CURRENTLY pinned keys at prepare, at Start, and at every follow-up — an
+import-time verdict is never inherited, so unpinning the key between
+prepare and Start refuses the dispatch by name, and a tampered blob
+refuses as a custody failure.
+
+The frozen selection carries the claim or reading in Deflate's own
+honesty vocabulary ("none of these statuses means verified"; "not
+independent validation"; "'matched' means the quoted words are in the
+saved transcript"), the verbatim transcript lines at the item's stated
+turns (quoted from custody, never recall, with any truncation counted
+and disclosed), the transcript's sha256 and location, and the signature
+law stated where the model and the owner will both read it: verification
+establishes origin and integrity — custody, never truth. The evidence
+lane starts quoteless on purpose: a custody line is the producer's text,
+not a public-source quote target, so research runs its full allowance on
+the question instead of stopping on a wording match.
+
+The door opens where the reading is seen: the Investigation page now
+lists a verified deposition's readings and claims (a held reading keeps
+Deflate's own hold and gets no door), each with a Go deeper control wired
+through the same proposal / op-gated Start / poll machinery the desk
+uses — deeper.js loads there, standalone-safe, and the proposal's scope
+line names the deposition law. The saved result preserves the
+originating deposition and item ref whole; its lineage edge continues
+from the deposition node, not a blank; Recent groups steps under the
+deposition item; follow-ups re-resolve the deposition root and refuse
+when custody breaks underneath them. Roots are deliberately clock-free
+so re-resolution compares equal across time.
+
+Verified: tests/test_deposition_door.py (11 behavioral pins: custody
+verbatim lines, labels intact, refusals each by name, unpin-at-Start,
+tamper, unverified, stable roots, lineage, follow-up, frozen-context
+tamper at Start) joins the wing the suite runs; the federation journey
+pastes the exemplar, sees the items and labels, and proves a dead lane
+renders Start disabled rather than firing; the deeper journey (mock
+lane) runs the full paste → door → proposal → Start → fixture result →
+Recent-grouping flow; the new checks are named in the runner so a green
+journey cannot quietly drop them. What this does NOT do: no
+auto-exploration of imports, no source admission, no verified-passage
+ruling, and nothing from an unverified or held item.
+
+Also in this version: the ResizeObserver flake class is closed. Chromium
+under full-suite load sometimes fires "ResizeObserver loop completed
+with undelivered notifications." as a page error — benign by spec,
+naming no script of ours, never seen in WebKit; it had failed four
+different journeys (resume, notebook, notes-chromium, narrowing) only
+under load, each green standalone. Every one of the 45 pageerror
+collectors across 32 journey files now routes through one named
+predicate in lib.js that admits exactly that message and nothing else.
+The suite pins the predicate's exact body and refuses any journey that
+collects a page error outside it — and the first draft of that pin was
+itself caught by its own sabotage (a widened predicate passed), so the
+pin now holds the body line, not just the names. An allowlist grows only
+with a name and a reason, in one place, under a pin.
+
 ## v1.44.0 — W2: the content layer, under the one switch
 
 The extraction program's second wing, built on his "ok go" (2026-10-17)

@@ -26,7 +26,7 @@ const panelClosed = () => !document.getElementById('spend-ask').classList.contai
   const browser = await launch();
   const ctx = await pairedContext(browser);
   const page = await ctx.newPage();
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
   const spend = [];   // every request to a paid route, as it leaves the page
   page.on('request', r => {
     const u = r.url();

@@ -11,7 +11,7 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
   try {
     const page = await browser.newPage({viewport:{width:390,height:844}});
     const requests = [], errors = [];
-    page.on('pageerror', error => errors.push(String(error)));
+    page.on('pageerror', error => { if (!require('./lib').benignPageError(error)) errors.push(String(error)); });
     await page.route('**/*', async route => {
       const request = route.request();
       requests.push({url:request.url(), method:request.method(), body:request.postDataJSON()});

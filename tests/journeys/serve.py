@@ -86,6 +86,11 @@ federation.pin_key("ethicalalt-dev", (mock_producer.FIXTURES / "ethicalalt.fixtu
 # the producers' contracts at the pinned revisions (the review of 6e5b59c, finding 3): the receipt and snapshot keys
 federation.pin_key("ethicalalt-dev", (mock_producer.PFIX / "ethicalalt.receipt.pub.spki.b64").read_text().strip(), label="receipt fixture key", by="journeys")
 federation.pin_key("open-case-dev", (mock_producer.PFIX / "open_case.snapshot.pub.spki.b64").read_text().strip(), label="snapshot fixture key", by="journeys")
+# the Deflate door (2026-10-17): a scratch Deflate connector with the fixture
+# key pinned. Custody starts EMPTY — the journey's own count assertions say
+# so — and the journey pastes the exemplar deposition itself, on a press.
+federation.register_connector("deflate-dev", "deflate", _pbase, display="Deflate Lens (scratch)", dev_loopback=True, by="journeys")
+federation.pin_key("deflate-dev", (mock_producer.FIXTURES / "deflate.fixture.pub.b64").read_text().strip(), label="package fixture key", by="journeys")
 DIR.mkdir(parents=True, exist_ok=True)
 (DIR / "producer_port").write_text(str(PRODUCER_PORT))
 (DIR / "token").write_text(gate.issue_session("journeys")["token"])

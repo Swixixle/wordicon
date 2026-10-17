@@ -27,7 +27,7 @@ const DRAFT = [
                           value: fs.readFileSync(path.join(DIR, 'token'), 'utf8').trim(),
                           domain: '127.0.0.1', path: '/' }]);
   const page = await ctx.newPage();
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
   // Which engine this actually is, asked of the browser rather than of the
   // import line — a `const { chromium: webkit }` rename walked straight past
   // the first version of the source pin that guards this.
@@ -318,7 +318,7 @@ const DRAFT = [
   const tbCtx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
   await tbCtx.addCookies([{ name: ck, value: tok, domain: '127.0.0.1', path: '/' }]);
   const tb = await tbCtx.newPage();
-  const tbErrs = []; tb.on('pageerror', e => tbErrs.push(String(e)));
+  const tbErrs = []; tb.on('pageerror', e => { if (!require('./lib').benignPageError(e)) tbErrs.push(String(e)); });
   await tb.goto(BASE + '/'); await tb.waitForTimeout(1100);
   await tb.evaluate(() => openWorkspace('write')); await tb.waitForTimeout(400);
   await tb.click('#compose-text');

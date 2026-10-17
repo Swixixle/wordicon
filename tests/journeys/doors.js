@@ -18,7 +18,7 @@ const { webkit } = require('playwright');
   const ctx = await pairedContext(browser, { viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const errs = [], posts = [];
-  page.on('pageerror', e => errs.push(String(e.message)));
+  page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e.message)); });
   page.on('request', r => { if (r.method() !== 'GET') posts.push(r.method() + ' ' + new URL(r.url()).pathname); });
 
   await page.goto(BASE + '/work');

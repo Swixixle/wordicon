@@ -3680,6 +3680,11 @@ def _create_job_from(data: dict, op_id: str | None = None):
         if not isinstance(deepen_context, dict) or not deepen_context:
             return jsonify({"error": "the exploration context is missing; prepare again", "nothing_was_sent": True}), 400
         parent_trace_id = deepen_context.get("parent_trace_id") or ""
+        # the Deflate door: a deposition-started exploration has no parent
+        # run, but it IS a door press — via carries the deposition so the
+        # input record's provenance says "door", not "unstated"
+        if not parent_trace_id and ((deepen_context.get("root") or {}).get("deposition_id")):
+            via = "deposition:" + str((deepen_context.get("root") or {}).get("deposition_id"))[:80]
         input_text = "Go deeper: " + str(deepen_context.get("question") or "Explore the selected work")
     elif mode == "sprout":
         original = data.get("original") or {}
@@ -5998,7 +6003,10 @@ def api_history():
                           # source_title-first made every new step invisible)
                           "title": snap.get("title") or snap.get("source_title") or "Go deeper",
                           "decision": None, "receipt_id": receipt.get("receipt_id", path.stem),
-                          "subject_key": str(root.get("trace_id") or trace_id) + ":" + str(root.get("thread_index", ""))})
+                          # a deposition-rooted exploration groups under its deposition item,
+                          # the way thread-rooted ones group under their thread
+                          "subject_key": str(root.get("trace_id") or root.get("deposition_id") or trace_id)
+                                         + ":" + str(root.get("thread_index", root.get("item_ref", "")))})
             continue
         judgments = judgments_by_trace.get(trace_id, [])
         decision_by_title = {j.get("candidate_text", ""): j.get("decision", "") for j in judgments}

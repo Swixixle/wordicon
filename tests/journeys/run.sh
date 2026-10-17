@@ -158,6 +158,13 @@ done
 for need in "opening the page posted nothing" "Check reaches Open Case through the credential and imports nothing" "importing by id verifies the EthicalAlt package under the pinned key" "a foreign address is refused and nothing is fetched" "the exact-bytes door returns the bytes received" "a package with one changed byte is kept UNVERIFIED" "server-boom lands as http_5xx, not as nothing found" "gateway-502 lands as html_error_page, not as nothing found" "each instrument keeps its own standing" "the seats are filled apart by instrument and kind" "each seat item carries its instrument's own label" "the documented absence, the failed search and the producer's own gaps stay distinct" "three exact name matches are proposed" "Reject and Leave unresolved converge nothing" "Declare produces the two instruments' dated records" "the form is pre-filled and nothing was fetched" "About & proof states the registry, custody and rulings" "federation: no request left the scratch origin"; do
   grep -q "^ok   $need" "$JOURNEY_OUT/federation.log" || { echo "== federation: missing check: $need"; status=1; }
 done
+# the Deflate door (2026-10-17): each named individually because the failures
+# here are a HOLD that quietly grows a door, a label that stops traveling, and
+# a Start that fires on a dead lane — all three invisible to a journey that
+# still prints OK with the checks dropped.
+for need in "the pasted Deflate package is kept and VERIFIED against the pinned key" "a claim is shown with Deflate's own status honesty" "a held reading keeps its hold and gets no door" "the verified reading and the claim each have their own door, the held one none" "the proposal names the deposition scope law: custody, never truth" "with the lane down, the deposition proposal renders Start disabled rather than firing"; do
+  grep -q "^ok   $need" "$JOURNEY_OUT/federation.log" || { echo "== federation: missing check: $need"; status=1; }
+done
 # slice 2: the shell must have proved the three things a source pin cannot —
 # same window, same element, and an undo stack that walked back through an
 # edit made before the walk. A journey that quietly stops making these is not
@@ -312,6 +319,11 @@ done
 # cannot quietly stop making it
 for need in "the doors are measured in WebKit" "the bar offers the three acts" "the bar folds to one slim row" "and the fold is remembered on this device" "and unfolds" "the rail lists 13 doors (was 36)" "the rail shows no second copy of Investigate (it lives on the Investigate page)" "the folded verbs and about-pages are not drawn in the rail" "three groups, the third named Places" "Ask still reaches the folded \"Take this apart\" by name" "and started nothing" "the bar’s Analyze completed through the one job path" "the routed run links to its immutable snapshot" "the bar’s Get feedback proposes the readers" "closing the proposal started nothing" "an arrived file is queued, not stored" "arrival posted nothing" "Admit posted exactly one /api/upload" "and the text derived locally, no model call" "Escape closes the intake dialog" "the result’s door opens the writing it came from" "the capture shows the exact text the run read" "the Ledger holds the movements this journey made" "an entry carries both clocks" "the trail page serves with its negative disclosure" "the footer door foot-constitution is there" "the footer door foot-anatomy is there" "the footer door foot-legacy is there" "Focus clears the bar" "Exit focus restores the bar" "no page errors through the doors"; do
   grep -qF "ok   $need" "$JOURNEY_OUT/doors.log" || { echo "== doors: missing check: $need"; status=1; }
+done
+# the Deflate door, Start side (2026-10-17): on the mock-lane server the door
+# must complete through the one job path and keep the deposition whole
+for need in "the deposition proposal carries the exact claim and the custody law" "opening the deposition door starts nothing" "the deposition exploration completed as a labeled fixture" "the result standing says the starting lines come from custody, not recall" "the saved result preserves the originating deposition whole" "the exploration appears in Recent grouped under its exact deposition item"; do
+  grep -qF "ok   $need" "$JOURNEY_OUT/deeper.log" || { echo "== deeper: missing check: $need"; status=1; }
 done
 # workspace-v2 slice J: the note surface's promises, named one by one in each
 # engine — words in this browser before any acknowledgment, a refused save that

@@ -47,7 +47,7 @@ function deepResult() {
                           value: fs.readFileSync(path.join(DIR, 'token'), 'utf8').trim(),
                           domain: '127.0.0.1', path: '/' }]);
   const page = await ctx.newPage();
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
 
   // every non-GET the page makes, so "spends nothing" can be measured rather
   // than asserted

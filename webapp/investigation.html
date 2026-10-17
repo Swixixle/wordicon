@@ -10,6 +10,7 @@
     --text: #e7ecf3; --muted: #8b98a9; --accent: #78aaff;
     --good: #6fcf97; --bad: #e08a8a; --warn: #d9a441;
     --oc: #9bb8ff; --ea: #b9d7a8; --nk: #d9c7ff;
+    --mode-source: #9bb8ff;   /* the Go deeper door's accent, as the desk names it */
   }
   html, body { margin: 0; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
@@ -48,6 +49,8 @@
   .scroll { overflow-x: auto; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   details summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  .result-title { font-size: 16px; font-weight: 600; margin: 4px 0 6px; }
+  .deeper-proposal pre { background: var(--panel-2); border-radius: 8px; padding: 8px; }
   @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } .wrap { padding: 12px 10px 60px; } }
 </style>
 </head>
@@ -56,7 +59,7 @@
 <header>
   <h1>Investigation Rooms</h1>
   <a href="/">← back to <span data-brand>__BRAND_NAME__</span></a>
-  <span class="foot" id="fed-line">connected instruments · manual pull only · no model on this page</span>
+  <span class="foot" id="fed-line">connected instruments · manual pull only · a model runs only from a Go deeper proposal you review and Start</span>
 </header>
 
 <div class="card">
@@ -135,6 +138,10 @@
   <div id="room-convergence"></div>
 </div>
 
+<!-- the Go deeper machinery: proposal, op_id-gated Start, poll — loaded here
+     so an imported reading's door opens the SAME lane the desk uses; it is
+     standalone-safe (desk-only globals are guarded by typeof checks) -->
+<script src="/deeper.js"></script>
 <script>
 const STATE = { connectors: [], depositions: [], rooms: [], room: null, producers: {} };
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -252,6 +259,25 @@ async function reverify(id) {
   const r = await post(`/api/depositions/${encodeURIComponent(id)}/verify`, {});
   const n = document.querySelector(`[data-vnote="${id}"]`); if (n) { const v = r.d.verification || {}; n.textContent = (v.ok ? 're-verified under the current pinned keys' : 'does not verify now: ' + (v.why || '')) + (r.d.byte_identical ? ' · bytes identical to import' : ' · BYTES CHANGED'); n.className = 'foot ' + (v.ok ? 'ok' : 'bad'); }
 }
+function depositionItemsHtml(id, rep) {
+  // the Deflate door (2026-10-17): each VERIFIED imported reading or claim is
+  // shown in the producer's own honesty vocabulary and carries a Go deeper
+  // control — the subject is resolved server-side from custody by its refs;
+  // a held reading keeps Deflate's own hold and gets no door here.
+  if (!rep || rep.producer !== 'deflate' || !Array.isArray(rep.items) || typeof window.deeperDepositionControl !== 'function') return '';
+  const rows = rep.items.filter(i => i.kind === 'claim' || i.kind === 'reading' || i.kind === 'reading_held').map(i => {
+    if (i.kind === 'reading_held') {
+      return `<div class="item"><div class="k">reading · held</div>${esc(i.title || i.ref)}
+        <div class="foot">${esc(i.attributed_to || '')}${(i.reasons || []).length ? ' · ' + i.reasons.map(esc).join('; ') : ''} · no door here: the producer's own hold stands</div></div>`;
+    }
+    const title = i.kind === 'claim' ? (i.text || i.ref) : (i.title || i.ref);
+    const head = i.kind === 'claim'
+      ? `${esc(i.text || '')}<div class="foot">${esc(i.type || 'claim')}${i.speaker ? ' · ' + esc(i.speaker) : ''}${i.status ? ' · status ' + esc(i.status) : ''} · ${esc(i.status_attributed_to || '')}</div>`
+      : `${esc(i.title || '')}<div class="foot">turns ${esc((i.turns || []).join('–'))}${i.fidelity ? ' · fidelity ' + esc(i.fidelity) : ''}${i.quotes_total != null ? ' · quotes matched ' + esc(i.quotes_matched) + '/' + esc(i.quotes_total) : ''} · ${esc(i.attributed_to || '')}</div>`;
+    return `<div class="item"><div class="k">${esc(i.kind)}</div>${head}${window.deeperDepositionControl(id, i.ref, String(title).slice(0, 120))}</div>`;
+  });
+  return rows.length ? `<div class="section-label" style="margin-top:10px">Readings and claims, as the producer states them</div>${rows.join('')}` : '';
+}
 async function showDeposition(id) {
   const r = await api(`/api/depositions/${encodeURIComponent(id)}`); const el = document.getElementById('dep-detail'); if (!el) return;
   const rep = r.d.representation, env = r.d.envelope || {};
@@ -263,7 +289,8 @@ async function showDeposition(id) {
     <div class="foot">gaps carried: ${rep ? rep.gaps.length : 0} · items: ${rep ? JSON.stringify(rep.counts) : 'no representation (unverified)'}</div>
     ${rep && rep.producer === 'ethicalalt' ? '<div class="foot">' + ((rep.partial || []).length ? '<span class="warn">PARTIAL — ' + rep.partial.map(esc).join('; ') + '</span>' : 'EthicalAlt\'s own counts show nothing missing') + ' · a signature proves origin and integrity, never completeness</div>' : ''}
     ${rep && rep.provenance_completeness ? '<div class="foot">provenance completeness (counts): ' + esc(JSON.stringify(rep.provenance_completeness).slice(0, 400)) + '</div>' : ''}
-    <div class="foot">vocabulary: ${rep ? Object.values(rep.vocabulary || {}).map(esc).join(' · ') : ''}</div></div>`;
+    <div class="foot">vocabulary: ${rep ? Object.values(rep.vocabulary || {}).map(esc).join(' · ') : ''}</div>
+    ${depositionItemsHtml(id, rep)}</div>`;
 }
 function renderRooms() {
   const el = document.getElementById('rooms');

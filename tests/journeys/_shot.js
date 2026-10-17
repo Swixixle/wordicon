@@ -35,7 +35,7 @@ const geom = () => {
   for (const [w, h, name] of SIZES) {
     const ctx = await pairedContext(browser, {viewport: {width: w, height: h}});
     const page = await ctx.newPage();
-    const errs = []; page.on('pageerror', e => errs.push(String(e)));
+    const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
     await page.goto(BASE + '/'); await page.waitForTimeout(2500);
     await page.screenshot({path: `${OUT}/home-${name}.png`});
     console.log(name, 'home', JSON.stringify(await page.evaluate(geom)));

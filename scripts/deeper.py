@@ -7,6 +7,7 @@ Actions freezes build_context's return value before the owner presses Start.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import re
 from urllib.parse import urlsplit
@@ -20,10 +21,27 @@ MAX_SELECTION = 24000
 MAX_ANCESTRY = 4
 MAX_ANCESTRY_TEXT = 2200
 MAX_TRAIL = 100
+MAX_TRANSCRIPT_LINES_CHARS = 4000
 PROMPT_PREFIX = "You are the Go deeper stage of Nikodemus."
 SOURCE_NOTE = ("The selected thread is model recall; its quotations are unverified. "
                "This exploration admits no source or verified passage. Provider search "
                "citations, when present, record acquisition, not proof of an interpretation.")
+# The Deflate door (ADR extraction, W1 follow-on (b); built on his "lets go",
+# 2026-10-17): an imported deposition's reading or claim becomes the frozen
+# subject of an exploration, with its evidence labels intact. The signature
+# law travels with it: verification establishes origin and integrity of the
+# package under the owner's pinned key — custody, never the truth or
+# fairness of the producer's readings.
+DEPOSITION_SOURCE_NOTE = (
+    "The selected record is an imported Deflate deposition, re-verified against the owner's "
+    "pinned key at preparation: origin and integrity are established — custody, never truth. "
+    "Its readings are Deflate's model's, reviewed by Deflate's own second pass, not independent "
+    "validation. This exploration admits no source or verified passage; the transcript lines "
+    "quoted in the frozen subject are the producer's own text at the item's stated location.")
+# the stand-in parent for a deposition-started exploration: there is no prior
+# run, and the evidence lane's goal/resume must be verifiable from this same
+# constant at Start (run() recomputes both and compares)
+_DEPOSITION_PARENT = {"mode": "deposition", "trace_id": ""}
 
 
 def _trace(value) -> str:
@@ -70,6 +88,127 @@ def _root(trace_id: str, index) -> dict:
                                 "relation_verdict_scope": "the original proposed parallel only"}}
 
 
+def _deposition_root(deposition_id, item_ref) -> dict:
+    """Resolve one reading or claim of a VERIFIED imported deposition into a
+    frozen exploration subject. Custody first: the exact bytes must still
+    hash to the deposition's sha256 and re-verify against the connector's
+    currently pinned keys at the moment of preparation — an import-time
+    verdict is not inherited. Everything carried is the producer's, labeled
+    in the producer's own honesty vocabulary; nothing is re-scored here."""
+    import federation
+    if not isinstance(deposition_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,120}", deposition_id or ""):
+        raise ValueError("a deposition subject needs a safe deposition id")
+    if not isinstance(item_ref, str) or not re.fullmatch(r"deflate:(claim|passage):[A-Za-z0-9._-]{1,120}", item_ref or ""):
+        raise ValueError("choose a reading or claim by its producer ref (deflate:claim:<id> or deflate:passage:<id>)")
+    dep = federation.get_deposition(deposition_id)
+    if dep is None:
+        raise ValueError("no deposition with that id is in custody")
+    if dep.get("producer") != "deflate":
+        raise ValueError(f"only Deflate depositions have this door today; this one is from {dep.get('producer')!r}")
+    raw = federation.deposition_bytes(dep)
+    if not raw:
+        raise ValueError("the deposition's exact bytes are missing from custody")
+    if hashlib.sha256(raw).hexdigest() != dep.get("sha256"):
+        raise ValueError("custody check failed: the stored bytes no longer hash to the deposition's own sha256")
+    conn = federation.get_connector(dep.get("connector_id") or "")
+    try:
+        env = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise ValueError("the deposition's bytes are not a JSON package") from exc
+    verdict = federation.verify_envelope(env, (conn or {}).get("trusted_keys") or [])
+    if not verdict.get("ok"):
+        raise ValueError("this deposition does not verify against a pinned key ("
+                         + str(verdict.get("why") or "no reason recorded")
+                         + ") — Go deeper reads only verified imports")
+    payload = env.get("payload") or {}
+    claims_doc = payload.get("claims") or {}
+    run_doc = claims_doc.get("run") or {}
+    run_title = str(run_doc.get("title") or dep.get("object_id") or deposition_id)
+    kind, item_id = item_ref.split(":")[1], item_ref.split(":", 2)[2]
+    item, turns = None, None
+    if kind == "claim":
+        c = next((x for x in claims_doc.get("claims") or [] if str(x.get("id")) == item_id), None)
+        if c is None:
+            raise ValueError(f"the deposition carries no claim {item_id!r}")
+        turns = c.get("turns") if isinstance(c.get("turns"), list) else None
+        item = {"kind": "claim", "id": item_id, "text": str(c.get("text") or ""),
+                "type": str(c.get("displayType") or c.get("type") or ""), "speaker": str(c.get("speaker") or ""),
+                "status": str(c.get("status") or ""),
+                "status_attributed_to": "Deflate's export's own meaning: none of these statuses means verified",
+                "provisional": [str(x) for x in (c.get("provisional") or [])][:8], "turns": turns,
+                "attributed_to": "a claim as Deflate's export states it — presence in the export is not verification"}
+        title = item["text"][:300] or f"claim {item_id}"
+    else:
+        p = next((x for x in claims_doc.get("passages") or [] if str(x.get("id")) == item_id), None)
+        if p is None:
+            raise ValueError(f"the deposition carries no passage {item_id!r}")
+        turns = [p.get("turnStart"), p.get("turnEnd")]
+        q = p.get("quoteCheck") or {}
+        item = {"kind": "reading", "id": item_id, "title": str(p.get("title") or ""),
+                "turns": turns, "speakers": [str(s) for s in (p.get("speakerNames") or [])][:8],
+                "model": str(p.get("model") or ""), "analyzed_by": str(p.get("analyzedBy") or ""),
+                "fidelity": str(p.get("fidelity") or ""), "quotes_matched": q.get("matched"), "quotes_total": q.get("quotes"),
+                "quotes_meaning": "'matched' means the quoted words are in the saved transcript — Deflate's own words: it does not prove the card reads them fairly",
+                "attributed_to": "Deflate's model reading, reviewed by its own second pass — not independent validation"}
+        title = item["title"][:300] or f"reading {item_id}"
+    tr = payload.get("transcript") or {}
+    lines, omitted = [], 0
+    if isinstance(tr.get("text"), str) and isinstance(turns, list) and len(turns) == 2 \
+            and all(type(t) is int and t >= 1 for t in turns) and turns[0] <= turns[1]:
+        all_lines = tr["text"].split("\n")
+        picked = all_lines[turns[0] - 1:turns[1]]          # Deflate's turns are 1-based lines of its own transcript
+        text = "\n".join(picked)
+        if len(text) > MAX_TRANSCRIPT_LINES_CHARS:
+            omitted = len(text) - MAX_TRANSCRIPT_LINES_CHARS
+            text = text[:MAX_TRANSCRIPT_LINES_CHARS]
+        lines = text.split("\n") if text else []
+    selection = {
+        # the shared vocabulary every downstream reader of a root already
+        # speaks: the item is the anchor, the producer's run is the work
+        "anchor_name": title,
+        "culture_or_work": run_title + " — a Deflate Lens transcript in custody",
+        "deposition": {
+            "producer": "deflate", "deposition_id": deposition_id, "item_ref": item_ref,
+            "object_id": str(dep.get("object_id") or ""), "sha256": str(dep.get("sha256") or ""),
+            "connector_id": str(dep.get("connector_id") or ""),
+            # no clock in the root: a follow-up re-resolves this root and
+            # compares it for EQUALITY with the frozen one, so the root holds
+            # only stable facts; the when of each check lives in the acts'
+            # own records (prepared_at, created_at)
+            "verification": {"ok": True, "key_id": str(verdict.get("key_id") or ""),
+                             "establishes": "origin and integrity of the package under the owner's pinned key — "
+                                            "custody, never the truth or fairness of its readings"},
+            "item": item,
+            "transcript": {"included": bool(tr.get("included")), "sha256": str(tr.get("sha256") or ""),
+                           "characters": tr.get("characters"),
+                           "location": (f"turns {turns[0]}–{turns[1]} of the transcript in custody"
+                                        if isinstance(turns, list) and len(turns) == 2 and all(type(t) is int for t in turns)
+                                        else "no turn location stated by the producer"),
+                           "lines_at_turns": lines, "lines_omitted_chars": omitted,
+                           "lines_meaning": "the producer's verbatim transcript at the item's stated turns — "
+                                            "quoted from custody, never from recall, and never a public-source verification"}}}
+    if len(json.dumps(selection, ensure_ascii=False)) > MAX_SELECTION:
+        raise ValueError("the selected deposition item exceeds the disclosed context limit")
+    return {"deposition_id": deposition_id, "item_ref": item_ref,
+            "selection": selection,
+            "source_standing": {"kind": "federated_deposition",
+                                "quotes": "producer transcript in custody — never a public-source verification",
+                                "source_admitted": False, "verified": False,
+                                "signature": {"ok": True, "key_id": str(verdict.get("key_id") or "")},
+                                "note": DEPOSITION_SOURCE_NOTE}}
+
+
+def _resolve_root(root_ref: dict) -> dict:
+    """One dispatch for every place a frozen root is re-resolved against the
+    record (follow-ups and Start): a deposition root re-resolves through
+    custody and the pinned keys; a thread root through the saved result."""
+    if not isinstance(root_ref, dict):
+        raise ValueError("the saved exploration has no original selection")
+    if root_ref.get("deposition_id"):
+        return _deposition_root(root_ref.get("deposition_id"), root_ref.get("item_ref"))
+    return _root(root_ref.get("trace_id"), root_ref.get("thread_index"))
+
+
 def _question(inputs: dict, required: bool) -> str:
     q = inputs.get("question", "")
     if not isinstance(q, str):
@@ -97,12 +236,40 @@ def _step(snap: dict) -> dict:
 
 def build_context(subject: dict, inputs: dict | None = None) -> dict:
     """Resolve one saved selection without a call, write, or title-based join."""
-    if not isinstance(subject, dict) or subject.get("kind") != "result":
-        raise ValueError("Go deeper needs a saved result")
+    if not isinstance(subject, dict) or subject.get("kind") not in ("result", "deposition"):
+        raise ValueError("Go deeper needs a saved result or an imported deposition item")
     if inputs is None:
         inputs = {}
     if not isinstance(inputs, dict):
         raise ValueError("Go deeper inputs must be an object")
+    if subject.get("kind") == "deposition":
+        # the Deflate door: no parent run exists — the verified deposition
+        # item IS the root, and the evidence lane's goal/resume are computed
+        # from the same stand-in parent that Start will recompute them from
+        root = _deposition_root(subject.get("deposition_id"), subject.get("item_ref"))
+        q = _question(inputs, False)
+        selection = root["selection"]
+        title = selection["anchor_name"]
+        if not q:
+            q = (f"Help me understand this {root['selection']['deposition']['item']['kind']} in the context of "
+                 f"{selection['culture_or_work']}: what it asserts, what would bear on it, and where to read next. "
+                 "The transcript lines quoted are the producer's text; do not treat them as publicly verified.")
+        trail = [{"deposition_id": root["deposition_id"], "item_ref": root["item_ref"],
+                  "title": title, "kind": "deposition"}]
+        return {"version": VERSION, "parent_trace_id": "", "root": root,
+                "focus": {"title": title, "work": selection.get("culture_or_work") or ""},
+                "question": q, "ancestry": [],
+                "context_limits": {"max_selection_chars": MAX_SELECTION,
+                                   "max_question_chars": MAX_QUESTION,
+                                   "max_prior_steps": MAX_ANCESTRY,
+                                   "max_prior_explanation_chars": MAX_ANCESTRY_TEXT,
+                                   "total_prior_steps": 0,
+                                   "omitted_prior_steps": 0},
+                "trail": trail, "trail_omitted_steps": 0,
+                "research_plan": evidence_research.plan(),
+                "research_goal": evidence_research.goal(_DEPOSITION_PARENT, root, question=q,
+                                                        continue_evidence=inputs.get("continue_evidence") is True),
+                "research_resume": evidence_research.freeze_resume(_DEPOSITION_PARENT)}
     parent_id = _trace(subject.get("trace_id"))
     parent = _snapshot(parent_id)
     is_followup = parent.get("mode") == "deepen"
@@ -122,7 +289,7 @@ def build_context(subject: dict, inputs: dict | None = None) -> dict:
         old_root = previous.get("root")
         if not isinstance(old_root, dict):
             raise ValueError("the saved exploration has no original selection")
-        root = _root(old_root.get("trace_id"), old_root.get("thread_index"))
+        root = _resolve_root(old_root)
         if root != old_root:
             raise ValueError("the original selection no longer matches its saved context")
         previous_steps = previous.get("ancestry") or []
@@ -242,9 +409,14 @@ def run(context: dict, gateway, on_progress=None) -> dict:
     if not isinstance(context, dict) or context.get("version") != VERSION:
         raise ValueError("Go deeper needs a frozen focused context")
     context = copy.deepcopy(context)
-    _trace(context.get("parent_trace_id"))
     root = context.get("root") or {}
-    if root != _root(root.get("trace_id"), root.get("thread_index")):
+    # a deposition-started exploration has no parent run: its root carries
+    # the deposition id, and the stand-in parent below is the same constant
+    # build_context froze the goal and resume from
+    deposition_start = bool(root.get("deposition_id")) and not context.get("parent_trace_id")
+    if not deposition_start:
+        _trace(context.get("parent_trace_id"))
+    if root != _resolve_root(root):
         raise ValueError("the frozen original selection does not match the record")
     _question({"question": context.get("question")}, True)
     expected_focus = {"title": root["selection"].get("anchor_name") or root["selection"].get("culture_or_work"),
@@ -255,9 +427,10 @@ def run(context: dict, gateway, on_progress=None) -> dict:
     if has_research_plan:
         if context["research_plan"] != evidence_research.plan():
             raise ValueError("the frozen research plan is unsupported; prepare a fresh proposal")
-        if context.get("research_resume") != evidence_research.freeze_resume(_snapshot(context["parent_trace_id"])):
+        research_parent = _DEPOSITION_PARENT if deposition_start else _snapshot(context["parent_trace_id"])
+        if context.get("research_resume") != evidence_research.freeze_resume(research_parent):
             raise ValueError("the frozen evidence continuation no longer matches its parent record")
-        expected_goal = evidence_research.goal(_snapshot(context["parent_trace_id"]), root, question=context["question"],
+        expected_goal = evidence_research.goal(research_parent, root, question=context["question"],
                         continue_evidence=(context.get("research_goal") or {}).get("kind") == "continue_evidence")
         if context.get("research_goal") != expected_goal:
             raise ValueError("the frozen evidence target no longer matches its parent record")
@@ -333,7 +506,9 @@ def run(context: dict, gateway, on_progress=None) -> dict:
         receipt_id=receipt_id, trace_id=trace_id, operation="distill", input_text=input_text,
         kernel_version=cli.load_seed_corpus()["kernel"]["kernel_version"], engine_version="cli-0.2.0",
         sources=[], derived_constraints_applied=[], claims=[], candidates=[], rejections=[],
-        warnings=[SOURCE_NOTE] + notes,
+        # each root says what its own reading rests on: model recall for a
+        # thread, custody-not-truth for an imported deposition
+        warnings=[(root.get("source_standing") or {}).get("note") or SOURCE_NOTE] + notes,
         model_calls=[{"gateway": gateway.name, "is_external": gateway.is_external}],
         prompt_identities=[identity])
     cli.validators.validate_receipt_invariants(receipt)
@@ -350,7 +525,8 @@ def run(context: dict, gateway, on_progress=None) -> dict:
     result = {"mode": "deepen", "deepen_rev": VERSION, "trace_id": trace_id,
               "receipt_id": receipt_id, "context": context, "question": context["question"],
               "input_text": context["question"], "source_title": expected_focus["title"],
-              "parent_trace_id": context["parent_trace_id"], "trail_root_id": root["trace_id"],
+              "parent_trace_id": context["parent_trace_id"],
+              "trail_root_id": root.get("trace_id") or root.get("deposition_id") or "",
               "created_at": receipt["created_at"], "trail": trail, "trail_omitted_steps": omitted,
               "depth": context["context_limits"]["total_prior_steps"] + 1,
               "source_standing": copy.deepcopy(root["source_standing"]),
@@ -368,7 +544,12 @@ def run(context: dict, gateway, on_progress=None) -> dict:
         result["acquisition_usage"] = (research["acquisition_records"][-1]
                                        if research["acquisition_records"] else None)
     cli.write_run_snapshot(trace_id, result, ensure_ascii=False, indent=2)
-    cli.record_edge("continued_from", cli._node("run", context["parent_trace_id"], ""),
+    # the lineage edge names what this step actually continued from: the
+    # parent run, or — for the Deflate door — the deposition itself, so the
+    # originating reading is preserved in the graph, not only in the context
+    from_node = (cli._node("deposition", root["deposition_id"], expected_focus["title"]) if deposition_start
+                 else cli._node("run", context["parent_trace_id"], ""))
+    cli.record_edge("continued_from", from_node,
                     cli._node("run", trace_id, fields["title"]), trace_id,
                     detail=context["question"][:200], origin="mechanical",
                     producer=cli.edge_producer("receipt", receipt_id, stage="deepen"))

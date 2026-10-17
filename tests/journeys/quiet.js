@@ -14,7 +14,7 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
   const ctx = await pairedContext(browser); const page = await ctx.newPage();
   await page.route('**/api/vault/status', r => r.fulfill({ json: healthyVault }));
   const posts = []; page.on('request', r => { if (r.method() !== 'GET') posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
   page.on('dialog', d => d.dismiss());
   await page.goto(BASE + '/'); await page.waitForTimeout(1500);
   ok(errs.length === 0, 'no page errors on Home: ' + JSON.stringify(errs));

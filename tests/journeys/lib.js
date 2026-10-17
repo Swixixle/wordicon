@@ -69,5 +69,19 @@ async function place(page, path, ms) {
   return null;
 }
 
+// The one named benign page error. Chromium under full-suite load sometimes
+// fires "ResizeObserver loop completed with undelivered notifications." as a
+// pageerror: the browser reporting observation-delivery overflow — benign by
+// spec (the skipped notifications are delivered next frame), naming no script
+// of ours, never seen in WebKit, and it has flaked four different journeys
+// (resume, notebook, notes-chromium, narrowing) only under load, each green
+// standalone. Every pageerror push routes through this predicate; this ONE
+// exact message is excluded, and every other page error still fails the
+// journey. An allowlist grows only with a name and a reason, here.
+const BENIGN_PAGE_ERROR = 'ResizeObserver loop completed with undelivered notifications.';
+function benignPageError(e) {
+  return String((e && e.message) != null ? e.message : e).trim() === BENIGN_PAGE_ERROR;
+}
+
 module.exports = {
-  place, BASE, DIR, OUT, tok, ck, ok, launch, pairedContext, finish, setPage: p => { lastPage = p; } };
+  place, BASE, DIR, OUT, tok, ck, ok, launch, pairedContext, finish, benignPageError, setPage: p => { lastPage = p; } };

@@ -30,7 +30,7 @@ function bff(support, extra) {
   const browser = await launch();
   const ctx = await pairedContext(browser);
   const page = await ctx.newPage();
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
   await page.goto(BASE + '/');
   await page.waitForTimeout(700);
 

@@ -20,7 +20,7 @@ const NAME = 'notes-' + ENGINE;
   const ctx = await pairedContext(browser, { viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const errs = [];
-  page.on('pageerror', e => errs.push(String(e.message)));
+  page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e.message)); });
 
   const boot = async p => {
     await p.goto(BASE + '/work');
@@ -153,7 +153,7 @@ const NAME = 'notes-' + ENGINE;
   //    opens the same note from the list and saves first.
   const target = afterRetry.find(n => /server was unreachable/.test(n.body));
   const tabB = await ctx.newPage();
-  tabB.on('pageerror', e => errs.push('tab B: ' + String(e.message)));
+  tabB.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push('tab B: ' + String(e.message)); });
   await boot(tabB);
   await tabB.evaluate(id => window.__work.session.open(id), docB);
   await tabB.waitForTimeout(500);

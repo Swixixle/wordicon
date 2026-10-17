@@ -102,8 +102,24 @@ datasets generated later, optionally, from the same records.
   establish that the two RUNNING copies are connected until that press.
   (b) A Deflate entry needs its own door into Go deeper: an adapter that
   carries the exact run, claim and transcript location into the
-  exploration with its evidence labels intact — the shipped first slice
-  starts from Sprout threads only.
+  exploration with its evidence labels intact.
+  **Status (2026-10-17, his "lets go"): SHIPPED.** `explore.deepen` takes
+  a `deposition` subject; `deeper._deposition_root` resolves a reading or
+  claim from custody — the exact bytes re-hashed and re-verified against
+  the currently pinned keys at prepare, Start and every follow-up, an
+  import-time verdict never inherited — and the frozen selection carries
+  the claim or reading in Deflate's own honesty vocabulary, the verbatim
+  transcript lines at its stated turns, the transcript sha256 and
+  location, and the signature law (origin and integrity — custody, never
+  truth). The Investigation page lists a verified deposition's readings
+  and claims with a Go deeper door on each (a held reading keeps
+  Deflate's own hold and gets no door), through the same
+  proposal/op-gated-Start/poll lane the desk uses; the saved result
+  preserves the originating deposition and item ref whole, its lineage
+  edge continues from the deposition node, and Recent groups steps under
+  the deposition item. Evidence research starts quoteless on purpose:
+  custody lines are the producer's text, not a public-source quote
+  target.
 - **W2 — capture at revision boundaries.** Ruled forward on 2026-10-16:
   local capture advances now while paid analysis stays press-to-run.
   Draft revisions content-addressed in their own store; searches;

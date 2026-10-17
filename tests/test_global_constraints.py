@@ -6534,11 +6534,39 @@ def _check_deeper_wing():
     for f in ("tests/test_deeper.py", "tests/test_deeper_integration.py", "scripts/deeper.py", "webapp/deeper.js",
               "scripts/evidence_fetch.py", "scripts/evidence_research.py", "scripts/evidence_quality.py",
               "tests/test_acquisition_usage.py", "tests/test_evidence_fetch.py", "tests/test_evidence_research.py",
-              "tests/test_evidence_quality.py", "tests/test_quoteless_research.py"):
+              "tests/test_evidence_quality.py", "tests/test_quoteless_research.py", "tests/test_deposition_door.py"):
         if not (root / f).exists():
             out.append(f"DEEPER: {f} is missing — the wing shipped without its parts")
     if out:
         return out
+    # the Deflate door (2026-10-17, ADR extraction W1 follow-on (b)): an
+    # imported deposition's reading or claim is a Go deeper subject, resolved
+    # from custody with the signature law intact. These pins hold the door's
+    # load-bearing sentences; the behavior is pinned in test_deposition_door.py.
+    _dpy = (root / "scripts" / "deeper.py").read_text(encoding="utf-8")
+    for need, why in (("custody, never truth", "the signature law"),
+                      ("custody check failed: the stored bytes no longer hash", "the custody re-hash refusal"),
+                      ("does not verify against a pinned key", "the pinned-key refusal"),
+                      ("Go deeper reads only verified imports", "the verified-only law"),
+                      ("_resolve_root(root)", "the one root dispatch at Start"),
+                      ("no clock in the root", "the stable-root law (follow-ups compare for equality)")):
+        if need not in _dpy:
+            out.append(f"DEEPER: the deposition door lost {why} ({need!r})")
+    import actions as _acW
+    if "deposition" not in (_acW.BY_ID.get("explore.deepen") or {}).get("subjects", ()):
+        out.append("DEEPER: explore.deepen no longer takes a deposition subject — the Deflate door is unreachable")
+    _inv = (root / "webapp" / "investigation.html").read_text(encoding="utf-8")
+    for need, why in (('src="/deeper.js"', "the door's machinery on the investigation page"),
+                      ("no door here: the producer's own hold stands", "the held-reading refusal"),
+                      ("deeperDepositionControl", "the per-item door")):
+        if need not in _inv:
+            out.append(f"DEEPER: the investigation page lost {why} ({need!r})")
+    _djs = (root / "webapp" / "deeper.js").read_text(encoding="utf-8")
+    for need, why in (("window.deeperDepositionControl", "the deposition control builder"),
+                      ("quoted from the package in custody", "the custody standing line"),
+                      ("re-verified against the pinned key at preparation (custody, never truth)", "the proposal scope law")):
+        if need not in _djs:
+            out.append(f"DEEPER: deeper.js lost {why} ({need!r})")
     _runsh = (root / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
     if "for j in work doors deeper; do" not in _runsh:
         out.append("DEEPER: the deeper journey does not run in the journey runner's work loop")
@@ -6585,12 +6613,39 @@ def _check_deeper_wing():
     import sys as _sysD
     r = _spD.run([_sysD.executable, "-m", "pytest", "tests/test_deeper.py", "tests/test_deeper_integration.py",
                   "tests/test_acquisition_usage.py", "tests/test_evidence_fetch.py", "tests/test_evidence_research.py",
-                  "tests/test_evidence_quality.py", "tests/test_quoteless_research.py",
+                  "tests/test_evidence_quality.py", "tests/test_quoteless_research.py", "tests/test_deposition_door.py",
                   "-q", "-p", "no:cacheprovider"],
                  cwd=root, capture_output=True, text=True, timeout=600)
     if r.returncode != 0:
         tail = (r.stdout + "\n" + r.stderr).strip().splitlines()[-12:]
         out.append("DEEPER: the wing's own pins fail:\n      " + "\n      ".join(tail))
+    return out
+
+
+def _check_journey_error_law():
+    """The journeys' page-error law (2026-10-17, after the fourth load-only
+    flake): every pageerror a journey collects routes through ONE named
+    predicate in lib.js, which excludes exactly one benign Chromium message
+    by its full text and nothing else. An allowlist that grows silently, or
+    a journey that stops routing through it, fails here by name."""
+    out = []
+    root = Path(__file__).resolve().parents[1]
+    lib = (root / "tests" / "journeys" / "lib.js").read_text(encoding="utf-8")
+    if "ResizeObserver loop completed with undelivered notifications." not in lib or "function benignPageError" not in lib:
+        out.append("JOURNEYS: lib.js lost the named benign-page-error predicate")
+    if lib.count("BENIGN_PAGE_ERROR") < 2 or "An allowlist grows only with a name and a reason" not in lib:
+        out.append("JOURNEYS: the allowlist lost its one named constant or its growth law")
+    # the predicate's exact body: a widened allowlist (another message OR'd in,
+    # a prefix match) changes this line and fails here by name — a string pin
+    # cannot read intent, so it pins the one body that admits exactly one text
+    if "return String((e && e.message) != null ? e.message : e).trim() === BENIGN_PAGE_ERROR;" not in lib:
+        out.append("JOURNEYS: the benign-page-error predicate's body moved — the allowlist admits exactly one named message")
+    for p in sorted((root / "tests" / "journeys").glob("*.js")):
+        if p.name == "lib.js":
+            continue
+        for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+            if "pageerror" in line and ".push(" in line and "benignPageError" not in line:
+                out.append(f"JOURNEYS: {p.name}:{i} collects a pageerror outside the named allowlist law")
     return out
 
 
@@ -8769,6 +8824,7 @@ def main() -> int:
     failures.extend(_check_workspace_doors(server, _paired))
     failures.extend(_check_ledger(server, _paired))
     failures.extend(_check_capture(server, _paired))
+    failures.extend(_check_journey_error_law())
     failures.extend(_check_deeper_wing())
     failures.extend(_check_document_contract(server, _paired))
     failures.extend(_check_docx_export(server, _paired))

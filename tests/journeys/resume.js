@@ -85,7 +85,7 @@ async function startFromRoom(page) {
   // ---- 1. the route is identity, and it is written before the first poll --
   {
     const ctx = await fresh(browser, DIR); const page = await ctx.newPage();
-    page.on('pageerror', e => errs.push(String(e)));
+    page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
     let st = 'slow'; const posts = [];
     await wire(page, () => st, posts);
     await startFromRoom(page);
@@ -138,7 +138,7 @@ async function startFromRoom(page) {
   // ---- 5. a run started from the page never takes the draft -------------
   {
     const ctx = await fresh(browser, DIR); const page = await ctx.newPage();
-    page.on('pageerror', e => errs.push(String(e)));
+    page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
     let st = 'slow'; const posts = [];
     await wire(page, () => st, posts);
     await page.goto(BASE + '/'); await page.waitForTimeout(1000);
@@ -169,7 +169,7 @@ async function startFromRoom(page) {
   // ---- 6. a failure names its class, in the room ------------------------
   {
     const ctx = await fresh(browser, DIR); const page = await ctx.newPage();
-    page.on('pageerror', e => errs.push(String(e)));
+    page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
     let st = 'slow'; const posts = [];
     await wire(page, () => st, posts);
     await startFromRoom(page);
@@ -188,7 +188,7 @@ async function startFromRoom(page) {
   // ---- 7. a job the server no longer has says so -----------------------
   {
     const ctx = await fresh(browser, DIR); const page = await ctx.newPage();
-    page.on('pageerror', e => errs.push(String(e)));
+    page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
     let st = 'slow'; const posts = [];
     await wire(page, () => st, posts);
     await startFromRoom(page);
@@ -206,7 +206,7 @@ async function startFromRoom(page) {
   // ---- 8. completion while he is typing does not touch what he types ----
   {
     const ctx = await fresh(browser, DIR); const page = await ctx.newPage();
-    page.on('pageerror', e => errs.push(String(e)));
+    page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
     let st = 'slow'; const posts = [];
     await wire(page, () => st, posts);
     await startFromRoom(page);

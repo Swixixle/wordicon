@@ -22,7 +22,7 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   const ctx = await paired();
   const page = await ctx.newPage();
   const reqs = []; page.on('request', r => reqs.push(r.url()));
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
   await page.goto(BASE + '/anatomy');
   await page.waitForTimeout(2200);
   ok(reqs.length === 1 && reqs[0] === BASE + '/anatomy', 'the only request is the page itself: ' + JSON.stringify(reqs));

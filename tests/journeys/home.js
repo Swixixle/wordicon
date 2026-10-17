@@ -19,7 +19,7 @@ const healthyVault = { initialized: true, last_seal_at: new Date(Date.now() - 4 
     const ctx = await paired(); const page = await ctx.newPage();
     await page.route('**/api/vault/status', r => r.fulfill({ json: healthyVault }));
     const reqs = []; page.on('request', r => reqs.push(r.url().replace(BASE, '')));
-    const errs = []; page.on('pageerror', e => errs.push(String(e)));
+    const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
     await page.goto(BASE + '/'); await page.waitForTimeout(1500);
     ok(errs.length === 0, 'no page errors on Home: ' + JSON.stringify(errs));
     ok(!reqs.some(u => u.startsWith('/api/config')), 'Home never asks /api/config on load: ' + JSON.stringify(reqs.filter(u => u.startsWith('/api'))));

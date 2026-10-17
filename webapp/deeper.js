@@ -12,7 +12,14 @@
   let activeProposal = null;
   const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const freshKey = () => window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : 'deeper-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-  const subjectKey = subject => subject && subject.trace_id ? JSON.stringify([subject.trace_id, subject.thread_index == null ? null : subject.thread_index]) : null;
+  const subjectKey = subject => {
+    if (!subject) return null;
+    if (subject.trace_id) return JSON.stringify([subject.trace_id, subject.thread_index == null ? null : subject.thread_index]);
+    // the Deflate door: a deposition item keeps the same lost-Start recovery
+    // (one pending request key per subject) as a thread does
+    if (subject.deposition_id) return JSON.stringify(['dep', subject.deposition_id, subject.item_ref || '']);
+    return null;
+  };
   function savePending(entry) {
     const key = subjectKey(entry.subject);
     if (!key || !entry.prepared || !entry.requestKey) return false;
@@ -64,7 +71,11 @@
 
   function sourceStanding(context, disclosure) {
     const thread = selectionOf(context);
-    const quote = thread.quote_status === 'paraphrase' ? 'The starting words are a paraphrase, not an exact quotation.' : 'The starting thread comes from model recall; its quotation has not been verified against an admitted passage.';
+    // a deposition root's starting lines come from custody, not recall — the
+    // standing line must say which law applies, never the wrong one
+    const quote = rootOf(context).deposition_id
+      ? 'The starting item is an imported deposition: its transcript lines are quoted from the package in custody, signature-verified against the pinned key — origin and integrity, never truth, and never a public-source verification.'
+      : (thread.quote_status === 'paraphrase' ? 'The starting words are a paraphrase, not an exact quotation.' : 'The starting thread comes from model recall; its quotation has not been verified against an admitted passage.');
     const verdict = thread.review_verdict;
     return `<div style="border-left:2px solid var(--mode-source);padding-left:12px;margin:12px 0">
       ${message(disclosure || 'Model reading and source leads. No source admission or interpretive support ruling; checks shown here concern wording in retrieved text only.')}
@@ -227,6 +238,15 @@
     return `${button(entry, 'open', '↓ Go deeper', 'style="margin-top:6px;font-size:12px" title="Stay with this person, work or idea; review the proposal before anything runs"')}<div id="${entry.mountId}" aria-live="polite"></div>`;
   };
 
+  window.deeperDepositionControl = (depositionId, itemRef, title) => {
+    // the Deflate door (2026-10-17): an imported, verified reading or claim
+    // opens the same proposal machinery a saved thread does — the subject is
+    // resolved server-side from custody; this control carries only its ids
+    if (!depositionId || !itemRef) return '';
+    const entry = makeEntry({subject: {kind:'deposition', deposition_id:depositionId, item_ref:itemRef}, title:title || 'this imported reading'});
+    return `${button(entry, 'open', '↓ Go deeper', 'style="margin-top:6px;font-size:12px" title="Explore this imported reading or claim; review the proposal before anything runs"')}<div id="${entry.mountId}" aria-live="polite"></div>`;
+  };
+
   window.buildDeeperHtml = result => {
     const context = result.context || {};
     const entry = makeEntry({subject: {kind:'result', trace_id:result.trace_id}, title:titleOf(context), questions:Array.isArray(result.next_questions) ? result.next_questions : []});
@@ -269,7 +289,7 @@
       ${focusOf(context).work ? message(focusOf(context).work) : ''}
       ${paragraph(context.question || entry.question || 'Understand this subject on its own terms and find a useful way into the work.')}
       ${context.research_goal && context.research_goal.kind === 'continue_evidence' && context.research_goal.question && context.research_goal.question !== context.question ? `<p class="body" style="white-space:pre-wrap"><strong>Evidence question</strong> · ${esc(context.research_goal.question)}</p>` : ''}
-      ${message('Scope: the exact saved thread' + (prior ? ' and ' + prior + ' prior exploration step(s)' : '') + ', with this question. ' + (scope.words == null ? '' : scope.words + ' words in the frozen context.'))}
+      ${message('Scope: ' + (rootOf(context).deposition_id ? 'the exact imported deposition item, re-verified against the pinned key at preparation (custody, never truth)' : 'the exact saved thread') + (prior ? ' and ' + prior + ' prior exploration step(s)' : '') + ', with this question. ' + (scope.words == null ? '' : scope.words + ' words in the frozen context.'))}
       ${message(laneLine)}
       ${message('Leaves this machine: ' + (lane.external ? fields + ' → ' + (outbound.recipient || 'model') + ' (' + (lane.model || lane.lane || 'configured provider') + ')' : 'nothing in the mock lane.'))}
       ${lane.external && (context.research_plan || d.research_plan) ? message('Public source hosts receive bounded unauthenticated GETs; retrieved excerpts and failure summaries go to the configured model.') : ''}

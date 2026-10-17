@@ -17,7 +17,7 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   const browser = await launch();
   const ctx = await pairedContext(browser);
   const page = await ctx.newPage();
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
 
   // ---- the canonical page ---------------------------------------------
   const resp = await page.goto(BASE + '/constitution');

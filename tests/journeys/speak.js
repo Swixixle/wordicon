@@ -13,7 +13,7 @@ const CATS = 'I would like to know about the historical superstitions involving 
   const ctx = await pairedContext(browser); const page = await ctx.newPage();
   await page.route('**/api/vault/status', r => r.fulfill({ json: healthyVault }));
   const posts = []; page.on('request', r => { if (r.method() !== 'GET') posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
   page.on('dialog', d => d.dismiss());
   const state = () => page.evaluate(() => ({ st: document.getElementById('speak-state').dataset.state, text: document.getElementById('speak-state').textContent, btn: document.getElementById('speak-btn').textContent.trim(), disabled: document.getElementById('speak-btn').disabled,
     recording: !!(typeof SPEAK !== 'undefined' && SPEAK.rec && SPEAK.rec.state === 'recording'), tracks: (typeof SPEAK !== 'undefined' && SPEAK.stream) ? SPEAK.stream.getTracks().filter(t => t.readyState === 'live').length : 0,

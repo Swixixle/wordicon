@@ -29,7 +29,7 @@ const OC_ID = OC.object.id, EA_ID = EA.object.id;
   const ctx = await pairedContext(browser); const page = await ctx.newPage();
   await page.route('**/api/vault/status', r => r.fulfill({ json: healthyVault }));
   const posts = []; page.on('request', r => { if (r.method() !== 'GET') posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
   page.on('dialog', d => d.type() === 'prompt' ? d.accept('the owner declares — journey') : d.accept());
   const api = async (p) => (await page.request.get(BASE + p)).json();
   const text = (sel) => page.evaluate((s) => (document.querySelector(s) || { textContent: '' }).textContent.replace(/\s+/g, ' ').trim(), sel);
@@ -190,6 +190,44 @@ const OC_ID = OC.object.id, EA_ID = EA.object.id;
   ok(/Nikodemus can hold what your other instruments produce/.test(canonHtml),
      'the constitution carries the instruments paragraph');
   ok(await page.evaluate(() => !!document.querySelector('#rooms-area a[href="/investigation"]')), 'the Rooms place has the door to the instruments');
+
+  // ---- the Deflate door (2026-10-17): a pasted deposition's reading opens Go
+  // deeper from the Investigation page — the same proposal/Start/poll lane the
+  // desk uses, the subject resolved server-side from custody, the labels intact
+  const DEFLATE = fs.readFileSync(path.join(FX, 'deflate.exemplar.deposition.json'), 'utf8');
+  const DF = JSON.parse(DEFLATE);
+  await page.goto(BASE + '/investigation'); await page.waitForTimeout(900);
+  await page.click('summary:has-text("Import a package you already have")');
+  await page.selectOption('#imp-connector', 'deflate-dev');
+  await page.fill('#pkg-body', DEFLATE);
+  await page.click('button:has-text("Import these bytes")'); await page.waitForTimeout(1000);
+  ok(/kept and VERIFIED/.test(await text('#pkg-note')), 'the pasted Deflate package is kept and VERIFIED against the pinned key: ' + (await text('#pkg-note')).slice(0, 120));
+  const dDF = (await api('/api/depositions')).depositions.find(d => d.producer === 'deflate');
+  ok(!!dDF && dDF.signature_ok, 'the Deflate deposition is in custody and verified');
+  await page.click(`tr[data-dep="${dDF.deposition_id}"] a:has-text("record")`); await page.waitForTimeout(800);
+  const itemsText = await text('#dep-detail');
+  ok(/Readings and claims, as the producer states them/.test(itemsText), 'the record lists the readings and claims');
+  ok(itemsText.includes(DF.payload.claims.claims[0].text) && /none of these statuses means verified/.test(itemsText),
+     "a claim is shown with Deflate's own status honesty — none of these statuses means verified");
+  ok(/not independent validation/.test(itemsText), "a reading carries its attribution — Deflate's model, reviewed by its own second pass");
+  ok(/no door here: the producer's own hold stands/.test(itemsText), 'a held reading keeps its hold and gets no door');
+  const doors = await page.evaluate(() => Array.from(document.querySelectorAll('#dep-detail [data-deeper-action="open"]')).length);
+  ok(doors === 2, 'the verified reading and the claim each have their own door, the held one none: ' + doors);
+  // the claim's door (items render reading, held, claim in the producer-record order)
+  await page.evaluate(() => Array.from(document.querySelectorAll('#dep-detail [data-deeper-action="open"]')).at(-1).click());
+  await page.waitForSelector('#dep-detail .deeper-proposal', { timeout: 10000 });
+  const prop = await text('#dep-detail .deeper-proposal');
+  ok(/re-verified against the pinned key at preparation \(custody, never truth\)/.test(prop), 'the proposal names the deposition scope law: custody, never truth');
+  ok(/MOCK — no live model calls/.test(prop), 'the scratch lane is named MOCK before any Start');
+  ok(/quoted from the package in custody/.test(prop), "the standing line says the transcript lines come from custody, not recall");
+  ok(/Nothing has started\./.test(prop), 'opening the proposal started nothing');
+  // this journey's server runs with the model gateway POISONED, so the honest
+  // behavior at this boundary is a Start that cannot be pressed — the full
+  // Start→result flow runs in the deeper journey, whose server has the mock
+  // lane, against this same door
+  const startDisabled = await page.evaluate(() => { const b = document.querySelector('#dep-detail .deeper-proposal [data-deeper-action="start"]'); return !!b && b.disabled; });
+  ok(startDisabled, 'with the lane down, the deposition proposal renders Start disabled rather than firing');
+
   ok(errs.length === 0, 'no page errors: ' + JSON.stringify(errs.slice(0, 3)));
   await browser.close();
   finish('federation');

@@ -15,7 +15,7 @@ const IDENT = 'Rowan Ashby Pell, born 1985-04-11 at 3 p.m. in Duluth, Minnesota'
   const ctx = await pairedContext(browser); const page = await ctx.newPage();
   await page.route('**/api/vault/status', r => r.fulfill({ json: healthyVault }));
   const posts = []; page.on('request', r => { if (r.method() !== 'GET') posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
-  const errs = []; page.on('pageerror', e => errs.push(String(e)));
+  const errs = []; page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e)); });
   page.on('dialog', d => d.dismiss());
   const api = async (p) => (await page.request.get(BASE + p)).json();
   await page.goto(BASE + '/'); await page.waitForTimeout(1500);

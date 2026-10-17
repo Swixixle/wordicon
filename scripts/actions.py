@@ -44,7 +44,7 @@ JOB_MODES = ("auto", "deep", "forge", "crack", "decompose", "riff", "play", "rev
 
 GROUPS = ("on_draft", "explore", "investigate", "more", "record")
 KINDS = ("view", "dispatch", "lookup", "note", "ruling", "apply")
-SUBJECTS = ("document", "selection", "concept", "word", "description", "candidate", "result", "source", "none")
+SUBJECTS = ("document", "selection", "concept", "word", "description", "candidate", "result", "source", "deposition", "none")
 
 
 def _a(id_, label, *, group, kind, subjects, handler, aliases=(), inputs=(), mutation="none",
@@ -94,8 +94,11 @@ ACTIONS = [
     _a("explore.deepen", "Go deeper", group="explore", kind="dispatch", rail=False,
        # rail=False: the Explore rail stays the ruled five — this door lives on a
        # saved Sprout thread (a result), and the palette answers its aliases.
-       subjects=("result",), handler="job", mode="deepen", aliases=("go deeper", "explore this work"),
-       inputs=("saved Sprout thread or deeper step", "follow-up question"), mutation="record",
+       # "deposition" (2026-10-17, the Deflate door): an imported, verified
+       # Deflate reading or claim is a subject too — resolved from custody
+       # by deeper._deposition_root, never from client prose
+       subjects=("result", "deposition"), handler="job", mode="deepen", aliases=("go deeper", "explore this work"),
+       inputs=("saved Sprout thread, deeper step, or imported deposition item", "follow-up question"), mutation="record",
        outbound_fields=("exact selected thread and its source caveats", "question", "disclosed recent exploration context",
                         "retrieved excerpts and failure summaries", "public source GET URLs"),
        recipient="configured model, its search service and public source hosts", provider="model",

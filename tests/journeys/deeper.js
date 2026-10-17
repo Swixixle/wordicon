@@ -18,7 +18,7 @@ fs.writeFileSync(path.join(state, 'results', root+'.json'), JSON.stringify(sourc
   const ctx = await pairedContext(browser);
   const page = await ctx.newPage();
   const errors = [], starts = [];
-  page.on('pageerror', e => errors.push(String(e)));
+  page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errors.push(String(e)); });
   page.on('request', r => {if(r.method()==='POST' && new URL(r.url()).pathname==='/api/operations') starts.push(r.postDataJSON());});
   await page.goto(BASE+'/?trace='+root);
   await page.waitForSelector('[data-deeper-action="open"]');
@@ -113,6 +113,40 @@ fs.writeFileSync(path.join(state, 'results', root+'.json'), JSON.stringify(sourc
   await page.click('[data-deeper-action="start"]');
   await page.getByText(/could not save the request recovery key/).waitFor();
   ok(starts.length===startsBeforeBlocked, 'unavailable recovery storage refuses before a Start leaves the browser');
+  // ---- the Deflate door (2026-10-17): an imported deposition's claim opens
+  // this same lane from the Investigation page — subject resolved from
+  // custody server-side, labels intact, result grouped under the deposition
+  const DEFLATE = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'federation', 'deflate.exemplar.deposition.json'), 'utf8');
+  const DFC = JSON.parse(DEFLATE).payload.claims.claims[0];
+  await page.goto(BASE + '/investigation');
+  await page.click('summary:has-text("Import a package you already have")');
+  await page.selectOption('#imp-connector', 'deflate-dev');
+  await page.fill('#pkg-body', DEFLATE);
+  await page.click('button:has-text("Import these bytes")');
+  await page.getByText(/kept and VERIFIED/).waitFor({timeout: 10000});
+  const dep = (await (await page.request.get(BASE + '/api/depositions')).json()).depositions.find(d => d.producer === 'deflate');
+  await page.click(`tr[data-dep="${dep.deposition_id}"] a:has-text("record")`);
+  await page.waitForSelector('#dep-detail [data-deeper-action="open"]');
+  const startsBeforeDep = starts.length;
+  await page.evaluate(() => Array.from(document.querySelectorAll('#dep-detail [data-deeper-action="open"]')).at(-1).click());
+  await page.waitForSelector('#dep-detail .deeper-proposal');
+  const depProp = await page.textContent('#dep-detail .deeper-proposal');
+  ok(depProp.includes('custody, never truth') && depProp.includes(DFC.text), 'the deposition proposal carries the exact claim and the custody law');
+  ok(starts.length === startsBeforeDep, 'opening the deposition door starts nothing');
+  await page.click('#dep-detail .deeper-proposal [data-deeper-action="start"]');
+  await page.waitForSelector('#dep-detail .deeper-result', {timeout: 20000});
+  const depRes = await page.textContent('#dep-detail .deeper-result');
+  ok(depRes.includes('MOCK FIXTURE') && depRes.includes('no live model call'), 'the deposition exploration completed as a labeled fixture');
+  ok(depRes.includes('quoted from the package in custody'), 'the result standing says the starting lines come from custody, not recall');
+  const depOp = (await (await page.request.get(BASE + '/api/operations')).json()).operations.find(x => x.prepared_id === starts[starts.length - 1].prepared_id);
+  const depResult = await (await page.request.get(BASE + '/api/result/' + depOp.trace_id)).json();
+  ok(depResult.context.root.deposition_id === dep.deposition_id && depResult.trail_root_id === dep.deposition_id,
+    'the saved result preserves the originating deposition whole');
+  ok(depResult.source_standing && depResult.source_standing.kind === 'federated_deposition',
+    'the saved standing names the federated deposition, custody never truth');
+  const hist2 = await (await page.request.get(BASE + '/api/history')).json();
+  ok(hist2.items.some(x => x.trace_id === depOp.trace_id && x.subject_key === dep.deposition_id + ':' + depResult.context.root.item_ref),
+    'the exploration appears in Recent grouped under its exact deposition item');
   ok(errors.length===0, 'no browser script errors: '+errors.join('; '));
   await browser.close();
   finish('deeper');
