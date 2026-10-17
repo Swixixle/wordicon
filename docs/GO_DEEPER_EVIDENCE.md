@@ -15,8 +15,17 @@ a saved URL finish a new question. Revision two separates acquisition status
 from the condition that ends the pass. Only an actual quotation match can
 stop research early; a question without a quotation target continues through
 the approved search/read allowance. The only reuse shortcut is retrying a
-failed final answer from a completed revision-two pass whose useful saved
+failed final answer from a completed revision-two-or-later pass whose useful saved
 excerpts pass current hash, extraction and lexical checks again.
+
+Revision three addresses an honestly unsuccessful Dante run: two inherited
+reads and four reads after two searches exhausted the allowance before the
+last search strategy. All six requests failed, including a PDF the reader
+could not extract and two book listings. The controller now reserves a read
+for each remaining search strategy, orders likely supported text before
+catalog and unsupported-format hints, and distinguishes failed retrieval
+from a failed lexical screen. These are routing improvements, not a promise
+that any particular source will be reachable.
 
 ## The plan is approved before work
 
@@ -37,9 +46,9 @@ the total price is unknown; this is a bounded-work plan, not a dollar cap.
 There are no background runs. The mock lane remains one offline fixture and
 does not fetch sources. Previously frozen proposals without a research plan
 retain the original single-call behavior; prepare a new proposal to use this
-feature. A frozen revision-one research proposal is refused before dispatch;
-prepare a new revision-two proposal. Quoteless work may therefore use more
-of the same disclosed allowance than the faulty early-stop path did. Other
+feature. Frozen revision-one and revision-two research proposals are refused
+before dispatch; prepare a new revision-three proposal. A pass may use more
+of the same disclosed allowance than an older stopping policy did. Other
 lanes retain their existing search allowances.
 
 The configured model receives the focused record, recent context, failure
@@ -57,10 +66,23 @@ completion guarantee.
 
 The controller first considers saved, unused leads. Discovery then tries a
 readable primary text, a different edition/archive, and a more precise
-passage search. Later requests receive actual earlier failures. The whole
-pending queue is ranked by distinct meaningful work/question terms and
-text/catalog metadata hints; newer strategies win ties. Domains receive no
-reputation bonus. A model saying
+passage search. Every read batch leaves at least one read available for each
+remaining search strategy. With a full inherited queue, this can allocate
+two initial reads, then two, one and one after the three search strategies.
+A new question with no initial reads can use two after each strategy. Empty
+or failed searches do not release later strategies' reservations early;
+unused reads become available once the discovery strategies have run.
+Quotation matches and revalidated answer-only retries retain their shortcuts.
+
+Discovery is explicitly told that the reader accepts public HTML/plain text,
+and to seek a supported edition when a PDF or blocked route cannot be read.
+Later requests receive actual earlier failures, including a bounded summary
+of outcomes carried from a previous pass. The whole pending queue first
+orders possible text ahead of catalog-like links and unsupported-format
+hints, then uses distinct meaningful work/question terms and text metadata;
+newer strategies win ties. Catalog URL patterns and file suffixes are hints,
+not hard exclusions: the links remain saved and may still be attempted if
+no better candidate is pending. Domains receive no reputation bonus. A model saying
 "every search failed" cannot cancel the mechanical source checks. An empty
 discovery explanation cannot discard otherwise usable returned citations.
 
@@ -83,6 +105,15 @@ such as will are retained. That selection is
 labeled with offsets and method and does not verify relevance. Omitted text
 is disclosed. Generated prose remains advisory and may still be wrong; the
 mechanical evidence panel is independent of it.
+
+When the recorded readable-source count is explicitly zero, the result puts
+"No source text retrieved" above the explanation and identifies the model
+explanation as unverified. That count cannot establish whether the model used
+recall, the supplied context or inference. A failed final answer gets a separate unavailable
+notice. Readable-but-excluded excerpts get a distinct warning. Missing legacy
+counts are not treated as zero; reused readable sources still count as
+evidence even when the current pass makes no new source requests. Fixture
+results keep their fixture identification.
 
 Excerpt screening records meaningful question/work matches and generic
 catalog or access-page hints. A useful passage merely mentioning a catalog
@@ -109,7 +140,7 @@ quotation match cannot finish that new question. If the provider returns a
 previously saved full-work URL again, its bytes can supply a newly selected
 excerpt without another download. A source-only continuation with an available
 answer also performs fresh discovery. Retrying an unavailable final answer
-can reuse a completed revision-two pass with revalidated useful excerpts
+can reuse a completed revision-two-or-later pass with revalidated useful excerpts
 without another search. An older landing-page result has no such shortcut.
 
 If the final model request fails or returns unusable JSON, a deterministic
@@ -157,14 +188,16 @@ late-chapter selection and final-answer failure have explicit checks.
 python -m pytest tests/test_deeper.py tests/test_deeper_integration.py \
   tests/test_acquisition_usage.py tests/test_evidence_fetch.py \
   tests/test_evidence_research.py tests/test_evidence_quality.py \
-  tests/test_quoteless_research.py tests/test_producer_launch.py \
+  tests/test_quoteless_research.py tests/test_retrieval_routes.py \
+  tests/test_producer_launch.py \
   tests/test_connect_instruments.py -q
 python tests/test_global_constraints.py
 PYTHON=python bash tests/journeys/run-deeper.sh
 node tests/journeys/deeper-evidence.js
 ```
 
-Revision two is prepared against `1abc1ecc9eb4be8a766e428e0b0aa05053d124e3`.
+Revision three is prepared against `d329c19c7691bcfc7ce391e91e21dcc3886c2fd3`.
+Revision two was based on `1abc1ecc9eb4be8a766e428e0b0aa05053d124e3`.
 The original evidence package was based on `38b94207cbcf9f1e6d40249df08cc10e215558a1`.
 Apply the incremental patch
 on a branch of the current Mac checkout, preserving newer Ledger, backup,

@@ -164,3 +164,112 @@ def test_inputs_are_bounded_and_malformed_metadata_stays_neutral():
                                     work="Confessions", question="gaudium")
     assert result["matched_question_terms"] == []
     assert "assessment_input_truncated" in result["reason"]
+
+
+def test_observed_book_listing_routes_are_inspectable_domain_neutral_hints():
+    kwargs = {"work": "Dante Inferno", "question": "contrapasso justice"}
+    for path, signal in [
+        ("/book/show/15645.Inferno", "book_show_id_path"),
+        ("/book/show/15645", "book_show_id_path"),
+        ("/book/9780262544321/", "book_isbn_path"),
+        ("/book/0-262-54432-6", "book_isbn_path"),
+        ("/book/080520041X", "book_isbn_path"),
+    ]:
+        row = {"title": "Dante Inferno — contrapasso and justice"}
+        one = quality.rank_candidate({**row, "url": "https://goodreads.com" + path}, **kwargs)
+        two = quality.rank_candidate({**row, "url": "https://texts.example" + path}, **kwargs)
+        assert one == two
+        assert one["retrieval_tier"] == 1
+        assert one["candidate_kind"] == "catalog_like"
+        assert one["metadata_signals"]["route_catalog_indications"] == [signal]
+        assert "url_indicates_book_listing" in one["reason"]
+        assert one["matched_question_terms"] == ["contrapasso", "justice"]
+        assert one["relevance_verified"] is False
+
+
+def test_readable_book_paths_are_not_demoted_for_generic_book_slug_or_numbers():
+    for path in ["/book/inferno", "/book/inferno/chapter-5", "/book/12345",
+                 "/book/show/justice", "/book/9780262544321/chapter-5"]:
+        result = quality.rank_candidate({"url": "https://example.org" + path,
+                                         "title": "Dante Inferno full text"},
+                                        work="Dante Inferno", question="contrapasso")
+        assert result["candidate_kind"] == "text_indicated", path
+        assert result["retrieval_tier"] == 0, path
+        assert result["metadata_signals"]["route_catalog_indications"] == [], path
+
+
+def test_full_text_title_cannot_erase_specific_book_listing_route():
+    result = quality.rank_candidate({"title": "Full text of Dante Inferno",
+                                     "url": "https://example.org/book/9780262544321"},
+                                    work="Dante Inferno", question="contrapasso")
+    assert result["metadata_signals"]["text_indications"] == ["full text"]
+    assert result["candidate_kind"] == "catalog_like"
+    assert result["retrieval_tier"] == 1
+
+
+def test_direct_pdf_suffix_is_deferred_despite_full_text_title_and_term_hits():
+    result = quality.rank_candidate({"title": "Dante Inferno full text: contrapasso justice",
+                                     "url": "https://example.org/text/INFERNO.PDF?download=1#page=4"},
+                                    work="Dante Inferno", question="contrapasso justice")
+    assert result["retrieval_tier"] == 2
+    assert result["unsupported_format_hint"] == "pdf"
+    assert result["candidate_kind"] == "text_indicated"
+    assert result["matched_question_terms"] == ["contrapasso", "justice"]
+    assert "url_suffix_indicates_unsupported_pdf" in result["reason"]
+    assert result["relevance_verified"] is False
+
+
+def test_pdf_in_query_fragment_or_title_is_not_direct_format_hint():
+    for row in [
+        {"url": "https://example.org/text/inferno?next=book.pdf"},
+        {"url": "https://example.org/text/inferno#inferno.pdf"},
+        {"url": "https://example.org/text/inferno", "title": "Inferno.pdf full text"},
+        {"url": "https://example.org/essay.pdf.html"},
+    ]:
+        result = quality.rank_candidate(row, work="Inferno", question="contrapasso")
+        assert result["retrieval_tier"] == 0
+        assert result["unsupported_format_hint"] is None
+        assert "url_suffix_indicates_unsupported_pdf" not in result["reason"]
+
+
+def test_route_hints_decode_path_once_and_remain_bounded():
+    kwargs = {"work": "Inferno", "question": "contrapasso"}
+    encoded = quality.rank_candidate({"url": "https://example.org/book/%39%37%38%30%32%36%32%35%34%34%33%32%31"}, **kwargs)
+    assert encoded["retrieval_tier"] == 1
+    assert quality.rank_candidate({"url": "https://example.org/inferno%2Epdf"}, **kwargs)["retrieval_tier"] == 2
+    assert quality.rank_candidate({"url": "https://example.org/inferno%252Epdf"}, **kwargs)["retrieval_tier"] == 0
+    for suffix in [".pdf", "/book/9780262544321"]:
+        result = quality.rank_candidate({"url": "https://example.org/" + "a" * quality.MAX_METADATA_FIELD + suffix}, **kwargs)
+        assert result["retrieval_tier"] == 0
+        assert result["unsupported_format_hint"] is None
+
+
+def test_tiers_keep_term_scores_useful_and_stable_within_each_tier():
+    rows = [
+        {"url": "https://example.org/inferno.pdf", "title": "Dante Inferno justice full text"},
+        {"url": "https://example.org/book/show/12.Inferno", "title": "Dante Inferno justice"},
+        {"url": "https://example.org/book/show/13.Inferno", "title": "Dante Inferno justice"},
+        {"url": "https://example.org/unknown-a"},
+        {"url": "https://example.org/unknown-b"},
+        {"url": "https://example.org/text/inferno", "title": "Dante Inferno justice"},
+    ]
+    ranked = [(row, quality.rank_candidate(row, work="Dante Inferno", question="justice")) for row in rows]
+    ordered = sorted(ranked, key=lambda item: (item[1]["retrieval_tier"], -item[1]["score"]))
+    assert [item[0] for item in ordered] == [rows[5], rows[3], rows[4], rows[1], rows[2], rows[0]]
+    assert ordered[-1][1]["score"] > ordered[1][1]["score"]
+
+
+def test_explicit_listing_route_adds_excerpt_hint_without_verdict():
+    result = quality.assess_excerpt("Justice and contrapasso in Dante's Inferno.",
+                                    work="Dante Inferno", question="justice contrapasso",
+                                    title="Inferno full text",
+                                    url="https://example.org/book/show/15645.Inferno")
+    assert result["weak"] is True
+    assert result["metadata_signals"]["route_catalog_indications"] == ["book_show_id_path"]
+    assert result["relevance_verified"] is False
+    # Actual text can still overcome a metadata hint, just as before.
+    body = quality.assess_excerpt("Full text: justice and contrapasso in Inferno.",
+                                  work="Dante Inferno", question="justice contrapasso",
+                                  url="https://example.org/book/show/15645.Inferno")
+    assert body["weak"] is False
+    assert body["relevance_verified"] is False

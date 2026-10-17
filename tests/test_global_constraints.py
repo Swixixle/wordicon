@@ -6534,7 +6534,8 @@ def _check_deeper_wing():
     for f in ("tests/test_deeper.py", "tests/test_deeper_integration.py", "scripts/deeper.py", "webapp/deeper.js",
               "scripts/evidence_fetch.py", "scripts/evidence_research.py", "scripts/evidence_quality.py",
               "tests/test_acquisition_usage.py", "tests/test_evidence_fetch.py", "tests/test_evidence_research.py",
-              "tests/test_evidence_quality.py", "tests/test_quoteless_research.py", "tests/test_deposition_door.py"):
+              "tests/test_evidence_quality.py", "tests/test_quoteless_research.py", "tests/test_deposition_door.py",
+              "tests/test_retrieval_routes.py"):
         if not (root / f).exists():
             out.append(f"DEEPER: {f} is missing — the wing shipped without its parts")
     if out:
@@ -6600,6 +6601,23 @@ def _check_deeper_wing():
     _erD = (root / "scripts" / "evidence_research.py").read_text(encoding="utf-8")
     if "quote_located" not in _erD or "retrieval_policy_rev" not in _erD:
         out.append("DEEPER: the controller lost its revision-two stopping contract (quote_located / retrieval_policy_rev)")
+    # revision three (2026-10-17, the Dante run): reads are reserved for later
+    # search strategies, likely text outranks catalog/PDF hints by TIER (never
+    # exclusion), and continuations carry the prior pass's bounded failure
+    # outcomes into discovery. Behavior is pinned in test_retrieval_routes.py;
+    # these hold the load-bearing names.
+    for need, why in (("reserved_reads", "the per-strategy read reservation"),
+                      ("retrieval_tier", "tier-before-score ordering"),
+                      ("prior_pass_outcomes", "the carried failure outcomes")):
+        if need not in _erD:
+            out.append(f"DEEPER: the revision-three controller lost {why} ({need!r})")
+    if "retrieval_tier" not in (root / "scripts" / "evidence_quality.py").read_text(encoding="utf-8"):
+        out.append("DEEPER: the ranking helper no longer assigns retrieval tiers")
+    _djs3 = (root / "webapp" / "deeper.js").read_text(encoding="utf-8")
+    if "No source text retrieved — model explanation, unverified." not in _djs3:
+        out.append("DEEPER: the zero-sources notice lost its exact sentence — an unsupported explanation reads as supported")
+    if "No retrieved text retained for grounding" not in _djs3:
+        out.append("DEEPER: readable-but-excluded text is no longer distinguished from failed retrieval")
     _srvD = (root / "server.py").read_text(encoding="utf-8")
     if '"title": snap.get("title") or snap.get("source_title")' not in _srvD:
         out.append("DEEPER: a focused step's history row does not lead with its own title — "
@@ -6614,6 +6632,7 @@ def _check_deeper_wing():
     r = _spD.run([_sysD.executable, "-m", "pytest", "tests/test_deeper.py", "tests/test_deeper_integration.py",
                   "tests/test_acquisition_usage.py", "tests/test_evidence_fetch.py", "tests/test_evidence_research.py",
                   "tests/test_evidence_quality.py", "tests/test_quoteless_research.py", "tests/test_deposition_door.py",
+                  "tests/test_retrieval_routes.py",
                   "-q", "-p", "no:cacheprovider"],
                  cwd=root, capture_output=True, text=True, timeout=600)
     if r.returncode != 0:

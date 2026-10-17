@@ -140,7 +140,24 @@
     const limits = plan.limits || plan;
     const items = [[limits.max_search_rounds, 'search rounds'], [limits.max_source_reads, 'direct source reads'], [limits.max_model_calls, 'model calls']]
       .filter(([value]) => countKnown(value)).map(([value, label]) => value + ' ' + label);
-    return `<div class="deeper-research-plan">${message('Evidence checking: ' + (items.length ? 'up to ' + items.join(', ') + '.' : 'within the frozen research limits.'))}${plan.version >= 2 ? message('For a question without exact quoted wording, checking continues through the available source-read or search allowance. Finding readable text or matching topic terms does not establish that the answer is supported.') : ''}${message('If an attempt fails, checking can continue through other source leads and targeted follow-up searches within those limits. Search and model token charges may apply; actual cost is unknown until reported. Reaching a limit preserves the evidence and remaining question for a separately reviewed continuation.')}</div>`;
+    return `<div class="deeper-research-plan">${message('Evidence checking: ' + (items.length ? 'up to ' + items.join(', ') + '.' : 'within the frozen research limits.'))}${plan.version >= 2 ? message('For a question without exact quoted wording, checking continues through the available source-read or search allowance. Finding readable text or matching topic terms does not establish that the answer is supported.') : ''}${plan.version >= 3 ? message('Links that look like readable pages are tried first. Some reads are kept for later search approaches, so the first set of links cannot use the whole allowance.') : ''}${message('If an attempt fails, checking can continue through other source leads and targeted follow-up searches within those limits. Search and model token charges may apply; actual cost is unknown until reported. Reaching a limit preserves the evidence and remaining question for a separately reviewed continuation.')}</div>`;
+  }
+
+  function evidenceNoticeHtml(result) {
+    const research = result.evidence_research;
+    if (result.is_fixture || !research || typeof research !== 'object' || !countKnown(research.source_count)) return '';
+    const hasExplanation = typeof result.explanation === 'string' && result.explanation.trim().length > 0;
+    let notice = '';
+    if (research.source_count === 0) {
+      notice = research.final_answer_status === 'unavailable'
+        ? 'No source text retrieved — no model explanation available.'
+        : hasExplanation ? 'No source text retrieved — model explanation, unverified.' : 'No source text retrieved.';
+    } else if (research.usable_source_count === 0) {
+      notice = research.final_answer_status === 'unavailable'
+        ? 'No retrieved text retained for grounding — no model explanation available.'
+        : hasExplanation ? 'No retrieved text retained for grounding — explanation remains unverified.' : 'No retrieved text retained for grounding.';
+    }
+    return notice ? `<div class="deeper-evidence-notice" role="note"><p class="body" style="font-size:13px"><strong>${esc(notice)}</strong></p></div>` : '';
   }
 
   function sourceScreeningHtml(sources) {
@@ -257,6 +274,7 @@
       <div class="result-title">${esc(result.title || titleOf(context))}</div>
       ${work ? message(work) : ''}
       ${result.question || context.question ? `<p class="body" style="font-size:13px"><strong>Your question</strong> · ${esc(result.question || context.question)}</p>` : ''}
+      ${evidenceNoticeHtml(result)}
       ${result.explanation ? paragraph(result.explanation) : message('This result has no explanation recorded.')}
       ${result.context_notes ? `<div class="section-label">In context</div>${paragraph(result.context_notes)}` : ''}
       ${result.source_guidance ? `<div class="section-label">Into the work itself</div>${paragraph(result.source_guidance)}` : ''}

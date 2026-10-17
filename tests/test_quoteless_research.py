@@ -1,4 +1,6 @@
 """Regressions for bounded research when a question has no exact quote target."""
+import pytest
+
 from test_evidence_research import (FakeGateway, context, execute, final_evidence, found,
                                     isolated, lead, research)
 
@@ -187,7 +189,8 @@ def test_old_failed_final_on_readable_landing_page_requires_new_research(isolate
     assert result["evidence_research"]["status"] == "candidate_passages_found"
 
 
-def test_useful_v2_failed_final_can_retry_answer_using_saved_passages(isolated):
+@pytest.mark.parametrize("parent_policy", [2, 3])
+def test_useful_completed_pass_can_retry_answer_using_saved_passages(isolated, parent_policy):
     _, reads, responses = isolated
     url = "https://archive.example/book-x"
     responses[url] = found(url, PASSAGE.encode())
@@ -195,6 +198,7 @@ def test_useful_v2_failed_final_can_retry_answer_using_saved_passages(isolated):
     first = execute(FakeGateway(discovery_rounds([url]), final=RuntimeError("Final transport failed")),
                     ctx, trace="trace_v2_final_failed")
     parent = {**first, "trace_id": "trace_v2_final_failed", "mode": "deepen"}
+    parent["evidence_research"]["retrieval_policy_rev"] = parent_policy
     continuation = question_context(research_resume=research.freeze_resume(parent),
                                     research_goal=research.goal(parent, ctx["root"], continue_evidence=True))
     assert continuation["research_goal"]["requires_new_source"] is False

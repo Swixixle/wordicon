@@ -12,7 +12,7 @@ import unicodedata
 from urllib.parse import unquote, urlsplit
 
 
-VERSION = 1
+VERSION = 2
 MAX_TERMS = 128
 MAX_TERM_INPUT = 40000
 MAX_EXCERPT_INPUT = 200000
@@ -90,6 +90,36 @@ def _url_text(value: str) -> str:
     return unquote(" ".join((parsed.path, parsed.query, parsed.fragment)))[:MAX_METADATA_FIELD]
 
 
+def _url_route_hints(value: str) -> dict:
+    """Inspect bounded URL paths only; page and format hints remain fallible.
+
+    A query mentioning a PDF is not a direct PDF URL. Book routes here are
+    deliberately narrow: a numeric show id or ISBN-shaped identifier, not
+    every /book/<slug> path. No host, response, or content is consulted.
+    """
+    try:
+        path = unquote(urlsplit(_string(value, MAX_METADATA_FIELD)).path)
+    except ValueError:
+        path = ""
+    path = _normalized(path, MAX_METADATA_FIELD)
+    parts = [part for part in path.split("/") if part]
+    catalog = []
+    for index, part in enumerate(parts):
+        if part != "book":
+            continue
+        following = parts[index + 1:]
+        if (len(following) == 2 and following[0] == "show"
+                and re.fullmatch(r"[0-9]+(?:[._-][^/]+)?", following[1])):
+            catalog.append("book_show_id_path")
+        if len(following) == 1:
+            # This identifies ISBN-like shapes, not valid registered ISBNs.
+            identifier = following[0].replace("-", "")
+            if re.fullmatch(r"(?:[0-9]{9}[0-9x]|97[89][0-9]{10})", identifier):
+                catalog.append("book_isbn_path")
+    return {"catalog": list(dict.fromkeys(catalog)),
+            "unsupported_format_hint": "pdf" if path.endswith(".pdf") else None}
+
+
 def _phrase_text(value: str) -> str:
     return " ".join(_TOKENS.findall(_normalized(value, MAX_METADATA_FIELD * 3)))
 
@@ -121,10 +151,17 @@ def _kind(title: str, url: str, extra: str = "") -> dict:
     if path_words & {"text", "texts", "txt", "transcript", "transcription"}:
         full = list(dict.fromkeys(full + ["text_path"]))
     catalog, access = _markers(metadata, _CATALOG), _markers(metadata, _ACCESS)
-    kind = "text_indicated" if full else "catalog_like" if catalog or access else "unknown"
+    route = _url_route_hints(url)
+    catalog += route["catalog"]
+    # A specific book-listing route survives a title advertising full text.
+    # Less specific catalog metadata keeps the pre-existing text preference.
+    kind = ("catalog_like" if route["catalog"] else "text_indicated" if full
+            else "catalog_like" if catalog or access else "unknown")
     return {"candidate_kind": kind,
+            "unsupported_format_hint": route["unsupported_format_hint"],
             "metadata_signals": {"text_indications": full, "catalog_indications": catalog,
-                                 "access_indications": access}}
+                                 "access_indications": access,
+                                 "route_catalog_indications": route["catalog"]}}
 
 
 def _matches(work: str, question: str, haystack: str, limit: int) -> dict:
@@ -137,11 +174,13 @@ def _matches(work: str, question: str, haystack: str, limit: int) -> dict:
 
 
 def rank_candidate(row: dict, *, work: str, question: str) -> dict:
-    """Return a score and its inspectable signals; caller keeps ties stable.
+    """Return a retrieval tier, score and signals; caller keeps ties stable.
 
     Counts are distinct terms, so repeating boilerplate cannot inflate them.
     Known row fields only are used. Snippets are untrusted provider metadata,
     not the document itself and never proof of content or credibility.
+    Lower retrieval tiers put possible text before catalog or unsupported
+    format hints. Tiers defer reads rather than excluding any candidate.
     """
     row = row if isinstance(row, dict) else {}
     title, url = _string(row.get("title"), MAX_METADATA_FIELD), _string(row.get("url"), MAX_METADATA_FIELD)
@@ -168,9 +207,15 @@ def rank_candidate(row: dict, *, work: str, question: str) -> dict:
     elif kind["candidate_kind"] == "catalog_like":
         score -= 20
         reason.append("metadata_indicates_catalog_or_access_page")
+    if kind["metadata_signals"]["route_catalog_indications"]:
+        reason.append("url_indicates_book_listing")
+    unsupported = kind["unsupported_format_hint"]
+    if unsupported:
+        reason.append("url_suffix_indicates_unsupported_pdf")
+    retrieval_tier = 2 if unsupported else 1 if kind["candidate_kind"] == "catalog_like" else 0
     if not reason:
         reason.append("no_ordering_signal")
-    return {"version": VERSION, "score": score, **matches, **kind,
+    return {"version": VERSION, "retrieval_tier": retrieval_tier, "score": score, **matches, **kind,
             "reason": reason, "relevance_verified": False}
 
 

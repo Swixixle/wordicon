@@ -1,5 +1,50 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.46.0 — Revision three: routes, reservations, and the honest zero
+
+Received from the other builder (Codex) as Nikodemus-Retrieval-Routes-r3,
+cross-examined and integrated onto the current line. The Dante run showed
+the defect honestly: two inherited reads plus two reads after each of the
+first two searches exhausted the six-read allowance before the third
+search strategy ever ran — six failed requests, among them a PDF the
+reader cannot extract and two book listings, and no readable text.
+
+Three changes, all within the existing frozen limits (3 searches, 6
+reads, 4 model requests). The controller now reserves one source read
+per remaining search strategy, so early failures cannot spend the final
+strategy's reads (inherited queue: 2, then 2, 1, 1; fresh question: 2,
+2, 2; unused reads drain after the strategies have run, and an empty
+search releases nothing early). The pending queue orders by retrieval
+TIER before lexical score: likely readable text, then catalog-shaped
+routes (narrow /book/show/<id> and ISBN-shaped paths, no domain
+reputation), then explicit .pdf hints — tiers defer reads, never exclude
+a candidate, and every hint is recorded as a hint. Continuation
+discovery now carries a bounded summary (18, counted when truncated) of
+the previous pass's URL outcomes, and the search prompt tells discovery
+plainly that the reader accepts only public HTML and plain text and
+should seek a readable edition rather than claim a PDF was read.
+
+The honest zero reaches the page: a result whose pass recorded exactly
+zero readable sources puts "No source text retrieved — model
+explanation, unverified." above the explanation; readable-but-excluded
+text gets its own distinct line; an unavailable answer is never dressed
+as an available one; missing or malformed legacy counts never become a
+false zero; fixtures stay labeled fixtures. The research plan version
+moves to 3, so frozen revision-one and revision-two proposals refuse
+before dispatch — prepare a fresh proposal.
+
+Their patch (8 files) applied onto this line with one reject — their
+hunk predated the journeys' page-error allowlist (v1.45.0), hand-applied
+beside the guard. Integration kept the Deflate door, the W2 reporter and
+every house pin intact: the full wing (265 tests here, their
+test_retrieval_routes.py included) passed on the merged tree first try.
+Their counts reconciled exactly: 292 claimed − the same 38 tests that
+live in two files their tree carries and this repo does not = 254 wing
+tests + our 11 deposition-door tests = 265; their 63 evidence-UI
+Chromium checks reproduce here exactly. Four sabotages (reservation
+zeroed, tier ignored, failure carryover dropped, banner softened) each
+failed by name — the first three caught by their own regressions.
+
 ## v1.45.0 — The Deflate door: an imported reading becomes a subject
 
 The federation and the exploration lane meet (ADR extraction, W1

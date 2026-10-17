@@ -11,6 +11,7 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
   try {
     const page = await browser.newPage({viewport:{width:390,height:844}});
     const requests = [], errors = [];
+    let proposalVersion = 3;
     page.on('pageerror', error => { if (!require('./lib').benignPageError(error)) errors.push(String(error)); });
     await page.route('**/*', async route => {
       const request = route.request();
@@ -20,7 +21,7 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
           available:true, calls:4, cost:'unknown', lane:{external:true, model:'fixture-model'},
           exploration:{question:request.postDataJSON().inputs.question, root:{trace_id:'root_fixture'},
             research_goal:request.postDataJSON().inputs.continue_evidence ? {kind:'continue_evidence',question:'What does the later chapter say about memory?'} : {kind:'followup_question',question:request.postDataJSON().inputs.question},
-            research_plan:{version:2,limits:{max_search_rounds:3,max_source_reads:6,max_model_calls:4}}},
+            research_plan:{version:proposalVersion,limits:{max_search_rounds:3,max_source_reads:6,max_model_calls:4}}},
         }})});
       }
       return route.fulfill({contentType:'text/html', body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><main id="result"></main>'});
@@ -57,6 +58,30 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
     const research = {status:'quote_located',target_quote:'The exact source wording.',source_count:1,rounds_used:1,sources_tried:2,checkpoint_id:'checkpoint_fixture',
       proofs:[{url:'https://example.test/book',final_url:'https://example.test/book-x',body_sha256:'a'.repeat(64),match:{match_type:'exact',section_path:['Book X','Chapter 8'],start:42,end:67,excerpt:'Before. The exact source wording. After.'}}],
       steps:[{kind:'read',status:'retrieved',url:'https://example.test/book-x'}]};
+    const noSources = {...research,status:'needs_more_evidence',source_count:0,usable_source_count:0,proofs:[],sources_tried:6};
+    text = await render({evidence_research:noSources});
+    ok(await page.locator('.deeper-evidence-notice').isVisible() && text.includes('No source text retrieved — model explanation, unverified.'), 'explicit zero retrieved texts visibly labels the model explanation as unverified');
+    ok(await page.locator('.deeper-evidence-notice').evaluate(el => el.nextElementSibling.textContent === 'Every search attempt failed.'), 'the evidence notice immediately precedes the preserved explanation');
+    text = await render({evidence_research:{...noSources,final_answer_status:'unavailable'}});
+    ok(text.includes('No source text retrieved — no model explanation available.') && !text.includes('model explanation, unverified'), 'an unavailable answer is not presented as an available explanation');
+    await render({explanation:'',evidence_research:noSources});
+    ok(await page.locator('.deeper-evidence-notice').innerText() === 'No source text retrieved.', 'an absent explanation does not gain a claim that an explanation is available');
+    let missingOrInvalidCountsUnlabeled = true;
+    for (const source_count of [undefined,null,'0',false,-1,1.5]) {
+      await render({evidence_research:{...noSources,source_count}});
+      missingOrInvalidCountsUnlabeled &&= await page.locator('.deeper-evidence-notice').count() === 0;
+    }
+    ok(missingOrInvalidCountsUnlabeled, 'missing and malformed source counts never become a false zero-source claim');
+    await render({evidence_research:undefined});
+    ok(await page.locator('.deeper-evidence-notice').count() === 0, 'legacy results without research records have no invented source status');
+    await render({is_fixture:true,evidence_research:noSources});
+    ok(await page.locator('.deeper-evidence-notice').count() === 0, 'fixture zero-source counts never imply a live retrieval attempt');
+    text = await render({evidence_research:{...noSources,source_count:2}});
+    ok(text.includes('No retrieved text retained for grounding — explanation remains unverified.') && !text.includes('No source text retrieved'), 'readable but weak pages are distinguished from retrieval failure');
+    await render({evidence_research:{...noSources,source_count:2,usable_source_count:1,fresh_source_count:0,sources_tried:0}});
+    ok(await page.locator('.deeper-evidence-notice').count() === 0, 'saved usable text is not mislabeled as missing evidence when no new sources were read');
+    await render({explanation:'<img src=x onerror=alert(1)>',evidence_research:noSources});
+    ok(await page.locator('.deeper-result img').count() === 0 && (await page.locator('.deeper-result').innerText()).includes('<img src=x onerror=alert(1)>'), 'explanation content remains escaped beside the evidence notice');
     text = await render({acquisition_usage:acquisition,evidence_research:research});
     ok(text.includes('Quotation wording located in retrieved text') && text.includes('does not by itself establish authorship'), 'located wording has a precise limited evidence claim');
     ok(text.includes('Before. The exact source wording. After.'), 'source excerpt is visible beside its safe source link');
@@ -127,14 +152,17 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
     ok(text.includes('Evidence question · What does the later chapter say about memory?'), 'continuation proposal exposes the substantive frozen evidence question');
     ok(text.includes('3 search rounds, 6 direct source reads, 4 model calls') && text.includes('actual cost is unknown'), 'proposal states the frozen contingency and cost limits');
     ok(text.includes('For a question without exact quoted wording, checking continues through the available source-read or search allowance.') && text.includes('matching topic terms does not establish that the answer is supported'), 'revision-two proposal states the quoteless continuation and support limit');
+    ok(text.includes('Links that look like readable pages are tried first.') && text.includes('Some reads are kept for later search approaches'), 'revision-three proposal explains heuristic readable-page ordering and reserved reads in plain language');
     ok(text.includes('Public source hosts receive bounded unauthenticated GETs') && text.includes('retrieved excerpts and failure summaries go to the configured model'), 'proposal discloses source requests and model-bound evidence');
     ok(text.includes('Nothing has started.') && requests.every(r => !r.url.endsWith('/api/operations')), 'continuation retains the explicit Start gate');
     await page.locator('.deeper-proposal [data-deeper-action="cancel"]').click();
+    proposalVersion = 2;
     await page.locator('.deeper-result textarea').fill('How does the argument differ in the next book?');
     await page.getByRole('button',{name:'Review next step',exact:true}).click();
     await page.locator('.deeper-proposal').waitFor();
     const newQuestion = requests.filter(r => r.method === 'POST').at(-1).body;
     ok(newQuestion.inputs.question === 'How does the argument differ in the next book?' && !Object.prototype.hasOwnProperty.call(newQuestion.inputs, 'continue_evidence'), 'a new follow-up resets continuation intent and has no continuation flag');
+    ok(!(await page.locator('.deeper-proposal').innerText()).includes('Some reads are kept for later search approaches'), 'an older frozen proposal does not promise revision-three allocation');
     ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'evidence and proposal fit a phone-width viewport');
     ok(errors.length === 0, 'no browser script errors');
     ok(requests.every(r => new URL(r.url).origin === 'http://127.0.0.1:8499'), 'no request leaves the intercepted fixture origin');
