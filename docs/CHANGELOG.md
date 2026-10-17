@@ -1,5 +1,43 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.43.0 — Evidence and contingencies: the model's prose stops being the referee
+
+The first two live Go deeper runs exposed the same defect twice: the model
+wrote "every search attempt failed" while the provider's own record showed
+one successful search and attached leads — and the record, as kept, could
+not adjudicate the disagreement. This wing, built by Codex against its own
+branch and integrated here, closes that whole class. The lane now retrieves
+public text itself: a proposal freezes a research plan — at most 3 search
+requests, 6 credential-free source reads (2 MiB, 3 revalidated redirects,
+public HTML/plain text only), 4 model requests, each one HTTP attempt, no
+background continuation — and Start is the only thing that spends it. The
+fetcher refuses private and mixed DNS answers whole, pins the validated
+address, verifies TLS against the original host, and names every failure;
+retrieved bodies are content-addressed under local_state/deeper_evidence/
+and the recalled quotation is located mechanically with Moira's matcher.
+quote_located proves wording presence in those bytes — never authorship,
+edition authority or interpretation; nothing is admitted to the Library and
+no support ruling is issued. Acquisition outcomes are recorded per block, so
+the model's prose can no longer cancel a mechanical check, and the card
+shows the recorded acquisition beside whatever the model claims. Continue
+checking resumes unfinished evidence under a fresh approved plan; unresolved
+work survives an exhausted allowance as named gaps.
+
+Integrated with the house adjustments: the wing's 155 new pytest pins run
+inside the constraint suite beside the first 46 — and one integration
+experiment is recorded honestly: deleting the guard's is_private clause
+fails no test because is_global alone already excludes every private and
+special range (CGNAT included), so the clause is redundant armor, not a
+gap; the suite now drives the guard's observable behavior directly with
+the canonical non-public answers anyway, so a future weakening of ANY
+clause fails by name; the evidence journey rides
+the journey runner and its totals; the proposal's disclosure names what now
+leaves the machine (the question to the search provider, GETs to public
+source hosts). Also his rail finding, fixed and pinned: a focused step's
+history row now leads with its own title — source-title-first made the rail
+deduplicate every new step into the first row, so new work never appeared.
+Live source quality and Safari remain unverified until his next press.
+
 ## v1.42.2 — The lanes ruled: cheap by measurement, local by custody (documentation only)
 
 Asked whether to "start using cheap models that learn as well," ruled the

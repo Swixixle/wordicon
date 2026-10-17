@@ -5961,7 +5961,11 @@ def api_history():
             root = (snap.get("context") or {}).get("root") or {}
             items.append({"trace_id": trace_id, "operation": "deepen",
                           "created_at": snap.get("created_at", ""),
-                          "title": snap.get("source_title") or snap.get("title") or "Go deeper",
+                          # the run's OWN title leads: two steps on one subject are two
+                          # rows in Recent and the rail, not one row swallowing the other
+                          # (his finding, 2026-10-17: the rail deduplicates by label, so
+                          # source_title-first made every new step invisible)
+                          "title": snap.get("title") or snap.get("source_title") or "Go deeper",
                           "decision": None, "receipt_id": receipt.get("receipt_id", path.stem),
                           "subject_key": str(root.get("trace_id") or trace_id) + ":" + str(root.get("thread_index", ""))})
             continue

@@ -6531,7 +6531,9 @@ def _check_deeper_wing():
     the journey runner's work loop and its totals."""
     out = []
     root = Path(cli.__file__).parent.parent
-    for f in ("tests/test_deeper.py", "tests/test_deeper_integration.py", "scripts/deeper.py", "webapp/deeper.js"):
+    for f in ("tests/test_deeper.py", "tests/test_deeper_integration.py", "scripts/deeper.py", "webapp/deeper.js",
+              "scripts/evidence_fetch.py", "scripts/evidence_research.py", "tests/test_acquisition_usage.py",
+              "tests/test_evidence_fetch.py", "tests/test_evidence_research.py"):
         if not (root / f).exists():
             out.append(f"DEEPER: {f} is missing — the wing shipped without its parts")
     if out:
@@ -6541,10 +6543,32 @@ def _check_deeper_wing():
         out.append("DEEPER: the deeper journey does not run in the journey runner's work loop")
     if '"$JOURNEY_OUT"/deeper.log' not in _runsh:
         out.append("DEEPER: the deeper journey's checks are not counted in the runner's total")
+    if "JOURNEY deeper-evidence OK" not in _runsh or '"$JOURNEY_OUT"/deeper-evidence.log' not in _runsh:
+        out.append("DEEPER: the evidence journey does not run and count in the journey runner")
     import actions as _acD
     _dpn = _acD.BY_ID.get("explore.deepen") or {}
     if _dpn.get("rail") is not False:
         out.append("DEEPER: explore.deepen is on the rail — the Explore rail is the ruled five, and this door lives on a saved thread")
+    # The fetcher's public-address guard, driven directly on its observable
+    # behavior. The integration experiment (2026-10-17) that motivated this
+    # is recorded honestly: deleting the guard's is_private clause fails no
+    # test because is_global alone already excludes every private and
+    # special range (CGNAT included) — redundant armor, not a gap. This pin
+    # holds the BEHAVIOR whatever clauses implement it, so a future
+    # weakening of any one of them fails here, by name, with no network.
+    import evidence_fetch as _efD
+    _badD = ("10.0.0.8", "192.168.1.10", "172.16.3.4", "127.0.0.1", "169.254.1.1",
+             "::1", "fe80::1", "fc00::1", "::ffff:10.0.0.8", "0.0.0.0")
+    _leakD = [ip for ip in _badD if _efD._public_ip(ip)]
+    if _leakD:
+        out.append(f"DEEPER: the evidence fetcher calls non-public addresses public ({_leakD}) — "
+                   "a source fetch could reach this machine's own network")
+    if not _efD._public_ip("93.184.216.34") or not _efD._public_ip("2606:2800:220:1:248:1893:25c8:1946"):
+        out.append("DEEPER: the evidence fetcher refuses plainly public addresses — every fetch would fail closed")
+    _srvD = (root / "server.py").read_text(encoding="utf-8")
+    if '"title": snap.get("title") or snap.get("source_title")' not in _srvD:
+        out.append("DEEPER: a focused step's history row does not lead with its own title — "
+                   "the rail deduplicates by label, so every new step on a subject vanishes into the first row")
     try:
         import pytest  # noqa: F401
     except ImportError:
@@ -6553,6 +6577,7 @@ def _check_deeper_wing():
     import subprocess as _spD
     import sys as _sysD
     r = _spD.run([_sysD.executable, "-m", "pytest", "tests/test_deeper.py", "tests/test_deeper_integration.py",
+                  "tests/test_acquisition_usage.py", "tests/test_evidence_fetch.py", "tests/test_evidence_research.py",
                   "-q", "-p", "no:cacheprovider"],
                  cwd=root, capture_output=True, text=True, timeout=600)
     if r.returncode != 0:

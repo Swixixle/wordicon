@@ -2905,12 +2905,16 @@ class Gateway:
             "sdk": _client_versions(),
         })
 
-    def _call_with_attempts(self, stage: str, make_call):
+    def _call_with_attempts(self, stage: str, make_call, *, max_attempts=None):
         """THE gateway boundary. Every HTTP attempt this gateway makes goes
         through here, and every attempt leaves an event before control
         leaves — the failing ones especially, because a run that produced
         nothing is exactly the run whose attempts nobody can otherwise
-        reconstruct."""
+        reconstruct. A bounded operation can lower the attempt limit locally;
+        retries must not silently reset a provider's per-request allowance."""
+        attempt_limit = self.ATTEMPTS if max_attempts is None else max_attempts
+        if type(attempt_limit) is not int or attempt_limit < 1:
+            raise ValueError("max_attempts must be a positive integer")
         rate_limited, transient = self._retryable()
         attempt = 0
         while True:
@@ -2930,13 +2934,18 @@ class Gateway:
                                      t0=t0, t1=time.monotonic(), outcome="error", exc=e)
                 wait = _retry_after_of(e)
                 if (wait is not None and wait <= self.RETRY_AFTER_BUDGET_S
-                        and attempt < self.ATTEMPTS):
+                        and attempt < attempt_limit):
                     print(f"  [gateway] rate limit — the provider asked for {wait:.0f}s; "
                           f"waiting exactly that, once (attempt {attempt})")
                     time.sleep(wait)
                     continue
                 asked = (f"the provider asked for {wait:.0f}s" if wait is not None
                          else "the provider named no wait")
+                if max_attempts is not None and attempt >= attempt_limit:
+                    raise RateLimited(
+                        f"The provider applied a rate limit — {asked}. This bounded operation "
+                        f"has used its {attempt_limit} HTTP attempt(s); it will not retry and "
+                        f"reset the per-request search allowance.", retry_after_s=wait) from e
                 raise RateLimited(
                     f"The provider applied a rate limit and nothing was judged — {asked}, "
                     f"which is outside this run's {self.RETRY_AFTER_BUDGET_S:.0f}s automatic "
@@ -2961,22 +2970,22 @@ class Gateway:
                                                      else "stream_failed_before_content"))
                 if e.saw_content:
                     raise
-                if attempt >= self.ATTEMPTS:
+                if attempt >= attempt_limit:
                     raise
                 backoff = self.BACKOFF_BASE_S * attempt
                 print(f"  [gateway] stream ended before any content after {t1 - t0:.0f}s "
-                      f"({e.cause_class}) — retry {attempt}/{self.ATTEMPTS - 1} in {backoff:.0f}s...")
+                      f"({e.cause_class}) — retry {attempt}/{attempt_limit - 1} in {backoff:.0f}s...")
                 time.sleep(backoff)
                 continue
             except transient as e:
                 t1 = time.monotonic()
                 self._record_attempt(stage=stage, attempt=attempt, started_at=started_at,
                                      t0=t0, t1=t1, outcome="error", exc=e)
-                if attempt >= self.ATTEMPTS:
+                if attempt >= attempt_limit:
                     raise
                 backoff = self.BACKOFF_BASE_S * attempt
                 print(f"  [gateway] call failed after {t1 - t0:.0f}s ({type(e).__name__}) — "
-                      f"retry {attempt}/{self.ATTEMPTS - 1} in {backoff:.0f}s...")
+                      f"retry {attempt}/{attempt_limit - 1} in {backoff:.0f}s...")
                 time.sleep(backoff)
                 continue
             except BaseException as e:  # noqa: BLE001 — record, then re-raise unchanged
@@ -3835,7 +3844,15 @@ class AnthropicAPIGateway(Gateway):
                  anthropic.InternalServerError))
 
     def complete(self, prompt: str) -> str:
-        response = self._call_with_attempts("complete", lambda: self._create(prompt))
+        return self._complete(prompt)
+
+    def complete_once(self, prompt: str) -> str:
+        """Tool-free explanation with exactly one HTTP attempt."""
+        return self._complete(prompt, max_attempts=1)
+
+    def _complete(self, prompt: str, *, max_attempts=None) -> str:
+        response = self._call_with_attempts("complete", lambda: self._create(prompt),
+                                            max_attempts=max_attempts)
         text = "".join(block.text for block in response.content if hasattr(block, "text"))
         if not text.strip():
             block_types = [type(b).__name__ for b in response.content]
@@ -3876,11 +3893,35 @@ class AnthropicAPIGateway(Gateway):
     DYNAMIC_FILTERING_DEFAULT = "code_execution_20260120"
 
     def complete_with_search(self, prompt: str) -> "tuple[str, list[dict]]":
+        return self._complete_with_search(prompt, tool=dict(self.WEB_SEARCH_TOOL))
+
+    def complete_with_search_budget(self, prompt: str, *, max_uses: int) -> "tuple[str, list[dict]]":
+        """One HTTP attempt with an explicitly disclosed search allowance.
+
+        max_uses is per provider request. Retrying after an ambiguous failure
+        could spend it twice, so this path never retries or resumes a paused
+        provider turn automatically. Full result blocks are requested for the
+        acquisition record; that still does not establish what the model read.
+        Discovery can return useful leads without prose; keep those leads and
+        error-only outcomes for the controller instead of requiring an answer.
+        """
+        if type(max_uses) is not int or not 1 <= max_uses <= 3:
+            raise ValueError("max_uses must be an integer from 1 through 3")
+        tool = {**self.WEB_SEARCH_TOOL, "max_uses": max_uses, "response_inclusion": "full"}
+        self.last_acquisition = None
+        return self._complete_with_search(prompt, tool=tool, max_attempts=1, require_text=False)
+
+    def _complete_with_search(self, prompt: str, *, tool: dict,
+                              max_attempts=None, require_text=True) -> "tuple[str, list[dict]]":
         import anthropic
 
         def _one():
             try:
-                return self._create(prompt, tools=[self.WEB_SEARCH_TOOL])
+                if not require_text:
+                    # Discovery consumes structured leads even if prose was
+                    # cut off. The stop reason survives in acquisition_usage.
+                    return self._create(prompt, tools=[tool], allow_truncated=True)
+                return self._create(prompt, tools=[tool])
             except anthropic.BadRequestError as e:
                 raise RuntimeError(
                     f"The model rejected the web_search tool ({e}). This usually means "
@@ -3890,7 +3931,7 @@ class AnthropicAPIGateway(Gateway):
                     f"or fall back to complete() (unsearched review) for this gateway."
                 ) from e
 
-        response = self._call_with_attempts("search", _one)
+        response = self._call_with_attempts("search", _one, max_attempts=max_attempts)
 
         # block 118: THE PROVIDER'S OWN NUMBERS, never ours. The count of
         # code-execution blocks is NOT a count of billable calls — it is a
@@ -3898,9 +3939,9 @@ class AnthropicAPIGateway(Gateway):
         # requests come from usage.server_tool_use, tokens from usage.
         self.last_acquisition = acquisition_usage(
             response, tool_version=self.SEARCH_TOOL_VERSION,
-            max_uses=self.WEB_SEARCH_TOOL.get("max_uses"))
+            max_uses=tool.get("max_uses"))
         text, citations = collect_citations(response.content)
-        if not text.strip():
+        if require_text and not text.strip():
             block_types = [type(b).__name__ for b in response.content]
             raise RuntimeError(
                 f"Anthropic returned no usable text on a search-enabled call "
@@ -3941,7 +3982,7 @@ class AnthropicAPIGateway(Gateway):
                 f"model hit the {self.MAX_OUTPUT_TOKENS}-token ceiling mid-transcription")
         return "".join(b.text for b in message.content if getattr(b, "type", "") == "text")
 
-    def _create(self, prompt: str, tools: "list[dict] | None" = None):
+    def _create(self, prompt: str, tools: "list[dict] | None" = None, *, allow_truncated=False):
         # STREAMING, deliberately: a non-streaming request holds a silent
         # connection for the whole 30-120s the model spends writing, and a
         # silent long-lived connection is the most fragile thing on a home
@@ -4002,7 +4043,7 @@ class AnthropicAPIGateway(Gateway):
                 f"({type(cause).__name__}: {str(cause)[:160]}).",
                 saw_content=saw_content,
                 cause_class=type(cause).__name__) from cause
-        if getattr(message, "stop_reason", None) == "max_tokens":
+        if not allow_truncated and getattr(message, "stop_reason", None) == "max_tokens":
             # Fail with the REAL diagnosis instead of letting the JSON
             # parser report a confusing "could not find a JSON object".
             raise RuntimeError(
@@ -4107,42 +4148,108 @@ def acquisition_counts(citations) -> "dict":
 def acquisition_usage(response, tool_version: str = "", max_uses=None) -> dict:
     """What the PROVIDER reported about one search-enabled call.
 
-    block 118. Everything here comes from the response's own usage fields or
-    from counting block types. Nothing is inferred: in particular the number
-    of code-execution blocks is never treated as a number of billable calls —
-    those are the provider filtering its own search results, and only
+    block 118. Usage, block types and individual tool outcomes are provider
+    observations. They do not establish which pages the model read or whether
+    its account of a search is true. In particular the number of code-execution
+    blocks is never treated as a number of billable calls — those are the
+    provider filtering its own search results, and only
     `server_tool_use.web_search_requests` says how many searches were made.
 
     When the response reports no usage at all, this says so rather than
-    filling in a zero."""
-    u = getattr(response, "usage", None)
+    filling in a zero. The tool-result shapes follow the provider's web-search
+    contract: a list of web_search_result blocks (including an empty list),
+    or one web_search_tool_result_error object. Unknown shapes remain unknown.
+    No query, encrypted search content, code, stdout or stderr is copied here.
+    """
+    def field(obj, key, default=None):
+        return obj.get(key, default) if isinstance(obj, dict) else getattr(obj, key, default)
+
+    def string_field(obj, key):
+        value = field(obj, key)
+        return value if isinstance(value, str) else None
+
+    u = field(response, "usage")
     out = {"tool_version": tool_version, "max_uses_requested": max_uses,
            "web_search_requests": None, "input_tokens": None,
            "output_tokens": None, "cache_creation_input_tokens": None,
            "cache_read_input_tokens": None, "usage_reported": False,
+           "response_stop_reason": string_field(response, "stop_reason"),
+           "search_outcomes_recorded": True,
            "cost": "unknown",
            "cost_why": "the provider does not price a call in its response, and this "
                        "client does not guess one from tokens or elapsed time"}
     if u is not None:
         for k in ("input_tokens", "output_tokens", "cache_creation_input_tokens",
                   "cache_read_input_tokens"):
-            v = getattr(u, k, None)
+            v = field(u, k)
             if v is not None:
                 out[k] = v
                 out["usage_reported"] = True
-        stu = getattr(u, "server_tool_use", None)
+        stu = field(u, "server_tool_use")
         if stu is not None:
-            out["web_search_requests"] = getattr(stu, "web_search_requests", None)
-    blocks = getattr(response, "content", None) or []
+            out["web_search_requests"] = field(stu, "web_search_requests")
+            if out["web_search_requests"] is not None:
+                out["usage_reported"] = True
+    blocks = field(response, "content") or []
     kinds = {}
-    for b in blocks:
-        k = getattr(b, "type", None) or type(b).__name__
+    search_uses, code_uses = [], []
+    for index, b in enumerate(blocks):
+        k = string_field(b, "type") or type(b).__name__
         kinds[k] = kinds.get(k, 0) + 1
+        if k == "server_tool_use":
+            name = string_field(b, "name")
+            if name in ("web_search", "code_execution"):
+                use = {"block_index": index, "id": string_field(b, "id"), "name": name}
+                (search_uses if name == "web_search" else code_uses).append(use)
     out["block_types"] = kinds
+
+    def result_identity(block, index, uses):
+        use_id = string_field(block, "tool_use_id")
+        matches = [use["block_index"] for use in uses
+                   if use_id and use["id"] == use_id]
+        status = ("missing_tool_use_id" if not use_id else
+                  "unmatched" if not matches else
+                  "matched" if len(matches) == 1 else "ambiguous")
+        return {"block_index": index, "tool_use_id": use_id,
+                "tool_use_match": status, "matched_tool_use_block_indexes": matches}
+
+    search_results, code_results = [], []
+    for index, block in enumerate(blocks):
+        kind = field(block, "type")
+        if kind not in ("web_search_tool_result", "code_execution_tool_result"):
+            continue
+        content = field(block, "content")
+        content_type = string_field(content, "type")
+        if kind == "web_search_tool_result":
+            result = {**result_identity(block, index, search_uses),
+                      "outcome": "unrecognized", "error_code": None,
+                      "result_count": None, "unrecognized_result_count": None}
+            if isinstance(content, list):
+                count = sum(field(item, "type") == "web_search_result" for item in content)
+                unknown = len(content) - count
+                result.update(result_count=count, unrecognized_result_count=unknown)
+                if not unknown:
+                    result["outcome"] = "results_returned" if count else "empty_results"
+            elif content_type == "web_search_tool_result_error":
+                result.update(outcome="error", error_code=string_field(content, "error_code"))
+            search_results.append(result)
+        else:
+            result = {**result_identity(block, index, code_uses),
+                      "outcome": "unrecognized", "error_code": None, "return_code": None}
+            if content_type == "code_execution_tool_result_error":
+                result.update(outcome="error", error_code=string_field(content, "error_code"))
+            elif content_type == "code_execution_result":
+                return_code = field(content, "return_code")
+                if type(return_code) is int:
+                    result.update(outcome="execution_result", return_code=return_code)
+            code_results.append(result)
+    out["search_tool_uses"] = search_uses
+    out["search_result_outcomes"] = search_results
     # PROVIDER-INTERNAL DYNAMIC FILTERING, recorded as what it is.
     n_code = kinds.get("code_execution_tool_result", 0)
     out["provider_internal_dynamic_filtering"] = {
         "observed": bool(n_code), "blocks": n_code,
+        "tool_uses": code_uses, "result_outcomes": code_results,
         "what": "the provider ran its own code to filter its own search results. Not "
                 "Nikodemus-local execution, not an undeclared local capability, and not "
                 "evidence gathered by Nikodemus. The block count is NOT a count of "
@@ -4216,6 +4323,10 @@ def collect_citations(blocks) -> "tuple[str, list[dict]]":
             results = getattr(block, "content", None) or []
             if isinstance(results, dict):
                 results = results.get("content") or []
+            # Search errors are a single object, not a result list. Their
+            # error codes live in acquisition_usage; they contain no leads.
+            if not isinstance(results, (list, tuple)):
+                continue
             for r in results:
                 u, t = _url_title(r)
                 if not u:

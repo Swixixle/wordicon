@@ -12,6 +12,7 @@ import re
 from urllib.parse import urlsplit
 
 import wordicon_cli as cli
+import evidence_research
 
 VERSION = 1
 MAX_QUESTION = 2000
@@ -151,7 +152,10 @@ def build_context(subject: dict, inputs: dict | None = None) -> dict:
                                "max_prior_explanation_chars": MAX_ANCESTRY_TEXT,
                                "total_prior_steps": total,
                                "omitted_prior_steps": total - len(ancestry)},
-            "trail": trail, "trail_omitted_steps": omitted_trail}
+            "trail": trail, "trail_omitted_steps": omitted_trail,
+            "research_plan": evidence_research.plan(),
+            "research_goal": evidence_research.goal(parent, root, question=q, continue_evidence=inputs.get("continue_evidence") is True),
+            "research_resume": evidence_research.freeze_resume(parent)}
 
 
 def build_prompt(context: dict) -> str:
@@ -230,7 +234,11 @@ def _unusable(raw: str, reason: str):
 
 
 def run(context: dict, gateway, on_progress=None) -> dict:
-    """One search-enabled call; receipt, immutable result, then lineage edge."""
+    """Approved evidence pass; receipt, immutable result, then lineage edge.
+
+    Previously frozen proposals retain their original single-call contract.
+    Offline fixtures never perform research or source retrieval.
+    """
     if not isinstance(context, dict) or context.get("version") != VERSION:
         raise ValueError("Go deeper needs a frozen focused context")
     context = copy.deepcopy(context)
@@ -243,6 +251,20 @@ def run(context: dict, gateway, on_progress=None) -> dict:
                       "work": root["selection"].get("culture_or_work") or ""}
     if context.get("focus") != expected_focus:
         raise ValueError("the frozen focus does not match the selection")
+    has_research_plan = "research_plan" in context
+    if has_research_plan:
+        if context["research_plan"] != evidence_research.plan():
+            raise ValueError("the frozen research plan is unsupported; prepare a fresh proposal")
+        if context.get("research_resume") != evidence_research.freeze_resume(_snapshot(context["parent_trace_id"])):
+            raise ValueError("the frozen evidence continuation no longer matches its parent record")
+        expected_goal = evidence_research.goal(_snapshot(context["parent_trace_id"]), root, question=context["question"],
+                        continue_evidence=(context.get("research_goal") or {}).get("kind") == "continue_evidence")
+        if context.get("research_goal") != expected_goal:
+            raise ValueError("the frozen evidence target no longer matches its parent record")
+    research_enabled = has_research_plan and bool(gateway.is_external)
+    if research_enabled and (not callable(getattr(gateway, "complete_with_search_budget", None))
+                             or not callable(getattr(gateway, "complete_once", None))):
+        raise ValueError("this gateway cannot enforce the approved research budget")
     # Mint before dispatch. The persisted attempt_end links this stable id
     # to its operation even if the process dies after writing the snapshot
     # but before the server marks the operation complete.
@@ -250,17 +272,26 @@ def run(context: dict, gateway, on_progress=None) -> dict:
     trace_id = cli.mint_trace_id(input_text)
     if on_progress:
         on_progress("deepening", f"Looking more closely at {expected_focus['title']}…")
-    prompt = build_prompt(context)
+    prompt_context = copy.deepcopy(context)
+    if (context.get("research_goal") or {}).get("kind") == "continue_evidence":
+        prompt_context["question"] = context["research_goal"]["question"]
+    prompt = build_prompt(prompt_context)
     identity = {"stage": "deepen", "template_sha": cli.template_sha_of(build_prompt),
                 "renderer_rev": cli.PROMPT_RENDERER_REV, "calls": 1,
                 "gateway": gateway.name, "model": getattr(gateway, "model", "") or gateway.name,
                 "settings": cli.gateway_settings(gateway)}
     ledger, owns_ledger = cli.open_attempt_ledger(gateway, run_id=trace_id)
+    research = None
     try:
-        # Match the real gateway's attempt_intent stage ("search"). Naming
-        # only the end "deepen" would leave recovery an unmatched intent.
-        with cli.attempt_scope(gateway, stage="search", run_id=trace_id):
-            raw, provider_citations = gateway.complete_with_search(prompt)
+        if research_enabled:
+            research = evidence_research.run(context, gateway, trace_id, prompt, on_progress)
+            raw, provider_citations = research["raw"], research["citations"]
+            identity["calls"] = research["evidence_research"]["model_calls"]
+            identity["template_sha"] = cli.template_sha_of(evidence_research.run)
+        else:
+            # Existing frozen proposals and offline fixtures retain one call.
+            with cli.attempt_scope(gateway, stage="search", run_id=trace_id):
+                raw, provider_citations = gateway.complete_with_search(prompt)
     finally:
         attempts = [e for e in ledger.events() if e.get("run_id") == trace_id]
         if owns_ledger:
@@ -331,6 +362,11 @@ def run(context: dict, gateway, on_progress=None) -> dict:
               "prompt_identities": [identity], "parse_notes": notes, "raw_response": raw,
               "raw_model_output": raw,
               "summary": fields["title"] + " · focused exploration · advisory, unverified", **fields}
+    if research is not None:
+        result.update({key: research[key] for key in
+                       ("acquisition_records", "evidence_research", "research_model_records")})
+        result["acquisition_usage"] = (research["acquisition_records"][-1]
+                                       if research["acquisition_records"] else None)
     cli.write_run_snapshot(trace_id, result, ensure_ascii=False, indent=2)
     cli.record_edge("continued_from", cli._node("run", context["parent_trace_id"], ""),
                     cli._node("run", trace_id, fields["title"]), trace_id,

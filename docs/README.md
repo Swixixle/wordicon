@@ -47,6 +47,8 @@ These are the written contracts that sit under it.
 
 - [`GO_DEEPER.md`](./GO_DEEPER.md) — focused exploration from a saved Sprout
   thread: proposal, progressive questions, source standing, history and test instructions.
+- [`GO_DEEPER_EVIDENCE.md`](./GO_DEEPER_EVIDENCE.md) — approved research
+  contingencies, retrieved passage records, bounded costs and continuation.
 
 - [`workspace-v2-progress.md`](./workspace-v2-progress.md) — the resumable
   state of the build authorized on 2026-09-16: slices done, commit, tests,

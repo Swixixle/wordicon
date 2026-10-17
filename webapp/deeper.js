@@ -30,7 +30,8 @@
     if (!pending || !pending.prepared || typeof pending.prepared.prepared_id !== 'string' || typeof pending.requestKey !== 'string') return false;
     const different = entry.requestKey !== pending.requestKey;
     Object.assign(entry, {prepared:pending.prepared, requestKey:pending.requestKey, operationId:pending.operationId || null, completed:false, terminalStatus:null,
-                         startUncertain:!!pending.startUncertain, question:((pending.prepared.disclosure || {}).exploration || {}).question || ''});
+                         startUncertain:!!pending.startUncertain, question:((pending.prepared.disclosure || {}).exploration || {}).question || '',
+                         continueEvidence:((((pending.prepared.disclosure || {}).exploration || {}).research_goal || {}).kind === 'continue_evidence')});
     return different;
   }
   const makeEntry = fields => {
@@ -66,25 +67,108 @@
     const quote = thread.quote_status === 'paraphrase' ? 'The starting words are a paraphrase, not an exact quotation.' : 'The starting thread comes from model recall; its quotation has not been verified against an admitted passage.';
     const verdict = thread.review_verdict;
     return `<div style="border-left:2px solid var(--mode-source);padding-left:12px;margin:12px 0">
-      ${message(disclosure || 'Model reading and source leads — this action does not admit or verify a passage.')}
+      ${message(disclosure || 'Model reading and source leads. No source admission or interpretive support ruling; checks shown here concern wording in retrieved text only.')}
       ${message(quote)}
       ${verdict ? message('“' + verdict + '” was the review of the original analogy. It is not a verdict on this person or work, and does not prevent exploring it.') : ''}
     </div>`;
   }
 
-  function sourceLinks(citations) {
-    const links = (Array.isArray(citations) ? citations : []).map(c => {
+  const safeSourceUrl = raw => {
+    try { const url = new URL(raw); return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : null; }
+    catch (_) { return null; }
+  };
+  const countKnown = value => Number.isInteger(value) && value >= 0;
+  function sourceLeads(citations) {
+    const seen = new Set();
+    return (Array.isArray(citations) ? citations : []).map(c => {
       const raw = typeof c === 'string' ? c : c && c.url;
-      if (!raw) return '';
-      try {
-        const url = new URL(raw);
-        if (!['https:', 'http:'].includes(url.protocol)) return '';
-        return `<li><a href="${esc(url.href)}" target="_blank" rel="noopener noreferrer" style="color:var(--mode-source)">${esc(c.title || url.hostname)}</a></li>`;
-      } catch (_) { return ''; }
+      const url = raw && safeSourceUrl(raw);
+      if (!url || seen.has(url)) return null;
+      seen.add(url);
+      return {url, title:c.title || new URL(url).hostname};
     }).filter(Boolean);
+  }
+
+  function sourceLinks(citations, hasRetrievedText) {
+    const links = sourceLeads(citations).map(c => `<li><a href="${esc(c.url)}" target="_blank" rel="noopener noreferrer" style="color:var(--mode-source);overflow-wrap:anywhere">${esc(c.title)}</a></li>`);
     return links.length
       ? `<details style="margin:12px 0"><summary style="cursor:pointer">Source leads returned by provider · ${links.length}</summary>${message('Provider citations are leads to inspect; they do not certify each claim or the starting quotation.')}<ul>${links.join('')}</ul></details>`
-      : message('No web citations returned. This answer is a model reading from recall, not a source check.');
+      : message(hasRetrievedText ? 'No provider citation leads were returned. Retrieved source text is recorded separately below.' : 'No web citations returned. Provider citations do not establish a source check.');
+  }
+
+  function acquisitionHtml(result) {
+    const records = Array.isArray(result.acquisition_records) && result.acquisition_records.length
+      ? result.acquisition_records : result.acquisition_usage ? [result.acquisition_usage] : [];
+    const known = records.filter(record => record && countKnown(record.web_search_requests));
+    const unknown = records.length - known.length;
+    const total = known.reduce((sum, record) => sum + record.web_search_requests, 0);
+    const allowanceKnown = records.length > 0 && records.every(record => record && countKnown(record.max_uses_requested));
+    const allowance = allowanceKnown ? records.reduce((sum, record) => sum + record.max_uses_requested, 0) : null;
+    const countText = known.length
+      ? 'Provider reports ' + (unknown ? 'at least ' : '') + total + ' search' + (total === 1 ? '' : 'es') + (unknown ? '; count unknown for ' + unknown + ' acquisition(s)' : '')
+      : 'Provider search count not recorded';
+    const line = countText + (allowanceKnown ? ' · ' + allowance + ' allowed across recorded acquisitions' : '') + ' · ' + sourceLeads(result.citations).length + ' distinct source leads attached';
+    const rows = records.map((record, index) => {
+      const outcomes = Array.isArray(record && record.search_result_outcomes) ? record.search_result_outcomes : [];
+      const uses = Array.isArray(record && record.search_tool_uses) ? record.search_tool_uses : null;
+      const details = outcomes.map(outcome => {
+        const labels = {results_returned:'Results returned', empty_results:'No search results returned', error:'Search error', unrecognized:'Unrecognized search result shape'};
+        let text = labels[outcome.outcome] || 'Unrecognized search result outcome';
+        if (outcome.outcome === 'results_returned' && countKnown(outcome.result_count)) text += ' · ' + outcome.result_count + ' result(s)';
+        if (outcome.error_code) text += ' · error code: ' + outcome.error_code;
+        if (outcome.tool_use_id) text += ' · attempt: ' + outcome.tool_use_id;
+        return `<li style="overflow-wrap:anywhere">${esc(text)}</li>`;
+      });
+      return `<li>Acquisition ${index + 1}${uses ? ' · ' + uses.length + ' identified search tool attempt(s)' : ''}${details.length ? '<ul>' + details.join('') + '</ul>' : message(record && record.search_outcomes_recorded ? 'No search result blocks were recorded in this response.' : 'Per-search outcomes were not recorded for this acquisition.')}</li>`;
+    });
+    return `<div class="deeper-acquisition" style="margin:12px 0">${message((result.is_fixture ? 'MOCK FIXTURE · ' : '') + line)}${rows.length ? `<details><summary style="cursor:pointer">Search acquisition record</summary>${message('These are provider-reported counts and returned block outcomes. They do not establish that the model read a page or that a quotation is accurate. Identified tool attempts can exceed allowed searches; they are not a billable-search count.')}<ul>${rows.join('')}</ul></details>` : ''}</div>`;
+  }
+
+  function researchPlanHtml(plan) {
+    if (!plan || typeof plan !== 'object') return '';
+    const limits = plan.limits || plan;
+    const items = [[limits.max_search_rounds, 'search rounds'], [limits.max_source_reads, 'direct source reads'], [limits.max_model_calls, 'model calls']]
+      .filter(([value]) => countKnown(value)).map(([value, label]) => value + ' ' + label);
+    return `<div class="deeper-research-plan">${message('Evidence checking: ' + (items.length ? 'up to ' + items.join(', ') + '.' : 'within the frozen research limits.'))}${message('If an attempt fails, checking can continue through other source leads and targeted follow-up searches within those limits. Search and model token charges may apply; actual cost is unknown until reported. Reaching a limit preserves the evidence and remaining question for a separately reviewed continuation.')}</div>`;
+  }
+
+  function evidenceHtml(result, entry) {
+    const research = result.evidence_research;
+    if (!research || typeof research !== 'object') return '';
+    const fixture = !!result.is_fixture;
+    const labels = {quote_located:'Quotation wording located in retrieved text', source_text_obtained:'Source text obtained; quotation wording not located', needs_more_evidence:'More evidence needed'};
+    const proofs = Array.isArray(research.proofs) ? research.proofs : [];
+    const steps = Array.isArray(research.steps) ? research.steps : [];
+    const proofHtml = proofs.map(proof => {
+      const match = proof.match || {};
+      const url = safeSourceUrl(proof.final_url || proof.url);
+      const location = Array.isArray(match.section_path) ? match.section_path.join(' → ') : match.section_path;
+      return `<article style="border-left:2px solid var(--mode-source);padding-left:12px;margin:12px 0;overflow-wrap:anywhere">
+        ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="color:var(--mode-source)">${esc(url)}</a>` : message('No valid source URL recorded.')}
+        ${match.excerpt || match.exact_text ? `<blockquote class="body" style="white-space:pre-wrap;margin:10px 0">${esc(match.excerpt || match.exact_text)}</blockquote>` : ''}
+        <details><summary style="cursor:pointer">Passage record</summary>
+          ${location ? message('Section: ' + location) : ''}
+          ${countKnown(match.start) && countKnown(match.end) ? message('Saved text offsets: ' + match.start + '–' + match.end) : ''}
+          ${match.match_type ? message('Match method: ' + match.match_type) : ''}
+          ${proof.body_sha256 ? message('Retrieved body SHA-256: ' + proof.body_sha256) : ''}
+        </details>
+      </article>`;
+    }).join('');
+    const progress = [[research.rounds_used, 'search rounds used'], [research.sources_tried, 'sources tried'], [research.source_count, 'source texts obtained']]
+      .filter(([value]) => countKnown(value)).map(([value, label]) => value + ' ' + label).join(' · ');
+    return `<section class="deeper-evidence" aria-label="Recorded source evidence" style="margin:16px 0">
+      <div class="section-label">${fixture ? 'MOCK FIXTURE · Evidence demonstration' : 'Recorded source evidence'}</div>
+      ${paragraph(fixture ? 'Simulated evidence only — no live source check was performed.' : labels[research.status] || 'Evidence status not recognized')}
+      ${research.target_quote ? message('Wording sought: “' + research.target_quote + '”') : ''}
+      ${!fixture && research.status === 'quote_located' ? message('This locates wording in the retrieved text. It does not by itself establish authorship, the edition’s authority, or every claim in the explanation.') : ''}
+      ${research.remaining_requirement ? message(research.remaining_requirement) : ''}
+      ${research.final_answer_status === 'unavailable' ? message('A grounded answer is not yet available. Continue checking can prepare another answer using the saved evidence.') : ''}
+      ${progress ? message(progress) : ''}
+      ${proofHtml}
+      ${steps.length ? `<details><summary style="cursor:pointer">Checking attempts · ${steps.length}</summary><ol>${steps.map(step => `<li style="overflow-wrap:anywhere">${esc([step.kind, step.status, step.url ? safeSourceUrl(step.url) || 'Source URL omitted' : '', step.reason].filter(Boolean).join(' · '))}</li>`).join('')}</ol></details>` : ''}
+      ${research.checkpoint_id ? `<details><summary style="cursor:pointer">Saved checkpoint</summary>${message(research.checkpoint_id)}</details>` : ''}
+      ${research.status === 'needs_more_evidence' || research.status === 'source_text_obtained' || research.final_answer_status === 'unavailable' ? button(entry, 'continue-evidence', 'Continue checking', 'style="margin-top:10px"') + message('Review a continuation proposal using this saved result. Nothing runs until you press Start.') : ''}
+    </section>`;
   }
 
   function trailHtml(result) {
@@ -123,7 +207,9 @@
       ${result.explanation ? paragraph(result.explanation) : message('This result has no explanation recorded.')}
       ${result.context_notes ? `<div class="section-label">In context</div>${paragraph(result.context_notes)}` : ''}
       ${result.source_guidance ? `<div class="section-label">Into the work itself</div>${paragraph(result.source_guidance)}` : ''}
-      ${sourceLinks(result.citations)}
+      ${acquisitionHtml(result)}
+      ${sourceLinks(result.citations, !!(result.evidence_research && result.evidence_research.source_count))}
+      ${evidenceHtml(result, entry)}
       <details style="margin:12px 0"><summary style="cursor:pointer">What this reading rests on</summary>${sourceStanding(context)}${contextNote(context)}</details>
       <div class="section-label">Stay with this subject</div>
       <div style="display:flex;gap:7px;flex-wrap:wrap">${entry.questions.map((q, i) => button(entry, 'question', q, `data-deeper-question="${i}" style="text-align:left;white-space:normal"`)).join('')}</div>
@@ -149,10 +235,13 @@
       <div class="result-title">${esc(titleOf(context))}</div>
       ${focusOf(context).work ? message(focusOf(context).work) : ''}
       ${paragraph(context.question || entry.question || 'Understand this subject on its own terms and find a useful way into the work.')}
+      ${context.research_goal && context.research_goal.kind === 'continue_evidence' && context.research_goal.question && context.research_goal.question !== context.question ? `<p class="body" style="white-space:pre-wrap"><strong>Evidence question</strong> · ${esc(context.research_goal.question)}</p>` : ''}
       ${message('Scope: the exact saved thread' + (prior ? ' and ' + prior + ' prior exploration step(s)' : '') + ', with this question. ' + (scope.words == null ? '' : scope.words + ' words in the frozen context.'))}
       ${message(laneLine)}
       ${message('Leaves this machine: ' + (lane.external ? fields + ' → ' + (outbound.recipient || 'model') + ' (' + (lane.model || lane.lane || 'configured provider') + ')' : 'nothing in the mock lane.'))}
+      ${lane.external && (context.research_plan || d.research_plan) ? message('Public source hosts receive bounded unauthenticated GETs; retrieved excerpts and failure summaries go to the configured model.') : ''}
       ${message('Calls: ' + (d.calls == null ? 'as disclosed by the server' : d.calls) + ' · Cost: ' + (d.cost || 'not disclosed'))}
+      ${researchPlanHtml(context.research_plan || d.research_plan)}
       ${sourceStanding(context, d.source_standing)}
       ${contextNote(context)}
       <details style="margin:10px 0"><summary style="cursor:pointer">Inspect frozen context</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:300px;overflow:auto">${esc(JSON.stringify(context, null, 2))}</pre></details>
@@ -162,7 +251,7 @@
     </section>`;
   }
 
-  async function prepare(entry, question = '') {
+  async function prepare(entry, question = '', continueEvidence = false) {
     if (entry.preparing || entry.starting) return;
     recoverPending(entry);
     // A lost Start response is not permission to mint another request. The
@@ -176,6 +265,7 @@
     const area = mount(entry);
     if (!area) return;
     entry.question = question;
+    entry.continueEvidence = continueEvidence;
     entry.operationId = null;
     entry.completed = false;
     entry.terminalStatus = null;
@@ -185,7 +275,9 @@
     const generation = ++entry.generation;
     area.innerHTML = `<div class="card">${message('Preparing a local proposal for ' + entry.title + '… No model call has started.')}${button(entry, 'cancel', 'Cancel')}</div>`;
     try {
-      const response = await fetch('/api/actions/prepare', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action_id:'explore.deepen', subject:entry.subject, inputs:{question}})});
+      const inputs = {question};
+      if (entry.continueEvidence) inputs.continue_evidence = true;
+      const response = await fetch('/api/actions/prepare', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action_id:'explore.deepen', subject:entry.subject, inputs})});
       const data = await response.json();
       if (entry.generation !== generation) return;
       if (!response.ok) { area.innerHTML = error(data.error || 'Could not prepare this exploration.'); return; }
@@ -310,10 +402,11 @@
       // A known failure may get a separately reviewed new attempt. An
       // unknown outcome keeps its old operation and can only be checked.
       entry.operationId = null;
-      prepare(entry, entry.question || '');
+      prepare(entry, entry.question || '', !!entry.continueEvidence);
     }
     else if (action === 'reopen' && typeof window.loadPastResult === 'function') window.loadPastResult(entry.reopenTrace);
     else if (action === 'cancel') closeProposal(entry);
+    else if (action === 'continue-evidence') prepare(entry, 'Continue checking the quotation against source texts using the saved evidence.', true);
     else if (action === 'question') {
       const question = entry.questions[Number(target.dataset.deeperQuestion)];
       if (typeof question === 'string') prepare(entry, question);

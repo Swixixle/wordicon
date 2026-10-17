@@ -96,9 +96,10 @@ ACTIONS = [
        # saved Sprout thread (a result), and the palette answers its aliases.
        subjects=("result",), handler="job", mode="deepen", aliases=("go deeper", "explore this work"),
        inputs=("saved Sprout thread or deeper step", "follow-up question"), mutation="record",
-       outbound_fields=("exact selected thread and its source caveats", "question", "disclosed recent exploration context"),
-       recipient="model and provider's search service when available", provider="model",
-       calls="1 model stage; provider search and transport retries may add usage", result_type="run",
+       outbound_fields=("exact selected thread and its source caveats", "question", "disclosed recent exploration context",
+                        "retrieved excerpts and failure summaries", "public source GET URLs"),
+       recipient="configured model, its search service and public source hosts", provider="model",
+       calls="live: up to 3 search requests and 1 final model request, plus 6 source reads; mock: 1 fixture", result_type="run",
        legacy_entry="a Sprout thread's Go deeper button",
        note="follows the selected work or idea; opening a proposal starts nothing; curiosity is not a ruling"),
     _a("explore.refract", "Find related words", group="explore", kind="dispatch",
@@ -479,7 +480,14 @@ def prepare(action_id: str, subject: dict, inputs: dict, server_gateway) -> dict
     }
     if deeper_context is not None:
         disclosure["exploration"] = deeper_context
-        disclosure["source_standing"] = "Model reading and source leads; no passage has been admitted or verified by this action."
+        disclosure["research_plan"] = deeper_context["research_plan"]
+        disclosure["source_standing"] = "Mechanical checks concern wording in retrieved text. No source admission, authorship certification or interpretive support ruling."
+        if (rd.get("lane") or {}).get("lane") != "mock":
+            disclosure["calls"] = "up to 3 search requests (one search each), up to 6 public source reads, then 1 tool-free model explanation; no background continuation"
+            disclosure["cost"] = deeper_context["research_plan"]["cost"]
+            disclosure["leaves_this_machine"] = {
+                "recipient": "configured model provider and public source hosts",
+                "fields": deeper_context["research_plan"]["outbound"]}
     extra = {}
     if a["mode"] == "refract":
         extra["entry"] = "selection" if kind == "selection" else ("description" if kind == "description" else "concept")

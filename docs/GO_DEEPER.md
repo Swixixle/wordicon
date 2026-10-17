@@ -1,5 +1,10 @@
 # Go deeper
 
+The first slice below is extended by [evidence and contingencies](./GO_DEEPER_EVIDENCE.md).
+New live proposals can now authorize bounded public-text retrieval, quotation
+checks and alternate search routes. Earlier single-call proposals retain their
+original contract; the first-slice exclusions below describe that earlier build.
+
 Go deeper follows a particular person, work or idea from a saved Sprout thread. Sprout continues to find parallels across fields. The two actions have different purposes and keep their own saved runs.
 
 ## The first slice
