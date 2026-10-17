@@ -1,5 +1,39 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.47.0 — Revision four: question-blind leads wait their turn
+
+Built from the first live revision-three pass (his record, diagnosed from
+the Mac): a fresh Freud exploration spent its two initial reads on Dante
+leads inherited from the sprout's own citations — each one ranked by the
+controller itself as tier 0, score 0, matching no meaningful question or
+work term — before the first search could supply on-question leads. On a
+healthy network that is two of six reads spent on leads the ranking had
+already called signal-free.
+
+The change is one gate, placed exactly there: when NO pending carried-over
+lead matches any meaningful question or work term, the initial read batch
+defers to the first search. Defer, never exclude — the carried leads stay
+saved and ranked, later batches may still read them once discovery has had
+its chance (proven for the all-searches-fail case), and a URL the previous
+pass recorded as retryable keeps its promised once-per-pass retry whatever
+its lexical score, because it was chosen for a question, not merely
+carried. The deferral is recorded in the pass's steps with its reason, the
+plan discloses it in plain language on every proposal, and the research
+plan moves to version 4, so frozen revision-two and revision-three
+proposals refuse before dispatch — prepare a fresh proposal.
+
+Verified: tests/test_read_deferral.py (five behavioral pins named for the
+defect: defer on a blind queue with the step recorded, proceed on any
+overlap, read deferred leads after discovery ran, the retryable carve-out,
+the plan wording) joins the suite-run wing; the reservation tests' fixtures
+now name their work the way live same-question leads do, with the deferral
+tested in its own file; the evidence journey asserts the version-four
+proposal sentence. Three sabotages (gate removed, defer turned into
+exclude, carve-out dropped) each failed by name. Two fixture updates in
+revision three's own tests were honest casualties: a version pin moved
+3→4, and the frozen-plan refusal now proves both revision-two and
+revision-three proposals refuse.
+
 ## v1.46.0 — Revision three: routes, reservations, and the honest zero
 
 Received from the other builder (Codex) as Nikodemus-Retrieval-Routes-r3,

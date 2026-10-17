@@ -6535,7 +6535,7 @@ def _check_deeper_wing():
               "scripts/evidence_fetch.py", "scripts/evidence_research.py", "scripts/evidence_quality.py",
               "tests/test_acquisition_usage.py", "tests/test_evidence_fetch.py", "tests/test_evidence_research.py",
               "tests/test_evidence_quality.py", "tests/test_quoteless_research.py", "tests/test_deposition_door.py",
-              "tests/test_retrieval_routes.py"):
+              "tests/test_retrieval_routes.py", "tests/test_read_deferral.py"):
         if not (root / f).exists():
             out.append(f"DEEPER: {f} is missing — the wing shipped without its parts")
     if out:
@@ -6613,6 +6613,15 @@ def _check_deeper_wing():
             out.append(f"DEEPER: the revision-three controller lost {why} ({need!r})")
     if "retrieval_tier" not in (root / "scripts" / "evidence_quality.py").read_text(encoding="utf-8"):
         out.append("DEEPER: the ranking helper no longer assigns retrieval tiers")
+    # revision four (2026-10-17, the Freud run): a question-blind inherited
+    # queue defers its initial reads to the first search — defer, never
+    # exclude, recorded with its reason; a retryable URL keeps its promised
+    # retry whatever its lexical score. Behavior pinned in test_read_deferral.py.
+    for need, why in (("initial_reads_deferred", "the recorded deferral"),
+                      ("_any_meaningful_pending", "the overlap gate"),
+                      ("keeps its promised once-per-pass retry", "the retryable carve-out")):
+        if need not in _erD:
+            out.append(f"DEEPER: revision four lost {why} ({need!r})")
     _djs3 = (root / "webapp" / "deeper.js").read_text(encoding="utf-8")
     if "No source text retrieved — model explanation, unverified." not in _djs3:
         out.append("DEEPER: the zero-sources notice lost its exact sentence — an unsupported explanation reads as supported")
@@ -6632,7 +6641,7 @@ def _check_deeper_wing():
     r = _spD.run([_sysD.executable, "-m", "pytest", "tests/test_deeper.py", "tests/test_deeper_integration.py",
                   "tests/test_acquisition_usage.py", "tests/test_evidence_fetch.py", "tests/test_evidence_research.py",
                   "tests/test_evidence_quality.py", "tests/test_quoteless_research.py", "tests/test_deposition_door.py",
-                  "tests/test_retrieval_routes.py",
+                  "tests/test_retrieval_routes.py", "tests/test_read_deferral.py",
                   "-q", "-p", "no:cacheprovider"],
                  cwd=root, capture_output=True, text=True, timeout=600)
     if r.returncode != 0:

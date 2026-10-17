@@ -27,6 +27,18 @@ catalog and unsupported-format hints, and distinguishes failed retrieval
 from a failed lexical screen. These are routing improvements, not a promise
 that any particular source will be reachable.
 
+Revision four addresses the first live revision-three pass: its two initial
+reads went to leads inherited from an earlier, differently-aimed step, each
+one recorded by the ranking itself as matching no meaningful question or
+work term. When nothing pending shows any meaningful overlap, the initial
+read batch now waits for the first search's fresh leads. The rule stays
+defer-never-exclude: the carried leads remain saved and ranked, later
+batches may still read them once discovery has had its chance, a URL the
+previous pass recorded as retryable keeps its promised once-per-pass retry
+whatever its lexical score, and the deferral is written into the pass's own
+steps with its reason. Lexical absence is not irrelevance; this changes
+when carried leads are read, never whether they may be.
+
 ## The plan is approved before work
 
 New proposals freeze a research plan with at most:

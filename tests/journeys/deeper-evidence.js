@@ -11,7 +11,7 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
   try {
     const page = await browser.newPage({viewport:{width:390,height:844}});
     const requests = [], errors = [];
-    let proposalVersion = 3;
+    let proposalVersion = 4;
     page.on('pageerror', error => { if (!require('./lib').benignPageError(error)) errors.push(String(error)); });
     await page.route('**/*', async route => {
       const request = route.request();
@@ -153,6 +153,7 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
     ok(text.includes('3 search rounds, 6 direct source reads, 4 model calls') && text.includes('actual cost is unknown'), 'proposal states the frozen contingency and cost limits');
     ok(text.includes('For a question without exact quoted wording, checking continues through the available source-read or search allowance.') && text.includes('matching topic terms does not establish that the answer is supported'), 'revision-two proposal states the quoteless continuation and support limit');
     ok(text.includes('Links that look like readable pages are tried first.') && text.includes('Some reads are kept for later search approaches'), 'revision-three proposal explains heuristic readable-page ordering and reserved reads in plain language');
+    ok(text.includes("If none of the carried-over links matches the question's own terms, the first reads wait for fresh search results instead"), 'revision-four proposal explains the question-blind deferral in plain language');
     ok(text.includes('Public source hosts receive bounded unauthenticated GETs') && text.includes('retrieved excerpts and failure summaries go to the configured model'), 'proposal discloses source requests and model-bound evidence');
     ok(text.includes('Nothing has started.') && requests.every(r => !r.url.endsWith('/api/operations')), 'continuation retains the explicit Start gate');
     await page.locator('.deeper-proposal [data-deeper-action="cancel"]').click();

@@ -30,9 +30,9 @@ STRATEGIES = (
 
 
 def plan() -> dict:
-    return {"version": 3, "limits": copy.deepcopy(LIMITS), "strategies": list(STRATEGIES),
+    return {"version": 4, "limits": copy.deepcopy(LIMITS), "strategies": list(STRATEGIES),
             "completion": "Locate the starting quotation in retrieved text. Without a quotation target, investigate through the disclosed search/read allowance; readability or keyword matches cannot finish the question. Candidate passages remain unverified. A failed final answer may reuse a completed pass after its saved passages are rechecked.",
-            "source_selection": "Order possible HTML/plain-text sources before catalog-like and unsupported-format hints. Preserve all leads; URL hints do not establish content or relevance. Reserve at least one source read for each remaining search strategy.",
+            "source_selection": "Order possible HTML/plain-text sources before catalog-like and unsupported-format hints. Preserve all leads; URL hints do not establish content or relevance. Reserve at least one source read for each remaining search strategy. When no carried-over lead matches any meaningful question or work term, the initial reads wait for the first search's fresh leads; the carried leads stay saved and may still be read after discovery has had its chance.",
             "continuation": "Save evidence and failures. If unresolved, Continue checking prepares another bounded pass; nothing resumes or spends in the background.",
             "outbound": "The configured model receives the focused record, failure summaries and bounded retrieved excerpts. Public source hosts receive unauthenticated GET requests, including the source URL. No browser cookies or credentials are used.",
             "cost": "Up to three provider searches plus model input/output token charges for up to four requests; total price is unknown before execution. Provider-internal search processing can add input tokens. Each request has one HTTP attempt; ambiguous failures are not replayed."}
@@ -101,7 +101,7 @@ def goal(parent: dict, root: dict, *, question="", continue_evidence=False) -> d
         previous = parent.get("evidence_research") or {}
         target = previous.get("target_quote", _selection_quote(root["selection"]))
         saved_goal = (parent.get("context") or {}).get("research_goal") or previous.get("goal") or {}
-        retry_answer_only = (not target and previous.get("retrieval_policy_rev") in (2, 3)
+        retry_answer_only = (not target and previous.get("retrieval_policy_rev") in (2, 3, 4)
                              and previous.get("retrieval_pass_complete") is True
                              and previous.get("final_answer_status") == "unavailable"
                              and type(previous.get("usable_source_count")) is int
@@ -209,7 +209,7 @@ def run(context: dict, gateway, trace_id: str, base_prompt: str, on_progress=Non
     fresh_question = ((context.get("research_goal") or {}).get("kind") == "followup_question"
                       or bool((context.get("research_goal") or {}).get("requires_new_source")))
     resume = context.get("research_resume") or {}
-    state = {"version": 3, "retrieval_policy_rev": 3, "retrieval_pass_complete": False,
+    state = {"version": 4, "retrieval_policy_rev": 4, "retrieval_pass_complete": False,
              "stop_reason": None, "checkpoint_id": trace_id, "status": "needs_more_evidence",
              "target_quote": quote, "proofs": [], "sources": [], "steps": [],
              "goal": copy.deepcopy(context.get("research_goal") or {}), "fresh_source_count": 0,
@@ -381,8 +381,35 @@ def run(context: dict, gateway, trace_id: str, base_prompt: str, on_progress=Non
                     and (context.get("research_goal") or {}).get("retry_answer_only") is True
                     and not quote and state["usable_source_count"] > 0)
     add_leads(resume.get("leads", []))
+    # Revision four (2026-10-17, the Freud run): the first live pass spent its
+    # two initial reads on inherited leads the ranking itself had scored as
+    # question-blind — tier 0, score 0, no matched question or work term —
+    # before the first search could supply on-question leads. When NOTHING
+    # pending shows any meaningful overlap, the initial batch now defers to
+    # the first search: defer, never exclude — the carried leads stay queued,
+    # are re-ranked as fresh leads arrive, and the post-round batches may
+    # still read them once discovery has had its chance. Two carve-outs keep
+    # older promises intact: a URL the previous pass already attempted and
+    # recorded as retryable keeps its promised once-per-pass retry whatever
+    # its lexical score (it was chosen FOR a question, not merely carried),
+    # and lexical absence is never irrelevance, so the deferral is recorded
+    # with its reason rather than silently reordering the pass.
+    _retryable = set(resume.get("retryable_urls") or [])
+    def _any_meaningful_pending():
+        for url in queue:
+            if url in _retryable:
+                return True
+            rank = state["candidate_rankings"].get(url) or {}
+            if rank.get("matched_question_terms") or rank.get("matched_work_terms"):
+                return True
+        return False
     if keep_researching() and not fresh_question:
-        read_candidates()
+        if not queue or _any_meaningful_pending():
+            read_candidates()
+        else:
+            event("queue", "initial_reads_deferred",
+                  reason=f"none of the {len(queue)} carried-over lead(s) matches a meaningful question or work term; "
+                         "the first reads wait for fresh search leads — the carried leads stay saved and remain readable")
 
     for round_index, strategy in enumerate(STRATEGIES):
         if not keep_researching() or state["sources_tried"] >= LIMITS["max_source_reads"]:

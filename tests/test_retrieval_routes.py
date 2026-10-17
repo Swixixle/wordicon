@@ -80,7 +80,12 @@ def test_reservation_preserves_final_read_after_empty_or_failed_searches(isolate
     first_rounds = [TimeoutError("one transport attempt"), OSError("one transport attempt")] if failed_rounds else [
         ("No new leads.", []), ("No new leads.", [])]
     gateway = ObservedGateway(first_rounds + [("A fresh text.", [lead(actual)])], reads)
-    state = execute(gateway, quoteless_context(inherited=[lead(url) for url in inherited]))["evidence_research"]
+    # revision four: a question-blind inherited queue defers its initial reads
+    # (tested in test_read_deferral.py). This test's subject is the RESERVATION
+    # arithmetic with a full inherited queue, so its leads name the work the
+    # way live same-question leads do.
+    on_question = [{**lead(url), "title": f"Dante Purgatorio reading {n}"} for n, url in enumerate(inherited)]
+    state = execute(gateway, quoteless_context(inherited=on_question))["evidence_research"]
     assert gateway.reads_before_search == [2, 4, 5]
     assert reads[-1] == actual and len(reads) == 6
     assert state["rounds_used"] == 3 and state["model_calls"] == 4
@@ -222,10 +227,12 @@ def test_zero_reads_and_weak_readable_text_have_different_missing_evidence_messa
 def test_prior_research_plan_requires_fresh_proposal_before_dispatch(isolated):
     tmp, reads, _ = isolated
     ctx = quoteless_context()
-    assert ctx["research_plan"]["version"] == 3
-    ctx["research_plan"]["version"] = 2
-    gateway = FakeGateway()
-    with pytest.raises(ValueError, match="fresh proposal"):
-        execute(gateway, ctx)
-    assert not reads and not gateway.search_calls and not gateway.final_prompts
-    assert not (tmp / "deeper_evidence").exists()
+    assert ctx["research_plan"]["version"] == 4
+    for frozen in (2, 3):
+        ctx = quoteless_context()
+        ctx["research_plan"]["version"] = frozen
+        gateway = FakeGateway()
+        with pytest.raises(ValueError, match="fresh proposal"):
+            execute(gateway, ctx)
+        assert not reads and not gateway.search_calls and not gateway.final_prompts
+        assert not (tmp / "deeper_evidence").exists()
