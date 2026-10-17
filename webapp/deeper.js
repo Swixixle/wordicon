@@ -129,14 +129,44 @@
     const limits = plan.limits || plan;
     const items = [[limits.max_search_rounds, 'search rounds'], [limits.max_source_reads, 'direct source reads'], [limits.max_model_calls, 'model calls']]
       .filter(([value]) => countKnown(value)).map(([value, label]) => value + ' ' + label);
-    return `<div class="deeper-research-plan">${message('Evidence checking: ' + (items.length ? 'up to ' + items.join(', ') + '.' : 'within the frozen research limits.'))}${message('If an attempt fails, checking can continue through other source leads and targeted follow-up searches within those limits. Search and model token charges may apply; actual cost is unknown until reported. Reaching a limit preserves the evidence and remaining question for a separately reviewed continuation.')}</div>`;
+    return `<div class="deeper-research-plan">${message('Evidence checking: ' + (items.length ? 'up to ' + items.join(', ') + '.' : 'within the frozen research limits.'))}${plan.version >= 2 ? message('For a question without exact quoted wording, checking continues through the available source-read or search allowance. Finding readable text or matching topic terms does not establish that the answer is supported.') : ''}${message('If an attempt fails, checking can continue through other source leads and targeted follow-up searches within those limits. Search and model token charges may apply; actual cost is unknown until reported. Reaching a limit preserves the evidence and remaining question for a separately reviewed continuation.')}</div>`;
+  }
+
+  function sourceScreeningHtml(sources) {
+    const rows = (Array.isArray(sources) ? sources : []).filter(source => source && typeof source === 'object' && source.assessment && typeof source.assessment === 'object').map(source => {
+      const assessment = source.assessment;
+      const url = safeSourceUrl(source.final_url || source.url);
+      const kinds = {catalog_like:'Catalog or landing page', text_indicated:'Possible text page', unknown:'Page type not established'};
+      const questionTerms = Array.isArray(assessment.matched_question_terms) ? assessment.matched_question_terms.filter(term => typeof term === 'string') : [];
+      const workTerms = Array.isArray(assessment.matched_work_terms) ? assessment.matched_work_terms.filter(term => typeof term === 'string') : [];
+      const reasons = Array.isArray(assessment.reason) ? assessment.reason.filter(reason => typeof reason === 'string') : [];
+      return `<li style="margin:10px 0;overflow-wrap:anywhere">
+        ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="color:var(--mode-source)">${esc(url)}</a>` : 'Source URL omitted'}
+        ${message((assessment.weak === true ? 'Weak candidate' : assessment.weak === false ? 'Candidate retained for inspection' : 'Screening strength not recorded') + ' · ' + (kinds[assessment.candidate_kind] || kinds.unknown))}
+        ${message((assessment.question_basis === 'frozen_focus_fallback' ? 'Frozen subject terms found: ' : 'Question terms found: ') + (questionTerms.length ? questionTerms.join(', ') : 'none recorded'))}
+        ${message('Work terms found: ' + (workTerms.length ? workTerms.join(', ') : 'none recorded'))}
+        ${reasons.length ? message('Screening reasons: ' + reasons.join('; ')) : ''}
+      </li>`;
+    });
+    return rows.length ? `<details class="deeper-source-screening"><summary style="cursor:pointer">Source screening · ${rows.length}</summary>${message('These are automatic clues for choosing passages to inspect, not verification. Word overlap and page type do not establish authorship, relevance, or support for the answer.')}<ul>${rows.join('')}</ul></details>` : '';
+  }
+
+  function researchStopHtml(research) {
+    const reasons = {
+      quotation_located:'Checking stopped after locating the requested wording. Broader answer support remains unverified.',
+      source_read_budget_reached:'This pass reached its source-read allowance. The research question remains open.',
+      search_budget_reached:'This pass reached its search allowance. The research question remains open.',
+      reused_complete_pass_for_answer_retry:'Saved source screening was reused for another answer attempt. The research question remains open.'
+    };
+    if (reasons[research.stop_reason]) return message(reasons[research.stop_reason]);
+    return research.retrieval_pass_complete === true ? message('This bounded retrieval pass has ended; that does not establish that the research question is answered.') : '';
   }
 
   function evidenceHtml(result, entry) {
     const research = result.evidence_research;
     if (!research || typeof research !== 'object') return '';
     const fixture = !!result.is_fixture;
-    const labels = {quote_located:'Quotation wording located in retrieved text', source_text_obtained:'Source text obtained; quotation wording not located', needs_more_evidence:'More evidence needed'};
+    const labels = {quote_located:'Quotation wording located in retrieved text', candidate_passages_found:'Candidate passages collected; answer support remains unverified', source_text_obtained:'Legacy record: source text obtained; relevance and answer support were not established', needs_more_evidence:'More evidence needed'};
     const proofs = Array.isArray(research.proofs) ? research.proofs : [];
     const steps = Array.isArray(research.steps) ? research.steps : [];
     const proofHtml = proofs.map(proof => {
@@ -154,20 +184,23 @@
         </details>
       </article>`;
     }).join('');
-    const progress = [[research.rounds_used, 'search rounds used'], [research.sources_tried, 'sources tried'], [research.source_count, 'source texts obtained']]
+    const progress = [[research.rounds_used, 'search rounds used'], [research.sources_tried, 'sources tried'], [research.source_count, 'readable source texts obtained'], [research.usable_source_count, 'source texts retained as candidates']]
       .filter(([value]) => countKnown(value)).map(([value, label]) => value + ' ' + label).join(' · ');
     return `<section class="deeper-evidence" aria-label="Recorded source evidence" style="margin:16px 0">
       <div class="section-label">${fixture ? 'MOCK FIXTURE · Evidence demonstration' : 'Recorded source evidence'}</div>
       ${paragraph(fixture ? 'Simulated evidence only — no live source check was performed.' : labels[research.status] || 'Evidence status not recognized')}
       ${research.target_quote ? message('Wording sought: “' + research.target_quote + '”') : ''}
       ${!fixture && research.status === 'quote_located' ? message('This locates wording in the retrieved text. It does not by itself establish authorship, the edition’s authority, or every claim in the explanation.') : ''}
+      ${fixture ? '' : researchStopHtml(research)}
+      ${research.screening_basis === 'frozen_focus_fallback' ? message('Source screening used the saved subject and work because the question supplied no specific topic terms. Your research question is unchanged.') : ''}
       ${research.remaining_requirement ? message(research.remaining_requirement) : ''}
       ${research.final_answer_status === 'unavailable' ? message('A grounded answer is not yet available. Continue checking can prepare another answer using the saved evidence.') : ''}
       ${progress ? message(progress) : ''}
       ${proofHtml}
+      ${sourceScreeningHtml(research.sources)}
       ${steps.length ? `<details><summary style="cursor:pointer">Checking attempts · ${steps.length}</summary><ol>${steps.map(step => `<li style="overflow-wrap:anywhere">${esc([step.kind, step.status, step.url ? safeSourceUrl(step.url) || 'Source URL omitted' : '', step.reason].filter(Boolean).join(' · '))}</li>`).join('')}</ol></details>` : ''}
       ${research.checkpoint_id ? `<details><summary style="cursor:pointer">Saved checkpoint</summary>${message(research.checkpoint_id)}</details>` : ''}
-      ${research.status === 'needs_more_evidence' || research.status === 'source_text_obtained' || research.final_answer_status === 'unavailable' ? button(entry, 'continue-evidence', 'Continue checking', 'style="margin-top:10px"') + message('Review a continuation proposal using this saved result. Nothing runs until you press Start.') : ''}
+      ${['needs_more_evidence', 'source_text_obtained', 'candidate_passages_found'].includes(research.status) || research.final_answer_status === 'unavailable' ? button(entry, 'continue-evidence', 'Continue checking', 'style="margin-top:10px"') + message('Review a continuation proposal using this saved result. Nothing runs until you press Start.') : ''}
     </section>`;
   }
 

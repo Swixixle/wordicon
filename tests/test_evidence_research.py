@@ -64,7 +64,9 @@ class FakeGateway(cli.Gateway):
     def complete_with_search_budget(self, prompt, *, max_uses):
         self.search_calls.append((prompt, max_uses))
         if len(self.search_calls) > len(self.rounds):
-            raise AssertionError("An undisclosed or unexpected search request was made")
+            # pytest's failure outcome escapes the production Exception handler;
+            # an undeclared test call must not masquerade as a transport failure.
+            pytest.fail("An undisclosed or unexpected search request was made")
         item = self.rounds[len(self.search_calls) - 1]
         if isinstance(item, Exception):
             raise item
@@ -75,7 +77,8 @@ class FakeGateway(cli.Gateway):
 
     def complete_once(self, prompt):
         self.final_prompts.append(prompt)
-        assert len(self.final_prompts) == 1, "The final answer must not silently retry"
+        if len(self.final_prompts) != 1:
+            pytest.fail("The final answer must not silently retry")
         if isinstance(self.final, Exception):
             raise self.final
         return self.final
@@ -149,13 +152,16 @@ def test_paraphrase_or_absent_quote_obtains_text_without_quotation_proof(isolate
     responses[url] = found(url)
     ctx = context()
     ctx["root"]["selection"].update(quote=quote, quote_status=kind)
-    result = execute(FakeGateway([("Read this candidate.", [lead(url)])]), ctx)
+    gateway = FakeGateway([("Read this candidate.", [lead(url)]), ("No new lead.", []), ("No new lead.", [])])
+    result = execute(gateway, ctx)
     state = result["evidence_research"]
     assert reads == [url]
-    assert state["status"] == "source_text_obtained"
+    assert state["status"] == "needs_more_evidence"
     assert state["proofs"] == [] and state["target_quote"] == ""
     assert state["source_count"] == 1
-    assert "not mechanically certified" in state["remaining_requirement"]
+    assert state["usable_source_count"] == 0
+    assert len(gateway.search_calls) == 3
+    assert state["remaining_requirement"]
 
 
 def test_exhaustion_obeys_all_caps_and_saves_progress_for_continuation(isolated):
@@ -380,12 +386,13 @@ def test_new_followup_question_requires_fresh_source_despite_reused_root_proof(i
     ctx = context(research_resume=research.freeze_resume({**first, "trace_id": "trace_root"}),
                   research_goal={"kind": "followup_question", "target_quote": ""},
                   question="How does the will relate to memory?")
-    gateway = FakeGateway([("A passage for the new question.", [lead(fresh_url)])])
+    gateway = FakeGateway([("A passage for the new question.", [lead(fresh_url)]),
+                           ("No new lead.", []), ("No new lead.", [])])
     result = execute(gateway, ctx, trace="trace_followup")
     assert reads == [root_url, fresh_url]
-    assert len(gateway.search_calls) == 1
+    assert len(gateway.search_calls) == 3
     state = result["evidence_research"]
-    assert state["status"] == "source_text_obtained"
+    assert state["status"] == "candidate_passages_found"
     assert state["source_count"] == 2 and state["fresh_source_count"] == 1
     assert state["proofs"] == []
     assert fresh_url in gateway.final_prompts[0]
@@ -533,12 +540,13 @@ def test_new_question_rediscovered_full_work_reuses_bytes_and_focuses_later_pass
     ctx = context(research_resume=research.freeze_resume({**first, "trace_id": "trace_book"}),
                   research_goal={"kind": "followup_question", "target_quote": ""},
                   question="What does voluntary intention reveal about choice and will?")
-    gateway = FakeGateway([("The same full work contains the relevant later passage.", [lead(url)])])
+    gateway = FakeGateway([("The same full work contains the relevant later passage.", [lead(url)]),
+                           ("No new lead.", []), ("No new lead.", [])])
     result = execute(gateway, ctx, trace="trace_later_question")
     assert reads == [url]
-    assert len(gateway.search_calls) == 1 and len(gateway.final_prompts) == 1
+    assert len(gateway.search_calls) == 3 and len(gateway.final_prompts) == 1
     state = result["evidence_research"]
-    assert state["status"] == "source_text_obtained" and state["sources_tried"] == 0
+    assert state["status"] == "candidate_passages_found" and state["sources_tried"] == 0
     assert state["sources"][0]["body_sha256"] == first["evidence_research"]["sources"][0]["body_sha256"]
     assert any(step["status"] == "rediscovered_for_question" for step in state["steps"])
     source = final_evidence(gateway.final_prompts[0])["sources"][0]
@@ -560,7 +568,8 @@ def test_fresh_question_new_page_precedes_six_reused_nonmatches_in_grounding(iso
     ctx = context(research_resume=research.freeze_resume({**first, "trace_id": "trace_older_material"}),
                   research_goal={"kind": "followup_question", "target_quote": ""},
                   question="How does voluntary intention relate to choice and will?")
-    gateway = FakeGateway([("A source for the new question.", [lead(fresh_url)])])
+    gateway = FakeGateway([("A source for the new question.", [lead(fresh_url)]),
+                           ("No new lead.", []), ("No new lead.", [])])
     result = execute(gateway, ctx, trace="trace_fresh_question")
     assert reads == urls + [fresh_url]
     assert result["evidence_research"]["source_count"] == 7
@@ -575,22 +584,25 @@ def test_continue_source_only_result_requires_new_search_unless_answer_failed(is
     _, reads, responses = isolated
     first_url, new_url = "https://archive.example/first-reading", "https://alternate.example/more-reading"
     responses[first_url] = found(first_url, b"A readable passage discussing memory and attention.")
-    ctx = context()
+    ctx = context(question="How does memory relate to attention?")
     ctx["root"]["selection"].update(quote="", quote_status="none")
     final = None if answer_available else RuntimeError("Final answer transport unavailable")
-    first = execute(FakeGateway([("A source.", [lead(first_url)])], final=final), ctx, trace="trace_initial_reading")
-    assert first["evidence_research"]["status"] == "source_text_obtained"
+    first = execute(FakeGateway([("A source.", [lead(first_url)]),
+                                 ("No new lead.", []), ("No new lead.", [])], final=final),
+                    ctx, trace="trace_initial_reading")
+    assert first["evidence_research"]["status"] == "candidate_passages_found"
     parent = {**first, "trace_id": "trace_initial_reading", "mode": "deepen"}
     continuation = copy.deepcopy(ctx)
     continuation["research_resume"] = research.freeze_resume(parent)
     continuation["research_goal"] = research.goal(parent, ctx["root"], continue_evidence=True)
     assert continuation["research_goal"]["requires_new_source"] is answer_available
     responses[new_url] = found(new_url, b"Another readable passage develops the relation of memory and attention.")
-    gateway = FakeGateway([("A further source.", [lead(new_url)])] if answer_available else [])
+    gateway = FakeGateway([("A further source.", [lead(new_url)]),
+                           ("No new lead.", []), ("No new lead.", [])] if answer_available else [])
     result = execute(gateway, continuation, trace="trace_continued_reading")
-    assert result["evidence_research"]["status"] == "source_text_obtained"
+    assert result["evidence_research"]["status"] == "candidate_passages_found"
     assert result["evidence_research"]["final_answer_status"] == "available"
-    assert len(gateway.search_calls) == (1 if answer_available else 0)
+    assert len(gateway.search_calls) == (3 if answer_available else 0)
     assert reads == ([first_url, new_url] if answer_available else [first_url])
 
 
@@ -610,10 +622,11 @@ def test_repeated_generic_continue_keeps_substantive_question_and_late_excerpt(d
     responses[url] = found(url, body, "text/html")
     substantive_question = "What does voluntary intention reveal about choice and will?"
     initial_context = deeper.build_context(subject, {"question": substantive_question})
-    first_gateway = ExternalFakeGateway([("The complete work.", [lead(url)])],
+    first_gateway = ExternalFakeGateway([("The complete work.", [lead(url)]),
+                                         ("No new lead.", []), ("No new lead.", [])],
                                         final=RuntimeError("Initial final answer unavailable"))
     parent = deeper.run(initial_context, first_gateway)
-    assert parent["evidence_research"]["status"] == "source_text_obtained"
+    assert parent["evidence_research"]["status"] == "candidate_passages_found"
     assert parent["evidence_research"]["final_answer_status"] == "unavailable"
     generic_question = "Continue checking the quotation against source texts using the saved evidence."
     for index in range(2):

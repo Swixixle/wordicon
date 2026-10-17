@@ -20,7 +20,7 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
           available:true, calls:4, cost:'unknown', lane:{external:true, model:'fixture-model'},
           exploration:{question:request.postDataJSON().inputs.question, root:{trace_id:'root_fixture'},
             research_goal:request.postDataJSON().inputs.continue_evidence ? {kind:'continue_evidence',question:'What does the later chapter say about memory?'} : {kind:'followup_question',question:request.postDataJSON().inputs.question},
-            research_plan:{limits:{max_search_rounds:3,max_source_reads:6,max_model_calls:4}}},
+            research_plan:{version:2,limits:{max_search_rounds:3,max_source_reads:6,max_model_calls:4}}},
         }})});
       }
       return route.fulfill({contentType:'text/html', body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><main id="result"></main>'});
@@ -74,10 +74,47 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
     text = await render({is_fixture:true,evidence_research:research});
     ok(text.includes('Simulated evidence only — no live source check was performed.') && !text.includes('Quotation wording located in retrieved text'), 'fixture evidence never claims a real source check');
     text = await render({evidence_research:{...research,status:'source_text_obtained',proofs:[],remaining_requirement:'Locate the exact sentence.'}});
-    ok(text.includes('Source text obtained; quotation wording not located') && text.includes('Locate the exact sentence.'), 'retrieval alone does not claim quotation proof');
+    ok(text.includes('Legacy record: source text obtained; relevance and answer support were not established') && text.includes('Locate the exact sentence.'), 'legacy retrieval alone does not claim quotation or answer proof');
+    ok(await page.getByRole('button',{name:'Continue checking',exact:true}).count() === 1, 'legacy retrieval records retain their continuation control');
+    const candidates = {...research,status:'candidate_passages_found',target_quote:'',proofs:[],source_count:3,usable_source_count:2,
+      retrieval_policy_rev:2,retrieval_pass_complete:true,stop_reason:'source_read_budget_reached',sources:[
+        {url:'https://example.test/audiobooks/book-x',assessment:{weak:true,candidate_kind:'catalog_like',matched_question_terms:[],matched_work_terms:['confessions'],reason:['Catalog-like page; seek an edition with the passage.']}},
+        {url:'https://example.test/book-x',assessment:{weak:false,candidate_kind:'text_indicated',matched_question_terms:['memory','happiness'],matched_work_terms:['confessions','augustine'],reason:['Relevant terms found; support still requires inspection.']}}
+      ]};
+    text = await render({evidence_research:candidates});
+    ok(text.includes('Candidate passages collected; answer support remains unverified') && !text.includes('Quotation wording located'), 'candidate passages have no wording or answer-proof claim');
+    ok(text.includes('3 readable source texts obtained') && text.includes('2 source texts retained as candidates'), 'readable source count stays distinct from screened candidate count');
+    ok(text.includes('This pass reached its source-read allowance. The research question remains open.'), 'read allowance ends the pass without declaring the question answered');
+    ok(await page.getByRole('button',{name:'Continue checking',exact:true}).count() === 1, 'candidate passages offer Continue checking');
+    ok(!(await page.locator('.deeper-source-screening').getAttribute('open')), 'source screening starts collapsed');
+    await page.getByText('Source screening · 2',{exact:true}).click();
+    text = await page.locator('.deeper-source-screening').innerText();
+    ok(text.includes('Weak candidate · Catalog or landing page') && text.includes('Question terms found: none recorded'), 'a weak landing page is visible as weak rather than proof');
+    ok(text.includes('Question terms found: memory, happiness') && text.includes('Work terms found: confessions, augustine'), 'meaningful matching terms remain inspectable');
+    ok(text.includes('automatic clues for choosing passages to inspect, not verification') && text.includes('do not establish authorship, relevance, or support for the answer'), 'screening is explicitly heuristic');
+    await render({question:'Explain more.',evidence_research:{...candidates,screening_basis:'frozen_focus_fallback',sources:[{...candidates.sources[1],assessment:{...candidates.sources[1].assessment,question_basis:'frozen_focus_fallback',matched_question_terms:['augustine','confessions']}}]}});
+    await page.getByText('Source screening · 1',{exact:true}).click();
+    text = await page.locator('.deeper-result').innerText();
+    ok(text.includes('Frozen subject terms found: augustine, confessions') && !text.includes('Question terms found:') && text.includes('Source screening used the saved subject and work') && text.includes('Your question · Explain more.'), 'generic questions disclose frozen-subject screening without attributing its terms to the question');
+    text = await render({evidence_research:{...candidates,stop_reason:'search_budget_reached'}});
+    ok(text.includes('This pass reached its search allowance. The research question remains open.'), 'search allowance stopping reason does not claim a resolved question');
+    text = await render({evidence_research:{...candidates,stop_reason:'reused_complete_pass_for_answer_retry'}});
+    ok(text.includes('Saved source screening was reused for another answer attempt. The research question remains open.') && !text.includes('complete pass'), 'saved-pass reuse describes an answer retry without calling research complete');
+    text = await render({evidence_research:{...candidates,stop_reason:undefined}});
+    ok(text.includes('This bounded retrieval pass has ended; that does not establish that the research question is answered.'), 'a completed retrieval pass remains distinct from an answered question');
+    text = await render({evidence_research:{...research,stop_reason:'quotation_located'}});
+    ok(text.includes('Checking stopped after locating the requested wording. Broader answer support remains unverified.'), 'quotation stopping reason preserves its narrow scope');
+    text = await render({is_fixture:true,evidence_research:{...research,stop_reason:'quotation_located'}});
+    ok(!text.includes('Checking stopped after locating the requested wording.'), 'fixture stop reason never suggests a live quotation check');
+    text = await render({evidence_research:{...candidates,sources:[{url:'https://a:private-password@example.test/book',assessment:{weak:true,candidate_kind:'catalog_like',matched_question_terms:['<img src=x onerror=alert(1)>'],matched_work_terms:[],reason:['<script>alert(1)</script>']}}]}});
+    await page.getByText('Source screening · 1',{exact:true}).click();
+    ok(!(await page.locator('.deeper-source-screening').textContent()).includes('private-password') && await page.locator('.deeper-source-screening a').count() === 0, 'screening does not display or link credential-bearing URLs');
+    ok(await page.locator('.deeper-source-screening img, .deeper-source-screening script').count() === 0 && (await page.locator('.deeper-source-screening').innerText()).includes('<script>alert(1)</script>'), 'source screening terms and reasons are escaped');
     text = await render({evidence_research:{...research,final_answer_status:'unavailable'}});
     ok(text.includes('A grounded answer is not yet available.') && await page.getByRole('button',{name:'Continue checking',exact:true}).count() === 1, 'a saved quotation match still offers continuation when the grounded answer is unavailable');
     await render({evidence_research:{...research,status:'needs_more_evidence',proofs:[],remaining_requirement:'Read the next available edition.'}});
+    ok(await page.getByRole('button',{name:'Continue checking',exact:true}).count() === 1, 'unresolved evidence retains its continuation control');
+    await render({evidence_research:candidates});
     const requestsBefore = requests.length;
     ok(requests.filter(r => r.method === 'POST').length === 0, 'rendering all saved evidence states performs no model or preparation request');
     await page.getByRole('button',{name:'Continue checking',exact:true}).click();
@@ -89,6 +126,7 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
     text = await page.locator('.deeper-proposal').innerText();
     ok(text.includes('Evidence question · What does the later chapter say about memory?'), 'continuation proposal exposes the substantive frozen evidence question');
     ok(text.includes('3 search rounds, 6 direct source reads, 4 model calls') && text.includes('actual cost is unknown'), 'proposal states the frozen contingency and cost limits');
+    ok(text.includes('For a question without exact quoted wording, checking continues through the available source-read or search allowance.') && text.includes('matching topic terms does not establish that the answer is supported'), 'revision-two proposal states the quoteless continuation and support limit');
     ok(text.includes('Public source hosts receive bounded unauthenticated GETs') && text.includes('retrieved excerpts and failure summaries go to the configured model'), 'proposal discloses source requests and model-bound evidence');
     ok(text.includes('Nothing has started.') && requests.every(r => !r.url.endsWith('/api/operations')), 'continuation retains the explicit Start gate');
     await page.locator('.deeper-proposal [data-deeper-action="cancel"]').click();

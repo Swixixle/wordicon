@@ -6532,8 +6532,9 @@ def _check_deeper_wing():
     out = []
     root = Path(cli.__file__).parent.parent
     for f in ("tests/test_deeper.py", "tests/test_deeper_integration.py", "scripts/deeper.py", "webapp/deeper.js",
-              "scripts/evidence_fetch.py", "scripts/evidence_research.py", "tests/test_acquisition_usage.py",
-              "tests/test_evidence_fetch.py", "tests/test_evidence_research.py"):
+              "scripts/evidence_fetch.py", "scripts/evidence_research.py", "scripts/evidence_quality.py",
+              "tests/test_acquisition_usage.py", "tests/test_evidence_fetch.py", "tests/test_evidence_research.py",
+              "tests/test_evidence_quality.py", "tests/test_quoteless_research.py"):
         if not (root / f).exists():
             out.append(f"DEEPER: {f} is missing — the wing shipped without its parts")
     if out:
@@ -6565,6 +6566,12 @@ def _check_deeper_wing():
                    "a source fetch could reach this machine's own network")
     if not _efD._public_ip("93.184.216.34") or not _efD._public_ip("2606:2800:220:1:248:1893:25c8:1946"):
         out.append("DEEPER: the evidence fetcher refuses plainly public addresses — every fetch would fail closed")
+    _eqD = (root / "scripts" / "evidence_quality.py").read_text(encoding="utf-8")
+    if "must never serve as a completion condition" not in _eqD:
+        out.append("DEEPER: the lexical helper no longer states its own limit — overlap orders reads, never completes them")
+    _erD = (root / "scripts" / "evidence_research.py").read_text(encoding="utf-8")
+    if "quote_located" not in _erD or "retrieval_policy_rev" not in _erD:
+        out.append("DEEPER: the controller lost its revision-two stopping contract (quote_located / retrieval_policy_rev)")
     _srvD = (root / "server.py").read_text(encoding="utf-8")
     if '"title": snap.get("title") or snap.get("source_title")' not in _srvD:
         out.append("DEEPER: a focused step's history row does not lead with its own title — "
@@ -6578,6 +6585,7 @@ def _check_deeper_wing():
     import sys as _sysD
     r = _spD.run([_sysD.executable, "-m", "pytest", "tests/test_deeper.py", "tests/test_deeper_integration.py",
                   "tests/test_acquisition_usage.py", "tests/test_evidence_fetch.py", "tests/test_evidence_research.py",
+                  "tests/test_evidence_quality.py", "tests/test_quoteless_research.py",
                   "-q", "-p", "no:cacheprovider"],
                  cwd=root, capture_output=True, text=True, timeout=600)
     if r.returncode != 0:

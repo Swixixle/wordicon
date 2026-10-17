@@ -1,5 +1,27 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.43.1 — Revision two: a landing page is not the work
+
+The first live evidence run exposed revision one within the hour: a
+quoteless follow-up searched once, read the single worst candidate on its
+own leads list — an audiobook landing page — and stopped with five reads
+unspent, because "a readable page" satisfied its terminal condition and
+candidates were read in return order. The checkpoint pinned both causes;
+Codex shipped the repair; it was cross-examined and integrated here.
+
+Revision two separates acquisition from completion: only an actual
+quotation match may stop a pass early, a quoteless question researches
+through its whole approved allowance, pending reads are ordered by
+bounded lexical overlap with the work and question (path and query only —
+no domain earns a bonus, and the helper's own header states that overlap
+must never serve as a completion condition), weak pages are recorded
+without being treated as grounding, the card says why checking stopped
+and what remains unverified, and a frozen revision-one research proposal
+is refused before dispatch rather than run under superseded rules. The
+status line now reads "candidate passages collected", never an implied
+settlement. The wing's pytest pins grow to 234 inside the suite, with
+the stopping contract and the helper's self-limit pinned beside them.
+
 ## v1.43.0 — Evidence and contingencies: the model's prose stops being the referee
 
 The first two live Go deeper runs exposed the same defect twice: the model

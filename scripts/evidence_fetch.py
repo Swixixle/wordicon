@@ -23,6 +23,7 @@ import socket
 import ssl
 import time
 from urllib.parse import quote as urlquote, urljoin, urlsplit, urlunsplit
+from evidence_quality import meaningful_terms
 
 MAX_BYTES = 2 * 1024 * 1024
 MAX_REDIRECTS = 3
@@ -32,10 +33,6 @@ TEXT_TYPES = {"text/html", "application/xhtml+xml", "text/plain"}
 REDIRECT_CODES = {301, 302, 303, 307, 308}
 MAX_GROUNDING_CHARS = 12000
 QUESTION_EXCERPT_CHARS = 3000
-_QUESTION_STOPWORDS = frozenset("""a an and are as at be been being but by can could did do does
-explain for from had has have how i if in into is it its me more my of on or our should
-some tell than that the their them then there these they this those through to us was
-were what when where which who why will with would you your please about""".split())
 
 
 class FetchRefused(ValueError):
@@ -284,8 +281,7 @@ def _question_excerpt(rep: dict, question: str, full_text_length: int) -> dict:
     """
     if not isinstance(question, str) or not question.strip():
         return {}
-    terms = list(dict.fromkeys(term for term in re.findall(r"[^\W_]{3,}", question[:2000].casefold())
-                               if term not in _QUESTION_STOPWORDS))[:32]
+    terms = meaningful_terms(question[:2000])[:32]
     if not terms:
         return {}
     pattern = re.compile(r"(?<!\w)(?:" + "|".join(re.escape(term) for term in terms) + r")(?!\w)", re.I)
