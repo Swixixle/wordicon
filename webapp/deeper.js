@@ -442,10 +442,20 @@
     else if (action === 'continue-evidence') prepare(entry, 'Continue checking the quotation against source texts using the saved evidence.', true);
     else if (action === 'question') {
       const question = entry.questions[Number(target.dataset.deeperQuestion)];
-      if (typeof question === 'string') prepare(entry, question);
+      // W2: the Ledger notes that a question was followed and which run it
+      // left from — never the question's words. A suggested question taken
+      // and his own asked are the same act with a different kind. Guarded:
+      // this file also loads where no reporter exists.
+      if (typeof question === 'string') {
+        if (window.__nikLedger) window.__nikLedger.note('question_followed', {id: (entry.subject && entry.subject.trace_id) || '', kind: 'suggested'});
+        prepare(entry, question);
+      }
     } else if (action === 'follow') {
       const input = document.getElementById(entry.key + '-question');
-      if (input && input.value.trim()) prepare(entry, input.value);
+      if (input && input.value.trim()) {
+        if (window.__nikLedger) window.__nikLedger.note('question_followed', {id: (entry.subject && entry.subject.trace_id) || '', kind: 'own'});
+        prepare(entry, input.value);
+      }
       else if (input) { input.focus(); input.setCustomValidity('Write the question you would like to follow.'); input.reportValidity(); input.addEventListener('input', () => input.setCustomValidity(''), {once:true}); }
     }
   });

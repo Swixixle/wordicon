@@ -1,5 +1,66 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.44.0 — W2: the content layer, under the one switch
+
+The extraction program's second wing, built on his "ok go" (2026-10-17)
+and the revision-boundaries ruling (2026-10-16). Until now the self-data
+layer held attention only; the content it deliberately refused — what he
+actually wrote and searched — was either overwritten in place (the
+notebook kept one head) or discarded on answer (a search's words lived
+only in the request). Both now have custody, in the stores that already
+own their subjects, under the Ledger's one visible switch.
+
+Revision retention lives where draft custody lives: `scripts/notebook.py`
+gains `revision_bodies` (content-addressed by fingerprint — saving the
+same wording twice stores one body) and a `revisions` index, written by
+`_keep_revision()` inside the save's own transaction on both paths
+(create and bump), so a crash keeps save and capture together or not at
+all. `/api/notebook/documents/<id>/revisions` returns the path a draft
+took; `/revisions/<n>` returns one revision's exact body, and a revision
+saved while recording was off is refused by name ("not retained") — the
+gap IS the record of off. The read carries the candidate-feedback
+sentence: an earlier wording is never labeled rejected; original, edit
+and context are judged only under review, never by a pipeline.
+
+Search words go to a new store, `scripts/capture.py`: monthly JSONL under
+`local_state/capture/`, written by the search route itself (so every
+caller is covered), kept whole or refused by name — an over-cap query is
+never truncated into something he did not type — and a store that cannot
+write reports it in its return instead of breaking the search it rides
+in. `/api/capture/queries` reads them back, day-filtered, honest about
+its population.
+
+The Ledger's inventory moves 9 → 14 as a ruling, not a drift: import
+attempted, question followed, material carried, edit applied, search
+performed — the attention of acts whose content lives elsewhere. Subjects
+gain `revision` (linking edit_applied to the retained revision) and
+`scope`; still ids, numbers and short titles, never bodies. The desk
+(`webapp/index.html`) now carries the reporter the workspace shell
+already had — same discipline inline: capped queue, plain-string beacon
+at the visibility boundary, no timer while hidden, 409 means the switch
+spoke and reporting stops — emitting at the press points themselves
+(result reopened, document opened, a save that advanced the revision, a
+carry-back, an upload attempt, a library search), and Go deeper reports
+`question_followed` from both doors (suggested taken / own asked) with
+the run's id and never the question's words. `/ledger` discloses the
+five new kinds beside what is never recorded, renders each as a
+sentence, and names both sibling stores and the candidate-feedback law
+— the disclosure moved WITH the inventory.
+
+The journeys' byte-identical store brackets (quiet, speak, map) now run
+with the Ledger off, flipped outside the measured window — the desk
+honestly reports attention on load, and the switch is the law's own
+answer: off means the server refuses everything (409), so a journey that
+still changes the store is exactly the defect the bracket exists to
+catch. Suite: the pinned event inventory updated to the fourteen ruled
+types; `_check_capture` added (retention across the on/off/on path,
+content-address dedup at the store, exact bodies back, whole-or-refused
+queries, the never-break-the-search law, the disclosure strings, the
+run.sh bracket wiring) — each sabotaged and failing by name before
+deploy. What this version does NOT do: no keystrokes (ruled out until a
+pass consumes them), no model call reads any of it, nothing leaves the
+machine, and nothing labels an earlier wording worse.
+
 ## v1.43.1 — Revision two: a landing page is not the work
 
 The first live evidence run exposed revision one within the hour: a

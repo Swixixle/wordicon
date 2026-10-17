@@ -121,6 +121,25 @@ datasets generated later, optionally, from the same records.
   pipeline files on its own — a shortening for one audience, a changed
   task and a one-detail correction all look like edits, and only
   analysis under review may read them as more.
+  **Status (2026-10-17, his "ok go"): the first slice is SHIPPED.** The
+  notebook retains every saved revision's exact content inside the
+  save's own transaction, content-addressed by fingerprint
+  (`revision_bodies` dedups identical wordings; the `revisions` index is
+  the path), readable at
+  `/api/notebook/documents/<id>/revisions[/<n>]`; the capture store
+  (`scripts/capture.py`) keeps search words whole, monthly JSONL,
+  readable at `/api/capture/queries`; the desk carries the Ledger's
+  reporter inline, emitting the five ruled interaction kinds at their
+  press points plus `question_followed` from Go deeper's two doors; the
+  Ledger's inventory is fourteen, pinned, with `revision` and `scope`
+  joining the subject fields — ids, numbers and short titles, never
+  bodies. One switch governs all of it (off is a stop, never an
+  eraser; retention gaps while off are the record OF off), the `/ledger`
+  page discloses the new kinds and both sibling stores beside that
+  switch, and the journeys' byte-identical brackets run with the switch
+  off, flipped outside the measured window. Still open in W2: dispositions
+  and lineage edges beyond the carry store's, and attempt/failure events
+  for acts whose own records do not already hold them.
 - **W3 — extraction jobs and findings.** A versioned pass catalog; job
   identity = source version × pass version × model × context manifest;
   intent persisted before dispatch, results before success; raw provider

@@ -15,6 +15,11 @@ export class Ledger {
       const r = await fetch('/api/ledger/config', { credentials: 'same-origin' });
       const d = await r.json();
       this.enabled = d.enabled !== false;
+      // off means nothing is SENT, not merely nothing new queued: the
+      // session_start noted below before a slow answer, or queued by an
+      // earlier page, is dropped too — a switched-off shell makes no
+      // /api/ledger request at all (W2; the desk's inline reporter agrees)
+      if (!this.enabled) { this.queue = []; clearTimeout(this.timer); this.timer = 0; }
     } catch (e) { /* the reporter never blocks the room */ }
     document.addEventListener('visibilitychange', () => {
       this.note(document.hidden ? 'visibility_hidden' : 'visibility_visible', {});

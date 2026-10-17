@@ -231,7 +231,10 @@ const DRAFT = [
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('wordicon.write.style.v1') || '{}'));
   ok(stored.view === 'wide', 'the view is remembered on this device and nowhere else: ' + JSON.stringify(stored));
   const posts = []; // stage B: a document save (/api/notebook/) is not a spend and not a run; it is counted by the notebook journey, not here
-  page.on('request', r => { if (r.method() !== 'GET' && r.url().indexOf('/api/notebook/') === -1) posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
+  // W2: the Ledger's reporter posts the owner's own attention record on its
+  // own 15s clock — not a spend, not a run, and counted by its own checks;
+  // without this exemption any spends-nothing window can be hit by that tick
+  page.on('request', r => { if (r.method() !== 'GET' && r.url().indexOf('/api/ledger') === -1 && r.url().indexOf('/api/notebook/') === -1) posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
   await page.evaluate(() => setWriteView('focused')); await page.waitForTimeout(500);
   ok(posts.length === 0, 'changing the view records nothing: ' + JSON.stringify(posts));
   const fo = await measure();

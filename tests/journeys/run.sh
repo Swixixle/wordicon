@@ -59,9 +59,22 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
+# W2: the desk now carries the Ledger's reporter, so merely LOADING the page
+# reports attention (session_start, visibility) on its own clock — honest
+# behavior that would make a byte-identical assertion flaky. The switch is the
+# law's own answer: off means nothing new is kept, server-enforced (409), so
+# the brackets run with the Ledger off — flipped BEFORE the before-digest and
+# back on AFTER the compare, both flips outside the measured window. A journey
+# that still changes the store with the switch off is exactly the defect the
+# bracket exists to catch.
+# state_root.apply is load-bearing: a bare import of ledger resolves the REPO's
+# local_state, not the scratch store the journey server serves — the first run
+# of this bracket proved it by switching the wrong ledger off and watching the
+# desk write two events into the measured store.
+lswitch() { (cd "$ROOT" && "$PY" -c "import sys, pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); import state_root; state_root.apply(pathlib.Path(sys.argv[2])); import ledger; ledger.set_enabled(sys.argv[1] == 'on')" "$1" "$JOURNEY_STATE"); }
 for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit carry wayfinder map moira notebook related narrowing gloss; do
   echo "== journey: $j"
-  if [ "$j" = quiet ] || [ "$j" = speak ] || [ "$j" = map ]; then before=$(digest); fi
+  if [ "$j" = quiet ] || [ "$j" = speak ] || [ "$j" = map ]; then lswitch off; before=$(digest); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
   rc=$?
   cat "$JOURNEY_OUT/$j.log"
@@ -70,6 +83,7 @@ for j in quiet home anatomy chooser speak speakkeep encounter federation shell r
   if [ "$j" = quiet ] || [ "$j" = speak ] || [ "$j" = map ]; then
     after=$(digest)
     if [ -z "$before" ] || [ "$before" != "$after" ]; then echo "== $j: the store changed during a journey that must write nothing ($before -> $after)"; status=1; else echo "ok   $j: the store is byte-identical ($before)"; fi
+    lswitch on
   fi
 done
 # the writing-room identity checks must have run (a journey that skipped them is not a pass)

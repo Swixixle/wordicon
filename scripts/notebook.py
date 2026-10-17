@@ -129,6 +129,27 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
             created_at      TEXT NOT NULL,
             UNIQUE (doc_id, revision, reason)
         );
+        -- W2 (2026-10-17): every revision's exact body, content-addressed.
+        -- The head used to be overwritten in place, so the path a draft took
+        -- was lost unless a checkpoint happened to ride along. One row per
+        -- distinct content (fingerprint), however many revisions share it;
+        -- the revisions table says which document reached which content when.
+        -- Recording is governed by the Ledger's visible switch: off keeps the
+        -- head-only behavior; what was never recorded is never reconstructed.
+        CREATE TABLE IF NOT EXISTS revision_bodies (
+            fingerprint TEXT PRIMARY KEY,
+            body        TEXT NOT NULL,
+            doc_json    TEXT,
+            chars       INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS revisions (
+            doc_id      TEXT NOT NULL,
+            revision    INTEGER NOT NULL,
+            fingerprint TEXT NOT NULL,
+            saved_at    TEXT NOT NULL,
+            origin      TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (doc_id, revision)
+        );
         CREATE TABLE IF NOT EXISTS document_events (
             event_id    TEXT PRIMARY KEY,
             doc_id      TEXT NOT NULL,
@@ -522,6 +543,7 @@ def save(doc_id: str, *, title: str, title_is_manual: bool, body: str, base_revi
                     "VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (doc_id, title, int(title_is_manual), body, fp, now, now, origin, doc_text, sch, proj, fpv))
                 revision, created = 1, True
+                _keep_revision(conn, doc_id, 1, fp, body, doc_text, now, origin)
                 if doc_text is not None:
                     events.append(_event(conn, doc_id, "format_converted", 1, {"from": "new", "to_schema": sch, "projection": proj}, now))
             else:
@@ -551,6 +573,7 @@ def save(doc_id: str, *, title: str, title_is_manual: bool, body: str, base_revi
                         "fingerprint = ?, saved_at = ?, doc_json = ?, doc_schema = ?, projection_version = ?, fp_version = ? "
                         "WHERE doc_id = ?",
                         (title, int(title_is_manual), body, revision, fp, now, doc_text, sch, proj, fpv, doc_id))
+                    _keep_revision(conn, doc_id, revision, fp, body, doc_text, now, origin)
             conn.execute(
                 "INSERT INTO save_requests (request_id, doc_id, fingerprint, revision, saved_at, request_fp, request_fp_version) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)", (request_id, doc_id, fp, revision, now, rq, REQUEST_FP_VERSION))
@@ -737,3 +760,52 @@ if __name__ == "__main__":  # pragma: no cover — a hand check, no model
     if a.list:
         for d in list_documents()["documents"]:
             print(f"{d['saved_at']}  rev {d['revision']:>3}  {d['doc_id']}  {d['display_title'][:60]}")
+
+def _keep_revision(conn, doc_id: str, revision: int, fp: str, body: str, doc_text, now: str, origin: str) -> None:
+    """W2: retain this revision's exact content, content-addressed, inside
+    the save's own transaction — a crash keeps save and capture together or
+    not at all. Gated by the one recording switch; off is the old
+    head-only behavior and is a stop, never an eraser."""
+    import ledger as _ledger
+    if not _ledger.enabled():
+        return
+    conn.execute("INSERT OR IGNORE INTO revision_bodies (fingerprint, body, doc_json, chars) VALUES (?, ?, ?, ?)",
+                 (fp, body, doc_text, len(body)))
+    conn.execute("INSERT OR IGNORE INTO revisions (doc_id, revision, fingerprint, saved_at, origin) VALUES (?, ?, ?, ?, ?)",
+                 (doc_id, revision, fp, now, origin))
+
+
+def revisions(doc_id: str) -> dict:
+    """The path a draft took: every retained revision, oldest first, with
+    whether its exact body is still addressable. Reading changes nothing."""
+    _check_id(doc_id, "document id")
+    conn = _connect()
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT r.revision, r.fingerprint, r.saved_at, r.origin, "
+            "(SELECT chars FROM revision_bodies b WHERE b.fingerprint = r.fingerprint) AS chars "
+            "FROM revisions r WHERE r.doc_id = ? ORDER BY r.revision", (doc_id,)).fetchall()]
+        head = conn.execute("SELECT revision FROM documents WHERE doc_id = ?", (doc_id,)).fetchone()
+    finally:
+        conn.close()
+    return {"doc_id": doc_id, "revisions": rows, "head_revision": int(head["revision"]) if head else None,
+            "recording": __import__("ledger").enabled(),
+            "note": "retained from the capture ruling onward; earlier revisions were overwritten in place and are not reconstructed. "
+                    "An earlier wording is never labeled rejected: original, edit and context are candidate feedback, judged only under review."}
+
+
+def revision_body(doc_id: str, revision: int) -> dict:
+    """One retained revision's exact content, by its place on the path."""
+    _check_id(doc_id, "document id")
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT r.fingerprint, r.saved_at, b.body, b.doc_json, b.chars FROM revisions r "
+            "JOIN revision_bodies b ON b.fingerprint = r.fingerprint "
+            "WHERE r.doc_id = ? AND r.revision = ?", (doc_id, int(revision))).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise NotebookError("that revision was not retained (saved before the capture ruling, or recording was off)", 404)
+    return {"doc_id": doc_id, "revision": int(revision), "fingerprint": row["fingerprint"],
+            "saved_at": row["saved_at"], "body": row["body"], "doc_json": row["doc_json"], "chars": int(row["chars"])}

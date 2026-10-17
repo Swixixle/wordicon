@@ -95,6 +95,7 @@ import inquiry  # noqa: E402  (the Inquiry — block 111 phase 1; a question kep
 import actions  # noqa: E402  (workspace-v2 slice B: the action registry — every control, one definition)
 import snapshots  # noqa: E402  (workspace-v2 slice B: immutable input snapshots)
 import ledger  # noqa: E402  (2026-10-16: the owner's own trail — attention events, owned, disclosed, sealed)
+import capture  # noqa: E402  (W2, 2026-10-17: the content layer — his searches kept whole, under the same switch and seal)
 import operations as ops  # noqa: E402  (workspace-v2 slice D: the durable operations store; JOBS is its projection)
 import workindex  # noqa: E402  (workspace-v2 slice E: the derived Your work index — rebuildable, never authority)
 import producers  # noqa: E402  (workspace-v2 slice F: investigation adapters — contracts pinned, live starts by the owner's ruling)
@@ -1656,6 +1657,31 @@ def api_notebook_summary():
     return jsonify(nbk.summary())
 
 
+@app.route("/api/notebook/documents/<doc_id>/revisions")
+def api_notebook_revisions(doc_id):
+    """W2: the path a draft took — every retained revision. A read."""
+    try:
+        return jsonify(nbk.revisions(doc_id))
+    except nbk.NotebookError as e:
+        return _nbk_error(e)
+
+
+@app.route("/api/notebook/documents/<doc_id>/revisions/<int:revision>")
+def api_notebook_revision_body(doc_id, revision):
+    """W2: one retained revision's exact content. A read."""
+    try:
+        return jsonify(nbk.revision_body(doc_id, revision))
+    except nbk.NotebookError as e:
+        return _nbk_error(e)
+
+
+@app.route("/api/capture/queries")
+def api_capture_queries():
+    """W2: the owner's own searches back — day-filtered, capped, honest
+    about its population. A read; shown only to him."""
+    return jsonify(capture.read_queries(day=str(request.args.get("day") or "")))
+
+
 @app.route("/api/notebook/documents/<doc_id>")
 def api_notebook_get(doc_id):
     try:
@@ -3130,10 +3156,15 @@ def api_library_doc(rep_id):
 
 @app.route("/api/library/search")
 def api_library_search():
+    results = library.search(request.args.get("q", ""))
+    # W2: the search itself is his data. Captured at the route so every
+    # caller is covered; kept whole or not at all, governed by the one
+    # recording switch, and never altering what the search returns.
+    capture.query("library", request.args.get("q", ""), len(results) if isinstance(results, list) else None)
     return jsonify({"lane": "library-exact",
                      "note": "Exact text in your library only — not semantic, "
                              "not the web.",
-                     "results": library.search(request.args.get("q", ""))})
+                     "results": results})
 
 
 @app.route("/api/library/resolve/<path:anchor_id>")

@@ -39,7 +39,10 @@ const DRAFT = [
   const page = await ctx.newPage();
   const errs = []; page.on('pageerror', e => errs.push(String(e)));
   const posts = [];
-  page.on('request', r => { if (r.method() !== 'GET' && r.url().indexOf('/api/notebook/') === -1) posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
+  // W2: the Ledger's reporter posts the owner's own attention record on its
+  // own 15s clock — not a spend, not a run, and counted by its own checks;
+  // without this exemption any spends-nothing window can be hit by that tick
+  page.on('request', r => { if (r.method() !== 'GET' && r.url().indexOf('/api/ledger') === -1 && r.url().indexOf('/api/notebook/') === -1) posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
 
   // the real seeded records, fetched once, become the job fixtures
   const cookieHeader = fs.readFileSync(path.join(DIR, 'cookie'), 'utf8').trim() + '=' + fs.readFileSync(path.join(DIR, 'token'), 'utf8').trim();

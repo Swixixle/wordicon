@@ -52,8 +52,11 @@ function deepResult() {
   // every non-GET the page makes, so "spends nothing" can be measured rather
   // than asserted
   const posts = [];
+  // W2: the Ledger's reporter posts the owner's own attention record on its
+  // own 15s clock — not a spend, not a run, and counted by its own checks;
+  // without this exemption any spends-nothing window can be hit by that tick
   // stage B: a document save (/api/notebook/) is not a spend and not a run; it is counted by the notebook journey, not here
-  page.on('request', r => { if (r.method() !== 'GET' && r.url().indexOf('/api/notebook/') === -1) posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
+  page.on('request', r => { if (r.method() !== 'GET' && r.url().indexOf('/api/ledger') === -1 && r.url().indexOf('/api/notebook/') === -1) posts.push(r.method() + ' ' + r.url().replace(BASE, '')); });
 
   await page.route('**/api/config', r => r.fulfill({ json: { gateway: 'probe-lane', model: 'probe-model-1', ok: true } }));
   let polls = 0;

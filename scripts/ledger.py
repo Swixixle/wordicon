@@ -38,6 +38,17 @@ EVENT_TYPES = (
     "document_opened",
     "result_viewed",
     "visibility_hidden", "visibility_visible",   # the tab lost or regained his attention
+    # W2 amendment (his ruling, recorded in docs/adr-extraction.md; "ok go",
+    # 2026-10-17): the interaction inventory joins deliberately — the pinned
+    # set moves because he ruled it, not because something drifted. Events
+    # still carry ids and short titles, never bodies: the query text lives
+    # in the capture store, the revision bodies in the notebook, the acts in
+    # their own records; these five are the ATTENTION of each.
+    "import_attempted",      # he tried to bring something in (outcome lives in the act's own record)
+    "question_followed",     # a Go deeper step: a suggested question taken or his own asked
+    "material_carried",      # an excerpt carried back to the writing's revision notes
+    "edit_applied",          # a save that changed a document (the revision itself is in the notebook)
+    "search_performed",      # a search box used (scope and count here; the words in the capture store)
 )
 MAX_BATCH = 100
 MAX_TITLE = 120
@@ -99,7 +110,10 @@ def append(events: list) -> dict:
         if not isinstance(subject, dict):
             return {"error": f"event {i} has a subject that is not an object", "refused": True}
         subj = {}
-        for k in ("id", "title", "route", "page", "kind"):
+        # W2: "revision" links edit_applied to the retained revision row in
+        # the notebook; "scope" names which search box search_performed means.
+        # Still ids, numbers and short titles — a subject never carries a body.
+        for k in ("id", "title", "route", "page", "kind", "revision", "scope"):
             v = subject.get(k)
             if v is None:
                 continue

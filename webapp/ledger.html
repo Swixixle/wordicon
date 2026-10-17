@@ -35,7 +35,8 @@
   <div class="card">
     <div class="lbl">What this is, exactly</div>
     <p style="margin:6px 0">The behavioral layer the big platforms harvest in the dark, captured here in the light and owned by you: which doors you opened, which pages you stood in, which documents and results had your attention, and when it came and went. Every entry is timestamped twice — the page’s clock and the store’s receive clock — appended to a file in your store that is never rewritten, and sealed into the encrypted Vault with your writing.</p>
-    <p class="muted small" style="margin:6px 0 0">What it never records: keystrokes, the content of anything, or a single event from outside this application. The switch is in the workspace’s Settings; off means nothing new is recorded and everything already written is kept. The exact event kinds: session start and end, page shown, place opened and closed, document opened, result viewed, attention leaving and returning to the tab.</p>
+    <p class="muted small" style="margin:6px 0 0">What it never records: keystrokes, the content of anything, or a single event from outside this application. The switch is in the workspace’s Settings; off means nothing new is recorded and everything already written is kept. The exact event kinds: session start and end, page shown, place opened and closed, document opened, result viewed, attention leaving and returning to the tab — and, since the capture ruling: import attempted, question followed, material carried, edit applied, search performed.</p>
+    <p class="muted small" style="margin:6px 0 0">Two sibling stores keep what the Ledger deliberately will not, under the same switch and the same seal: the words you type into the search boxes are kept whole in the capture store, and every saved revision of a document is retained by the notebook — your earlier wording is never labelled “rejected”; an edit is candidate feedback, original and revision kept side by side and judged only under your review. Off stops both the moment it stops the Ledger, and erases nothing.</p>
   </div>
 
   <div class="card">
@@ -64,6 +65,11 @@
     result_viewed: s => 'looked at a ' + (s.kind === 'reading' ? 'reading' : 'result'),
     visibility_hidden: () => 'attention left the tab',
     visibility_visible: () => 'attention returned',
+    import_attempted: s => 'tried to bring in <span class="title">' + esc(s.title || 'a file') + '</span>',
+    question_followed: s => (s.kind === 'own' ? 'asked a question of their own in Go deeper' : 'followed a suggested question in Go deeper'),
+    material_carried: () => 'carried material back to the revision notes',
+    edit_applied: s => 'saved an edit' + (s.revision ? ' (revision ' + esc(s.revision) + ')' : ''),
+    search_performed: s => 'searched the ' + esc(s.scope || 'library'),
   };
   function esc(x) { return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
   let loaded = [];

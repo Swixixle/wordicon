@@ -1437,6 +1437,65 @@
 // Static markup carries data-brand; a sentence assembled in JS calls this, so a
 // future rename cannot leave a dead name behind inside a rendered string.
 const brand = () => (window.BRAND && window.BRAND.name) || 'Nikodemus';
+
+// ---- the Ledger's desk reporter (W2, his "ok go" 2026-10-17) --------------
+// The workspace shell has webapp/work/ledger.js; the desk is one file, so the
+// same reporter lives inline, same discipline, no divergence allowed: queue
+// capped at 500, batch at 20, a 15s timer only while visible (a reporter that
+// wakes a background tab changes the very attention it records), a PLAIN-
+// STRING sendBeacon at the visibility boundary (text/plain is a simple
+// request — WebKit's teardown never flags it), and a 409 from the store is
+// the Settings switch speaking: reporting stops at once. Events carry ids and
+// short titles, never bodies — the query text lives in the capture store, the
+// revision bodies in the notebook, the acts in their own records. This object
+// only REPORTS; it reads nothing and sends nothing anywhere but his store.
+window.__nikLedger = (function () {
+  const L = { queue: [], timer: 0, enabled: true };
+  function localISO() {
+    const d = new Date(), off = -d.getTimezoneOffset();
+    const pad = n => String(Math.abs(n)).padStart(2, '0');
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, -1)
+      + (off >= 0 ? '+' : '-') + pad(Math.trunc(off / 60)) + ':' + pad(off % 60);
+  }
+  L.note = function (type, subject) {
+    if (!L.enabled) return;
+    L.queue.push({ type, at: localISO(), subject: subject || {} });
+    if (L.queue.length > 500) L.queue.splice(0, L.queue.length - 500);   // attention data, not a debt: cap, never balloon
+    if (L.queue.length >= 20) { L.flush(); return; }
+    if (!L.timer && !document.hidden) L.timer = setTimeout(() => L.flush(), 15000);
+  };
+  L.flush = function (beacon) {
+    clearTimeout(L.timer); L.timer = 0;
+    if (!L.queue.length) return;
+    const events = L.queue.splice(0, 100);
+    const body = JSON.stringify({ events });
+    if (beacon && navigator.sendBeacon) {
+      try { navigator.sendBeacon('/api/ledger', body); return; } catch (e) { /* fall through */ }
+    }
+    fetch('/api/ledger', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body })
+      .then(r => { if (r.status === 409) L.enabled = false; })    // the switch is off; stop until it is turned back on
+      .catch(() => { L.queue.unshift(...events); });              // kept for the next flush
+  };
+  L.init = function () {
+    fetch('/api/ledger/config', { credentials: 'same-origin' })
+      .then(r => r.json()).then(d => {
+        L.enabled = d.enabled !== false;
+        // off means nothing is SENT, not merely nothing new queued: the
+        // session_start noted before this answer arrived is dropped too,
+        // so a switched-off desk makes no /api/ledger request at all
+        if (!L.enabled) { L.queue = []; clearTimeout(L.timer); L.timer = 0; }
+      })
+      .catch(() => { /* the reporter never blocks the room */ });
+    document.addEventListener('visibilitychange', () => {
+      L.note(document.hidden ? 'visibility_hidden' : 'visibility_visible', {});
+      if (document.hidden) L.flush(true);   // hand over ONLY when hiding; returning does no work at all
+    });
+    window.addEventListener('pagehide', () => { L.note('session_end', {}); L.flush(true); });
+    L.note('session_start', {});
+  };
+  return L;
+})();
+
 let pendingDecisions = {}; // { [cardIndex]: 'a'|'r'|'v' }
 let cardTraceId = {}; // { [cardIndex]: trace_id } — each card carries its own trace, since decompose renders multiple concepts (each its own trace) on one page
 let cardData = {}; // { [cardIndex]: {bff, claims_detail} } — full candidate per card, for judgment payloads and for Revise's frozen-meaning re-roll
@@ -2658,6 +2717,9 @@ async function loadPastResult(traceId, shelf, label, restoring, revealSection, r
     area.innerHTML = `<div class="card"><div class="error">Couldn't reach the server.</div></div>`;
     return;
   }
+  // W2: the look itself, not the content — id, which shelf the jump came
+  // from, and the label that was on the button; never the result's body
+  window.__nikLedger.note('result_viewed', {id: traceId, kind: shelf || 'past', title: String(label || '').slice(0, 120)});
 
   if (d.receipt_only) {
     // the door opened onto an old run whose reasoning was never stored:
@@ -6976,6 +7038,9 @@ async function carryBack(traceId, kind, ref, excerpt, standing, btn) {
     const d = await r.json();
     if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status));
     if (btn) { btn.textContent = '↩ added to revision notes'; }
+    // W2: the carry's full record (excerpt, standing, resolution) lives in
+    // the carry store; the Ledger holds only that material moved, and whence
+    window.__nikLedger.note('material_carried', {id: traceId, kind: kind || ''});
     await loadCarries();
     carryReturnLine();
   } catch (e) {
@@ -8915,6 +8980,10 @@ async function nbSend() {
     return;
   }
   NB.inflight = null; NB.retries = 0; NB.serverError = '';
+  // W2: a save that ADVANCED the document is an edit applied — the revision
+  // number links this attention event to the revision the notebook retained;
+  // the words themselves live only there. An unchanged-save acks silently.
+  if ((d.revision | 0) !== (NB.revision | 0)) window.__nikLedger.note('edit_applied', {id: NB.id, revision: d.revision | 0});
   NB.revision = d.revision | 0; NB.fingerprint = d.fingerprint || ''; NB.savedAt = d.saved_at || '';
   NB.ackSeq = inf.seq;
   if (inf.payload.checkpoint_reason) { NB.lastCheckpointAt = Date.now(); if (NB.pendingReason === inf.payload.checkpoint_reason) NB.pendingReason = ''; }
@@ -9003,6 +9072,7 @@ async function nbOpen(id) {
   let d;
   try { const r = await fetch('/api/notebook/documents/' + encodeURIComponent(id)); d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status)); }
   catch (e) { pageNote('Could not open that document: ' + escapeHtml(String(e))); return; }
+  window.__nikLedger.note('document_opened', {id: d.doc_id, title: String(d.title || '').slice(0, 120)});   // W2: same event the workspace shell reports
   // a newer unsent copy of THIS document in some tab's recovery record
   const newer = nbRecoveryRecords(id).filter(rc => rc.base_revision === d.revision && (rc.body !== d.body)).sort((a, b) => (b.at || '').localeCompare(a.at || ''))[0];
   NB = Object.assign(nbBlank(), {id: d.doc_id, title: d.title || '', title_is_manual: !!d.title_is_manual, revision: d.revision | 0,
@@ -9962,6 +10032,10 @@ async function uploadFile(file) {
   card.innerHTML = `<div class="card"><p class="body muted"><span class="spinner"></span>reading ${escapeHtml(file.name || 'that file')}…</p></div>`;
   const fd = new FormData();
   fd.append('file', file, file.name || 'pasted');
+  // W2: the ATTEMPT is the event, emitted at the press whatever the server
+  // then says — the outcome lives in the upload's own record. The filename is
+  // the subject's short title; the file's content never touches the Ledger.
+  window.__nikLedger.note('import_attempted', {title: String(file.name || 'pasted').slice(0, 120)});
   let d;
   try {
     const r = await fetch('/api/upload', {method: 'POST', body: fd});
@@ -10231,6 +10305,9 @@ async function docSearch() {
   const q = document.getElementById('doc-search').value.trim();
   const out = document.getElementById('doc-search-results');
   if (!q) { out.innerHTML = ''; return; }
+  // W2: the Ledger holds that a library search happened, never the words —
+  // the query text is kept by the capture store on the server, same switch
+  window.__nikLedger.note('search_performed', {scope: 'library'});
   try {
     const d = await readJsonDoc(await fetch(`/api/library/search?q=${encodeURIComponent(q)}`));
     out.innerHTML = `<div class="muted" style="font-size:11.5px;margin:4px 0">${escHtmlD(d.note || '')}</div>`
@@ -11786,6 +11863,7 @@ window.addEventListener('hashchange', () => { const p = location.hash.slice(1); 
 document.querySelectorAll('#rail a[data-place]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); openBand(a.dataset.place); }));
 
 document.addEventListener('DOMContentLoaded', () => {
+  window.__nikLedger.init();   // the trail starts when the desk does (W2)
   document.getElementById('input-text').addEventListener('input', updateGestureChooser);
   document.getElementById('input-text').addEventListener('input', () => { if (HOME) renderContinue(); });
   document.getElementById('input-text').addEventListener('input', scheduleDestinations);   // block 105: the chooser reads, never runs

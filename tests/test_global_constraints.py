@@ -6626,8 +6626,14 @@ def _check_ledger(server, paired):
         rr = c.post("/api/ledger", json={"events": payload})
         if rr.status_code != 409 or name not in ((rr.get_json() or {}).get("error") or ""):
             out.append(f"LEDGER: a bad batch was not refused by name ({name}): {rr.status_code} {rr.get_json()}")
+    # W2 (his ruling in docs/adr-extraction.md; "ok go", 2026-10-17): the
+    # interaction inventory joined DELIBERATELY — five kinds, named here so
+    # the set still cannot drift without a ruling. Events carry ids, numbers
+    # and short titles, never bodies.
     if set(_led.EVENT_TYPES) != {"session_start", "session_end", "page_shown", "place_opened", "place_closed",
-                                 "document_opened", "result_viewed", "visibility_hidden", "visibility_visible"}:
+                                 "document_opened", "result_viewed", "visibility_hidden", "visibility_visible",
+                                 "import_attempted", "question_followed", "material_carried", "edit_applied",
+                                 "search_performed"}:
         out.append(f"LEDGER: the event inventory moved without a ruling: {sorted(_led.EVENT_TYPES)}")
     if any("key" in t for t in _led.EVENT_TYPES):
         out.append("LEDGER: a key-shaped event type appeared — keystrokes were ruled OUT (events first)")
@@ -6653,13 +6659,57 @@ def _check_ledger(server, paired):
     lh = Path("webapp/ledger.html").read_text(encoding="utf-8")
     for need, why in (("What it never records", "the negative disclosure"), ("keystrokes", "the no-keystrokes sentence"),
                       ("timestamped twice", "the two-clocks note"), ("Export the day", "the export door"),
-                      ("sealed into the encrypted Vault", "the custody sentence")):
+                      ("sealed into the encrypted Vault", "the custody sentence"),
+                      # W2: the disclosure moved WITH the inventory — the page names the
+                      # five new kinds and the two sibling stores, or the capture layer
+                      # is recording more than the page beside its switch admits
+                      ("import attempted, question followed, material carried, edit applied, search performed",
+                       "the five ruled kinds"),
+                      ("capture store", "the sibling store for search words"),
+                      ("retained by the notebook", "the sibling store for revisions"),
+                      ("candidate feedback", "the edits-are-candidate-feedback sentence"),
+                      ("erases nothing", "the stop-never-eraser sentence")):
         if need not in lh:
             out.append(f"LEDGER: the trail page lost {why} ({need!r})")
+    for kind in ("import_attempted", "question_followed", "material_carried", "edit_applied", "search_performed"):
+        if kind + ":" not in lh:
+            out.append(f"LEDGER: the trail renders {kind} as a raw type, not a sentence")
+    # W2: an edit_applied subject may carry the revision NUMBER (the link to
+    # the retained revision) and a search its scope — numbers and names, not bodies
+    r = c.post("/api/ledger", json={"events": [
+        {"type": "edit_applied", "at": "2026-10-17T02:00:00-04:00", "subject": {"id": "doc_l2", "revision": 7}},
+        {"type": "search_performed", "at": "2026-10-17T02:00:01-04:00", "subject": {"scope": "library"}}]})
+    if r.status_code != 200 or (r.get_json() or {}).get("kept") != 2:
+        out.append(f"LEDGER: the W2 subjects (revision, scope) were not kept: {r.status_code} {r.get_json()}")
+    else:
+        g2 = c.get("/api/ledger?day=2026-10-17").get_json() or {}
+        ea = [e for e in g2.get("events", []) if e.get("type") == "edit_applied" and (e.get("subject") or {}).get("id") == "doc_l2"]
+        if not ea or ea[0]["subject"].get("revision") != "7":
+            out.append(f"LEDGER: edit_applied lost its revision link on the way to the store: {ea[:1]}")
     wj = Path("webapp/work/ledger.js").read_text(encoding="utf-8")
     for need in ("sendBeacon", "'/api/ledger'", "visibilitychange", "session_start", "409"):
         if need not in wj:
             out.append(f"LEDGER: the reporter lost {need!r}")
+    # W2: the DESK carries the same reporter inline (index.html is one file),
+    # same discipline — and the five ruled interaction events are emitted at
+    # their press points, by name. A missing emission is an event the
+    # disclosure promises and the page never sends.
+    dh = Path("webapp/index.html").read_text(encoding="utf-8")
+    for need, why in (("window.__nikLedger", "the desk reporter"), ("__nikLedger.init()", "the reporter's start"),
+                      ("sendBeacon", "the teardown-safe handover"), ("visibilitychange", "the visibility boundary"),
+                      ("'result_viewed'", "the look at a past result"), ("'document_opened'", "the document opening"),
+                      ("'edit_applied'", "the applied edit"), ("'material_carried'", "the carry-back"),
+                      ("'import_attempted'", "the import attempt"), ("'search_performed'", "the search event")):
+        if need not in dh:
+            out.append(f"LEDGER: the desk lost {why} ({need!r})")
+    if "'search_performed', {scope: 'library'}" not in dh:
+        out.append("LEDGER: the desk search event carries something other than its scope — the words belong to the capture store")
+    dj = Path("webapp/deeper.js").read_text(encoding="utf-8")
+    if dj.count("window.__nikLedger.note('question_followed'") != 2 or "if (window.__nikLedger)" not in dj:
+        out.append("LEDGER: Go deeper does not report question_followed at both doors (suggested and own), guarded")
+    for ln in [l for l in dj.splitlines() if "question_followed" in l]:
+        if "input.value" in ln or "question}" in ln or "title:" in ln:
+            out.append(f"LEDGER: a question_followed subject carries the question's words — events never carry bodies: {ln.strip()[:120]}")
     mj = Path("webapp/work/main.js").read_text(encoding="utf-8")
     for need, why in (("ledgerRep.init()", "the reporter's start"), ("page_shown", "the page event"),
                       ("document_opened", "the document event"), ("place_opened", "the place event"),
@@ -6671,6 +6721,153 @@ def _check_ledger(server, paired):
     a = _ac.BY_ID.get("more.ledger") or {}
     if a.get("handler") != "standalone" or a.get("route") != "/ledger" or a.get("rail") is not False:
         out.append(f"LEDGER: the \u2318K door is missing or wrong: {a.get('handler')}/{a.get('route')}/{a.get('rail')}")
+    return out
+
+
+def _check_capture(server, paired):
+    """W2 \u2014 the content layer of the extraction program (his rulings: capture
+    at revision boundaries, 2026-10-16; the interaction inventory and 'ok go',
+    2026-10-17). Two stores under the Ledger's one switch: the notebook
+    retains every saved revision's exact content, content-addressed, inside
+    the save's own transaction; the capture store keeps the owner's search
+    words whole. The laws: off is a stop never an eraser; a query is kept
+    whole or refused by name, never truncated; an earlier wording is never
+    labeled rejected (candidate feedback); recording never breaks the
+    instrument it records; and the journeys' byte-identical brackets run
+    with the switch off, flipped outside the measured window."""
+    out = []
+    import capture as _cap
+    import ledger as _led
+    import notebook as _nbk
+    c = paired(server.app.test_client())
+    root = Path(__file__).resolve().parents[1]
+
+    # ---- gates: these are the owner's own words; an unpaired device reads nothing
+    for route in ("/api/capture/queries", "/api/notebook/documents/doc_x/revisions",
+                  "/api/notebook/documents/doc_x/revisions/1"):
+        if server.app.test_client().get(route).status_code != 401:
+            out.append(f"CAPTURE: an unpaired device reaches {route}")
+
+    # ---- revision retention: the path a draft took, exact and content-addressed
+    try:
+        _led.set_enabled(True)
+        rid = _nbk.new_id()
+        bodies = ["First wording.\n", "Second wording, changed.\n", "First wording.\n"]   # A, B, A \u2014 the dedup case
+        fp0 = ""
+        rev = 0
+        for i, b in enumerate(bodies):
+            r = c.put(f"/api/notebook/documents/{rid}", json={"title": "", "title_is_manual": False, "body": b,
+                                                              "base_revision": rev, "base_fingerprint": fp0,
+                                                              "request_id": f"req_capture_{i:08d}"})
+            j = r.get_json() or {}
+            if r.status_code not in (200, 201) or not j.get("fingerprint"):
+                out.append(f"CAPTURE: save {i} failed ({r.status_code}: {j})"); break
+            rev, fp0 = j.get("revision"), j.get("fingerprint")
+        lst = c.get(f"/api/notebook/documents/{rid}/revisions").get_json() or {}
+        rows = lst.get("revisions") or []
+        if [x.get("revision") for x in rows] != [1, 2, 3] or lst.get("head_revision") != 3:
+            out.append(f"CAPTURE: three saves did not retain three revisions: {rows} head={lst.get('head_revision')}")
+        elif rows[0]["fingerprint"] != rows[2]["fingerprint"] or rows[0]["fingerprint"] == rows[1]["fingerprint"]:
+            out.append("CAPTURE: the content address does not address content (same body, different fingerprint \u2014 or the reverse)")
+        if "never labeled rejected" not in (lst.get("note") or ""):
+            out.append("CAPTURE: the revisions read lost the candidate-feedback sentence \u2014 an earlier wording is never labeled rejected")
+        b1 = c.get(f"/api/notebook/documents/{rid}/revisions/1").get_json() or {}
+        b2 = c.get(f"/api/notebook/documents/{rid}/revisions/2").get_json() or {}
+        if b1.get("body") != bodies[0] or b2.get("body") != bodies[1]:
+            out.append(f"CAPTURE: a retained revision does not return its exact body ({b1.get('body')!r}, {b2.get('body')!r})")
+        # dedup at the store itself: three index rows, two bodies
+        conn = _nbk._connect()
+        try:
+            nbod = conn.execute("SELECT COUNT(*) AS n FROM revision_bodies WHERE fingerprint IN "
+                                "(SELECT fingerprint FROM revisions WHERE doc_id = ?)", (rid,)).fetchone()["n"]
+        finally:
+            conn.close()
+        if nbod != 2:
+            out.append(f"CAPTURE: identical bodies were stored twice (revision_bodies for this path: {nbod}, not 2)")
+
+        # ---- the switch: off retains nothing new and erases nothing old
+        _led.set_enabled(False)
+        r = c.put(f"/api/notebook/documents/{rid}", json={"title": "", "title_is_manual": False, "body": "Fourth, while off.\n",
+                                                          "base_revision": rev, "base_fingerprint": fp0,
+                                                          "request_id": "req_capture_off00001"})
+        j = r.get_json() or {}
+        if r.status_code != 200 or j.get("revision") != 4:
+            out.append(f"CAPTURE: with recording off the SAVE itself was blocked \u2014 off gates retention, never the writing ({r.status_code}: {j})")
+        rev, fp0 = j.get("revision", rev), j.get("fingerprint", fp0)
+        lst_off = c.get(f"/api/notebook/documents/{rid}/revisions").get_json() or {}
+        if [x.get("revision") for x in (lst_off.get("revisions") or [])] != [1, 2, 3]:
+            out.append(f"CAPTURE: the off switch erased or extended the retained path: {lst_off.get('revisions')}")
+        r4 = c.get(f"/api/notebook/documents/{rid}/revisions/4")
+        if r4.status_code != 404 or "not retained" not in ((r4.get_json() or {}).get("error") or ""):
+            out.append(f"CAPTURE: an unretained revision is not refused by name: {r4.status_code} {r4.get_json()}")
+        _led.set_enabled(True)
+        r = c.put(f"/api/notebook/documents/{rid}", json={"title": "", "title_is_manual": False, "body": "Fifth, back on.\n",
+                                                          "base_revision": rev, "base_fingerprint": fp0,
+                                                          "request_id": "req_capture_on000001"})
+        if (r.get_json() or {}).get("revision") != 5:
+            out.append(f"CAPTURE: the save after re-enabling did not advance to 5: {r.get_json()}")
+        lst_on = c.get(f"/api/notebook/documents/{rid}/revisions").get_json() or {}
+        if [x.get("revision") for x in (lst_on.get("revisions") or [])] != [1, 2, 3, 5]:
+            out.append(f"CAPTURE: retention did not resume cleanly at 5 (the gap IS the record of off): {lst_on.get('revisions')}")
+    finally:
+        _led.set_enabled(True)
+
+    # ---- the capture store: the owner's search words, kept whole or not at all
+    probe = "capture probe lexicon"
+    r = c.get(f"/api/library/search?q={probe.replace(' ', '%20')}")
+    if r.status_code != 200:
+        out.append(f"CAPTURE: the library search itself broke under capture: {r.status_code}")
+    q = c.get("/api/capture/queries").get_json() or {}
+    mine = [x for x in q.get("queries", []) if x.get("q") == probe]
+    if not mine or mine[-1].get("scope") != "library" or not isinstance(mine[-1].get("hits"), int):
+        out.append(f"CAPTURE: the searched words were not kept with scope and hit count: {mine[-1:] or q.get('population')}")
+    if "population" not in q:
+        out.append("CAPTURE: the queries read does not state its population")
+    long_q = "x" * (_cap.MAX_QUERY + 1)
+    r = c.get(f"/api/library/search?q={long_q}")
+    if r.status_code != 200:
+        out.append(f"CAPTURE: an over-cap query broke the search route itself: {r.status_code}")
+    if any(x.get("q", "").startswith("xxxx") for x in (c.get("/api/capture/queries").get_json() or {}).get("queries", [])):
+        out.append("CAPTURE: an over-cap query was kept (truncated?) \u2014 a query is kept whole or not at all")
+    ref = _cap.query("library", long_q, 0)
+    if ref.get("kept") or not ref.get("refused") or "kept whole or not at all" not in (ref.get("why") or ""):
+        out.append(f"CAPTURE: the over-cap refusal is not by name: {ref}")
+    ref2 = _cap.query("desk", "hello", 0)
+    if ref2.get("kept") or not ref2.get("refused"):
+        out.append(f"CAPTURE: an unknown scope was kept: {ref2}")
+    _led.set_enabled(False)
+    try:
+        r = c.get(f"/api/library/search?q=switched%20off%20probe")
+        if r.status_code != 200:
+            out.append(f"CAPTURE: with recording off the search itself was blocked: {r.status_code}")
+        qoff = c.get("/api/capture/queries").get_json() or {}
+        if any("switched off probe" in x.get("q", "") for x in qoff.get("queries", [])):
+            out.append("CAPTURE: a search was kept while the switch was off")
+        if not [x for x in qoff.get("queries", []) if x.get("q") == probe]:
+            out.append("CAPTURE: turning capture off erased earlier queries \u2014 off is a stop, never an eraser")
+        if qoff.get("enabled") is not False:
+            out.append("CAPTURE: the queries read does not say the switch is off")
+    finally:
+        _led.set_enabled(True)
+
+    # ---- the wiring is law, not habit: the hook, the transaction, the brackets
+    sv = (root / "server.py").read_text(encoding="utf-8")
+    if 'capture.query("library"' not in sv:
+        out.append("CAPTURE: the library search route lost its capture hook")
+    nb = (root / "scripts" / "notebook.py").read_text(encoding="utf-8")
+    if nb.count("_keep_revision(conn") < 2:
+        out.append("CAPTURE: retention left one of the two save paths (create / bump) \u2014 or left the save's transaction")
+    if "INSERT OR IGNORE INTO revision_bodies" not in nb:
+        out.append("CAPTURE: revision bodies are no longer content-addressed (INSERT OR IGNORE by fingerprint)")
+    cp = (root / "scripts" / "capture.py").read_text(encoding="utf-8")
+    for need, why in (("kept whole or not at all", "the whole-or-refused law"),
+                      ("the search itself is unaffected", "the never-break-the-instrument law"),
+                      ("ledger.enabled()", "the one switch")):
+        if need not in cp:
+            out.append(f"CAPTURE: capture.py lost {why} ({need!r})")
+    rs = (root / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
+    if "then lswitch off; before=$(digest); fi" not in rs or "lswitch on" not in rs or "ledger.set_enabled" not in rs:
+        out.append("CAPTURE: the journeys' byte-identical brackets no longer run with the Ledger off, flipped outside the measured window")
     return out
 
 
@@ -8571,6 +8768,7 @@ def main() -> int:
     failures.extend(_check_workspace_registry(server, _paired))
     failures.extend(_check_workspace_doors(server, _paired))
     failures.extend(_check_ledger(server, _paired))
+    failures.extend(_check_capture(server, _paired))
     failures.extend(_check_deeper_wing())
     failures.extend(_check_document_contract(server, _paired))
     failures.extend(_check_docx_export(server, _paired))
