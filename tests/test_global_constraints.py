@@ -6525,7 +6525,7 @@ _INTEGRATION_MODULES = (
 )
 _INTEGRATION_PYTESTS = (
     "tests/test_attention_durable.py", "tests/test_capture_durable.py", "tests/test_capture_gaps.py",
-    "tests/test_code_manifest.py",
+    "tests/test_code_manifest.py", "tests/test_install_beta_release.py",
     "tests/test_capture_history.py", "tests/test_capture_routes.py", "tests/test_evidence_lineage.py",
     "tests/test_opencase_grounded_view.py", "tests/test_opencase_grounding.py",
     "tests/test_opencase_integrity_workflow.py", "tests/test_opencase_synthesis.py",
@@ -6537,7 +6537,7 @@ _INTEGRATION_NODE_TESTS = (
     "tests/test_cost_display.mjs",
 )
 _INTEGRATION_SUPPORT = (
-    "scripts/opencase_capabilities.json", "tests/fixtures/receipts.json", "scripts/code_manifest.py",
+    "scripts/install_beta_release.py", "scripts/opencase_capabilities.json", "tests/fixtures/receipts.json", "scripts/code_manifest.py",
     "webapp/capture-history.html", "webapp/capture-history.js", "webapp/opencase.js", "webapp/receipts.js",
     "webapp/work/cost-display.js",
 )
