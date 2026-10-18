@@ -1,0 +1,94 @@
+{
+  "contract": "deflate.bridge.v1",
+  "files": [
+    {
+      "path": "server/ai.js",
+      "change": "modified",
+      "baseline_sha256": "4fe39cafb5862902f87c13302d4c2b1c085e01be9e0d98ff62023d198658e97c",
+      "staged_sha256": "12bb4b1b0758a0e57fe080e60056928f15252e8041606374a34e7d0dd859a81b",
+      "bytes": 31642,
+      "runtime": true,
+      "before_sha256": "4fe39cafb5862902f87c13302d4c2b1c085e01be9e0d98ff62023d198658e97c",
+      "sha256": "12bb4b1b0758a0e57fe080e60056928f15252e8041606374a34e7d0dd859a81b"
+    },
+    {
+      "path": "server/app.js",
+      "change": "modified",
+      "baseline_sha256": "e527436bb1b6ab1205bce3e4615d83e628200194b48727cc870d0a797bd1faa5",
+      "staged_sha256": "4e306a12c778f7e0bebfe2086a911abec6c99abe10613f8109b596fab8afa56c",
+      "bytes": 66555,
+      "runtime": true,
+      "before_sha256": "e527436bb1b6ab1205bce3e4615d83e628200194b48727cc870d0a797bd1faa5",
+      "sha256": "4e306a12c778f7e0bebfe2086a911abec6c99abe10613f8109b596fab8afa56c"
+    },
+    {
+      "path": "server/bridge.js",
+      "change": "added",
+      "baseline_sha256": null,
+      "staged_sha256": "31d8ab04d4a1816f6c8c35ea8b3502a5b8581cbc26cc25aca2459a090bf991f1",
+      "bytes": 33904,
+      "runtime": true,
+      "before_sha256": null,
+      "sha256": "31d8ab04d4a1816f6c8c35ea8b3502a5b8581cbc26cc25aca2459a090bf991f1"
+    },
+    {
+      "path": "server/exportClaims.js",
+      "change": "modified",
+      "baseline_sha256": "d0249d90b1bd38f42869f3050cd77c8233572ff0a8113ee305e7ff0733ce6c2d",
+      "staged_sha256": "bb4a78c5d89a228d6df8cf6e1d12e92a36eec05197a88e2d69861c0c24215569",
+      "bytes": 27758,
+      "runtime": true,
+      "before_sha256": "d0249d90b1bd38f42869f3050cd77c8233572ff0a8113ee305e7ff0733ce6c2d",
+      "sha256": "bb4a78c5d89a228d6df8cf6e1d12e92a36eec05197a88e2d69861c0c24215569"
+    },
+    {
+      "path": "server/importer.js",
+      "change": "modified",
+      "baseline_sha256": "0e630c24a06f9421c7a9cf97fd214954d2e2ad584061750e941b75a2e83c94d1",
+      "staged_sha256": "54067bf7807f51c447e085b1e47040308d5395c8cc3c5f4d9bdc4bfc3f7b3a73",
+      "bytes": 6643,
+      "runtime": true,
+      "before_sha256": "0e630c24a06f9421c7a9cf97fd214954d2e2ad584061750e941b75a2e83c94d1",
+      "sha256": "54067bf7807f51c447e085b1e47040308d5395c8cc3c5f4d9bdc4bfc3f7b3a73"
+    },
+    {
+      "path": "server/preparation.js",
+      "change": "modified",
+      "baseline_sha256": "a3724daa888145143171b50e1a7ebce5d31285c3c0ee7cec02ade977b56a3ffc",
+      "staged_sha256": "1e4d94d685adc1f85cc105d0ca01086d8105486a01daee6409153209c6ace552",
+      "bytes": 48898,
+      "runtime": true,
+      "before_sha256": "a3724daa888145143171b50e1a7ebce5d31285c3c0ee7cec02ade977b56a3ffc",
+      "sha256": "1e4d94d685adc1f85cc105d0ca01086d8105486a01daee6409153209c6ace552"
+    },
+    {
+      "path": "test/bridge.test.js",
+      "change": "added",
+      "baseline_sha256": null,
+      "staged_sha256": "545b20ab1756a09519935d6650bee192447d609a759c48b62a9feedc81825c8f",
+      "bytes": 21922,
+      "runtime": false,
+      "before_sha256": null,
+      "sha256": "545b20ab1756a09519935d6650bee192447d609a759c48b62a9feedc81825c8f"
+    },
+    {
+      "path": "test/html-forms.test.js",
+      "change": "added",
+      "baseline_sha256": null,
+      "staged_sha256": "30e434aa17630181478ef59ef7a376148bfc189852166171fca63494c6149a00",
+      "bytes": 2590,
+      "runtime": false,
+      "before_sha256": null,
+      "sha256": "30e434aa17630181478ef59ef7a376148bfc189852166171fca63494c6149a00"
+    }
+  ],
+  "preserve": [
+    ".env",
+    "data",
+    "deposition-key.json",
+    "package.json",
+    "package-lock.json",
+    "node_modules",
+    "existing native port and launcher"
+  ]
+}

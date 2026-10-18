@@ -1,0 +1,432 @@
+NIKODEMUS INTEGRATION PLAN FOR DESKTOP CODEX
+18 October 2026
+Owner: Alex Maksimovich
+Purpose: ordered implementation handoff
+
+OBJECTIVE
+
+Make Nikodemus the single workspace where Alex can bring in a question, article, document, podcast, video or selected passage; investigate it using his existing programs; inspect the evidence; continue deeper; and save, reopen and connect the resulting work.
+
+Preserve a durable account of the material, attempts, model calls, tool outcomes, revisions and observable user actions. This supports a personal memory system that can later improve through evaluated personalization.
+
+Use the existing projects as capabilities inside Nikodemus. Keep technical setup in Connections/Settings and keep the main experience understandable to a nontechnical user.
+
+EXECUTION INSTRUCTION
+
+Continue the already-authorized integration. Finish the work underway, then advance through this order as far as the available code, access and session permit. Make routine implementation decisions and continue without asking for approval after every slice. Maintain runnable checkpoints and a current handoff when the session ends.
+
+This plan authorizes implementation, reversible local changes, focused testing and work within existing spending authorization. It does not create new subscriptions, authorize unrelated purchases, publish private material or authorize destructive changes to existing stores. Keep existing approval and cost controls operational.
+
+Treat this as an ordered backlog, not a claim that every project can be finished in one session. A blocked optional adapter should not stop unrelated usable work. Resolve dependencies first and explicitly record any remaining blocker.
+
+CURRENT CHECKPOINT AND IMMEDIATE WORK — UPDATED AFTER c9cd9ef REVIEW
+
+This section takes precedence over the older backlog below. Preserve completed work and verify it; do not rebuild it from the earlier defect descriptions.
+
+Desktop Codex reports deployment c9cd9ef: a real FJC investigation, source inspection, Save, restart/reopen and linked follow-up; two durable document revisions and an exact passage snapshot; and two outage-queued events delivered exactly once. It reports 140 Python tests, 20 outbox tests and 30 capture browser checks. Capture remains partial, Receipts is staged and later integrations, including Ethical Alternatives, remain pending.
+
+Claude reports independently checking a snapshot of the deployed files against the integration manifest and reproducing their behavior. Its review confirms: non-end_turn and max_tokens holds; upstream-ID-based FJC provenance families; official_primary_record classification; Deflate derived-interpretation lineage and transcript hash validation; version chains for producer objects; and a distinct grounding stage that refuses unsupported conclusions. These are completed capabilities to retain, not fresh assignments.
+
+The same review reports 2 of 33 journeys failing: notes-webkit and editor-webkit refuse the ledger POST through access-control checks. Chromium passes. Eleven new modules/test files are absent from the global constraint gate. The deployed .candidate-commit says 6dfef59 while .open-case-integration.json identifies c9cd9ef. The integration history resides in a separate local checkout rather than the reviewer-visible repositories/bundle.
+
+This chat checked the connected Swixixle/wordicon GitHub repository on 18 October: requesting commit c9cd9ef returned "No commit found for SHA"; a candidate-branch search returned no matches. This is a remote-access check, not a test of the Mac deployment. No code repair or publication is claimed by this handoff.
+
+Do the following before promoting further live integrations. Isolated inventory and adapter preparation can continue in parallel.
+
+P0 — Make one checkpoint reachable and reproducible
+
+Owner: desktop Codex, which can access the integration checkout. Locate ~/Documents/ChatGPT/deflate-lens-0.15.2/integration/nikodemus, the active deployed tree, ~/nk-verify and the main wordicon checkout. Compare the integration manifest, tracked content, dirty files and relevant git history. Preserve all unrelated work and existing stores. Do not reset or replace the main checkout to force agreement.
+
+- Recover the exact integration commit and ancestry into the agreed wordicon repository using a named integration branch. Verify the branch contains the deployed code and required tests. Publish that branch through the existing authenticated connection; do not force-push or merge main merely to make it visible.
+- Refresh the portable bundle from that same published checkpoint. Include required ancestry, tests and configuration documentation. Publish the bundle checksum and a location each reviewer can actually access. A bundle remaining only in Mac Downloads is not shared delivery.
+- Keep one tracked CURRENT-STATE file in the shared branch. Record the repository URL, branch, full code commit(s), deployed code identity, dirty-state status, manifest/hash location, test results by engine, known failures and next tasks. Record separate commits for Open Case, Deflate or other repositories when their code is required.
+- Give builders separate worktrees and task ownership, with one integration owner. Each starts by reading CURRENT-STATE and comparing its checkout to the stated commit. Each finishes by committing its work and updating the shared checkpoint. Chat descriptions supplement this record; they do not substitute for it.
+- Keep credentials, cookies, private writing and live stores out of the public code repository. Use scrubbed reproduction fixtures and an explicitly authorized private channel for any indispensable sensitive record. Checkpoint sharing does not require publishing the user's corpus.
+
+Acceptance: another environment can fetch the exact full commit or clone the delivered bundle into a fresh directory, reproduce the tracked-file manifest and run the declared checks. Confirm remote reachability from this chat and reviewer access before saying all builders are on the same code. If credentials or repository permissions block publication, name that specific blocker after preparing the complete bundle; do not claim it will sync automatically.
+
+P1 — Fix WebKit from observed request evidence
+
+Reproduce notes-webkit and editor-webkit against the shared checkpoint. Capture page origin, actual request URL, initiator, method, request/response headers, preflight if present, status and browser console. Determine whether the printed /127.0.0.1:8498/api/ledger is a malformed relative URL or log formatting. The dynamic import of /work/ledger.js is a lead, not a proven root cause.
+
+Fix request construction, loading or the intended origin contract at its source. Preserve existing authentication, same-origin, CORS, CSP and CSRF protections as applicable; do not disable protections or add broad origin allowances to silence the journeys. Verify ledger events are actually accepted and persisted, and retry behavior preserves event identity.
+
+Acceptance: both failing journeys pass in WebKit, Chromium remains passing, and a relevant unauthorized cross-origin request remains rejected. Playwright WebKit results and a manual run in the user's Safari are different evidence; label each accurately.
+
+P2 — Put the new wing inside the main gate
+
+Inventory the eleven reported new modules/test files against the actual diff; do not guess their names from the review. Add the necessary existence/registration checks and test invocations using the existing deeper-wing pattern in test_global_constraints.py. Include lineage, synthesis holds, grounding, accounting and durable capture wherever their tests live. Reuse focused tests rather than creating duplicate suites.
+
+Acceptance: removing tests/test_evidence_lineage.py from an isolated test checkout makes the main gate fail by name. A representative behavioral sabotage in the newly covered implementation also fails the main gate by name. Restore the checkout afterward. A filename assertion alone is not behavioral coverage.
+
+P3 — Make release identity and remaining claims accurate
+
+- Generate deployment markers, integration manifest and bundle from one identified code checkpoint. Correct the stale .candidate-commit after comparing the actual content. Record generated deployment metadata without trying to embed a commit's own hash inside the commit that creates it. Preserve release history; do not rewrite old signed records.
+- Keep provenance-family IDs and evidence-linked grounding as the primary protection against false independence. Exercise paraphrases such as "confirmed by two sources" and "the second record agrees" on two copies of one family. Agreement between copies may be described, but must not imply independent corroboration. Test actual answer/evidence relationships; broadening a prose regex alone does not establish the guarantee. Include a genuine two-family case to avoid over-blocking.
+- Display estimated spending as "about $0.13 estimated" for the four reported new calls and "about $0.19 estimated" including the two earlier calls, subject to the accounting records. Retain full calculation precision internally; final provider billing is unconfirmed. Preserve unknowns and separate budget ceilings from measured estimates.
+- cache_read remains zero in the reviewed receipts. Keep that visible; do not claim provider cache savings, confuse local source reuse with provider caching, or require an invented nonzero cache result. Cache optimization is later work unless it blocks the current task.
+
+Release acceptance: from the final shared checkpoint, run the full constraint suite and all 33 existing journeys in their declared engines, plus applicable added checks. Record exact results and the two known private-corpus skips separately. Verify restart/reopen on an authorized safe store copy. Reuse existing live records for unchanged model behavior; make a new paid call only where a concrete integration uncertainty requires it under the existing allowance. End with the full code commit, deployment manifest, accessible bundle/checksum, independent-fetch result and explicit remaining limitations. Do not call a Chromium-only run complete browser verification.
+
+Once P0–P3 are complete, reconcile the backlog below against implemented behavior. Finish only remaining gaps, then continue with durable capture, Receipts, Deflate and Ethical Alternatives in the established order. Do not ask Alex to authorize already-authorized repairs again.
+
+EARLIER BASELINE AND BACKLOG CONTEXT
+
+Earlier live runs exposed truncated invalid JSON without a hold, rendered FJC variants treated as independent corroboration, and a $0 collection figure that omitted billed synthesis. The c9cd9ef review above supersedes those earlier observations where fixes were verified. The acceptance cases below remain useful regression requirements, not proof that every item is still broken. Classification and task-relative completion must still be checked against the current implementation.
+
+Locate the actual active checkout, running process, store, branch and commit before editing. Preserve current uncommitted work, existing writing, readings, identities and pinned keys.
+
+Existing Deflate deposition, Go deeper and W2/revision-capture work has been reported in earlier handoffs. Inspect it and extend it; do not create duplicate replacements.
+
+The repository findings below came from source inspection of GitHub default branches on 18 October. Recheck the corresponding local code before adopting a finding.
+
+ORDERED WORK
+
+0. Establish the working baseline and shared contract
+
+Objective: keep the currently working beta usable while integrations expand.
+
+Actions:
+- Identify the active Nikodemus, Open Case, Deflate and Ethical Alternatives copies and record their exact locations and versions. Resolve launcher confusion so the intended copy opens consistently.
+- Snapshot/backup the store before migrations. Make small, reviewable commits with a recovery path.
+- Inspect the existing origin, revision, proposal, operation, model-run, capture, finding and deposition types. Extend their identifiers and relationships rather than introducing a parallel record system.
+- Make source discovery, fetched document, selected excerpt, model-visible excerpt and evidence cited in an answer distinguishable.
+- Define adapter capability/version checks and explicit unavailable/degraded states.
+- Preserve separate source identities even when content is deduplicated. Similarity or the same name is not an authorized identity merge.
+
+Done when: the builder can name the running code/store, preserve it, and document the minimal integration contract without a wholesale rewrite.
+
+0A. Retain the live integrity fixes and complete any remaining acceptance gaps
+
+Objective: prevent silent answer corruption, false independent corroboration and misleading cost totals. First reconcile the completed c9cd9ef fixes above with these regression requirements. Use the preserved 04:57 and 05:01 run records where relevant; resolve their IDs and time zone from the actual store. Inspect current behavior before changing code.
+
+Verify existing work and fill remaining gaps in this order:
+
+A. Hold truncated and structurally invalid answers by name
+- Inspect the provider finish/stop reason and streaming completion state before accepting an answer. An output-limit stop such as max_tokens must produce an explicit held/truncated status. Detect malformed JSON, schema failures and interrupted responses independently too.
+- Preserve the raw response, usage, error, stop reason and partial text. Do not present invalid or unfinished structured output as a completed answer.
+- Provide a useful recovery path: size the initial output allowance for the schema/task, then use an explicit bounded retry/continuation/repair strategy within the disclosed remaining budget. Retain each attempt and do not silently concatenate incompatible fragments.
+- A user asking for 180 words is not the system fix. The ordinary question should work without this workaround.
+- Tests: force an output-limit response ending mid-string; force invalid JSON with a normal stop; interrupt a stream; then recover to valid output. Verify the UI, saved record and reopen state retain the hold and all attempt costs.
+
+B. Separate byte integrity from source identity and independence
+- Keep each original capture and signed payload unchanged, with its own cryptographic hash. Add derived identity/lineage metadata rather than rewriting old evidence.
+- Maintain separate notions of capture ID, source record identity, substantive revision and provenance family. Prefer authoritative upstream record IDs; otherwise use a conservative, versioned combination of source locator, resolved subject ID, record type and normalized substantive fields.
+- A label/rendering change must not create a new independent source. Known mirrors, cached copies and multiple imports from the same underlying source remain related through their provenance family even when their bytes differ.
+- Normalize through a documented source schema, not by stripping words from labels. Recover commission-versus-oath semantics from the upstream record; those fields must never be treated as equivalent merely because an older renderer combined their names.
+- Changed substantive values at the same URL remain distinct revisions. Different people with similar names, separate primary records and genuinely independent origins must not be collapsed. Similarity alone is not enough; unresolved identity stays unresolved.
+- Apply this to both Open Case findings and Deflate depositions. Distinguish the same imported reading from a newly generated interpretation of the same transcript; neither supplies independent real-world corroboration merely by being another output.
+- Put grouping and independence information into the evidence bundle sent to the model, the citation display and validation of corroboration claims. Do not rely on Alex adding a warning to the question. If a claim of independence lacks lineage support, hold or qualify that claim.
+- Tests: replay both FJC renderer versions without a special user instruction; retain both originals but expose one underlying source family. Include a changed date, two distinct subjects, a mirror at another URL, two imports of one Deflate reading and two genuinely independent records. Inspect the actual synthesis input and output.
+
+C. Account for the complete operation cost
+- Separate the Open Case collection/enrichment allowance from Nikodemus synthesis, transcription, other tools and continuation. Show both component costs and an operation total across all billable attempts.
+- Include failed, truncated, repaired and retried model calls. Deduplicate ledger entries by provider/run identity so polling and re-import do not double-charge the record.
+- Preserve model/provider IDs, usage categories, rate version/date, currency and accounting basis. Track cache-read/cache-write tokens from provider usage when available; distinguish provider prompt caching from local saved-source reuse.
+- Reserve/check a conservative cost estimate before each newly billable action and reconcile usage afterward. A $0 upstream profile must not bypass the synthesis allowance.
+- Unknown cost stays unknown, with any known subtotal visible. A calculation from tokens and a rate card is an estimate unless the provider supplies a final billed amount. Missing rate/cache information must never silently become zero.
+- Reconcile the earlier records through append-only accounting corrections linked to their original receipts. Do not rewrite signed artifacts. The review's approximately 3.6-cent and 2.6-cent figures are estimates to verify against the model/rate records, not asserted invoice totals.
+- Tests: free collection plus billed synthesis; truncated then successful retry; missing price; cache token categories; duplicate polling; reopening a legacy mispriced run. The displayed total and Settings budget view must use the same ledger.
+
+D. Fix evidence-kind labels at their producing source
+- In Open Case, distinguish an official primary record, an allegation, a derived interpretation and an access/coverage notice. Primary-source origin does not automatically establish every claim as true.
+- Keep “no automated access” placeholders out of the substantive evidence count. Preserve access notices as acquisition records.
+- Nikodemus should display the producer's labels and linked corrections, not secretly re-score them.
+- Keep commission and oath dates as distinct fields; preserve earlier mislabeled artifacts with an explicit correction rather than editing history.
+- Tests: an FJC primary record, a genuine allegation and an access notice receive meaningful distinct classifications and survive export/import.
+
+E. Make completion status reflect the requested task
+- Track acquisition coverage, answer validity and job lifecycle separately.
+- At proposal time identify required, optional, inapplicable and unimplemented capabilities with reasons. A judge query should not fail because a campaign-finance path is irrelevant.
+- Do not count fifteen declared stubs as fifteen attempted failed sources. Preserve their availability information in coverage details.
+- “Required sources ready” alone is not enough: verify that the question has an adequate, valid answer. Where it does, show completion with specific coverage limitations; where it does not, retain partial or held status.
+- Tests: required evidence succeeds while optional adapters are unavailable; a required source fails; an adapter is inapplicable; synthesis is truncated despite successful acquisition. Each has an accurate, distinct user-facing state.
+
+Acceptance for 0A:
+Re-run the ordinary judicial-record question without the 180-word workaround or anti-duplication instruction. A valid answer must not claim independent corroboration from cached variants; the full operation's usage/cost state must be accurate; classification and completion must preserve concrete limits. Verify restart/reopen and both Open Case and Deflate identity regressions. Use fixtures for forced error cases and a bounded live acceptance run for the integrated path.
+
+Read-only inventory and isolated adapter preparation can continue in parallel. Do not promote additional live integrations until this shared integrity slice is passing.
+
+1. Finish the Open Case workflow already underway
+
+Objective: one useful investigation launched, followed, saved and reopened entirely inside Nikodemus.
+
+Actions:
+- Finish question -> proposal/cost disclosure -> Start -> progress -> findings/sources -> Save -> reopen -> follow-up.
+- Make the current scope clear. A named-federal-official connector is a useful first capability; label its supported investigation types honestly.
+- Fix the CourtListener authentication path if credentials are available. Check the environment of the actual running process. A connected ChatGPT plugin does not automatically configure the local Open Case server.
+- Show missing setup before starting when possible. Preserve useful partial results when an optional source fails.
+- Determine what the $0 collection path actually accomplishes and show its scope. Use the complete cost ledger from 0A for synthesis and all other calls. Keep useful free collection, and support existing paid model APIs when needed under the standing authorization and visible allowance. Do not turn “no plugin subscriptions” into “no model-assisted investigations.”
+- Use the existing controller's useful budget, evidence reuse and continuation behavior. Select allowances from measured work and the actual task; no arbitrary tiny limit that guarantees an incomplete answer.
+- Prevent duplicate execution on double-clicks, lost responses and restarts. An uncertain Start must be reconciled with a known upstream job, never blindly replayed.
+- Distinguish retrieving documents from answering the question with relevant passages.
+
+Acceptance:
+Run a real, bounded investigation in the actual interface. Inspect its actual model input where applicable, cited passages and saved source bytes. Restart, reopen it, and continue with ancestry intact. Record actual cost and any gaps. Exercise the relevant recovery path without creating duplicate paid work.
+
+2. Make activity and model-run capture durable immediately
+
+Objective: every subsequent integration contributes to one usable personal history.
+
+Actions:
+- Inspect W2 first. Reuse revision-boundary capture; do not silently introduce keystroke or cursor replay that previous rulings deferred.
+- Record attempted actions before dispatch and append their outcomes: success, partial result, failure, cancellation, unavailable service or unknown outcome.
+- Carry stable IDs linking the workspace, document/revision, thread, originating selection, operation, provider run, source capture, excerpt, finding and resulting artifact.
+- Capture available request/response bodies, model/version, prompts, tool arguments/results/errors, finish/stop reasons, truncation/schema status, usage, actual/estimated/unknown cost, latency and retries. Reuse the accounting and lineage contracts from 0A. Identify unavailable provider fields explicitly. Exclude credentials, cookies and authorization headers.
+- Store originals and revisions together with context as candidate feedback. Do not automatically label an edit “chosen” and the original “rejected.”
+- Distinguish displayed, opened, foreground-active, selected, carried/quoted, edited, saved and explicitly rated.
+- Measure foreground-active intervals with visibility/idle handling if supported. Label these as observable activity estimates; they do not prove reading, comprehension or preference.
+- Use durable local writes, deduplication and explicit capture gaps. Preserve raw records and make derived indexes rebuildable.
+- Separate this local capture from background model mining. Existing press-to-run rules remain until an applicable standing scope/budget is implemented.
+
+Acceptance:
+A question, failed source attempt, model/tool run, selection and revision can be reconstructed after restart and linked to the result they produced. Repeated visits remain separate events. No secret appears in captured logs.
+
+3. Add Receipts evidence and follow-up capabilities
+
+Objective: make existing investigations easier to understand and continue.
+
+Reuse candidates:
+- src/brief/evidence_matrix.py
+- src/brief/missing_evidence.py
+- src/brief/source_completion_queue.py
+- src/brief/case_timeline.py
+- src/brief/contradiction_matrix.py
+- src/engine/session.py
+- src/brief/session_to_brief.py
+
+Actions:
+- Adapt saved Nikodemus records into these modules' inputs.
+- Add concise views for “Evidence,” “What is missing,” “Timeline,” “Conflicting accounts,” and “Continue investigating.”
+- Preserve supporting, rejected, inaccessible, metadata-only and unused source states.
+- Use the completion queue to identify the next useful action. Rank by relevance to the open question and retain the blocker.
+- Retry transient failures with bounded backoff; request necessary setup for authentication failures; use a genuinely different source or passage when relevant. Do not loop over the same failed input.
+- Reuse already captured evidence and show new information added by a continuation.
+- Interpret missing-evidence detection as a referenced-material gap, never as proof of concealment or wrongdoing.
+- Keep Nikodemus as the authoritative store; avoid a competing session/case database.
+- Retain “used in brief/script” as generated-artifact usage, separate from human reading events.
+
+Acceptance:
+The evidence views reproduce from a saved investigation without another model call. At least one continuation targets a specific missing question or source and links its result back to that gap.
+
+4. Complete Deflate inside Nikodemus
+
+Objective: Alex can paste a media URL or choose an upload and reach a usable reading in the same workspace.
+
+Actions:
+- Preserve the existing signed deposition connection and the door from a reading into Go deeper.
+- Add launch/status/result integration where still missing; importing a completed record and starting a new reading are distinct capabilities.
+- Reuse the maintained Deflate URL acquisition and audio-transcription fallback. Verify the running copy, not just the version in a README.
+- Handle missing captions through available supported audio/transcription paths. Disclose transcription/model cost through the common proposal.
+- Keep any browser-session access on the user's machine through the established explicit setting; never export cookies into Nikodemus records or model prompts.
+- Carry original URL, transcript, timestamps, speaker labels, claims, review holds and acquisition gaps.
+- Preserve uncertainty when speaker segmentation is ambiguous. Keep existing readings visible after restart or migration.
+
+Acceptance:
+One supported pasted URL and one upload complete through Nikodemus, with readable saved output, source/transcript links and a working Go deeper follow-up. Document access-restricted URLs as such.
+
+5. Bring Ethical Alternatives into the same workflow
+
+Objective: investigate a person, institution, organization or product using Ethical Alternatives without changing workspaces.
+
+Actions:
+- Inventory its actual local routes, profile exports, research jobs, limits and storage.
+- Reuse any existing signed export/instrument contract.
+- Support preparation, Start, progress, partial failure, saved profile/evidence and follow-up through the shared lifecycle.
+- Preserve Ethical Alternatives' labels and their basis. Keep model judgments separate from source facts.
+- Carry origins so an Ethical Alternatives inquiry can start from a Deflate claim, an Open Case finding or a selection in writing.
+
+Acceptance:
+One supported inquiry returns an evidence-linked result inside Nikodemus and can be reopened and continued from its originating thread.
+
+6. Add Public Eye article context and Lantern source inspection
+
+Objective: investigate written media and inspect precisely where findings came from.
+
+Public Eye:
+- Add “Investigate this article.”
+- Reuse article/byline extraction and linked article, journalist and outlet records.
+- Reuse public-record adapters only where they add capability beyond Open Case.
+- Preserve per-adapter status, timeout, error, latency and row counts.
+- Add explicit budget handling around optional model/provider calls.
+- Retain fetched source text locally; a content hash alone cannot restore the evidence.
+
+Known Public Eye limits:
+- Current article v2 is narrower than the README's full framing/coalition story.
+- apps/api/claim_audit_engine.py explicitly contains stub omission/audit functionality.
+- Do not promote headline-derived counterclaims or model-invented category counts into evidence.
+- Treat coverage monitoring as a later capability requiring an explicit schedule and baseline validation.
+
+Lantern:
+- Reuse page/character references, evidence curation and dossier/export components.
+- Use genuine hashes and source bytes. The client extractor currently contains mockHash.
+- Its generated page PNG is re-typeset extracted text, not an original-page image. Preserve that distinction or replace the renderer.
+- Its evidence-pack export omits original files; Nikodemus must retain required source captures separately.
+
+Acceptance:
+An article inquiry retains the distinct article/author/outlet records, and a document finding opens its exact saved passage. An unsupported identity match or stub analysis remains visibly unresolved.
+
+7. Add low-friction intake from Rabbit Hole and strengthen exploration
+
+Objective: “send this to Nikodemus” from a browser, phone or tablet, with the origin and thread preserved.
+
+Actions:
+- Reuse apps/extension/handoff.js and the mobile share/deep-link intake concepts.
+- Transfer selection plus page URL/title and available location together; the existing choose-one-text handoff needs extension to preserve complete provenance.
+- Connect imported material to Nikodemus's actual investigation/reading entry points.
+- Reuse exploration relations and history concepts for navigation. Keep Go deeper focused on the selected subject; keep Sprout's broader associations distinct.
+- Connect Rabbit Hole event emitters to the durable capture layer from step 2.
+- Replace the current in-memory analytics sink and limited/deduplicated recent-history view for archival purposes.
+- Verify a real target device. A desktop extension or localhost URL alone does not establish tablet access.
+- Resolve the LENS/LOUPE naming with the local inventory. No separate repository by that name appeared in the connected GitHub list.
+
+Acceptance:
+One browser share and one supported mobile/tablet share preserve their origins, create the intended Nikodemus item, and remain linked to subsequent work after restart.
+
+8. Add ELI as an optional evidence-review capability
+
+Objective: “What does this evidence support?” and “What was known at that time?”
+
+Reuse candidates:
+- domain/parrot_box/entitlement.ts
+- domain/sre_stratum_locking/stratum_lock.ts
+- domain/eli_measurement_envelope/
+- the integration-ingest contract, after hardening
+
+Actions:
+- Apply the narrow procedural checks to relevant saved investigations and decisions.
+- Carry time constraints, evidence IDs, rules version, exclusions and missing information with the review.
+- Keep supplied relevance/context labels distinct from independently established facts.
+- Keep ordinary reading and exploration available outside this optional review.
+- Inspect signing before federation: the current key fallback logs private key material; remove that path and assess any exposed keys.
+- Replace “signature present” checks with actual verification of the relevant payload.
+- Make ingest/deduplication atomic before accepting concurrent or retried imports.
+
+Acceptance:
+A review distinguishes contemporaneous evidence from later knowledge, explains its scope, and links to saved inputs. It does not claim to prove truth or become a general personal-learning model.
+
+9. Build cross-project memory and evaluated personalization
+
+Objective: Nikodemus remembers the work Alex actually did and can explain the records behind its suggestions.
+
+Actions:
+- Provide retrieval over sources, events, runs, findings, connections, revisions and explicit feedback.
+- Start with useful queries: “What did I try?”, “What did I actually use?”, “Where did this idea begin?”, “What changed my answer?”, and “What is still unresolved?”
+- Use lexical search, embeddings or a graph only where they improve a measured retrieval task. All derived results retain links to authoritative records.
+- Separate explicit preference from inferred interest, model inference and recorded fact. Corrections and superseded beliefs remain distinguishable.
+- Make retention/deletion controls apply to derived indexes and exports as well as primary records, with a defined repair/rebuild path.
+- Build a held-out evaluation set from permitted examples. Compare source-grounded retrieval/personalization to an unchanged baseline.
+- Prepare reviewed training/export datasets only after capture quality, rights, feedback interpretation and evaluation are sound. Do not automatically turn every edit into a DPO pair.
+- Treat commercial-fit suggestions as hypotheses tied to repository capabilities and separately acquired market evidence. Attention or repeated use alone does not establish market demand.
+- Report retrieval/prompt personalization separately from actual weight training.
+
+Acceptance:
+The system answers the history questions with underlying records, honors corrections, and demonstrates any claimed improvement on held-out tasks. A personal-model training experiment has a clear purpose, eligible dataset, budget and rollback.
+
+10. Simplify and demonstrate the whole experience
+
+Objective: Alex can use and show the tool without operating a development console.
+
+Actions:
+- Keep the visible entry points simple: Ask, Add a link/file, Continue, Saved work.
+- Put provider settings, keys, versions, signatures and technical diagnostics under Connections or expandable details.
+- Show meaningful progress, useful partial answers, plain-language errors and an actionable next step.
+- Run the same compact acceptance workflow after each major integration; finish with a connected demonstration spanning at least two engines and the memory/history view.
+- Verify export/restore of a representative case, including required sources, relationships and available signing history.
+- Supply a short user walkthrough, actual cost record and precise remaining limitations.
+
+Acceptance:
+From one entry point Alex can bring material in, obtain a useful result, inspect evidence, continue, close/reopen the program and recover the same work.
+
+PARALLEL WORK THAT SAVES TIME
+
+- While the main builder completes P0–P3, separate agents can investigate WebKit and prepare the gate-registration changes in isolated worktrees once the shared checkpoint is available. One owner integrates them. Others can inspect capture extensions and Receipts input contracts without promoting new live integrations.
+- After the shared contract is stable, Receipts views and Deflate/Ethical Alternatives adapters can be developed independently.
+- Public Eye and Lantern work can proceed in separate worktrees once source-capture contracts exist.
+- ELI hardening and memory evaluation can use fixed saved records without blocking the active investigation screen.
+- Have one owner merge shared-schema, migration and lifecycle changes. Review diffs and run the relevant integration checks before enabling each capability.
+- Do not run multiple writers against the live user store.
+
+SUPPORTING REPOSITORIES
+
+Debrief: reuse server/analyzer/src/core/operate.py and api_surface.py for code inventory. Its workspace graph is a scaffold with empty edges; do not assume an existing ecosystem map.
+
+HALO-RECEIPTS: inspect server/llm/invokeLLMWithHalo.ts for structured request/response capture. Provider stubs are not a working multi-model system; failures also need capture. Its privacy-reduced research export is not a complete personal-memory store.
+
+repo-memory: use its project/session handoff approach to maintain build continuity. It is plain-file context storage, not learned memory or enforcement of an agent's behavior.
+
+Keyp-Away/KeySmith: use credential status and opaque-handle patterns to improve setup. Recheck provider support and security limitations; do not assume every service already has a health checker.
+
+SAFE_PASTE: consider its secret detectors at input/export boundaries. Preserve the original content model and record redaction transformations deliberately.
+
+Valet: revisit for optional audio/video presentation once an evidence-backed brief is reliable.
+
+Senate: a possible later specialist public-record capability; first compare its schemas and adapters against Open Case.
+
+CDIL, ai-receipts-verification and other signing projects: use selective schema/test ideas where they solve a concrete gap. Preserve algorithm/version identity; their signatures and canonicalization formats are not interchangeable.
+
+REPOSITORIES AND SOURCE STARTING POINTS
+
+https://github.com/Swixixle/wordicon
+https://github.com/Swixixle/Open-Case
+https://github.com/Swixixle/deflate-lens
+https://github.com/Swixixle/ETHICAL_ALTERNATIVES
+https://github.com/Swixixle/Receipts
+https://github.com/Swixixle/PUBLIC-EYE
+https://github.com/Swixixle/Lantern
+https://github.com/Swixixle/Rabbit_Hole
+https://github.com/Swixixle/ELI
+https://github.com/Swixixle/debrief
+https://github.com/Swixixle/HALO-RECEIPTS
+https://github.com/Swixixle/repo-memory
+https://github.com/Swixixle/Keyp-Away
+
+REPORTING AND STOPPING RULES
+
+For each completed slice, record:
+- User-visible capability and how to open it.
+- Exact checkout/commit and any data migration.
+- Focused checks and the relevant broader gate.
+- Real run IDs, costs, evidence coverage and restart/reopen results.
+- Which checks used fixtures and which exercised actual providers/devices.
+- Remaining limitations and the next unblocked step.
+
+A passing offline suite is not proof of a live source or useful answer. A valid signature establishes integrity/origin of its signed payload, not the truth of its claims.
+
+Preserve unresolved failures and partial results. When blocked, complete all useful preparation and state the exact missing credential, access, budget or decision. Do not make Alex relay routine coordination between agents.
+
+The recurring definition of done is a useful action Alex can perform inside Nikodemus, with reliable records behind it.
+
+
+
+FUTURE SOFTWARE-INVESTIGATION CAPABILITY — CODE_VIEW
+Added at the owner's request after the P0–P3 update. Keep those immediate
+priorities and the existing integration sequence first. This is an assessment
+backlog entry, not authorization to install every suggested tool or redo Receipts.
+
+Reverify Code_View at ac92179151b4249719673178487b5390b10f897f before use:
+https://github.com/Swixixle/Code_View
+Reported source review names backend/analysis/archaeology/extractor.py and
+graph_builder.py for Python functions/classes/routes, locations and some
+imports/calls. These are reported findings, not tested runtime capabilities.
+Reported limits: deeper extraction is Python-only; unresolved calls may disappear;
+normalized fingerprints need separate exact file hashes. A missing graph edge
+must remain unknown, never proof that a dependency is absent.
+
+Desired saved assessment: component, repository/full commit, exact source files,
+hashes/locations, dependencies, configuration, license evidence, tests, failures,
+coverage limits, unresolved questions and later revisions. Answer where a
+capability lives, what it requires, what existing capability overlaps it, and what
+adaptation Nikodemus needs. Preserve every extraction attempt and outcome.
+
+Initial trial: reconstruct the already completed Receipts evidence-matrix reuse;
+compare upstream with Nikodemus's adaptation, retaining origin, license and tests;
+save/reopen that assessment inside Nikodemus. Do not reintegrate completed work
+to manufacture a demo. Then select one actually unfinished reuse task.
+
+Evaluate optional tools only against measured gaps: Repomix for selected context
+packaging; Microsoft multilspy for broader language definitions/references;
+ScanCode Toolkit for license/package evidence. Authoritative Git history and exact
+source evidence remain separate from generated context. Docling and PaperQA2 are
+separate later document/scholarly candidates, with configuration and usage costs
+reviewed before adoption. No installation or live integration is claimed here.

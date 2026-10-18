@@ -1,0 +1,110 @@
+NIKODEMUS SHARED CHECKPOINT — 18 October 2026
+
+This is the canonical tracked handoff. Read it before changing a checkout and
+compare git rev-parse HEAD with the named branch and code checkpoint. One owner
+integrates changes; builders use separate worktrees and focused commits.
+
+SHARED IDENTITY
+Repository: https://github.com/Swixixle/wordicon
+Integration branch: codex/nikodemus-integration-20261018
+Runtime/code checkpoint: 76ec0cfeecbe1bd652d55223e795c8e7b7bc21ee
+Required recovery ancestor: c9cd9eff59f91622cd8edf264615f02f309a5a1d
+Shared-main comparison: 17894e32d66c860a66fc66cc022fc7c5e1d162ee
+This handoff and its manifests are generated AFTER the named code commit. Their
+own commit identity is obtained from Git, not embedded recursively in this file.
+Publication and independent-fetch acceptance are in progress; do not infer that
+a local commit or this document alone establishes remote availability.
+
+CODE AND DEPLOYMENT
+The integration checkout is integration/nikodemus in the connected Deflate task.
+The managed Nikodemus runtime is ~/nikodemus-preview/candidate-r89 on port8421;
+it uses the pre-existing preview store, which is excluded from shared artifacts.
+Its 63 installed workflow files match docs/checkpoints/deployed-76ec0cf.json.
+All tracked code files at this checkpoint are hashed in
+docs/checkpoints/nikodemus-76ec0cf.files.json.
+The runtime .candidate-commit still says6dfef59; this stale generated marker is a
+known P3 repair, not evidence of a rollback. Original signed records are unchanged.
+
+Open Case required code: https://github.com/Swixixle/Open-Case
+62a197ae6ac4c33d09daf353b6162c8208a8f87d, local branch
+codex/nikodemus-investigations; port8000 with original store and signing identity.
+Its publication/bundle is part of the shared-checkpoint work.
+Deflate required producer: maintained non-Git merged0.15.2 on port3123. Bounded
+bridge deployed after the Nikodemus checkpoint; exact selective code hashes are
+docs/checkpoints/deflate-bridge-reviewed-files.json. All135 original record files
+survived that deployment unchanged. A portable code-only snapshot is pending.
+Ethical Alternatives: https://github.com/Swixixle/ETHICAL_ALTERNATIVES
+1a71460a9bbae62124f9cf774f25f4c05c0b1f61 on port3001, with pre-existing dirty files.
+It is not an accepted new integration. DB/index errors and unsigned current
+exports block the next live slice. No EA paid research has been started.
+
+DIRTY STATE AND OWNERSHIP
+The Nikodemus source was clean at76ec0cf before adding this handoff/manifests.
+The separate main wordicon checkout has unrelated edits in scripts/library.py,
+server.py, webapp/clinic.html, webapp/index.html, plus source-related untracked
+files. Preserve those edits; do not reset or replace that checkout.
+The root task also contains private verification material and local backups.
+Never publish that directory wholesale. Only reviewed Git code and scrubbed
+reproduction fixtures belong in shared branches and bundles.
+
+WORKING CHECKPOINT
+Open Case question/proposal/Start/progress/evidence/Save/restart/reopen/follow-up
+works inside Nikodemus for the demonstrated FJC judicial-record scope. Truncated
+and unsupported answers remain held. Copies retain one source family; commission
+and oath dates stay distinct. Historical copies and signed artifacts are retained.
+Capture preserves supported operation-attached model requests/responses/errors,
+named gaps, costs, document revisions, exact passage snapshots and coarse observed
+activity. Revisions and queued events passed restart/deduplication checks.
+Receipts reconstructs saved evidence, missing material, typed chronology, family
+coverage and targeted continuation proposals without model calls. One real FJC
+continuation was saved/restarted/reopened, retaining its parent gap and origin.
+It did not supply the missing oath record and did not generate a model answer.
+
+COSTS
+Six earlier known model calls total0.192304USD estimated, about$0.19; provider
+billing is unconfirmed. Four-operation ancestry totals0.130282USD, about$0.13.
+Capture/Receipts acceptance added no model calls; the new collection cost was$0.
+Missing historical costs remain unknown. Reviewed cache_read usage is zero;
+local evidence reuse is not provider prompt-cache savings.
+
+TESTS AND KNOWN FAILURES
+Previously recorded focused checks: capture Python184, outbox27, capture-history
+browser20, Work selection browser20, Open Case browser27; Receipts Python28,
+browser14 and Open Case regression114. Counts overlap inherited coverage.
+Live restart verification was separate from browser/provider fixtures.
+The reviewed older checkpoint reported notes-webkit and editor-webkit failures;
+P1 is reproducing actual requests before changing security behavior.
+The latest assembled gate exposed an obsolete literal capture.query wiring
+assertion; deployed code uses a read-only wrapper. P2 will repair registration
+and run meaningful suites rather than treating existence checks as coverage.
+Do not claim a complete browser gate from Chromium-only results. Private-corpus
+skips, forced failure fixtures and manual Safari evidence must be separate.
+
+DEFLATE STAGED, NOT YET ENABLED IN NIKODEMUS
+The producer bridge is deployed, but Nikodemus URL/upload UI/backend/history
+remain isolated in integration/deflate-nikodemus-stage. No live bridge reading
+has been launched. Producer tests:26focused;473full passes,1skip,1 independently
+reproduced pre-existing YouTube recovery UI failure. Consumer stage:22backend,
+9newhistory,12existinghistory,9cost and32Chromium fixture checks pass.
+Stage supports URL orMP3, optional bounded configured model use, explicit Start,
+cost receipts, signed retained text/reading, Save/reopen and existing Go deeper.
+It still requires real URL/upload, follow-up and restart acceptance.
+
+IMMEDIATE PRIORITY — USER'S UPDATED P0–P3
+P0: publish exact integration ancestry on the named branch; publish a matching
+downloadable code bundle/checksum; independently fetch/clone and verify manifests.
+P1: fix observed WebKit ledger failures while preserving authorization, origin,
+CORS/CSP/CSRF protections; verify persisted events and cross-origin rejection.
+P2: register the actual integrity/capture/Receipts suites in the main gate; prove
+isolated missing-test and behavioral-sabotage failures, then restore the checkout.
+P3: synchronize generated deployment identity; round display estimates while
+retaining internal precision/unknowns; exercise same-family paraphrases and real
+two-family citation relationships. Run the full gate and named browser journeys.
+Then resume the established order from this actual state: remaining capture,
+Receipts, Deflate live acceptance, Ethical Alternatives, later integrations,
+grounded memory and export/restore. No routine permission round is required.
+
+The adopted complete order is tracked in docs/integration-backlog.txt. It also
+records the future Code_View software-reuse assessment, after immediate P0–P3
+and without repeating the integrated Receipts work. No Code_View runtime or
+optional-tool installation has been performed.
