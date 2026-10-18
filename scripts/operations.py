@@ -98,6 +98,22 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+def _connect_readonly() -> sqlite3.Connection | None:
+    """Open an existing operation spine without creating or migrating it.
+
+    A missing store has no operations. Schema setup belongs to a write/startup
+    boundary; displaying saved work must not perform DDL or create a database.
+    """
+    path = db_path()
+    if not path.is_file():
+        return None
+    conn = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True,
+                           timeout=BUSY_TIMEOUT_S, isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA query_only=ON")
+    return conn
+
+
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -322,7 +338,9 @@ def mark(op_id: str, status: str | None = None, *, local_state: str | None = Non
 # ---- reads ------------------------------------------------------------------------
 
 def get(op_id: str) -> dict | None:
-    conn = _connect()
+    conn = _connect_readonly()
+    if conn is None:
+        return None
     try:
         r = conn.execute("SELECT * FROM operations WHERE op_id = ? OR legacy_job_id = ?", (op_id, op_id)).fetchone()
         if r is None:
@@ -335,7 +353,9 @@ def get(op_id: str) -> dict | None:
 
 
 def events(op_id: str, limit: int = 500) -> list[dict]:
-    conn = _connect()
+    conn = _connect_readonly()
+    if conn is None:
+        return []
     try:
         rows = conn.execute("SELECT * FROM operation_events WHERE op_id = ? ORDER BY seq ASC LIMIT ?", (op_id, int(limit))).fetchall()
         out = []
@@ -353,7 +373,9 @@ def events(op_id: str, limit: int = 500) -> list[dict]:
 
 def list_ops(limit: int = 50, cursor: str = "", status: str | None = None, kind: str | None = None) -> dict:
     limit = max(1, min(int(limit or 50), 200))
-    conn = _connect()
+    conn = _connect_readonly()
+    if conn is None:
+        return {"operations": [], "total": 0, "population": "every operation this store holds", "next_cursor": None}
     try:
         where, args = [], []
         if status:
@@ -379,7 +401,9 @@ def list_ops(limit: int = 50, cursor: str = "", status: str | None = None, kind:
 
 
 def counts() -> dict:
-    conn = _connect()
+    conn = _connect_readonly()
+    if conn is None:
+        return {s: 0 for s in STATUSES}
     try:
         out = {s: 0 for s in STATUSES}
         for r in conn.execute("SELECT status, COUNT(*) AS n FROM operations GROUP BY status").fetchall():

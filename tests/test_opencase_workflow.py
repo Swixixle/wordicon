@@ -106,6 +106,49 @@ class WorkflowTests(unittest.TestCase):
         (producers.artifact_dir(oid) / reopened["artifacts"][-1]["name"]).write_text("tampered")
         self.assertEqual(self.client.get(reopened["artifacts"][-1]["url"]).status_code, 409)
 
+    def test_saved_gets_never_initialize_or_mutate_operation_store(self):
+        prepared = self.prepare()
+        with patch.object(producers, "_request", side_effect=self.fixture):
+            started = self.start(prepared)
+        oid = started.json["operation_id"]
+        # Include the ordinary persisted review overlay as part of reopen.
+        ops.mark(oid, "complete", result_ref={**ops.get(oid)["result_ref"],
+            "synthesis": {"status": "not_requested", "answer": "", "citations": []}})
+        def files():
+            return {str(p.relative_to(cli.LOCAL_STATE)): hashlib.sha256(p.read_bytes()).hexdigest()
+                    for p in cli.LOCAL_STATE.rglob("*") if p.is_file()}
+        before = files()
+        with patch.object(ops, "_connect", side_effect=AssertionError("GET used a writer connection")), \
+             patch.object(ops, "_ensure_schema", side_effect=AssertionError("GET initialized schema")), \
+             patch.object(producers, "_request", side_effect=AssertionError("GET used a producer")), \
+             patch.object(cli.AnthropicAPIGateway, "_call_with_attempts", side_effect=AssertionError("GET used a model")):
+            detail = self.client.get(f"/api/open-case/operations/{oid}")
+            self.assertEqual(detail.status_code, 200, detail.json)
+            self.assertEqual(detail.json["result"]["findings"][0]["id"], "e1")
+            listing = self.client.get("/api/open-case/operations")
+            self.assertEqual(listing.status_code, 200, listing.json)
+            self.assertEqual([row["operation_id"] for row in listing.json["operations"]], [oid])
+            receipts = self.client.get(f"/api/open-case/operations/{oid}/receipts")
+            self.assertEqual(receipts.status_code, 200, receipts.json)
+            self.assertEqual(ops.counts()["complete"], 1)
+            for artifact in detail.json["artifacts"]:
+                response = self.client.get(artifact["url"])
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(hashlib.sha256(response.data).hexdigest(), artifact["sha256"])
+        self.assertEqual(files(), before, "Saved GETs changed durable bytes")
+
+    def test_empty_operation_reads_do_not_create_a_store(self):
+        absent = cli.LOCAL_STATE / "uninitialized"
+        with patch.object(cli, "LOCAL_STATE", absent), \
+             patch.object(ops, "_connect", side_effect=AssertionError("read used writer")), \
+             patch.object(ops, "_ensure_schema", side_effect=AssertionError("read initialized schema")):
+            self.assertIsNone(ops.get("missing"))
+            self.assertEqual(ops.events("missing"), [])
+            self.assertEqual(ops.list_ops()["operations"], [])
+            self.assertEqual(ops.list_ops()["total"], 0)
+            self.assertEqual(ops.counts(), {status: 0 for status in ops.STATUSES})
+            self.assertFalse(absent.exists())
+
     def test_paid_and_changed_connection_refused(self):
         for allowance in ({"max_cost_usd": 1, "paid_models": False}, {"max_cost_usd": 0, "paid_models": True}, {"max_cost_usd": False, "paid_models": False}):
             with self.assertRaises(opencase.WorkflowError):
