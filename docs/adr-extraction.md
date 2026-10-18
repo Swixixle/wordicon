@@ -100,6 +100,18 @@ datasets generated later, optionally, from the same records.
   instrument, pin the key, pull an existing reading, and confirm its
   transcript, claims and gaps arrived whole; the automated proofs do not
   establish that the two RUNNING copies are connected until that press.
+  **W1(a) verified locally, 2026-10-18:** the pinned live store retains
+  four Deflate depositions with successful verification receipts:
+  `dep_68630e9121cb` and `dep_127791780185` for
+  `r_jobmuze6hb98d185b` (16,857 bytes each; received 2026-10-16
+  23:54:28 and 23:54:52 UTC), and `dep_d5d67800e69d` and
+  `dep_905e2060a174` for `r_jobmv8ykh2ib462fd` (63,598 bytes each;
+  received 2026-10-17 00:44:58 and 00:45:35 UTC). These records in
+  `state/federation/depositions.jsonl` satisfy the first real import;
+  they represent two source runs and remain separate signed envelopes.
+  This receipt evidence does not establish answer correctness or a
+  Sagan import. The earlier paragraph records the original acceptance
+  requirement, no longer pending.
   (b) A Deflate entry needs its own door into Go deeper: an adapter that
   carries the exact run, claim and transcript location into the
   exploration with its evidence labels intact.
