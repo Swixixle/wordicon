@@ -1,0 +1,66 @@
+QUALITY ACCEPTANCE — 18 October 2026
+
+Code:088441cff864ddbf22dbd28475ac2303b34e61d7
+Source branch:codex/nikodemus-integration-20261018
+This report and CURRENT-STATE are later documentation-only metadata. Use the
+release checkpoint.json for their exact commit and the installed runtime manifest.
+Recovery ancestors:c9cd9eff59f91622cd8edf264615f02f309a5a1d and
+76ec0cfeecbe1bd652d55223e795c8e7b7bc21ee; both tagged and published.
+
+FIXTURE REPRODUCTION
+The complete three-repository code package was cloned afresh and every tracked
+byte/mode verified, including under optimized Python. Nikodemus396 files;
+Open Case372; Deflate176. Fresh local dependency environment:Python3.13.7,
+requirements-test.txt including python-docx1.2.0, pinned Playwright dependencies.
+The full constraint gate passed. Registered integration suites:256 Python tests
+and39 subtests; outbox29; history UI20; selection UI20; cost display11.
+All37 named browser journeys passed,1,678 checks, no reported browser skips.
+Two private-corpus constraint checks explicitly skipped; they are not passes.
+
+Independent GitHub-hosted Ubuntu CI used Python3.14 and Node22, checked exact
+Git manifest and owned secret scan, and passed the full constraint gate plus
+47 focused Deeper tests. The same37 journeys/1,678 checks passed. Its4 explicit
+constraint skips: shallow Git history, absent LibreOffice conversion, and the2
+private-corpus checks. See ci-39111641158-receipt.json and its public job URLs.
+Playwright WebKit is engine verification, not a manual Safari or OS session.
+
+Earlier integrated runs are not relabeled as passes. The31d9073 fresh Mac run
+failed Work keyboard traversal and Ledger/WebKit teardown; its remote suite
+passed but browser job failed Ledger/WebKit teardown. The final code fixes the
+beforeunload cancellation race and verifies native Mac full-control traversal
+before selecting Option+Tab. All named controls remain required. No auth/origin
+or broad page-error filter was weakened. Deliberate missing-test and lineage
+behavior sabotage checks failed by name and were restored before this checkpoint.
+
+REAL SAVED-WORK VERIFICATION
+A private safe copy reopened in two fresh Python processes with zero adapter,
+provider/network call, schema initialization or store write. Exact prior
+operation states, source artifacts, revisions, snapshots and delivery identities
+survived. Copies and private-derived proof stay local and are not release assets.
+
+The reviewed installer then stopped/restarted the actual managed Nikodemus.
+A new server listener served the same store. Independent audit verified every
+one of396 installed files, executable modes, both generated markers and complete
+manifest:83 changed,313 verified unchanged, no unexpected owned code.
+The running UI reopened the existing saved investigation, four retained artifacts,
+Receipts evidence review, both document revisions and the exact passage snapshot.
+The read-only post-restart audit matched the previously saved evidence/projection
+hashes. Repeated records still counted as one provenance family. Saved status,
+commission/oath distinction and the held/unsupported historical outcomes remained.
+This is an actual restart/reopen of existing work, not a newly launched research
+run and not a claim of general investigations or complete personal memory.
+
+Primary cost display showed about$0.00 for the no-model continuation and about
+$0.13 for its ancestry. Precise ancestry disclosure retained0.130282USD and
+provider billing remained unconfirmed. The earlier six named calls total
+0.192304USD estimated. No verification action issued Start or a provider request.
+That six-call figure is not a claim about all independent workspace activity.
+
+LIMITS AND NEXT WORK
+P0–P3 quality repairs are installed and reproduced. General activity capture,
+broader Open Case acquisition and later integrations remain unfinished.
+The new Deflate consumer remains isolated until source-binding, current-pin
+verification and combined checks pass. It must demonstrate a real URL/MP3
+reading, retained evidence, Go deeper, Save and restart/reopen. Existing ffmpeg
+YouTube conversion is broken; tested local MP3 decoding does not use ffmpeg.
+See CURRENT-STATE and docs/integration-backlog.txt for the accepted sequence.

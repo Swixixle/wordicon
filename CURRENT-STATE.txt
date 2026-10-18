@@ -1,137 +1,144 @@
 NIKODEMUS SHARED CHECKPOINT — 18 October 2026
 
-This is the canonical tracked handoff. Read it before changing a checkout and
-compare git rev-parse HEAD with the named branch and code checkpoint. One owner
-integrates changes; builders use separate worktrees and focused commits.
+This is the canonical tracked handoff. Verify what is already installed before
+reinstalling or repeating work. Preserve stores, signed originals, credentials,
+unrelated edits and the recovery ancestry. No routine permission round is needed
+for the adopted implementation order.
 
-SHARED IDENTITY
+IDENTITY
 Repository: https://github.com/Swixixle/wordicon
-Integration branch: codex/nikodemus-integration-20261018
-Deployed code checkpoint: 76ec0cfeecbe1bd652d55223e795c8e7b7bc21ee
-Reviewed quality code checkpoint: ad5a44f239dcf74e36d9700e81374dbfbc22bd1b
-Required recovery ancestor: c9cd9eff59f91622cd8edf264615f02f309a5a1d
-Shared-main comparison: 17894e32d66c860a66fc66cc022fc7c5e1d162ee
-This handoff and its manifests are generated AFTER the named code commit. Their
-own commit identity is obtained from Git, not embedded recursively in this file.
-Publication and independent-fetch acceptance are in progress; do not infer that
-a local commit or this document alone establishes remote availability.
+Branch: codex/nikodemus-integration-20261018
+Quality runtime commit: 088441cff864ddbf22dbd28475ac2303b34e61d7
+Required recovery: c9cd9eff59f91622cd8edf264615f02f309a5a1d
+Capture/Receipts recovery: 76ec0cfeecbe1bd652d55223e795c8e7b7bc21ee
+Both recovery tags are published and are ancestors of the quality runtime.
+The handoff commit follows the runtime commit and changes documentation only.
+Read its exact identity from Git and checkpoint.json; do not embed its own
+future hash recursively. The runtime manifest identifies every tracked file at
+the installed commit. The shared manifest identifies this later handoff tree.
 
-CODE AND DEPLOYMENT
-The integration checkout is integration/nikodemus in the connected Deflate task.
-The managed Nikodemus runtime is ~/nikodemus-preview/candidate-r89 on port8421;
-it uses the pre-existing preview store, which is excluded from shared artifacts.
-Its 63 installed workflow files match docs/checkpoints/deployed-76ec0cf.json.
-All tracked code files at this checkpoint are hashed in
-docs/checkpoints/nikodemus-76ec0cf.files.json.
-The runtime .candidate-commit still says6dfef59; this stale generated marker is a
-known P3 repair, not evidence of a rollback. Original signed records are unchanged.
+RELEASE STATUS
+Installed and restarted successfully: all396 tracked files and executable modes
+match the quality commit. Both generated markers now name its same full SHA.
+The installer preserved configuration/store paths and made a private code backup.
+Independent full-file audit passed. Private safe-copy reconstruction passed in
+two fresh processes; actual managed server restart and browser reopen also passed.
+The previously saved Receipts continuation retained exact artifact/projection
+hashes. Both revisions and the49-character passage snapshot reopened unchanged.
 
-Open Case required code: https://github.com/Swixixle/Open-Case
-62a197ae6ac4c33d09daf353b6162c8208a8f87d, local branch
-codex/nikodemus-investigations; port8000 with original store and signing identity.
-Its publication/bundle is part of the shared-checkpoint work.
-Deflate required producer: maintained non-Git merged0.15.2 on port3123. Bounded
-bridge deployed after the Nikodemus checkpoint; exact selective code hashes are
-docs/checkpoints/deflate-bridge-reviewed-files.json. All135 original record files
-survived that deployment unchanged. A portable code-only snapshot is pending.
-Ethical Alternatives: https://github.com/Swixixle/ETHICAL_ALTERNATIVES
-1a71460a9bbae62124f9cf774f25f4c05c0b1f61 on port3001, with pre-existing dirty files.
-It is not an accepted new integration. DB/index errors and unsigned current
-exports block the next live slice. No EA paid research has been started.
+Fresh bundle reproduction: full constraint gate PASS;37 named browser journeys,
+1,678 checks, PASS. Linux CI for the exact same commit also PASS:
+https://github.com/Swixixle/wordicon/actions/runs/39111641158
+Local gate has2 explicit private-corpus skips. CI has4: shallow Git history,
+LibreOffice conversion and those same2 private-corpus checks. Browser journeys
+have no reported skips. Manual Safari was not run.
+See docs/checkpoints/quality-acceptance-20261018.txt and the code-only receipts.
 
-DIRTY STATE AND OWNERSHIP
-The Nikodemus source was clean at76ec0cf before adding this handoff/manifests.
-The separate main wordicon checkout has unrelated edits in scripts/library.py,
-server.py, webapp/clinic.html, webapp/index.html, plus source-related untracked
-files. Preserve those edits; do not reset or replace that checkout.
-The root task also contains private verification material and local backups.
-Never publish that directory wholesale. Only reviewed Git code and scrubbed
-reproduction fixtures belong in shared branches and bundles.
+Downloadable code/checksum release:
+https://github.com/Swixixle/wordicon/releases/tag/codex/nikodemus-quality-20261018
+checkpoint.json supplies the full handoff/runtime commits and every bundle/file
+manifest. Verify the separate archive checksum before cloning. Runtime and later
+documentation-only handoff are deliberately identified separately.
 
-WORKING CHECKPOINT
-Open Case question/proposal/Start/progress/evidence/Save/restart/reopen/follow-up
-works inside Nikodemus for the demonstrated FJC judicial-record scope. Truncated
-and unsupported answers remain held. Copies retain one source family; commission
-and oath dates stay distinct. Historical copies and signed artifacts are retained.
-Capture preserves supported operation-attached model requests/responses/errors,
-named gaps, costs, document revisions, exact passage snapshots and coarse observed
-activity. Revisions and queued events passed restart/deduplication checks.
-Receipts reconstructs saved evidence, missing material, typed chronology, family
-coverage and targeted continuation proposals without model calls. One real FJC
-continuation was saved/restarted/reopened, retaining its parent gap and origin.
-It did not supply the missing oath record and did not generate a model answer.
+DEPENDENCIES AND PRIVATE STATE
+Open Case: https://github.com/Swixixle/Open-Case
+62a197ae6ac4c33d09daf353b6162c8208a8f87d, branch
+codex/nikodemus-investigations, port8000, original store and signing identity.
+Deflate portable code: cfe84c3ec4992dac345f363b36a9bf86fe77ec28, branch
+codex/nikodemus-producer-20261018. The maintained merged0.15.2 producer is on
+port3123. The bounded bridge and HTML prose extraction fix are already deployed;
+all135 original record files survived that deployment unchanged.
+The release bundles carry all three selected commits and required ancestry.
+No independent public branch push is claimed for Open Case or Deflate.
+Ethical Alternatives: 1a71460a9bbae62124f9cf774f25f4c05c0b1f61, port3001, with
+pre-existing dirty files preserved. DB/index errors and unsigned current exports
+still block its next live slice. No new EA paid research has been started.
+
+Managed Nikodemus runtime: ~/nikodemus-preview/candidate-r89, port8421.
+Existing store: ~/nikodemus-preview/preview-20260916T154715Z/state.
+The separate main wordicon checkout has unrelated edits; do not reset it.
+This task's root integration directory contains PRIVATE proof, copies and
+backups. Never publish it wholesale. Only reviewed Git code and synthetic
+fixtures belong in shared branches/bundles. Private-derived proofs stay local.
+
+WORKING CAPABILITIES
+Open Case question, proposal, explicit Start, progress, findings, sources, Save,
+restart, reopen and follow-up work inside Nikodemus for the demonstrated FJC
+judicial-record scope. Existing model APIs are optional usage-based tools;
+paid plugin subscriptions are not required. Repeated paid Starts are guarded.
+Truncated and unsupported answers remain held. Copied or paraphrased records
+from one provenance family do not become independent corroboration. Commission
+and oath dates stay distinct. Finite legacy language checks are not general
+semantic entailment verification.
+
+Capture retains supported operation-attached model inputs, outputs, failures,
+costs, named capture gaps, document revisions, exact passage snapshots and coarse
+observed activity. Queued event IDs survived outage recovery without duplicates.
+This is not complete activity capture, keystroke recording or proven personal
+memory improvement. Keep unsupported scopes visible rather than claiming them.
+
+Receipts reconstructs saved evidence matrices, missing material, typed chronology,
+source-family coverage and targeted continuation proposals without model calls.
+One real FJC continuation was saved, restarted and reopened with its parent gap
+and origin. It retained the commission date and explicitly missing oath date;
+it did not generate an answer or acquire a separate oath record.
+
+QUALITY REPAIRS
+The main gate executes integrity, capture, Receipts, installer and cost-display
+behavior. Isolated missing-test and source-family sabotage checks failed by name
+and were restored. Registered browser runs include Receipts and both Ledger
+engines. Missing prerequisites fail rather than silently skipping a journey.
+Read-only operation listing/detail/history no longer initialize or write SQLite.
+Costs round to cents on primary controls, retain precision in details, distinguish
+unknown from zero, and separate estimated usage from confirmed provider bills.
+Zero observed provider cache-read usage remains zero; local evidence reuse is
+not provider prompt-cache savings.
+
+WebKit teardown preserves delivery IDs and stops Results GETs at beforeunload,
+before WebKit cancels requests. Restored pages use a fresh read generation.
+If navigation is cancelled, Updates paused / Resume updates remains visible,
+including narrow layouts; a real interaction or Resume restarts reads only.
+Dismissal of the navigation dialog alone does not automatically resume reads.
+Start/write requests are not aborted, replayed or retried by this mechanism.
+Authorization, origin, CORS/CSP/CSRF controls and negative checks remain intact.
+Mac WebKit keyboard fixtures use a native control probe for Option+Tab; named
+control coverage remains required. Playwright WebKit is not manual Safari.
 
 COSTS
-Six earlier known model calls total0.192304USD estimated, about$0.19; provider
-billing is unconfirmed. Four-operation ancestry totals0.130282USD, about$0.13.
-Capture/Receipts acceptance added no model calls; the new collection cost was$0.
-Missing historical costs remain unknown. Reviewed cache_read usage is zero;
-local evidence reuse is not provider prompt-cache savings.
+The six earlier known model calls total0.192304USD estimated (about$0.19).
+The four-operation ancestry totals0.130282USD (about$0.13). Provider billing is
+unconfirmed. Capture, Receipts and this quality verification added no model
+calls. The real Receipts continuation's collection cost was$0. Missing historical
+charges remain unknown. Do not reset or re-label these earlier attempts.
 
-TESTS AND KNOWN FAILURES
-Previously recorded focused checks: capture Python184, outbox27, capture-history
-browser20, Work selection browser20, Open Case browser27; Receipts Python28,
-browser14 and Open Case regression114. Counts overlap inherited coverage.
-Live restart verification was separate from browser/provider fixtures.
-The reviewed older checkpoint reported notes-webkit and editor-webkit failures;
-P1 is reproducing actual requests before changing security behavior.
-The latest assembled gate exposed an obsolete literal capture.query wiring
-assertion; deployed code uses a read-only wrapper. P2 will repair registration
-and run meaningful suites rather than treating existence checks as coverage.
-Do not claim a complete browser gate from Chromium-only results. Private-corpus
-skips, forced failure fixtures and manual Safari evidence must be separate.
+NEXT CAPABILITY: DEFLATE LIVE ACCEPTANCE
+The producer bridge exists. A Nikodemus URL/MP3 consumer was staged against76ec;
+it requires selective integration over the quality code, not a directory overlay.
+Review also found that reading promotion and direct Go deeper preparation/run
+need matching transcript/passage source hashes and duplicate-held exclusion.
+Finish those checks before accepting the new live Deflate workflow; signing
+alone does not establish that a passage actually used the declared source.
+Preserve Results navigation guards, shared cost display, portable tests and the
+registered gate. The old stage includes stale unmanifested copies: never copy
+its whole directory over the maintained source.
+Then demonstrate URL/upload → retained text → useful reading → evidence →
+Go deeper → Save → restart/reopen, retaining question, origin, source bytes,
+model attempts, failures and cost receipts. Run actual live acceptance separately
+from intercepted browser fixtures. No live bridge reading is accepted yet.
+Existing MP3 decoding uses mpg123-decoder WASM and cached Whisper base.en;
+a controlled38-second MP3 transcribed locally without network or paid calls.
+System ffmpeg currently fails on its missing x265 library; this affects the
+YouTube conversion path, not the tested MP3 upload decoder. Do not fake a fix
+by aliasing incompatible library versions.
+Producer tests:26focused passes;473full passes,1optional skip,1 independently
+reproduced existing YouTube recovery UI failure. Stage test counts are historical
+development evidence, not acceptance of a newly merged or deployed consumer.
 
-DEFLATE STAGED, NOT YET ENABLED IN NIKODEMUS
-The producer bridge is deployed, but Nikodemus URL/upload UI/backend/history
-remain isolated in integration/deflate-nikodemus-stage. No live bridge reading
-has been launched. Producer tests:26focused;473full passes,1skip,1 independently
-reproduced pre-existing YouTube recovery UI failure. Consumer stage:22backend,
-9newhistory,12existinghistory,9cost and32Chromium fixture checks pass.
-Stage supports URL orMP3, optional bounded configured model use, explicit Start,
-cost receipts, signed retained text/reading, Save/reopen and existing Go deeper.
-It still requires real URL/upload, follow-up and restart acceptance.
-
-IMMEDIATE PRIORITY — USER'S UPDATED P0–P3
-P0: publish exact integration ancestry on the named branch; publish a matching
-downloadable code bundle/checksum; independently fetch/clone and verify manifests.
-P1: fix observed WebKit ledger failures while preserving authorization, origin,
-CORS/CSP/CSRF protections; verify persisted events and cross-origin rejection.
-P2: register the actual integrity/capture/Receipts suites in the main gate; prove
-isolated missing-test and behavioral-sabotage failures, then restore the checkout.
-P3: synchronize generated deployment identity; round display estimates while
-retaining internal precision/unknowns; exercise same-family paraphrases and real
-two-family citation relationships. Run the full gate and named browser journeys.
-Then resume the established order from this actual state: remaining capture,
-Receipts, Deflate live acceptance, Ethical Alternatives, later integrations,
-grounded memory and export/restore. No routine permission round is required.
-
-The adopted complete order is tracked in docs/integration-backlog.txt. It also
-records the future Code_View software-reuse assessment, after immediate P0–P3
-and without repeating the integrated Receipts work. No Code_View runtime or
-optional-tool installation has been performed.
-
-QUALITY INTEGRATION UPDATE
-P1/P2/P3 focused changes are now integrated on the named local branch, after
-the deployed76ec checkpoint. WebKit teardown now retains outbox IDs and uses
-beacon delivery; unfocused draft undo is ignored. Actual same-origin request
-evidence, negative auth/origin cases and real ledger persistence are retained
-in docs/checkpoints/webkit-ledger-20261018/. Both engines passed notes43,
-editor108 and Ledger13; outbox29 passed. Manual Safari was not run.
-
-The main gate now invokes the previously omitted integration behavior and the
-new cost-display fixture. Isolated missing-test and lineage-sabotage checks failed
-by name and were restored. requirements-test.txt declares DOCX reopening support;
-CI now installs Node and pinned Chromium for the main gate's browser fixtures.
-The browser runner includes Receipts and both new Ledger-engine cases.
-
-Primary costs round to cents, retain exact values in details, and keep unknowns
-and zero cache-read usage explicit. Citation relationships follow cited families;
-legacy language checks are finite, not general semantic entailment verification.
-The final combined gate, generated-marker deployment and safe-copy reopen proof
-are pending. No new model calls were made for these quality repairs.
-
-The initial public push was rejected by automatic approval review as unclear
-disclosure authorization. The owner then explicitly authorized the necessary
-reviewed pushes and code-only publication. Publication will be retried within
-that scope, without force-pushing or merging main. Remote reachability is still
-not asserted until independently checked.
+CONTINUE THE ADOPTED ORDER
+Supported capture and Receipts are working; preserve and extend them where the
+next integration exposes explicit gaps. Continue Deflate, Ethical Alternatives,
+Public Eye/Lantern, Rabbit Hole, optional ELI review, grounded personal memory,
+then simplification/export/restore and a short walkthrough. Keep optional paid
+plugins optional. Reuse existing programs, identities and records.
+docs/integration-backlog.txt records the complete accepted order and the later
+Code_View software-reuse assessment. No Code_View runtime has been installed.

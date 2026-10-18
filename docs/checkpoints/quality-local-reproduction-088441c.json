@@ -1,0 +1,28 @@
+{
+  "code_commit": "088441cff864ddbf22dbd28475ac2303b34e61d7",
+  "fresh_bundle_sha256": "df0029e27ebf7d863918c9d52e4672c6262954174276143b38d736695ea4e7f5",
+  "full_constraint_gate": "passed",
+  "registered_python": 256,
+  "subtests": 39,
+  "outbox": 29,
+  "capture_history_browser": 20,
+  "selection_browser": 20,
+  "cost_display": 11,
+  "skips": [
+    "private-corpus sanitization",
+    "private-corpus anatomy titles"
+  ],
+  "named_browser_journeys": 37,
+  "browser_checks": 1678,
+  "journeys_exit": 0,
+  "engines": [
+    "Playwright Chromium",
+    "Playwright WebKit"
+  ],
+  "manual_safari": false,
+  "model_calls": 0,
+  "log_sha256": {
+    "release-full-gate-088441c.log": "9accfaf67e560d34c545bf322bb9a5227de25936805eca2357f25234e734592a",
+    "release-journeys-088441c.log": "7bcb66dd96fc355037861ddc8942dd0cdcfb26db574abf791f2944d4e9f70661"
+  }
+}

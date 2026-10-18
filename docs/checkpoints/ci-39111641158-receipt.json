@@ -1,0 +1,75 @@
+{
+  "schema": "nikodemus.remote-ci-receipt.v1",
+  "repository": "Swixixle/wordicon",
+  "run_id": 39111641158,
+  "url": "https://github.com/Swixixle/wordicon/actions/runs/39111641158",
+  "commit": "088441cff864ddbf22dbd28475ac2303b34e61d7",
+  "conclusion": "success",
+  "jobs": [
+    {
+      "name": "suite",
+      "job_id": 117628865161,
+      "conclusion": "success",
+      "started_at": "2026-10-18T08:29:35Z",
+      "completed_at": "2026-10-18T08:32:37Z",
+      "url": "https://github.com/Swixixle/wordicon/actions/runs/39111641158/job/117628865161"
+    },
+    {
+      "name": "journeys",
+      "job_id": 117628865348,
+      "conclusion": "success",
+      "started_at": "2026-10-18T08:29:35Z",
+      "completed_at": "2026-10-18T08:42:38Z",
+      "url": "https://github.com/Swixixle/wordicon/actions/runs/39111641158/job/117628865348"
+    }
+  ],
+  "suite": {
+    "full_constraint_gate": "passed",
+    "registered_python_tests_passed": 256,
+    "registered_python_subtests_passed": 39,
+    "outbox_checks_passed": 29,
+    "capture_history_ui_checks_passed": 20,
+    "selection_capture_ui_checks_passed": 20,
+    "cost_display_checks_passed": 11,
+    "focused_deeper_tests_passed": 47,
+    "explicit_global_constraint_skips": [
+      "focus: TRACKED_SINCE against the first tracked commit's time \u2014 this checkout is shallow (one commit), so the first commit is not here to read; proven only in a full clone (the owner's Mac, this container)",
+      "the DOCX export was not converted by LibreOffice (not installed here)",
+      "the private-corpus sanitization scan: it reads the owner's real accepted_concepts.json, which is gitignored, so this has never run in CI",
+      "the corpus-titles-in-the-anatomy check: same gate, same reason \u2014 the owner's real shelf is not in the repository"
+    ],
+    "explicit_skip_count": 4,
+    "exact_commit_manifest_verification": "passed",
+    "owned_secret_scan": "passed",
+    "note": "Legacy global-constraint checks do not emit a single aggregate assertion count. Listed registered-suite counts are distinct reported categories."
+  },
+  "journeys": {
+    "completed": 37,
+    "checks": 1678,
+    "exit_code": 0,
+    "reported_test_skips": 0,
+    "chromium_and_webkit_specific": {
+      "notes": {
+        "chromium": 43,
+        "webkit": 43
+      },
+      "editor": {
+        "chromium": 108,
+        "webkit": 108
+      },
+      "ledger_delivery": {
+        "chromium": 37,
+        "webkit": 37
+      }
+    },
+    "work_checks": 117,
+    "opencase_checks": 32,
+    "receipts_checks": 14
+  },
+  "log_sha256": {
+    "ci-39111641158-suite.log": "812de4c2f240649bf86683630a22232a08302aacd0f63cdc41429e2635ad9e8c",
+    "ci-39111641158-journeys.log": "a6533533390ada2e2a12c82272baeecaf6d64ca88cbc3399d46357ddabe44bb8",
+    "ci-39111641158-state.json": "fa5cb42766975c7628c5648b4f5704e0ba01ea7f73d3dd081bf117bfd99a5ce9"
+  },
+  "scope": "Code-only GitHub-hosted Ubuntu fixture verification. No live owner store, provider, or private corpus was used."
+}
