@@ -1,0 +1,45 @@
+ok   no page errors on /work: []
+ok   the note reached the record: ["My own note, typed while reading."]
+ok   the record says these are his own words and not a carry: {"o":true,"m":"the owner's own words, typed beside the work"}
+ok   the tab carries the count so the surface is visibly there while reading
+ok   undo in the note box took back words from the note: ["ng. Words to undo.","le reading. Words "]
+ok   undo in the note box left the draft exactly as it was
+ok   redo in the note box restores only its own words and leaves the draft unchanged
+ok   undo in the draft left the note box alone
+ok   the note box came back with its words after the panel closed and reopened: "My own note, typed while reading. Still here."
+ok   the box kept its own undo stack across the panel toggle — the element was re-attached, not rebuilt
+ok   the journey is on a second document
+ok   the note box is empty on the second document
+ok   the first document’s notes are not shown beside the second
+ok   each document keeps its own note: [1,1]
+ok   Start another note leaves an empty box and the finished one below
+ok   a refused save says so and says the words are still here: "Not saved: the request did not complete (Failed to fetch). Your words are here — press Ret"
+ok   the save reached the record even though the page was told it failed — the duplicate hazard is live: 1
+ok   the refused save left every word in the box
+ok   the request id is held for the retry
+ok   the unsent words came back from this browser after a reload: "Words written while the server was unreachable."
+ok   and the page says they are not on the record yet: "In this browser — not saved to the record yet."
+ok   the recovered words came back with the request id they were last sent under (the mechanism; the guarantee it exists for is the next check): ["rk_a5e9c899e2b4b1b68f85_mvdive41","rk_a5e9c899e2b4b1b68f85_mvdive41"]
+ok   the retry made exactly one note, not two: ["Words written while the server was unreachable.","A note that belongs to the second document."]
+ok   the list the offline page could not read came back by itself once the server answered
+ok   tab B saved its edit to the same note first
+ok   tab A is told the note moved and that nothing was overwritten: "This note changed somewhere else while you were writing. Nothing was overwritten"
+ok   tab A still holds every word it typed: "chable. — and edited in tab A."
+ok   and it is shown what the other version says rather than having it applied
+ok   tab B’s save stands on the record, unharmed by tab A’s refused one
+ok   both versions are on the record under their own ids — nothing combined, nothing lost: ["— and edited in tab A.","le. — edited in tab B.","o the second document."]
+ok   the notes came back from the record after a reload: "Your notesYour own words, kept beside this document. Nothing"
+ok   a standing is rendered from its own fields, in words: ["route: candidate concept","anchor fit: supported","critique: weak","written by the model, not taken from your text"]
+ok   no standing renders as [object Object]
+ok   a flag the record does not assert is silence, not "false": ["route: candidate concept","anchor fit: supported","critique: weak","written by the model, not taken from your text"]
+ok   a carry with no standing renders nothing rather than guessing
+ok   a run is named from the record’s own path: "from run trace_abc123"
+ok   with no run in the record the page says so and never infers one from a title: "the originating run is not recorded for this one"
+ok   a carried card offers him a note of his own: "Add my own note"
+ok   opening it gives a box and a save control
+ok   the carried sentence is still on the card with the box open — the note goes beside it, never over it
+ok   the card states the standing in words and names the run the record holds
+ok   no page errors across the whole journey: []
+ok   notes-chromium: no request left the scratch origin
+CHECKS 43
+JOURNEY notes-chromium OK

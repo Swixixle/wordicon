@@ -177,7 +177,11 @@ const NAME = 'editor-' + ENGINE;
   await page.keyboard.press('ControlOrMeta+z');
   await page.waitForTimeout(100);
   ok((await text()) === 'the cat and the dog and the end', 'and one undo takes the whole replace-all back');
-  await page.keyboard.press('End'); await page.keyboard.type(' the last');
+  // End scrolls without moving the caret on macOS WebKit. Place the caret
+  // explicitly: this check is about recounting without moving it, not a
+  // platform-dependent navigation key. The next edit is still real typing.
+  const end7 = (await text()).length; await select(end7, end7);
+  await page.keyboard.type(' the last');
   ok((await text()) === 'the cat and the dog and the end the last' && /of 4/.test(await page.textContent('#find-count')), 'typing with the bar open recounts (' + await page.textContent('#find-count') + ') and never moves the caret onto a match');
   await page.keyboard.press('Escape');
   ok(await page.isHidden('#findbar'), 'Escape closed the find bar');

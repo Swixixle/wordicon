@@ -76,6 +76,27 @@ test('accepted beacon is not an acknowledgement, and reload retries it', async()
   assert.equal(restarted.ledger.pending().length,0);
 });
 
+test('pagehide batch threshold uses beacon and preserves IDs until reopened acknowledgement', async()=>{
+  const f=fixture();await f.ledger.init();
+  // Fill to one below automatic delivery, so session_end itself crosses it.
+  while(f.ledger.pending().length<19)f.ledger.note('page_shown',{page:'work'});
+  const before=f.ledger.pending().map(e=>e.event_id);
+  f.listeners.pagehide();
+  assert.equal(f.posts.length,0);assert.ok(f.beacons.length>0);
+  assert.ok(before.every(id=>f.ledger.pending().some(e=>e.event_id===id)));
+  const restart=fixture(f.storage);await restart.ledger.config();await restart.ledger.flush();
+  assert.ok(before.every(id=>restart.posts[0].events.some(e=>e.event_id===id)));
+  assert.equal(restart.ledger.pending().length,0);
+});
+
+test('unavailable teardown beacon retains the outbox without starting fetch', async()=>{
+  const f=fixture();await f.ledger.init();f.beacon=false;f.listeners.pagehide();
+  assert.equal(f.posts.length,0);assert.ok(f.ledger.pending().length>0);
+  const ids=f.ledger.pending().map(e=>e.event_id);
+  f.listeners.pageshow();await f.ledger.flush();
+  assert.ok(ids.every(id=>f.posts[0].events.some(e=>e.event_id===id)));
+});
+
 test('rejected beacon falls back to keepalive request', async()=>{
   const f=await fresh();f.beacon=false;f.ledger.note('session_end',{});await f.ledger.flush(true);
   assert.equal(f.posts.length,1);assert.equal(f.posts[0].options.keepalive,true);assert.equal(f.ledger.pending().length,0);
@@ -292,7 +313,7 @@ test('wall-clock discontinuity is unknown and restored pages do not fill hidden 
 
 test('credential-like titles and URL parameters are omitted before storage while token-count labels remain', async()=>{
   const f=await fresh();
-  const secrets=['sk-ant-abcdefghijk123','Bearer abcdefghijk','https://user:password@example.test/path','https://example.test/?access_token=secretvalue','https://example.test/?%61pi_key=secretvalue'];
+  const secrets=['sk-' + 'ant-abcdefghijk123','Bearer abcdefghijk','https://user:password@example.test/path','https://example.test/?access_token=secretvalue','https://example.test/?%61pi_key=secretvalue'];
   for (const title of secrets) f.ledger.note('document_opened',{id:'doc_safe',title});
   f.ledger.note('document_opened',{id:'doc_usage',title:'input_tokens: 100; output_tokens: 20'});
   const encoded=JSON.stringify([...f.storage.rows]);

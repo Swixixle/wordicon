@@ -1,0 +1,30 @@
+PASS reload delivers the same stable ID and retains separate intentional visits
+PASS accepted beacon is not an acknowledgement, and reload retries it
+PASS pagehide batch threshold uses beacon and preserves IDs until reopened acknowledgement
+PASS unavailable teardown beacon retains the outbox without starting fetch
+PASS rejected beacon falls back to keepalive request
+PASS HTTP failure, broken acknowledgement and network loss retain every event
+PASS recording off stops new capture/transmission but preserves durable pending rows
+PASS server switch-off rejection retains the attempted batch and suppresses retries
+PASS new local store never drains an earlier store outbox
+PASS two tabs retain each other’s events despite concurrent acknowledgements
+PASS browser storage failure records an explicit memory-only capture gap
+PASS malformed outbox is preserved and disclosed without blocking good rows
+PASS bounded outbox records a gap rather than dropping earlier activity
+PASS long real document title is bounded before persistence and cannot poison delivery
+PASS body and authorization properties never enter browser storage or transport
+PASS valid JSON poison pills remain preserved but are quarantined from good delivery
+PASS page lifecycle records observed boundaries only
+PASS delivery status is read-only and exposes IDs rather than captured metadata
+PASS a reloaded recording-off page can inspect its existing scoped outbox without sending
+PASS delivery status reports malformed and unavailable storage without mutating it
+PASS unknown server scope exposes safe unconfirmed counts without assigning or transmitting
+PASS recording off retains previously captured memory-only rows until acknowledged
+PASS foreground estimates stop at idle, blur and hidden boundaries with no content access
+PASS pagehide closes only observed time; crash retains checkpoints without fabricated tail or end
+PASS delayed timers and recording-off never fabricate foreground duration or discard pending intervals
+PASS interval validation refuses oversized or body-bearing estimates before browser persistence
+PASS wall-clock discontinuity is unknown and restored pages do not fill hidden time
+PASS credential-like titles and URL parameters are omitted before storage while token-count labels remain
+PASS a changed workspace scope never rebinds or transmits prior memory-only activity
+29/29 capture outbox fixtures passed

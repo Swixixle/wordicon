@@ -77,6 +77,8 @@ const NAME = 'notes-' + ENGINE;
   const boxUndone = await page.inputValue('#note-compose');
   ok(boxUndone.length < boxFull.length && boxFull.endsWith('Words to undo.'), 'undo in the note box took back words from the note: ' + JSON.stringify([boxFull.slice(-18), boxUndone.slice(-18)]));
   ok(await page.evaluate(() => window.__work.editor.getText()) === draftText, 'undo in the note box left the draft exactly as it was');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  ok(await page.inputValue('#note-compose') === boxFull && await page.evaluate(() => window.__work.editor.getText()) === draftText, 'redo in the note box restores only its own words and leaves the draft unchanged');
   await page.click('.pm-editor'); await page.keyboard.type(' appended');
   const boxBeforeDraftUndo = await page.inputValue('#note-compose');
   await page.keyboard.press('ControlOrMeta+z');
@@ -93,7 +95,9 @@ const NAME = 'notes-' + ENGINE;
   const beforeToggleUndo = await page.inputValue('#note-compose');
   await page.click('#note-compose');
   await page.keyboard.press('ControlOrMeta+z');
-  ok((await page.inputValue('#note-compose')).length < beforeToggleUndo.length, 'the box kept its own undo stack across the panel toggle — the element was re-attached, not rebuilt');
+  // Undo of a replacement can restore a longer previous value. Check that
+  // the retained stack changes this box, not which value is shorter.
+  ok(await page.inputValue('#note-compose') !== beforeToggleUndo, 'the box kept its own undo stack across the panel toggle — the element was re-attached, not rebuilt');
   await setBox(page, 'My own note, typed while reading. Still here.');
 
   // 4. a second document has its own notes; the first document's are not shown
@@ -162,12 +166,19 @@ const NAME = 'notes-' + ENGINE;
   await tabB.click('.note-chip-head:has-text("server was unreachable")');
   await tabB.waitForSelector('.note-chip.open textarea', { timeout: 8000 });
   const tabBBox = tabB.locator('.note-chip.open textarea').first();
+  const replyB = tabB.waitForResponse(r => r.url() === BASE + '/api/notes/' + target.note_id && r.request().method() === 'PUT');
   await tabBBox.click(); await tabBBox.press('ControlOrMeta+End'); await tabB.keyboard.type(' — edited in tab B.');
+  const committedB = await replyB;
+  const committedBodyB = await committedB.json();
   await tabB.waitForFunction(() => /Saved to the record/.test((document.querySelector('.note-chip.open .note-status') || {}).textContent || ''), null, { timeout: 9000, polling: 150 });
-  ok(true, 'tab B saved its edit to the same note first');
+  ok(committedB.status() === 200 && /edited in tab B/.test(committedBodyB.note?.body || ''), 'tab B saved its edit to the same note first');
 
+  // A stale Saved label can survive until the asynchronous recovery write
+  // paints. Await each actual save response before asserting its outcome.
+  const replyA = page.waitForResponse(r => r.url() === BASE + '/api/notes/' + target.note_id && r.request().method() === 'PUT');
   await page.click('#note-compose');
   await page.keyboard.press('ControlOrMeta+End'); await page.keyboard.type(' — and edited in tab A.');
+  await replyA;
   // settle on ANY outcome first: a check that hangs instead of failing by name
   // is not a check, and the sabotage pass proved this one used to hang
   await waitStatus(page, /changed somewhere else|Saved to the record|Not saved/, 12000);

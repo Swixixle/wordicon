@@ -1,0 +1,41 @@
+{
+  "engine": "webkit",
+  "browser_version": "26.0",
+  "playwright_version": "1.56.0",
+  "manual_safari": false,
+  "origin": "http://127.0.0.1:8487",
+  "event_ids": [
+    "event_c6510942-fc88-4e64-94cf-71f50b86f1f1",
+    "event_0417fd4b-b839-472e-88a3-baab69f213c9",
+    "event_1e9ede5c-e539-473c-b195-cce06acb1dfd",
+    "event_27742c33-4530-490a-b15c-d1c7945ae5da",
+    "event_4a1976c0-f08b-4dc4-8b64-99d421850eb2",
+    "event_6a3d19fa-a3dd-4587-8771-18e46665c912",
+    "event_7184b1cc-5f40-4705-a0a0-2884c585e612",
+    "event_88ea63fd-45fe-4d84-8364-c828ad13b75f",
+    "event_8a10cc26-1de4-4a24-ad96-75a44301af8b",
+    "event_914a9ed3-e90b-42ec-badf-cbca48b928c9",
+    "event_9b51e007-8e08-4784-aaa4-4b9c3d04ec1d",
+    "event_a5f09fcc-41cf-49c6-a9c5-b87b637bfec8",
+    "event_c470ea95-8632-4f40-b445-f6cc40cdbcdb",
+    "event_ed01dcad-51db-43e8-82dc-0888fc5072e9",
+    "event_f42b1c78-3243-40fa-9258-ac7a95ca072f",
+    "event_fbc961c2-a858-49a0-a059-a4bfc2d98720",
+    "event_8385c8d9-1758-48a2-93e4-500508289bd2",
+    "event_cec36a6c-73ae-457f-81d6-ee0b63d60a4e",
+    "event_eb68ef06-3dc6-47e6-85d3-00f55f936ad7",
+    "event_f9c276b5-759f-4a2b-8f87-13dd1a3a5825"
+  ],
+  "session_ids": [
+    "session_2d051b60-f190-4a72-8739-3350a0e9705d",
+    "session_ac5e0241-007c-4220-b452-540afce6a38d"
+  ],
+  "persisted_rows": 20,
+  "duplicate_ids": 0,
+  "lost_reply_status": 200,
+  "cross_origin_status": 403,
+  "unauthorized_status": 401,
+  "preflight_status": 401,
+  "opaque_origin_browser_rejected": true,
+  "page_errors": []
+}

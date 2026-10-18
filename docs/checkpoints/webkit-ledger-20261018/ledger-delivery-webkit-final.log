@@ -1,0 +1,15 @@
+ok   Ledger delivery is measured in webkit
+ok   the lost reply followed one successful durable append
+ok   without acknowledgement the exact event remains queued
+ok   reload preserves original event identity and session clock
+ok   retry acknowledges the same event and leaves exactly one persisted row
+ok   navigation threshold events all persist once across beacon and acknowledged retry
+ok   navigation and retry raise no Ledger page error: []
+ok   paired cross-origin POST remains refused without an origin allowance
+ok   unpaired Ledger POST remains refused
+ok   unauthorized preflight gets no cross-origin permission
+ok   browser fetch from an unauthorized opaque origin is rejected
+ok   rejected cross-origin and unpaired events never enter the Ledger
+ok   ledger-delivery-webkit: no request left the scratch origin
+CHECKS 13
+JOURNEY ledger-delivery-webkit OK

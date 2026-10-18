@@ -1,0 +1,110 @@
+ok   the editor is measured in chromium: chromium
+ok   no page errors on /work: []
+ok   the page reproduces all 18 golden vectors (projection, canonical JSON, fingerprint v2, position map) in chromium
+ok   bold changed no character of the text
+ok   the bold-only save moved the revision (1 → 2) and the structure holds the mark beside the exact text
+ok   after a reload the bold is still there, on the same document
+ok   and the session knows the head is structured
+ok   a body-only save against the structured head is refused by name (422 structure_would_be_lost), with an explicit null too
+ok   and the head is untouched
+ok   a document the server never received is reopened from this browser’s recovery, bold and all
+ok   and then saved, structure included
+ok   an unsent formatting-only edit (no character changed) is recovered from the envelope, not lost to a body comparison
+ok   Shift-Enter is a hard break (one LF), Enter a paragraph (two LF): "A\nB\n\nC"
+ok   the list continues, nests on Tab, lifts on Shift-Tab and exits on an empty item: paragraph,paragraph,bullet_list,paragraph
+ok   two! is nested under one; three was lifted back to the outer list
+ok   the projection joins every leaf paragraph with two LF and adds no markers: "A\nB\n\nC\n\none\n\ntwo!\n\nthree\n\nafter"
+ok   the header counts the words of this draft: 7 words
+ok   clicking Italic on the bar italicised exactly the selected word and left the selection where it was
+ok   and the bar shows the mark as on
+ok   H2 makes the paragraph a heading
+ok   Link puts an http(s) link on the selected words
+ok   an unsafe link scheme is refused by the editor
+ok   and the server refuses one too (400 unsafe_link)
+ok   an unknown schema version is refused (422 schema_unsupported)
+ok   a structure that does not project to the text sent with it is refused (422 projection_mismatch)
+ok   find counts the matches in this draft: 1 of 3
+ok   and selects the first
+ok   Next moves to the second
+ok   Replace all replaced every match
+ok   and one undo takes the whole replace-all back
+ok   typing with the bar open recounts (2 of 4) and never moves the caret onto a match
+ok   Escape closed the find bar
+ok   the proposal says the words go as text only — no formatting is sent
+ok   the result is fresh: the writer’s own autosave acknowledgment did not make the capture stale
+ok   a candidate word offers Insert below and Replace for the words it was made from: The Refusenik Posture
+ok   Replace put the candidate where the FIRST cat stood and nowhere else: "The The Refusenik Posture sat. The cat s"
+ok   the application was one undo step: one ⌘Z restores the draft exactly
+ok   the record holds the application and its undo, linked to the operation: undo,replace,format_converted
+ok   and the application was marked committed by the save that carried it
+ok   after the draft changed, the old target is refused even though "cat" still stands at the old offsets — the target must be chosen again: The Refusenik Posturethe draft changed since this result was made.Insert below the current
+ok   with nothing selected, choosing the target again applies nothing
+ok   an explicitly reconfirmed target takes the candidate, and only there
+ok   a CRLF document opens plain, read-only, exact, with the formatting bar off
+ok   and the surface says why
+ok   a checkpoint of the read-only document rewrites nothing
+ok   the disclosed conversion made revision 2 with LF line endings, structured
+ok   the plain head was kept as a migration checkpoint and the conversion is an event
+ok   a document with a control character stays plain and editable, and the character is kept
+ok   Versions lists the checkpoints by revision and reason: Revision 2 · save | Revision 1 · save | ? | ? | ? | ? | ?
+ok   restoring revision 1 made revision 3 with the old text; nothing was rewritten
+ok   the head before the restore was kept as a version, and revision 1 is still there
+ok   a plain copy is a NEW plain document; the original keeps its id and its structure
+ok   the editor reports a composition in progress (synthetic compositionstart — no engine here drives a real IME)
+ok   a save waits for the composition
+ok   and so does a capture: no proposal while composing
+ok   the save goes once the composition ends
+ok   the text export says it is plain and what a .txt file does not carry
+ok   Markdown keeps heading, list, bold, quote and link: "## T\n\n- one **two**\n\n> [q](https://e.org)\n"
+ok   pasted text keeps a single line break as a hard break and a blank line as a paragraph: "Export me.P1 line a\nP1 line b\n\nP2"
+ok   a 20400-word draft: an edit with its handlers 6.8 ms, the projection 0.5 ms, the save payload (128 KB) 0.4 ms
+ok   the editor’s own last check refuses a target whose words are not the words the suggestion was made for, and writes nothing: {"ok":false,"why":"the words at that place are not the words this suggestion was made for"}
+ok   more words were typed while the save was in flight (seq 18 > the request’s 14)
+ok   the switch happened (3020 ms: it waited for the held save and sent the rest)
+ok   every word typed before the switch is on the server — the held save’s and the words typed during it: "Slow words one two"
+ok   reopening it recovers nothing and rewrites nothing: the envelope held exactly the head (revision 3 stands)
+ok   the switch waited its bound for the held save and then went on rather than holding the room (4042 ms)
+ok   the held save landed after the switch: the server holds the words that request carried and not the words typed after it: "Late reply alpha"
+ok   the late reply repaired its envelope: based on the head it made, its own words acknowledged, the words typed after it still unsent, no request pending: {"base":2,"head":2,"seq":21,"ack":16}
+ok   reopening it recovers the words typed after the send, from the envelope, and saves them
+ok   the second tab has its own tab id, so the two envelopes never overwrite each other
+ok   the second tab saved: the head moved
+ok   the first tab’s save is refused and the room says so, with the choice beside the draft
+ok   nothing was overwritten: the head is the second tab’s and the first tab still holds its own words
+ok   Keep mine as a new document: both copies are on the server under their own ids
+ok   the candidate was applied while the older save was still in flight, and the application is not yet committed
+ok   the save that carried the application committed it, at the revision it made: 2
+ok   one undo takes the application back
+ok   the undo is recorded and committed as the next revision, and the head holds the words before the application
+ok   with storage refusing, the server save lands and the header says this browser keeps no recovery copy: "untitled · Saved 3:43 AM · this browser keeps no recovery copy · 3 words" · server: "Nowhere but here" id doc_542723380759ead8dd641ae8
+ok   with the server gone as well, the room says the words are not on the server and this browser kept no copy — never "saved locally" — and the last complete copy stands on the server: "untitled · Couldn’t save — not on the server, and this browser refused to keep a copy (storage is unavailable) · 5 words" · server: "Nowhere but here"
+ok   no page errors with storage unavailable: []
+ok   the server committed the save whose reply was cut (revision 2)
+ok   before the reload the envelope is based on the old revision, still names the request it sent, and holds the later words
+ok   after the reload every later word is in the editor: the sent request was resent under its own id, answered as already committed, the envelope rebased onto that revision, and the rest recovered (status saved)
+ok   and saved as the next revision — no duplicate, nothing combined by guesswork
+ok   a fresh tab reconciles the gone tab’s envelope (the committed words acknowledged, the bold recovered) and saves it
+ok   the head carries the formatting as the next revision
+ok   the gone tab’s envelope is left in place — never abandoned — and noted as carried into the saved revision: [{"tab":"tab_72da25017e1a14df679ef","abandoned":false,"carried":true,"by":"tab_e37a34adc41a14df74e5f"},{"tab":"tab_e37a34adc41a14df74e5f","abandoned":false,"carried":false,"by":""}]
+ok   and it is not offered again as a separate copy
+ok   another writer moved the head on after the committed save
+ok   the words typed after the committed save are in the editor, the head is untouched, and the room says both are kept: "untitled · Saved elsewhere since this copy was opened — choose which to keep · 5"
+ok   the other writer’s head stands
+ok   Keep mine as a new document: both versions are on the server under their own ids
+ok   a second tab opens the saved head, and lists the first tab’s unsent words as a copy that is still open elsewhere — it does not take them: [{"tab":"tab_72da25017e1a14df679ef","body":"Saved alpha MY UNSENT WORDS","title":"","live":true,"words":5}]
+ok   the bar above the draft says so
+ok   tab A reopens with ITS OWN unsent words, though tab B’s envelope is newer — and saves them: "Saved alpha MY UNSENT WORDS"
+ok   tab B’s version is listed in A, whole, marked as still open elsewhere: [{"tab":"tab_4e99e8c2a81a14df76887","body":"Saved alpha OTHER TAB WORDS","title":"","live":true,"words":5}]
+ok   B’s envelope was neither overwritten, abandoned nor marked carried by A’s reopening: [{"tab":"tab_4e99e8c2a81a14df76887","body":"Saved alpha OTHER TAB WORDS","title":"","abandoned":false,"carried":false},{"tab":"tab_72da25017e1a14df679ef","body":"Saved alpha MY UNSENT WORDS","title":"","abandoned":false,"carried":false}]
+ok   B’s version is a document of its own on the server; A’s words stand as the shared document’s head — nothing combined
+ok   tab B reopens with ITS OWN words (older than A’s save now): the head moved under them, so both are kept as a named conflict, nothing lost: {"text":"Saved alpha OTHER TAB WORDS","status":"conflict","id":"doc_657a8ebc5fb49a002fce1917"}
+ok   the other tab’s save committed (its reply cut): its envelope now equals the head
+ok   this tab’s own unsent words are in its editor, kept beside the moved head as a named conflict — not replaced by the newer envelope that merely equals the head
+ok   both versions are on the server under their own ids
+ok   the bold version (this tab’s own) is in the editor; the italic version is listed as the other tab’s copy — a formatting-only difference is a distinct version: [2]
+ok   the unsaved rename is recovered and saved — an envelope with the head’s words but another title is not the head: {"title":"My unsaved new title","manual":true,"status":"saved","recovered":true}
+ok   a title-only version from another tab is listed as its own copy, and this tab keeps its title: [{"tab":"tab_a6ee256bdc1a14df7a392","body":"Titled words","title":"A title from the other tab","live":true,"words":2}]
+ok   no page errors across the editor journey: []
+ok   editor-chromium: no request left the scratch origin
+CHECKS 108
+JOURNEY editor-chromium OK

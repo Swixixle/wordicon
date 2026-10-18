@@ -289,12 +289,25 @@ export class Ledger {
       return;
     }
     if (this.enabled === false || this.inflight) return;
+    // A page that never received its routing scope must wait for reopen,
+    // not start a configuration request while it is being discarded.
+    if (!this.scope && (this.pageEnded || document.hidden)) return;
     if (!this.scope && !(await this.config())) { this.schedule(); return; }
+    // A boundary note can fill the batch during pagehide, before its caller
+    // reaches flush(true). WebKit refuses an ordinary fetch from that dying
+    // document. Use the lifecycle transport for EVERY flush at that boundary;
+    // only a later explicit acknowledgement may remove these durable IDs.
+    const departing = this.pageEnded || document.hidden;
+    beacon = beacon || departing;
     const events = this.pending().slice(0, 100);
     if (!events.length) return;
     const body = JSON.stringify({ events });
     if (beacon && navigator.sendBeacon) {
-      try { if (navigator.sendBeacon('/api/ledger', body)) return; } catch (_) { /* normal request below */ }
+      try { if (navigator.sendBeacon('/api/ledger', body)) return; } catch (_) { /* retained on teardown; visible-page fallback below */ }
+    }
+    if (departing) {
+      this.lastError = 'Capture is queued for acknowledgement when this workspace reopens.';
+      return;
     }
     this.inflight = true;
     try {

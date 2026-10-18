@@ -58,6 +58,17 @@ export class StructuredEditor {
     this.view = new EditorView(this.holder, {
       state: this.state,
       attributes: { class: 'pm-editor', spellcheck: 'true', autocorrect: 'off', autocapitalize: 'off', 'aria-label': 'Your draft', role: 'textbox', 'aria-multiline': 'true' },
+      // WebKit can replay one native undo group across editing hosts: undo
+      // in a textarea emits a second historyUndo at this unfocused view.
+      // The structured history belongs only to the focused draft. Toolbar
+      // commands call command() directly and remain unaffected.
+      handleDOMEvents: { beforeinput: (view, event) => {
+        if (/^history(?:Undo|Redo)$/.test(event.inputType || '') && !view.hasFocus()) {
+          event.preventDefault();
+          return true;
+        }
+        return false;
+      } },
       dispatchTransaction: tr => {
         const st = this.view.state.apply(tr);
         this.view.updateState(st);

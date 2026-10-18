@@ -42,6 +42,7 @@ async function launch() {
 async function pairedContext(browser, opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...opts });
   await ctx.addCookies([{ name: ck, value: tok, domain: '127.0.0.1', path: '/' }]);
+  if (process.env.JOURNEY_LEDGER_TRACE) await require('./ledger-trace').attachLedgerTrace(ctx, OUT, process.env.JOURNEY_LEDGER_TRACE);
   ctx.on('page', p => { lastPage = p; watch(p); });
   return ctx;
 }

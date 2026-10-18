@@ -313,6 +313,19 @@ else
     if [ $rc -ne 0 ]; then echo "== $j: FAILED (exit $rc)"; status=1; fi
     if ! grep -q "^JOURNEY $j OK" "$JOURNEY_OUT/$j.log"; then echo "== $j: did not reach its final line — not a pass"; status=1; fi
   done
+  # P1: real paired append, lost acknowledgement/reload identity, lifecycle
+  # transport and unauthorized cross-origin rejection in BOTH engines.
+  for eng in chromium webkit; do
+    j="ledger-delivery-$eng"
+    echo "== journey: $j"
+    (cd "$HERE" && env JOURNEY_DIR="$JOURNEY_DIR_WORK" JOURNEY_STATE="$JOURNEY_DIR_WORK/state" JOURNEY_OUT="$JOURNEY_OUT" JOURNEY_PORT="$JOURNEY_PORT_WORK" JOURNEY_ENGINE="$eng" JOURNEY_LEDGER_TRACE="$j" node ledger-delivery.js) > "$JOURNEY_OUT/$j.log" 2>&1
+    rc=$?
+    cat "$JOURNEY_OUT/$j.log"
+    if [ $rc -ne 0 ] || ! grep -q "^JOURNEY $j OK" "$JOURNEY_OUT/$j.log"; then echo "== $j: FAILED or incomplete"; status=1; fi
+    for need in "the lost reply followed one successful durable append" "retry acknowledges the same event and leaves exactly one persisted row" "navigation threshold events all persist once across beacon and acknowledged retry" "paired cross-origin POST remains refused without an origin allowance" "unpaired Ledger POST remains refused" "unauthorized preflight gets no cross-origin permission"; do
+      grep -qF "ok   $need" "$JOURNEY_OUT/$j.log" || { echo "== $j: missing check: $need"; status=1; }
+    done
+  done
   kill $WORK_PID 2>/dev/null; wait $WORK_PID 2>/dev/null
 fi
 # workspace-v2 slice B: named individually because each is a promise of the
