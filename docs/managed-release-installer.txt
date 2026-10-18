@@ -1,0 +1,78 @@
+Managed beta release installer — P3
+
+scripts/install_beta_release.py uses only the Python standard library. It is a
+release utility, never imported by the application. It defaults to dry run.
+
+Example (substitute the full clean checkpoint; run from its own checkout):
+  python scripts/install_beta_release.py --commit FULL_40_CHARACTER_COMMIT \
+    --baseline docs/checkpoints/nikodemus-76ec0cf.files.json \
+    --beta-config /absolute/path/to/beta/beta.json
+Review the dry-run report, then repeat exactly with --apply when authorized.
+--backup-root may select an existing private mode0700 directory outside the
+source, destination and store. Default: beta/release-backups.
+
+What is installed and identified
+- Every tracked regular file from the requested full commit: runtime code,
+  documentation, tests and tracked fixtures. Source must be clean and HEAD must
+  equal that commit. Bytes are frozen from Git objects before service stop.
+- Tracked config/ and existing environment requirements are immutable verified
+  dependencies; a change refuses installation for separate review. The new
+  requirements-test.txt is allowed as a tracked test-environment specification;
+  no packages are installed by this helper.
+- A baseline must cover every tracked file at its full ancestor commit and its
+  hashes must match Git. Overlay/partial manifests are rejected. The existing
+  installed files must then match those bytes and executable bits exactly.
+- Removed tracked files, extra files within owned code/docs/tests directories,
+  symlinked installation paths, missing files, blocked parent directories and
+  new-file collisions refuse before stop. Dependency/cache directories
+  node_modules and __pycache__ are excluded, preserved and never written into.
+- Generated .candidate-commit and .open-case-integration.json are outside the Git
+  identity. Both are written only after installed-file verification, from the
+  same full code commit. The manifest lists all hashes, installed versus unchanged
+  verified paths, previous commit and private backup. There is no recursive hash.
+  That complete generated manifest can be the next release's --baseline.
+
+Service/data boundary
+The existing beta.json supplies checkout, state, interpreter and port. Its
+adjacent existing nikodemus_beta.py performs stop/open. Neither is changed.
+An adjacent .release-install.lock serializes applies even with different backup
+destinations; it contains no credentials or configuration.
+The installer never imports app modules, changes connectors, copies .env, creates
+keys, seeds/migrates a database, or writes the store. Active or unrecognized
+operation states are refused using a short, explicitly closed mode=ro SQLite
+connection; only complete/failed/unknown terminal statuses are accepted.
+Keep the interactive workspace quiet while applying: there is no atomic gate
+across a new UI submission and a process stop. Idle is rechecked immediately
+before stop and after stop; work appearing in that interval prevents install.
+The pinned port must be closed after stop before any tracked file is changed.
+Ordinary startup behavior of the existing managed application (including its
+configured backups/recovery/migrations) is not disabled by the installer. The
+release owner must have validated startup/store compatibility and the existing
+store-backup/recovery path separately. This utility's backup is CODE, not a
+database backup, and is not a substitute for that release precondition.
+
+Durability and failure behavior
+A mode0700 backup contains each changed file and both prior generated markers,
+plus before hashes/modes and explicit absent-new-file entries. Each file is
+mode0600; contents/directories are fsynced before stop. No credential is copied.
+Deployment is atomic per file while the managed service is stopped. Ordinary
+installation failures restore all attempted files/markers, remove introduced
+files, and leave the service stopped. If restoration fails, remaining restores
+are attempted and the tool reports incomplete rollback, never success.
+A process kill/power loss mid-install can leave a mixed tree; it will fail the
+next baseline check. Inspect the private backup.json and restore only its named
+files with hash/mode verification before restarting. Do not use a reset/whole
+directory replacement that could overwrite private environment or store state.
+Startup failure keeps the fully verified new code/markers and private backup,
+reports failure, and does not claim a running release. Managed launcher output
+is captured and wholly withheld, including pairing codes, stderr and exception
+tails; inspect the launcher's existing private log when needed.
+
+Fixtures
+  PYTHONDONTWRITEBYTECODE=1 python tests/test_install_beta_release.py
+Scratch Git repositories, a minimal scratch operations SQLite database, and a
+fake launcher test dry-run purity, missing/changed/partial baselines, dirty source,
+new-path/symlink collisions, active operations, immutable dependencies, full
+manifest/marker identity, unchanged private files, backup-before-stop ordering,
+source/control races, post-replacement rollback, busy-port refusal and failed
+stop/start. No live beta, provider, network request or model is used.
