@@ -4651,6 +4651,15 @@ def api_open_case_recover(op_id):
         return jsonify({"error": str(e)}), e.status
 
 
+@app.route("/api/open-case/operations/<op_id>/answer-review", methods=["POST"])
+def api_open_case_answer_review(op_id):
+    import opencase_review
+    try:
+        return jsonify(opencase_review.hold(ops.get(op_id), request.get_json(silent=True) or {}))
+    except opencase.WorkflowError as e:
+        return jsonify({"error": str(e)}), e.status
+
+
 @app.route("/api/open-case/operations/<op_id>/artifacts/<name>")
 def api_open_case_artifact(op_id, name):
     try:

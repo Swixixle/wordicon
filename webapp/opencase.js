@@ -159,8 +159,9 @@
     if (Object.keys(result).length) {
       if (state === 'partial') el.append(node('p','Partial result: inspect the source failures and coverage below before drawing conclusions.','warn'));
       if (synthesis.answer) {
-        el.append(node('h2','Answer from the saved evidence'));
+        el.append(node('h2',synthesis.answer_format==='checked_excerpts'?'Relevant passages from the saved evidence':'Model answer · interpretation needs review'));
         el.append(node('p','Model synthesis · '+(plan.synthesis?.model || 'configured model'),'foot'));
+        el.append(node('p',synthesis.support_verification || 'Citations identify saved records; they do not independently verify the model’s interpretation.','foot'));
         const citations=entries(synthesis.citations), answer=node('p',null,'body');
         answer.style.whiteSpace='pre-line';
         // Link only the locally resolved record ids. Model text remains text,
@@ -185,7 +186,18 @@
           if(c.source_url || c.url) n.append(link(c.source_name || 'Original source',c.source_url || c.url));
           n.append(detail('Saved citation and source hash',c));
         });
+        const review=node('details'); review.append(node('summary','Flag an unsupported answer'));
+        const reason=node('textarea'); reason.id='oc-review-reason'; reason.maxLength=4000;
+        reason.setAttribute('aria-label','Unsupported claim and evidence gap');
+        reason.placeholder='Identify the claim and explain what the cited evidence does not establish.';
+        const hold=button('Hold this answer',async()=>{
+          hold.disabled=true;
+          try { await api('/api/open-case/operations/'+enc(selected)+'/answer-review',{reason:reason.value,response_sha256:synthesis.response_artifact?.sha256}); await open(selected); await historyList(); }
+          catch(e){error(e);hold.disabled=false;}
+        }); hold.id='oc-review-hold';review.append(reason,hold);el.append(review);
       }
+      if(synthesis.reviews) el.append(detail('Review history · original response retained',synthesis.reviews));
+      if(synthesis.held_answer) el.append(detail('Held model answer · unsupported claim reported',synthesis.held_answer));
       if (synthesis.error) el.append(node('p','Model answer needs attention: '+synthesis.error.replace(/\.*$/,'')+'. The source records below remain available.','warn'));
       if (plan.synthesis?.enabled) el.append(detail('Model run and usage',synthesis));
       const renderFinding = (n,f) => {

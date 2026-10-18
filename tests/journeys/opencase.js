@@ -7,7 +7,7 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   const page = await ctx.newPage();
   const errors = [], starts = [], prepares = [];
   page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errors.push(e.message); });
-  let saved = false, reads = 0, rejectedResult = false, heldAnswer = false;
+  let saved = false, reads = 0, rejectedResult = false, heldAnswer = false, reviewReason = '';
   const origin = {kind:'selection',text:'A preserved passage about a judge.',doc_id:'fixture-document',revision:7,range:{start:0,end:34},title:'Origin fixture'};
   let plan;
   const result = {job_id:'job-fixture',case_id:'case-fixture',status:'partial',actual_cost_usd:0,model_runs:[],
@@ -22,8 +22,10 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/status')) return route.fulfill({json:{available:true,synthesis:{available:true,provider:'anthropic',model:'fixture-model'}}});
     if (path.endsWith('/save')) {saved=true;return route.fulfill({json:{saved:true}});}
+    if (path.endsWith('/answer-review')) {reviewReason=route.request().postDataJSON().reason;return route.fulfill({json:{saved:true}});}
     if (path.endsWith('/operations')) return route.fulfill({json:{operations:plan?[{operation_id:'op_fixture',question:plan.question,status:'complete',saved}]:[]}});
     const v = view();
+    if(reviewReason) {v.synthesis={status:'rejected',answer:'',held_answer:'Original unsupported interpretation',hold_reason:'support_disputed',error:reviewReason,reviews:[{reason:reviewReason}]};v.dimensions={display_status:'Answer held',lifecycle:'complete',acquisition:{status:'ready'},answer:{status:'held'}};}
     if (rejectedResult) { v.status='unknown';v.result=null;v.producer_state.status='completed';v.error='The producer returned a different subject; result not accepted.'; }
     if(heldAnswer) {v.synthesis={status:'truncated',answer:'',hold_reason:'output_limit',error:'Output allowance reached.'};v.dimensions={display_status:'Answer held',lifecycle:'complete',acquisition:{status:'ready'},answer:{status:'held'}};}
     v.costs={estimated_cost_usd:0.035772,known_estimated_subtotal_usd:0.035772,unknown_components:[]};v.thread_costs={...v.costs,estimated_cost_usd:0.062022};
@@ -66,6 +68,13 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   ok(/Cited evidence/.test(await page.textContent('#oc-current')) && /API dollar total: not reported/.test(await page.textContent('#oc-current')) && /input_tokens/.test(await page.textContent('#oc-current')),'saved model answer exposes resolved evidence and usage without claiming a dollar total');
   ok((await page.locator('#oc-current a[href="#oc-citation-1"]').count())===1 && /Fixture biography retained/.test(await page.textContent('#oc-citation-1')),'answer citations link to the saved source excerpt actually supplied to the model');
   ok(starts.length===1,'reopening an optional model answer never sends Start');
+  await page.getByText('Flag an unsupported answer',{exact:true}).click();
+  await page.fill('#oc-review-reason','The evidence does not establish the added timing inference.');await page.click('#oc-review-hold');
+  await page.waitForFunction(()=>document.querySelector('#oc-progress').textContent==='Answer held');
+  await page.reload();await page.waitForSelector('#oc-answer-recovery');
+  ok(/Review history/.test(await page.textContent('#oc-current')) && /Original unsupported interpretation/.test(await page.textContent('#oc-current')),'a reviewed hold survives reopen and retains the original answer');
+  ok(starts.length===1,'reviewing an unsupported answer creates no paid request');
+  reviewReason='';
   heldAnswer=true;await page.reload();await page.waitForSelector('#oc-answer-recovery');
   ok((await page.textContent('#oc-progress'))==='Answer held','held answers do not inherit source completion');
   ok(/estimated \$0.035772/.test(await page.textContent('#oc-current')) && /estimated \$0.062022/.test(await page.textContent('#oc-current')),'operation and thread estimates include earlier attempts');

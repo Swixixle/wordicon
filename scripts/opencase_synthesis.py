@@ -393,7 +393,8 @@ def view(op):
                     artifact(op, state[key]["name"])
         except (ValueError, OSError) as e:
             return {**state, "status": "failed", "answer": "", "citations": [], "error": str(e)}
-        return state
+        import opencase_review
+        return opencase_review.apply(op, state)
     return {
         "status": "pending" if plan.get("synthesis", {}).get("enabled") else "not_requested",
         "answer": "", "citations": [], "model_runs": [], "usage": {}, "actual_cost_usd": None}

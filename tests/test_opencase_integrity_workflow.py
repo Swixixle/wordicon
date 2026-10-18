@@ -12,6 +12,38 @@ from test_opencase_workflow import opencase, ops, federation, producers
 import operation_costs
 
 class IntegrityWorkflowTests(SynthesisTests):
+    def test_review_hold_is_durable_bound_to_receipt_and_preserves_original_and_cost(self):
+        op=self.run_prepared(self.prepare_model())
+        original=copy.deepcopy(op['result_ref'])
+        before=operation_costs.total(op)
+        payload={'reason':'The cited record does not establish the additional timing inference.',
+                 'response_sha256':original['synthesis']['response_artifact']['sha256']}
+        url='/api/open-case/operations/'+op['op_id']+'/answer-review'
+        for _ in range(2):
+            r=self.client.post(url,json=payload)
+            self.assertEqual(r.status_code,200,r.json)
+        self.assertEqual(r.json['dimensions']['display_status'],'Answer held')
+        self.assertEqual(r.json['synthesis']['hold_reason'],'support_disputed')
+        self.assertEqual(r.json['synthesis']['answer'],'')
+        self.assertEqual(r.json['synthesis']['held_answer'],original['synthesis']['answer'])
+        self.assertEqual(len(r.json['synthesis']['reviews']),1)
+        current=ops.get(op['op_id'])
+        self.assertEqual(current['result_ref'],original)
+        self.assertEqual(operation_costs.total(current),before)
+        with patch.object(producers,'_request',side_effect=AssertionError('review is local')):
+            opencase._run(op['op_id'],resume=True)
+        self.assertEqual(opencase.view(ops.get(op['op_id']))['synthesis']['hold_reason'],'support_disputed')
+        self.assertEqual(len(self.model.calls),1)
+
+    def test_review_requires_exact_saved_receipt_and_explanation(self):
+        op=self.run_prepared(self.prepare_model())
+        url='/api/open-case/operations/'+op['op_id']+'/answer-review'
+        r=self.client.post(url,json={'reason':'Unsupported timing claim in the answer.','response_sha256':'other'})
+        self.assertEqual(r.status_code,409)
+        r=self.client.post(url,json={'reason':'short','response_sha256':op['result_ref']['synthesis']['response_artifact']['sha256']})
+        self.assertEqual(r.status_code,400)
+        self.assertNotIn('reviews',opencase.view(ops.get(op['op_id']))['synthesis'])
+
     def test_answer_recovery_reuses_exact_evidence_and_does_not_repeat_collection(self):
         self.model.mode='truncated'
         parent=self.run_prepared(self.prepare_model(), 'held')
