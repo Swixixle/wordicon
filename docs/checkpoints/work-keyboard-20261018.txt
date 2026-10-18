@@ -1,0 +1,36 @@
+WORK KEYBOARD FIXTURE — 18 October 2026
+
+The macOS Work journey at31d9073038ac655c8e630e2577f026b09fdb69cd
+failed its named control traversal: ordinary Tab reached five distinct focus
+descriptors, skipping buttons and links. The same failure appears in earlier
+local baseline logs. It was reproduced with the unchanged application, not
+introduced by the Results lifecycle repair.
+
+An independent bare HTML page, containing only native buttons, a link and text
+fields and no application JavaScript, exhibits the same omission in macOS
+Playwright WebKit26.0/Playwright1.56.0. Option-Tab reaches those native controls
+and every required workspace control. Chromium141.0.7390.37 reaches them with
+both keys. Exact observed focus sequences are retained in the adjacent JSON.
+No system/browser preference was changed. Manual Safari was not exercised.
+
+Apple documents the native Tab and Option-Tab modes and their dependence on
+Keyboard Navigation/Safari settings:
+https://support.apple.com/en-gb/guide/safari/cpsh003/mac
+
+The fixture now probes native traversal on a separate bare page first. Tab
+remains the default. Only on Darwin, when the independent probe demonstrates
+that Tab omits native controls and Option-Tab reaches all of them, does the
+workspace traversal use Option-Tab. The decision never depends on whether an
+application assertion passed. A probe that cannot reach all native controls
+fails; it does not skip keyboard coverage or modify app tabindex values.
+
+Every original named workspace category remains required: Tools toggle,
+Document menu, formatting, Ask, Focus, Results toggle, Your work, Get feedback,
+Hide Tools, both resizing grips, editor, Results tab, Hide Results. Arrow-key
+grip resizing and ordinary Tab leaving the editor without typing remain tested.
+The full Work journey passes117 checks, including its original authoring,
+autosave, proposal/Start, results, recovery and no-egress checks. Its detailed
+focus proof is emitted as work-keyboard.proof.json on each run.
+
+This change affects the fixture and its evidence only. It does not override
+user keyboard choices or modify production application behavior.

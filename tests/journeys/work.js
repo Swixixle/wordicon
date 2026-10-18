@@ -22,10 +22,46 @@ const { webkit } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
+// Safari/macOS has two native traversal modes. Select the documented
+// Option-Tab mode only after a bare page (no application JS) proves ordinary
+// Tab excludes a button/link and Option-Tab reaches every native control.
+// No OS/browser preference or app tabindex is changed. The actual workspace
+// still has to satisfy the same complete, named control checklist below.
+// https://support.apple.com/en-gb/guide/safari/cpsh003/mac
+async function nativeTraversal(context) {
+  const probe = await context.newPage();
+  try {
+    await probe.setContent('<button id="first">First</button><button id="second">Second</button><a id="link" href="#probe">Link</a><input id="field">');
+    const walk = async key => {
+      await probe.focus('#first');
+      const reached = new Set(['first']);
+      for (let i = 0; i < 12; i++) {
+        await probe.keyboard.press(key);
+        const id = await probe.evaluate(() => document.activeElement?.id || '');
+        if (!id) break;
+        if (id === 'first' && i > 1) break;
+        reached.add(id);
+      }
+      return [...reached];
+    };
+    const tab = await walk('Tab');
+    const complete = reached => ['first', 'second', 'link', 'field'].every(id => reached.includes(id));
+    let key = 'Tab', optionTab = null;
+    if (process.platform === 'darwin' && !complete(tab)) {
+      optionTab = await walk('Alt+Tab');
+      if (complete(optionTab)) key = 'Alt+Tab';
+    }
+    return {platform: process.platform, engine: 'webkit', key, tab, option_tab: optionTab,
+            supported: complete(key === 'Tab' ? tab : optionTab), preferences_changed: false};
+  } finally { await probe.close(); }
+}
+
 (async () => {
   const browser = await webkit.launch();
   ok(browser.browserType().name() === 'webkit', 'the workspace is measured in WebKit, the engine the owner writes in: ' + browser.browserType().name());
   const ctx = await pairedContext(browser, { viewport: { width: 1440, height: 900 } });
+  const navigation = await nativeTraversal(ctx);
+  ok(navigation.supported, 'native keyboard traversal reaches all bare-page controls without changing preferences: ' + JSON.stringify(navigation));
   const page = await ctx.newPage();
   const errs = [], posts = [];
   page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e.message)); });
@@ -386,7 +422,7 @@ const path = require('path');
   const describe = () => page.evaluate(() => { const a = document.activeElement; if (!a || a === document.body) return ''; return a.tagName.toLowerCase() + (a.id ? '#' + a.id : '') + (a.className ? '.' + String(a.className).split(' ').filter(Boolean).join('.') : '') + (a.dataset && a.dataset.page ? '[' + a.dataset.page + ']' : '') + (a.dataset && a.dataset.action ? '[' + a.dataset.action + ']' : ''); });
   reached.add(await describe());
   for (let i = 0; i < 120; i++) {
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(navigation.key);
     const d = await describe();
     if (!d) break;
     if (d.includes('#tools-toggle') && i > 5) break;
@@ -394,7 +430,8 @@ const path = require('path');
   }
   const need = [['#tools-toggle', 'Tools toggle'], ['#doc-menu-btn', 'Document menu'], ['.fmt', 'a formatting button'], ['#ask-btn', 'Ask'], ['#focus-btn', 'Focus'], ['#results-toggle', 'Results toggle'], ['[yourwork]', 'Your work destination'], ['[feedback.readers]', 'Get feedback'], ['#tools-hide', 'Hide Tools'], ['#tools-grip', 'the Tools grip'], ['.pm-editor', 'the editor'], ['.tab', 'a Results tab'], ['#results-hide', 'Hide Results'], ['#results-grip', 'the Results grip']];
   const missing = need.filter(([sel]) => !Array.from(reached).some(r => r.includes(sel))).map(([, name]) => name);
-  ok(missing.length === 0, 'a Tab walk reaches every control of the header, Tools, the editor and Results, including both grips (' + reached.size + ' stops)' + (missing.length ? ' — missing: ' + missing.join(', ') : ''));
+  fs.writeFileSync(path.join(process.env.JOURNEY_OUT || path.join(DIR, 'out'), 'work-keyboard.proof.json'), JSON.stringify({ ...navigation, reached: [...reached], required: need.map(([, name]) => name), missing }, null, 2) + '\n');
+  ok(missing.length === 0, 'a Tab walk reaches every control of the header, Tools, the editor and Results, including both grips (' + reached.size + ' stops; native ' + navigation.key + ')' + (missing.length ? ' — missing: ' + missing.join(', ') : ''));
   await page.focus('#tools-grip');
   const wBefore = await page.evaluate(() => document.getElementById('tools').getBoundingClientRect().width);
   await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft');
