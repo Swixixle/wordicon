@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Capture history · Nikodemus</title>
+  <style>
+    :root{color-scheme:light dark;font-family:system-ui,sans-serif;background:#101a27;color:#e4edf5}
+    *{box-sizing:border-box}body{margin:0}main{max-width:1080px;margin:auto;padding:30px 24px 80px}a{color:#a8d8ff}
+    h1{font-size:30px;margin:18px 0 8px}h2{font-size:21px;margin:28px 0 12px}h3{font-size:16px;margin:0 0 9px}
+    p{line-height:1.5}header p,.muted{color:#aabccc;font-size:14px}.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .card{background:#172638;border:1px solid #32465c;border-radius:12px;padding:17px;margin:10px 0;overflow-wrap:anywhere}
+    .warning{border-color:#b48a47;background:#332b20;color:#ffdfad}.error{border-color:#bc6565;background:#352225;color:#ffcdcd}
+    button{font:inherit;background:#27425e;color:#eef7ff;border:1px solid #4c6987;border-radius:8px;padding:8px 12px;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}details{margin-top:12px}summary{cursor:pointer;color:#b9cddd}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:420px;overflow:auto}
+    ol,ul{padding-left:25px}li{margin:9px 0;line-height:1.45}.tag{font-size:12px;border:1px solid #5b728b;border-radius:12px;padding:3px 9px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:9px 8px;border-bottom:1px solid #32465c;vertical-align:top}th{font-size:13px;color:#b6c9dc}section{scroll-margin-top:20px}.empty{font-style:italic;color:#aabccc}
+  </style>
+  <script src="/capture-history.js" defer></script>
+</head>
+<body><main>
+  <header><nav class="row"><a href="/work">Return to Work</a><a href="/investigation">Investigations</a></nav>
+    <h1>Capture history</h1><p>The saved path from a question or passage through its attempts, sources, and follow-ups. Opening this page sends no investigation or model request.</p>
+    <div class="row"><button id="history-refresh" type="button">Refresh saved history</button><span id="history-status" role="status">Loading saved records…</span></div>
+  </header>
+  <div id="history-error" role="alert"></div><div id="history-content"></div>
+</main></body></html>

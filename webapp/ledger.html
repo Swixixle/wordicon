@@ -34,8 +34,9 @@
 
   <div class="card">
     <div class="lbl">What this is, exactly</div>
-    <p style="margin:6px 0">The behavioral layer the big platforms harvest in the dark, captured here in the light and owned by you: which doors you opened, which pages you stood in, which documents and results had your attention, and when it came and went. Every entry is timestamped twice — the page’s clock and the store’s receive clock — appended to a file in your store that is never rewritten, and sealed into the encrypted Vault with your writing.</p>
-    <p class="muted small" style="margin:6px 0 0">What it never records: keystrokes, the content of anything, or a single event from outside this application. The switch is in the workspace’s Settings; off means nothing new is recorded and everything already written is kept. The exact event kinds: session start and end, page shown, place opened and closed, document opened, result viewed, attention leaving and returning to the tab — and, since the capture ruling: import attempted, question followed, material carried, edit applied, search performed, and an explicitly observed capture or delivery gap. Pending activity is stored in this browser until the local server acknowledges it; repeated delivery is deduplicated. This browser outbox is outside the encrypted Vault until delivery. Turning recording off stops transmission and retains already captured pending records.</p>
+    <p style="margin:6px 0">Your record of observed activity: pages displayed, documents and results opened, selections, edits and confirmed saves. These events do not establish reading, comprehension or preference. Every entry is timestamped twice: the page’s clock and the store’s receive clock stay separate, appended to a file in your store and sealed into the encrypted Vault with your writing.</p>
+    <p class="muted small" style="margin:6px 0 0">What it never records: individual keystrokes or their values, cursor positions, selected text, document bodies or events outside this application. Obvious credential patterns in metadata are omitted with a named gap before browser storage; pattern matching cannot detect every secret. The switch is in Settings. The event kinds are session start/end, page shown, place opened/closed, document opened, result viewed, tab hidden/visible, import attempted, question followed, material carried, edit applied, search performed, capture gap, activity state/interval, material selected, document edited and document saved. Pending metadata stays in this browser until explicit server acknowledgement; repeated delivery is deduplicated. The browser outbox is outside the encrypted Vault until delivered. Off stops new capture and transmission while retaining previously captured pending records, including memory-only rows when browser storage is unavailable.</p>
+    <p class="muted small" style="margin:6px 0 0">Foreground intervals are coarse per-page estimates under visibility_focus_idle.v1. A visible, focused page becomes idle after 60 seconds without an input, pointer-down or scroll occurrence; no individual gesture or its content is stored. Estimates checkpoint every 15 seconds and close on focus, visibility or page-exit boundaries. More than 30 seconds between checks, or a discontinuous clock change, leaves an explicit unobserved gap. A crash can lose the tail after the last checkpoint; no ending or duration is invented on reopen. Intervals carry the most recently displayed page/document/result context; that association does not prove it was read. Separate pages may overlap and are not a unique measure of your attention. Frames or browser capabilities that do not report activity can leave incomplete estimates.</p>
     <p class="muted small" style="margin:6px 0 0">Two sibling stores keep what the Ledger deliberately will not, under the same switch and the same seal: the words you type into the search boxes are kept whole in the capture store, and every saved revision of a document is retained by the notebook — your earlier wording is never labelled “rejected”; an edit is candidate feedback, original and revision kept side by side and judged only under your review. Off stops both the moment it stops the Ledger, and erases nothing.</p>
   </div>
 
@@ -57,21 +58,26 @@
 </div>
 <script>
   const SENTENCE = {
-    session_start: () => 'sat down at the desk',
-    session_end: () => 'left the desk',
-    page_shown: s => 'stood in ' + (s.page || 'a page'),
+    session_start: () => 'page session began',
+    session_end: () => 'page session ended',
+    page_shown: s => 'displayed ' + esc(s.page || 'a page'),
     place_opened: s => 'opened <span class="title">' + esc(s.title || 'a place') + '</span>',
     place_closed: () => 'closed the place, back to the writing',
     document_opened: s => 'opened the document <span class="title">“' + esc(s.title || s.id || 'untitled') + '”</span>',
-    result_viewed: s => 'looked at a ' + (s.kind === 'reading' ? 'reading' : 'result'),
-    visibility_hidden: () => 'attention left the tab',
-    visibility_visible: () => 'attention returned',
+    result_viewed: s => 'displayed a ' + (s.kind === 'reading' ? 'reading' : 'result'),
+    visibility_hidden: () => 'tab became hidden',
+    visibility_visible: () => 'tab became visible',
     import_attempted: s => 'tried to bring in <span class="title">' + esc(s.title || 'a file') + '</span>',
-    question_followed: s => (s.kind === 'own' ? 'asked a question of their own in Go deeper' : 'followed a suggested question in Go deeper'),
-    material_carried: () => 'carried material back to the revision notes',
+    question_followed: s => s.kind === 'investigation_follow_up' ? 'prepared an investigation follow-up' : (s.kind === 'own' ? 'asked a question in Go deeper' : 'followed a suggested question in Go deeper'),
+    material_carried: () => 'carried material into another part of the workspace',
     edit_applied: s => 'saved an edit' + (s.revision ? ' (revision ' + esc(s.revision) + ')' : ''),
     search_performed: s => 'searched the ' + esc(s.scope || 'library'),
     capture_gap: s => 'capture gap: ' + esc(s.title || s.kind || 'details unavailable'),
+    activity_state: s => 'activity estimate state: ' + esc((s.kind || 'unknown').replace(/_/g, ' ')),
+    activity_interval: (s, e) => esc(((e.interval || {}).state || 'unknown').replace(/_/g, ' ')) + ': ' + esc(((e.interval || {}).duration_ms || 0) / 1000) + ' seconds; boundary ' + esc((e.interval || {}).reason || 'unknown'),
+    material_selected: () => 'selected a nonempty range (text not captured here)',
+    document_edited: s => 'edited a document (coalesced change boundary)' + (s.revision ? ' from revision ' + esc(s.revision) : ''),
+    document_saved: s => 'confirmed saved revision ' + esc(s.revision || 'unknown'),
   };
   function esc(x) { return String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
   let loaded = [];
@@ -92,7 +98,7 @@
     trail.innerHTML = loaded.map(e => {
       const t = (e.at || e.received_at || '').slice(11, 19);
       const f = SENTENCE[e.type];
-      return '<div class="entry"><span class="t">' + esc(t) + '</span><span class="what">' + (f ? f(e.subject || {}) : esc(e.type)) + '</span></div>';
+      return '<div class="entry"><span class="t">' + esc(t) + '</span><span class="what">' + (f ? f(e.subject || {}, e) : esc(e.type)) + '</span></div>';
     }).join('');
     renderSummary();
   }

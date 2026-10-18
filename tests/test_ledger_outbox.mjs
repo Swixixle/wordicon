@@ -16,14 +16,16 @@ class Storage {
   removeItem(k) { if (this.fail) throw Error('fixture unavailable'); this.rows.delete(k); }
 }
 function fixture(storage = new Storage(), scope = SCOPE_A) {
-  const state = {storage, scope, enabled:true, posts:[], beacons:[], timers:new Map(), listeners:{}, reply:'ack', beacon:true};
+  const state = {storage, scope, enabled:true, posts:[], beacons:[], timers:new Map(), listeners:{}, reply:'ack', beacon:true, time:0, wallShift:0, focused:false};
   let nextTimer = 0;
-  const context = vm.createContext({crypto:webcrypto, Date, Math, JSON, Set, Map, String, console,
+  class Clock extends Date { constructor(...args) { super(...(args.length ? args : [Date.UTC(2026,9,18)+state.time+state.wallShift])); } static now() {return Date.UTC(2026,9,18)+state.time+state.wallShift;} }
+  state.document = {hidden:false, hasFocus:()=>state.focused, addEventListener:(kind, fn) => state.listeners[kind] = fn};
+  const context = vm.createContext({crypto:webcrypto, Date:Clock, performance:{now:()=>state.time}, Math, JSON, Set, Map, String, console,
     localStorage: storage,
-    document:{hidden:false, addEventListener:(kind, fn) => state.listeners[kind] = fn},
+    document:state.document,
     window:{addEventListener:(kind, fn) => state.listeners[kind] = fn},
     navigator:{sendBeacon:(url, body) => {state.beacons.push({url, events:JSON.parse(body).events}); return state.beacon;}},
-    setTimeout:fn => {state.timers.set(++nextTimer,fn);return nextTimer;},
+    setTimeout:(fn,ms) => {state.timers.set(++nextTimer,{fn,at:state.time+ms});return nextTimer;},
     clearTimeout:id => state.timers.delete(id),
     fetch:async (url, options={}) => {
       if (url === '/api/ledger/config') return {ok:true,json:async()=>({enabled:state.enabled,scope_id:state.scope})};
@@ -39,6 +41,16 @@ function fixture(storage = new Storage(), scope = SCOPE_A) {
     }});
   vm.runInContext(source, context);
   state.ledger = new context.Ledger();
+  state.advance = async(ms, timers=true) => {
+    const until=state.time+ms;
+    if(timers) for(;;) {
+      const next=[...state.timers].sort((a,b)=>a[1].at-b[1].at)[0];
+      if(!next || next[1].at>until)break;
+      state.time=next[1].at;state.timers.delete(next[0]);await next[1].fn();
+    }
+    state.time=until;
+  };
+  state.events = () => [...new Map([...state.posts.flatMap(p=>p.events),...state.beacons.flatMap(p=>p.events),...state.ledger.pending()].map(e=>[e.event_id,e])).values()];
   return state;
 }
 const tests = [];
@@ -163,7 +175,7 @@ test('valid JSON poison pills remain preserved but are quarantined from good del
 
 test('page lifecycle records observed boundaries only', async()=>{
   const f=fixture();await f.ledger.init();assert.equal(f.ledger.pending()[0].type,'session_start');
-  assert.deepEqual(Object.keys(f.listeners).sort(),['pagehide','visibilitychange']);
+  assert.deepEqual(Object.keys(f.listeners).sort(),['blur','focus','input','keydown','pagehide','pageshow','pointerdown','scroll','visibilitychange']);
   f.listeners.pagehide();assert.equal(f.beacons.length,1);
   assert.equal(f.ledger.pending().filter(e=>e.type==='session_end').length,1);
 });
@@ -213,6 +225,93 @@ test('recording off retains previously captured memory-only rows until acknowled
   await f.ledger.flush();assert.equal(f.posts.length,0);
   f.storage.fail=false;f.ledger.setEnabled(true);await f.ledger.flush();
   assert.deepEqual(f.posts[0].events.map(e=>e.event_id).sort(),ids);assert.equal(f.ledger.status().pending_count,0);
+});
+
+test('foreground estimates stop at idle, blur and hidden boundaries with no content access', async()=>{
+  const f=fixture();f.focused=true;await f.ledger.init();
+  const secret=new Proxy({}, {get(){throw Error('gesture content must never be read');}});
+  await f.advance(10000);f.listeners.keydown(secret);
+  await f.advance(65000);
+  let intervals=f.events().filter(e=>e.type==='activity_interval').map(e=>e.interval);
+  assert.equal(intervals.filter(i=>i.state==='foreground_active_estimate').reduce((n,i)=>n+i.duration_ms,0),70000);
+  assert.equal(intervals.filter(i=>i.state==='foreground_idle_estimate').reduce((n,i)=>n+i.duration_ms,0),5000);
+  f.listeners.input(secret);await f.advance(5000);f.focused=false;f.listeners.blur();
+  const before=f.events().filter(e=>e.type==='activity_interval').length;
+  await f.advance(90000);assert.equal(f.events().filter(e=>e.type==='activity_interval').length,before);
+  f.focused=true;f.listeners.focus();f.listeners.pointerdown(secret);await f.advance(3000);
+  f.document.hidden=true;f.listeners.visibilitychange();await f.advance(90000);
+  intervals=f.events().filter(e=>e.type==='activity_interval').map(e=>e.interval);
+  assert.equal(intervals.filter(i=>i.state==='foreground_active_estimate').reduce((n,i)=>n+i.duration_ms,0),78000);
+  assert.ok(intervals.every(i=>i.duration_ms<=30000&&i.policy==='visibility_focus_idle.v1'));
+  assert.ok(!JSON.stringify(f.events()).includes('secret'));
+});
+
+test('pagehide closes only observed time; crash retains checkpoints without fabricated tail or end', async()=>{
+  const f=fixture();f.focused=true;await f.ledger.init();await f.advance(17000);f.listeners.pagehide();
+  assert.equal(f.events().filter(e=>e.type==='activity_interval').reduce((n,e)=>n+e.interval.duration_ms,0),17000);
+  await f.advance(60000);assert.equal(f.events().filter(e=>e.type==='session_end').length,1);
+  const crash=fixture();crash.reply='network';crash.focused=true;await crash.ledger.init();await crash.advance(17000);
+  const stored=crash.ledger.pending();assert.equal(stored.filter(e=>e.type==='activity_interval').reduce((n,e)=>n+e.interval.duration_ms,0),15000);
+  const reopened=fixture(crash.storage);await reopened.ledger.init();
+  const old=reopened.ledger.pending().filter(e=>e.session_id===crash.ledger.session);
+  assert.equal(old.filter(e=>e.type==='activity_interval').reduce((n,e)=>n+e.interval.duration_ms,0),15000);
+  assert.equal(old.filter(e=>e.type==='session_end').length,0);
+});
+
+test('delayed timers and recording-off never fabricate foreground duration or discard pending intervals', async()=>{
+  const f=fixture();f.reply='network';f.focused=true;await f.ledger.init();await f.advance(15000);
+  await f.advance(120000,false);f.ledger.activityCheck();
+  assert.equal(f.events().filter(e=>e.type==='activity_interval').reduce((n,e)=>n+e.interval.duration_ms,0),15000);
+  assert.ok(f.events().some(e=>e.type==='capture_gap'&&e.subject.kind==='activity_time_unobserved'));
+  f.listeners.pointerdown();await f.advance(5000,false);f.ledger.setEnabled(false);
+  const before=JSON.stringify(f.ledger.pending());await f.advance(60000);f.listeners.keydown();
+  assert.equal(JSON.stringify(f.ledger.pending()),before);assert.equal(f.timers.size,0);
+  f.ledger.setEnabled(true);f.listeners.pointerdown();await f.advance(15000);
+  assert.ok(f.events().filter(e=>e.type==='activity_interval').every(e=>e.interval.duration_ms<=30000));
+});
+
+test('interval validation refuses oversized or body-bearing estimates before browser persistence', async()=>{
+  const f=await fresh();const base={policy:'visibility_focus_idle.v1',state:'foreground_active_estimate',start_at:'2026-10-18T00:00:00Z',end_at:'2026-10-18T00:00:15Z',duration_ms:15000,idle_after_ms:60000,reason:'checkpoint'};
+  f.ledger.note('activity_interval',{id:'doc'}, {...base,body:'PRIVATE BODY'});
+  f.ledger.note('activity_interval',{id:'doc'}, {...base,duration_ms:90000});
+  f.ledger.note('activity_interval',{id:'doc'}, {...base,start_at:'Sun, 18 Oct 2026 00:00:00 GMT (PRIVATE BODY)'});
+  assert.equal(f.ledger.pending().filter(e=>e.type==='activity_interval').length,0);
+  assert.ok(!JSON.stringify([...f.storage.rows]).includes('PRIVATE BODY'));
+  f.ledger.note('activity_interval',{id:'doc'},base);await f.ledger.flush();
+  assert.equal(f.posts[0].events.filter(e=>e.type==='activity_interval').length,1);
+});
+
+test('wall-clock discontinuity is unknown and restored pages do not fill hidden time', async()=>{
+  const f=fixture();f.focused=true;await f.ledger.init();await f.advance(15000);
+  f.wallShift=3600000;await f.advance(5000,false);f.ledger.activityCheck();
+  assert.ok(f.events().some(e=>e.type==='capture_gap'&&e.subject.kind==='activity_time_unobserved'));
+  assert.equal(f.events().filter(e=>e.type==='activity_interval').reduce((n,e)=>n+e.interval.duration_ms,0),15000);
+  f.listeners.pagehide();await f.advance(120000);f.listeners.pageshow();f.listeners.pointerdown();await f.advance(15000);
+  assert.equal(f.events().filter(e=>e.type==='activity_interval').reduce((n,e)=>n+e.interval.duration_ms,0),30000);
+});
+
+test('credential-like titles and URL parameters are omitted before storage while token-count labels remain', async()=>{
+  const f=await fresh();
+  const secrets=['sk-ant-abcdefghijk123','Bearer abcdefghijk','https://user:password@example.test/path','https://example.test/?access_token=secretvalue','https://example.test/?%61pi_key=secretvalue'];
+  for (const title of secrets) f.ledger.note('document_opened',{id:'doc_safe',title});
+  f.ledger.note('document_opened',{id:'doc_usage',title:'input_tokens: 100; output_tokens: 20'});
+  const encoded=JSON.stringify([...f.storage.rows]);
+  assert.ok(secrets.every(secret=>!encoded.includes(secret)));
+  assert.ok(f.ledger.pending().some(e=>e.type==='capture_gap'&&e.subject.kind==='metadata_redacted'));
+  assert.equal(f.ledger.pending().find(e=>e.subject.id==='doc_usage').subject.title,'input_tokens: 100; output_tokens: 20');
+  await f.ledger.flush();assert.ok(secrets.every(secret=>!JSON.stringify(f.posts).includes(secret)));
+});
+
+test('a changed workspace scope never rebinds or transmits prior memory-only activity', async()=>{
+  const f=await fresh();f.storage.fail=true;f.ledger.note('document_opened',{id:'old_doc'});
+  const original=f.ledger.pending().find(e=>e.subject.id==='old_doc');
+  f.scope=SCOPE_B;assert.equal(await f.ledger.config(),false);
+  assert.equal(f.ledger.scope,SCOPE_A);assert.equal(original.scope_id,SCOPE_A);
+  assert.equal(f.ledger.status().scope_conflict,true);
+  f.storage.fail=false;await f.ledger.flush();assert.equal(f.posts.length,0);
+  f.ledger.note('document_opened',{id:'new_doc'});assert.ok(!f.ledger.pending().some(e=>e.subject.id==='new_doc'));
+  assert.ok(f.ledger.pending().some(e=>e.event_id===original.event_id));
+  assert.match(f.ledger.status().last_error,/identity changed/);
 });
 
 let passed=0;

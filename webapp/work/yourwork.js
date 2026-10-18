@@ -67,6 +67,7 @@ export class YourWork {
     s.loading = false;
     if (!r.ok) { this.list.textContent = ''; this.list.appendChild(el('div', { class: 'warn', text: 'Your work could not be read: ' + (r.data.error || r.status) })); return; }
     const d = r.data;
+    s.capture = d.capture;
     s.items = s.cursor ? s.items.concat(d.items || []) : (d.items || []);
     s.health = d.health; s.kinds = d.kinds || {}; s.mode = d.mode; s.next = d.next_cursor; s.exhaustive = d.exhaustive; s.population = d.population;
     this.renderFilters(); this.renderHealth(); this.renderList();
@@ -93,8 +94,10 @@ export class YourWork {
     // the headline: how many items are searchable and how fresh; the index's internals (stores, generation) in About
     let text = (h.items === undefined ? '' : h.items + ' item' + (h.items === 1 ? '' : 's') + ' searchable') + (h.last_refresh_at ? ' · refreshed ' + whenOf(h.last_refresh_at) : '') + (h.fts ? '' : ' · plain matching (no full-text engine)');
     if (h.updating || h.incomplete) text = 'Search is updating; some recent work may be missing' + (pend.length ? ' (' + pend.map(([k, v]) => v + ' ' + k + (v === 1 ? ' change' : ' changes') + ' pending').join(', ') + ')' : '') + (h.incomplete ? ' — ' + h.incomplete : '') + ' · ' + text;
+    const captureFailed = this.state.capture && this.state.capture.kept === false && !['recording_off','recording is off (the Ledger switch in Settings governs capture too)'].includes(this.state.capture.why);
+    if (captureFailed) text += ' · Search results are available; this search was not retained in history (' + (this.state.capture.why || 'capture unavailable') + ').';
     this.healthLine.textContent = text;
-    this.healthLine.classList.toggle('warn', !!(h.updating || h.incomplete));
+    this.healthLine.classList.toggle('warn', !!(h.updating || h.incomplete || captureFailed));
     if (this.aboutLine) this.aboutLine.textContent = (h.population || '') + (h.built_at ? ' · built ' + whenOf(h.built_at) : '') + ' — a derived index; every hit reopens the authoritative record';
   }
 

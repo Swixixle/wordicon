@@ -147,7 +147,9 @@ import { Ledger } from '/work/ledger.js';
       $('oc-synthesis').checked = false; $('oc-task-profile').value = plan.task_profile || 'public_records';
       originView(); $('open-case-card').scrollIntoView({block:'start'}); $('oc-question').focus();
     });
-    el.append(row(save, follow));
+    const history = button('History and capture', () => { location.href = '/capture-history?operation_id=' + enc(view.operation_id || selected); });
+    history.id = 'oc-capture-history';
+    el.append(row(save, follow, history));
     if ((['truncated','rejected','failed','unknown'].includes(synthesis.status) || ['partial','insufficient'].includes(synthesis.answer_status)) && view.result) {
       const recover=button('Review answer recovery', () => {
         reuseEvidence=view.operation_id; followUp=view.operation_id;origin=view.origin || plan.origin;

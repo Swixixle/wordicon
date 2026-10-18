@@ -396,8 +396,11 @@ def attach(gateway, op_id: str) -> None:
     call (complete, complete_with_search, complete_with_image) leaves an
     intent event before it goes and an end event after; the attempt loop
     of a provider gateway leaves the same pair per real HTTP attempt. The
-    text never enters the record — the stage's name (the prompt's own first
-    line), the attempt number, the outcome and the exception class do."""
+    event metadata remains separate from exact available SDK bodies. The
+    capture helper writes body artifacts before dispatch/return, linked by the
+    existing logical-call and physical-attempt IDs. Callers own the corpus guard."""
+    import operation_capture
+    gateway.capture_factory = lambda **metadata: operation_capture.Attempt(op_id, **metadata)
     gateway.dispatch_hook = lambda kind, **f: _hook(op_id, kind, **f)
     for name in ("complete", "complete_with_search", "complete_with_image"):
         original = getattr(gateway, name, None)
@@ -420,8 +423,9 @@ def attach(gateway, op_id: str) -> None:
 
 
 def _stage_of(prompt) -> str:
+    import operation_capture
     first = str(prompt or "").split("\n", 1)[0].strip()
-    return first[:80]
+    return operation_capture.sanitize_body(first)["value"][:80]
 
 
 def _hook(op_id: str, kind: str, **f) -> None:

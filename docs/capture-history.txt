@@ -1,0 +1,55 @@
+CAPTURE AND HISTORY — 18 OCTOBER 2026
+
+Open a saved document's Document menu > History and capture, or the same
+button on an Open Case result. This view reconstructs explicit saved links:
+question, proposal, document revision, passage snapshot, operation, attempts,
+retained source evidence, captured response, answer hold and follow-ups.
+Opening or refreshing it performs local reads only. Missing and changed
+records are gaps; a title or similar URL never creates a relationship.
+
+New operation-attached Anthropic text, search and image calls retain their
+available SDK arguments before dispatch, then their full/partial/error SDK
+response before returning. The image path remains a single attempt. Captures
+are immutable, hash-addressed files under the existing operation artifact
+store. Intent/attempt IDs join the operation journal. A failed request capture
+prevents dispatch; failed response persistence cannot trigger automatic replay.
+An unlinked complete artifact remains recoverable and is reported as a gap.
+
+The shared cost ledger receives available model and tool usage. Open Case's
+existing accounting owner is retained to avoid counting a call twice. Unknown
+prices, missing usage and tool charges remain unknown, with any known subtotal
+separate from a complete estimate. Provider invoice totals are not inferred.
+Capture grants no spending authority and does not add background model work.
+
+These are SDK bodies, not HTTP wire captures. Transport headers, cookies,
+environment objects and recognized credentials are excluded. Every body
+transformation is declared. Pattern matching cannot establish that arbitrary
+content contains no secret. Unattached CLI calls retain their original scope;
+unsupported/custom gateways identify unavailable body fields. Records made
+before this change are not retroactively reconstructed.
+
+The activity Ledger records coarse visible/focused intervals, using 15-second
+checkpoints and a 60-second idle boundary. Intervals are bounded to 30 seconds;
+late timers and clock discontinuities produce gaps instead of invented time.
+Only input occurrence is observed, never key values or cursor positions.
+The most recently displayed context is recorded; overlapping tabs may overlap
+and a browser crash leaves its last unacknowledged interval unknown. Activity
+is not proof of reading, understanding, agreement or preference.
+
+Selections record a metadata boundary. Exact passage text enters the existing
+snapshot store only through the explicit action/proposal path. Edits are
+coalesced until a save; saved events require a committed revision acknowledgement.
+Originals and revisions remain candidate feedback without preference labels.
+
+The Settings recording switch governs supplemental activity, searches and
+revision capture. Existing functional input/edge recovery and operation
+records retain their established role in fulfilling and reopening requested
+work. Failed recovery-log writes now return named capture gaps. A completely
+unwritable store cannot promise a durable failure record; the caller reports
+that limitation. No capture switch deletes prior records.
+
+A workspace-identity.json file now binds the store independently of its path.
+New stores receive random identities; copies/restores retain the file. The
+explicit upgrade of the checked c9cd9ef store preserves its prior browser
+outbox scope. Missing/corrupt identities are not silently replaced by readers.
+Restoring a pre-identity backup needs an explicit migration choice.

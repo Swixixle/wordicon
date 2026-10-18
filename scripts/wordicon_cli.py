@@ -2281,14 +2281,47 @@ def speech_record(speech, provenance: str) -> dict:
     return out
 
 
+def _capture_write_gap(kind: str, references: dict, exc: Exception) -> dict:
+    # The failure report holds IDs and a class, never the lost body or an
+    # exception message that could include credentials. Lazy import avoids the
+    # capture/CLI import cycle. A broken gap store is explicitly non-durable.
+    try:
+        import capture
+        gap = capture.gap(kind, references, type(exc).__name__)
+    except Exception:
+        gap = {"kept": False, "durable": False, "why": "capture_gap_store_unavailable", "kind": kind}
+    return {"kept": False, "durable": False, "why": kind, "capture_gap": gap}
+
+
+def _append_capture_line(path, row):
+    """Preserve an existing partial tail, then append and fsync one record."""
+    import fcntl
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_RDWR | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "a+b") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        stream.seek(0, os.SEEK_END)
+        if stream.tell():
+            stream.seek(-1, os.SEEK_END)
+            if stream.read(1) != b"\n":
+                stream.write(b"\n")
+        stream.write((json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8"))
+        stream.flush(); os.fsync(stream.fileno())
+    parent_fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(parent_fd)
+    finally:
+        os.close(parent_fd)
+
+
 def record_input(job_id: str, mode: str, text: str, parent: str = "",
                  provenance: str = "unstated", destination: str = "",
-                 shape: str = "", suggested: str = "", speech=None) -> None:
-    """Append-only, best-effort, and deliberately dumb: no schema to
-    validate, no gateway to reach, nothing that can refuse. This runs
-    before any model is contacted, so it must not be able to fail the
-    submission it is recording. A swallowed exception here costs one log
-    line; a raised one would cost the run.
+                 shape: str = "", suggested: str = "", speech=None) -> dict:
+    """Append-only input recovery; a write failure never cancels submission.
+    Return the durable write status or a named capture gap. This functional
+    recovery record retains its existing scope; supplemental gaps honor the
+    visible recording switch. No model is contacted here.
 
     provenance (block 103): how the words arrived — typed by the owner,
     attached (a file's text used as the input), door (from a stored
@@ -2299,26 +2332,26 @@ def record_input(job_id: str, mode: str, text: str, parent: str = "",
         provenance = "unstated"
     try:
         LOCAL_STATE.mkdir(exist_ok=True)
-        with INPUTS_LOG.open("a", encoding="utf-8") as f:
-            row = {
-                "object_type": "input", "job_id": job_id, "mode": mode,
-                "text": text, "chars": len(text or ""),
-                "parent_trace_id": parent, "provenance": provenance,
-                "epoch": current_epoch(), "created_at": _now(),
-            }
-            # block 105: where the owner sent the words, and what the
-            # chooser had highlighted — so the record can later count
-            # how often its reading matched his choice, and never guess
-            if destination in DESTINATION_IDS:
-                row["destination"] = destination
-                row["shape"] = shape if shape in SHAPES else ""
-                row["suggested"] = suggested if suggested in DESTINATION_IDS else ""
-            sp = speech_record(speech, provenance)
-            if sp:
-                row["speech"] = sp
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
+        row = {
+            "object_type": "input", "job_id": job_id, "mode": mode,
+            "text": text, "chars": len(text or ""),
+            "parent_trace_id": parent, "provenance": provenance,
+            "epoch": current_epoch(), "created_at": _now(),
+        }
+        # block 105: where the owner sent the words, and what the
+        # chooser had highlighted — so the record can later count
+        # how often its reading matched his choice, and never guess
+        if destination in DESTINATION_IDS:
+            row["destination"] = destination
+            row["shape"] = shape if shape in SHAPES else ""
+            row["suggested"] = suggested if suggested in DESTINATION_IDS else ""
+        sp = speech_record(speech, provenance)
+        if sp:
+            row["speech"] = sp
+        _append_capture_line(INPUTS_LOG, row)
+        return {"kept": True, "durable": True, "job_id": job_id}
+    except Exception as exc:
+        return _capture_write_gap("input_write_failed", {"job_id": job_id, "run_trace_id": parent}, exc)
 
 
 def load_inputs(limit: int = 200) -> list[dict]:
@@ -2828,6 +2861,9 @@ def attempt_summary(events: "list[dict]") -> dict:
     }
 
 
+_GATEWAY_CAPTURE = threading.local()
+
+
 class Gateway:
     name = "base"
     is_external = False
@@ -2862,17 +2898,49 @@ class Gateway:
     # after; a boundary that cannot be persisted does not dispatch.
     dispatch_hook = None
 
+    def _capture_request(self, body):
+        """Called with actual SDK body arguments immediately before dispatch."""
+        for gateway, capture in reversed(getattr(_GATEWAY_CAPTURE, "stack", ())):
+            if gateway is self:
+                return capture.request(body)
+        return None  # no operation attached: existing CLI capture scope is unchanged
+
+    def _captured_attempt(self, make_call, **metadata):
+        factory = getattr(self, "capture_factory", None)
+        if factory is None:
+            return make_call()
+        ledger = getattr(self, "attempts", None)
+        labels = _current_label(ledger) if isinstance(ledger, AttemptLedger) else {}
+        capture = factory(provider=self.name, model=getattr(self, "model", "") or self.name,
+                          component=labels.get("component") or "", **metadata)
+        stack = getattr(_GATEWAY_CAPTURE, "stack", None)
+        if stack is None:
+            stack = _GATEWAY_CAPTURE.stack = []
+        stack.append((self, capture))
+        try:
+            try:
+                response = make_call()
+            except BaseException as exc:
+                capture.finish(error=exc)
+                raise
+            capture.finish(response=response)
+            return response
+        finally:
+            stack.pop()
+
     def _record_attempt(self, *, stage, attempt, started_at, t0, t1,
                         outcome, exc=None, usage=None, outcome_detail="",
                         call_id="", response=None) -> None:
         ledger = getattr(self, "attempts", None)
         label = _current_label(ledger) if isinstance(ledger, AttemptLedger) else {}
         partial = getattr(exc, "response_record", None) or {}
+        if usage is None:
+            usage = partial.get("usage")
         provider_run_id = getattr(response, "id", None) or partial.get("response_id")
         raw_response = partial.get("response")
         provider_model = getattr(response, "model", None) or (raw_response.get("model") if isinstance(raw_response, dict) else None)
         stop_reason = getattr(response, "stop_reason", None) or partial.get("stop_reason")
-        usage_complete = False if isinstance(exc, StreamInterrupted) else (True if response is not None and _usage_fields(usage) is not None else None)
+        usage_complete = False if isinstance(exc, StreamInterrupted) else (partial.get("usage_complete") if type(partial.get("usage_complete")) is bool else True if response is not None and _usage_fields(usage) is not None else None)
         attempt_id = f"{call_id}:{attempt}" if call_id else ""
         usage_categories = [{"category": k, "count": v} for k, v in (_usage_fields(usage) or {}).items()]
         hook = getattr(self, "dispatch_hook", None)
@@ -2952,7 +3020,8 @@ class Gateway:
                      provider=self.name, model=getattr(self, "model", "") or self.name,
                      call_id=call_id, attempt_id=f"{call_id}:{attempt}")
             try:
-                response = make_call()
+                response = self._captured_attempt(make_call, stage=stage, call_id=call_id,
+                    attempt_id=f"{call_id}:{attempt}", started_at=started_at)
             except rate_limited as e:
                 self._record_attempt(stage=stage, attempt=attempt, started_at=started_at, call_id=call_id,
                                      t0=t0, t1=time.monotonic(), outcome="error", exc=e)
@@ -4031,10 +4100,27 @@ class AnthropicAPIGateway(Gateway):
                                          "data": base64.standard_b64encode(image_bytes).decode()}},
             {"type": "text", "text": prompt},
         ]
-        with self.client.messages.stream(
-                model=self.model, max_tokens=self.MAX_OUTPUT_TOKENS,
-                messages=[{"role": "user", "content": content}]) as stream:
-            message = stream.get_final_message()
+        kwargs = dict(model=self.model, max_tokens=self.MAX_OUTPUT_TOKENS,
+                      messages=[{"role": "user", "content": content}])
+        def one_image():
+            self._capture_request(kwargs)
+            with self.client.messages.stream(**kwargs) as stream:
+                try:
+                    return stream.get_final_message()
+                except BaseException as exc:
+                    from operation_capture import response_record
+                    try:
+                        snapshot = stream.current_message_snapshot
+                    except Exception:
+                        snapshot = None
+                    partial = response_record(snapshot)[0]
+                    partial.update(stream_complete=False, usage_complete=False)
+                    raise StreamInterrupted("The image response stream was interrupted.",
+                        saw_content=bool(getattr(snapshot, "content", None)),
+                        cause_class=type(exc).__name__, response_record=partial) from exc
+        # Preserve this path's original single-request policy. Joining the
+        # common boundary must never introduce retries of an uploaded image.
+        message = self._call_with_attempts("image", one_image, max_attempts=1)
         if getattr(message, "stop_reason", None) == "max_tokens":
             raise RuntimeError(
                 f"model hit the {self.MAX_OUTPUT_TOKENS}-token ceiling mid-transcription")
@@ -4105,6 +4191,7 @@ class AnthropicAPIGateway(Gateway):
                     "stop_reason": getattr(snapshot, "stop_reason", None),
                     "usage": _usage_fields(getattr(snapshot, "usage", None)),
                     "response": raw, "stream_complete": False, "usage_complete": False}
+        self._capture_request(kwargs)
         try:
             with self.client.messages.stream(**kwargs) as stream:
                 iterating = True
@@ -4143,12 +4230,15 @@ class AnthropicAPIGateway(Gateway):
         if not allow_truncated and getattr(message, "stop_reason", None) == "max_tokens":
             # Fail with the REAL diagnosis instead of letting the JSON
             # parser report a confusing "could not find a JSON object".
-            raise RuntimeError(
+            failure = RuntimeError(
                 f"model hit the {self.MAX_OUTPUT_TOKENS}-token output ceiling mid-response "
                 "(stop_reason=max_tokens) — the reply was cut off before the JSON closed. "
                 "The model likely spent unusually much of the budget on internal thinking; "
                 "re-run, and if this recurs, raise MAX_OUTPUT_TOKENS in wordicon_cli.py."
             )
+            from operation_capture import response_record
+            failure.response_record = response_record(message)[0]
+            raise failure
         return message
 
 
@@ -5895,7 +5985,7 @@ def edge_producer(kind: str, id_: str, stage: str = "") -> dict:
 
 def record_edge(rel: str, source: dict, target: dict, run_trace_id: str,
                  verdict: str = "", detail: str = "", extra: dict = None, *,
-                 origin: str, producer: dict) -> None:
+                 origin: str, producer: dict) -> dict:
     """Best-effort by design: the edge log is a map layer, never
     load-bearing for the pipeline — a failed write must not kill a run
     that already cost real model calls. `extra` carries provenance fields
@@ -5921,10 +6011,11 @@ def record_edge(rel: str, source: dict, target: dict, run_trace_id: str,
         }
         for k, v in (extra or {}).items():
             row.setdefault(k, v)
-        with open(EDGES_LOG, "a") as f:
-            f.write(json.dumps(row) + "\n")
-    except OSError:
-        pass
+        _append_capture_line(EDGES_LOG, row)
+        return {"kept": True, "durable": True, "edge_id": row["edge_id"]}
+    except OSError as exc:
+        return _capture_write_gap("edge_write_failed", {"run_trace_id": run_trace_id,
+            "source_id": source.get("key", ""), "target_id": target.get("key", "")}, exc)
 
 
 def edge_origin_of(row: dict) -> str:

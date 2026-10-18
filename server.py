@@ -96,6 +96,8 @@ import actions  # noqa: E402  (workspace-v2 slice B: the action registry — eve
 import snapshots  # noqa: E402  (workspace-v2 slice B: immutable input snapshots)
 import ledger  # noqa: E402  (2026-10-16: the owner's own trail — attention events, owned, disclosed, sealed)
 import capture  # noqa: E402  (W2, 2026-10-17: the content layer — his searches kept whole, under the same switch and seal)
+import workspace_identity  # noqa: E402  (stable store identity, initialized only when serving)
+import capture_history  # noqa: E402  (read-only reconstruction of saved records)
 import operations as ops  # noqa: E402  (workspace-v2 slice D: the durable operations store; JOBS is its projection)
 import workindex  # noqa: E402  (workspace-v2 slice E: the derived Your work index — rebuildable, never authority)
 import producers  # noqa: E402  (workspace-v2 slice F: investigation adapters — contracts pinned, live starts by the owner's ruling)
@@ -1645,8 +1647,11 @@ def _nbk_error(e: "nbk.NotebookError"):
 @app.route("/api/notebook/documents")
 def api_notebook_list():
     try:
-        return jsonify(nbk.list_documents(q=request.args.get("q", ""), cursor=request.args.get("cursor", ""),
-                                          limit=int(request.args.get("limit", "50") or 50)))
+        result = nbk.list_documents(q=request.args.get("q", ""), cursor=request.args.get("cursor", ""),
+                                    limit=int(request.args.get("limit", "50") or 50))
+        if request.args.get("q", "").strip():
+            result["capture"] = _capture_search("work", request.args.get("q", ""), None)
+        return jsonify(result)
     except nbk.NotebookError as e:
         return _nbk_error(e)
     except ValueError:
@@ -1681,6 +1686,39 @@ def api_capture_queries():
     """W2: the owner's own searches back — day-filtered, capped, honest
     about its population. A read; shown only to him."""
     return jsonify(capture.read_queries(day=str(request.args.get("day") or "")))
+
+
+@app.route("/api/capture/gaps")
+def api_capture_gaps():
+    return jsonify(capture.read_gaps())
+
+
+@app.route("/capture-history")
+def capture_history_page():
+    return send_from_directory(WEBAPP_DIR, "capture-history.html")
+
+
+@app.route("/api/capture/history")
+def api_capture_history():
+    try:
+        return jsonify(capture_history.view(operation_id=request.args.get("operation_id"),
+                                            doc_id=request.args.get("doc_id"),
+                                            prepared_id=request.args.get("prepared_id"),
+                                            limit=int(request.args.get("limit", "100"))))
+    except capture_history.HistoryError as e:
+        return jsonify({"error": str(e)}), e.status
+    except ValueError:
+        return jsonify({"error": "History limit must be a supported number."}), 400
+
+
+@app.route("/api/capture/operations/<op_id>/artifacts/<name>")
+def api_capture_artifact(op_id, name):
+    try:
+        raw = capture_history.artifact(op_id, name)
+        return Response(raw, mimetype="application/json" if name.endswith(".json") else "text/plain",
+                        headers={"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'; sandbox"})
+    except capture_history.HistoryError as e:
+        return jsonify({"error": str(e)}), e.status
 
 
 @app.route("/api/notebook/documents/<doc_id>")
@@ -3161,11 +3199,25 @@ def api_library_search():
     # W2: the search itself is his data. Captured at the route so every
     # caller is covered; kept whole or not at all, governed by the one
     # recording switch, and never altering what the search returns.
-    capture.query("library", request.args.get("q", ""), len(results) if isinstance(results, list) else None)
+    capture_status = _capture_search("library", request.args.get("q", ""), len(results) if isinstance(results, list) else None)
     return jsonify({"lane": "library-exact",
                      "note": "Exact text in your library only — not semantic, "
                              "not the web.",
-                     "results": results})
+                     "results": results, "capture": capture_status})
+
+
+def _capture_search(scope, query, hits):
+    # Search itself remains available if capture fails. Its status is returned
+    # to the same caller; the named metadata gap can also be inspected later.
+    try:
+        with vault.corpus_write():
+            result = capture.query(scope, query, hits)
+            if result.get("kept") or result.get("capture_gap", {}).get("kept"):
+                vault.mark_dirty()
+            return result
+    except (OSError, RuntimeError):
+        return {"kept": False, "why": "capture_store_unavailable",
+                "capture_gap": {"kept": False, "durable": False, "why": "capture_guard_unavailable"}}
 
 
 @app.route("/api/library/resolve/<path:anchor_id>")
@@ -3902,7 +3954,7 @@ def _create_job_from(data: dict, op_id: str | None = None):
         _prov = "door" if (parent_door_id or via or parent_trace_id) else ("attached" if data.get("from_artifact") else "unstated")
     # block 105: the door the owner chose and what the chooser had
     # highlighted ride on the input row — recorded, never inferred
-    cli.record_input(job_id, mode, input_text, parent_trace_id or "", provenance=_prov,
+    input_capture = cli.record_input(job_id, mode, input_text, parent_trace_id or "", provenance=_prov,
                      destination=str(data.get("destination") or "")[:32], shape=str(data.get("shape") or "")[:16],
                      suggested=str(data.get("suggested") or "")[:32],
                      speech=_speech_cited(data.get("speech")))   # block 106: the transcription's identity rides only with provenance spoken
@@ -3916,6 +3968,12 @@ def _create_job_from(data: dict, op_id: str | None = None):
             with JOBS_LOCK:
                 JOBS.pop(job_id, None)
             return jsonify({"error": f"the operations store refused the reservation: {e}", "nothing_was_sent": True}), 500
+    if isinstance(input_capture, dict) and not input_capture.get("kept"):
+        # Preserve a separate recovery-log failure on the authoritative job,
+        # including when the supplemental gap file could not be written.
+        ops.event(op_id or job_id, "note", detail={"capture_gap": input_capture})
+        with JOBS_LOCK:
+            JOBS[job_id]["capture"] = input_capture
     return _dispatch_job(job_id, mode, input_text)
 
 
@@ -3965,11 +4023,14 @@ def api_ledger():
     or everything since an instant, oldest first. Nothing here reaches a
     model or the network: this is record-keeping of his own movements, for
     him, in his store, sealed by the Vault with everything else."""
-    if request.method == "POST":
-        d = request.get_json(force=True, silent=True) or {}
-        out = ledger.append(d.get("events") or [])
-        return jsonify(out), (409 if out.get("refused") else 200)
-    return jsonify(ledger.read(day=request.args.get("day", ""), since=request.args.get("since", "")))
+    try:
+        if request.method == "POST":
+            d = request.get_json(force=True, silent=True) or {}
+            out = ledger.append(d.get("events") or [])
+            return jsonify(out), (409 if out.get("refused") else 200)
+        return jsonify(ledger.read(day=request.args.get("day", ""), since=request.args.get("since", "")))
+    except workspace_identity.IdentityError as e:
+        return jsonify({"error": str(e), "code": "workspace_identity_unavailable"}), 503
 
 
 @app.route("/api/ledger/config", methods=["GET", "POST"])
@@ -3979,7 +4040,12 @@ def api_ledger_config():
     if request.method == "POST":
         d = request.get_json(force=True, silent=True) or {}
         return jsonify(ledger.set_enabled(bool(d.get("enabled"))))
-    return jsonify({"enabled": ledger.enabled(), "scope_id": ledger.scope_id()})
+    try:
+        identity = workspace_identity.read()
+    except workspace_identity.IdentityError as e:
+        return jsonify({"error": str(e), "code": "workspace_identity_unavailable"}), 503
+    return jsonify({"enabled": ledger.enabled(), "scope_id": identity["attention_scope_id"],
+                    "workspace_id": identity["workspace_id"]})
 
 
 @app.route("/ledger")
@@ -4686,6 +4752,8 @@ def api_work():
                                cursor=str(a.get("cursor") or "")[:200], limit=int(a.get("limit") or 30))
     except (workindex.IndexError_, ValueError) as e:
         return jsonify({"error": str(e)}), 400
+    if str(a.get("q") or "").strip():
+        out["capture"] = _capture_search("work", str(a.get("q") or ""), len(out.get("items", [])))
     return jsonify(out)
 
 
@@ -6551,6 +6619,11 @@ def ops_startup_report() -> dict:
     """The serving process's startup reconciliation, said out loud; then the
     Your work index catches up with the record and keeps reconciling the
     file stores on a timer (slice E)."""
+    # Identity is corpus metadata, created at the serving boundary. Read-only
+    # imports and reconstruction routes never manufacture an identity.
+    with vault.corpus_write():
+        workspace_identity.ensure()
+        vault.mark_dirty()
     summary = _ops_startup()
     print(f"[operations] startup: reconciled {len(summary['reconciled'])}, resumed {len(summary['resumed'])}, "
           f"left queued {len(summary['left_queued'])} (dispatching: {summary['dispatching']})"

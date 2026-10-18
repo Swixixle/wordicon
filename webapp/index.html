@@ -10267,6 +10267,7 @@ async function docSearch() {
   try {
     const d = await readJsonDoc(await fetch(`/api/library/search?q=${encodeURIComponent(q)}`));
     out.innerHTML = `<div class="muted" style="font-size:11.5px;margin:4px 0">${escHtmlD(d.note || '')}</div>`
+      + (d.capture && d.capture.kept === false && d.capture.capture_gap ? `<div class="warn">Search results are available; this search was not retained in history (${escHtmlD(d.capture.why || 'capture unavailable')}).</div>` : '')
       + ((d.results || []).map(r => `<div class="body" style="font-size:12.5px;margin:3px 0">
           <a href="#" style="color:var(--accent);text-decoration:none"
              onclick="openDoc('${escAttr(r.anchor_id.split(':')[0])}',${parseInt(r.anchor_id.split(':')[1]) || 0});return false">${escHtmlD(r.heading)}</a>

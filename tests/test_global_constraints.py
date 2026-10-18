@@ -6712,6 +6712,8 @@ def _check_ledger(server, paired):
     out = []
     import ledger as _led
     import json as _json
+    import workspace_identity as _identity
+    _identity.ensure()  # explicit scratch serving setup; importing server stays read-only
     c = paired(server.app.test_client())
     if server.app.test_client().post("/api/ledger", json={"events": [{"type": "page_shown", "at": "t", "subject": {}}]}).status_code != 401:
         out.append("LEDGER: an unpaired device can write the owner's trail")
@@ -6737,11 +6739,13 @@ def _check_ledger(server, paired):
     # interaction inventory joined DELIBERATELY — five kinds, named here so
     # the set still cannot drift without a ruling. Events carry ids, numbers
     # and short titles, never bodies. The adopted 2026-10-18 action plan adds
-    # capture_gap explicitly to name observed storage/delivery loss.
+    # capture_gap plus coarse visible/focused/idle estimates and distinct
+    # selected/edit/confirmed-save boundaries; never gesture bodies or replay.
     if set(_led.EVENT_TYPES) != {"session_start", "session_end", "page_shown", "place_opened", "place_closed",
                                  "document_opened", "result_viewed", "visibility_hidden", "visibility_visible",
                                  "import_attempted", "question_followed", "material_carried", "edit_applied",
-                                 "search_performed", "capture_gap"}:
+                                 "search_performed", "capture_gap", "activity_state", "activity_interval",
+                                 "material_selected", "document_edited", "document_saved"}:
         out.append(f"LEDGER: the event inventory moved without a ruling: {sorted(_led.EVENT_TYPES)}")
     if any("key" in t for t in _led.EVENT_TYPES):
         out.append("LEDGER: a key-shaped event type appeared — keystrokes were ruled OUT (events first)")

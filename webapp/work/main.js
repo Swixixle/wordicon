@@ -16,6 +16,34 @@ import { Ledger } from './ledger.js';
 
 // the Ledger's reporter: attention events only, owned and disclosed (2026-10-16)
 const ledgerRep = new Ledger();
+// Observed boundaries only; text stays in notebook revisions, never the Ledger.
+let workObservation = null, selectedRangeObservation = '';
+function observeWorkStatus(s) {
+  const key = (s.id || '') + ':' + (s.editorSession || '');
+  if (!workObservation || workObservation.key !== key) {
+    workObservation = {key, ackSeq:s.ackSeq || 0, revision:s.revision || 0, edited:false};
+    selectedRangeObservation = ''; return;
+  }
+  if (s.ackSeq > workObservation.ackSeq && s.revision > workObservation.revision) {
+    ledgerRep.note('document_saved', {id:s.id, revision:s.revision, kind:'acknowledged_revision'});
+    if (s.ackSeq === s.seq) workObservation.edited = false;
+  }
+  workObservation.ackSeq = s.ackSeq || 0; workObservation.revision = s.revision || 0;
+}
+function observeWorkEdit(s) {
+  observeWorkStatus(s);
+  if (s.id && !workObservation.edited) {
+    ledgerRep.note('document_edited', {id:s.id, revision:s.revision, kind:'edit_batch'});
+    workObservation.edited = true;
+  }
+}
+function observeWorkSelection(s, selection) {
+  if (!s.id || !Number.isInteger(selection?.start) || !Number.isInteger(selection?.end) || selection.end <= selection.start) { selectedRangeObservation = ''; return; }
+  const key = [s.id,s.editorSession,s.revision,s.seq,selection.start,selection.end].join(':');
+  if (key !== selectedRangeObservation) ledgerRep.note('material_selected', {id:s.id, revision:s.revision, kind:'editor_range'});
+  selectedRangeObservation = key;
+}
+
 import { Applier } from './apply.js';
 import { toMarkdown, toHTML } from '/work/document.js';
 
@@ -26,7 +54,7 @@ editor.mount(document.getElementById('editor-host'));
 
 var syncNotesDoc = null;                  // set below, once Results exists
 const session = new DocumentSession(editor, {
-  onStatus: s => { renderHeader(s); renderDrafts(s); if (syncNotesDoc) syncNotesDoc(); },
+  onStatus: s => { observeWorkStatus(s); renderHeader(s); renderDrafts(s); if (syncNotesDoc) syncNotesDoc(); },
   onOpened: s => { renderHeader(s); renderDrafts(s); showPage('work'); renderToolbar(); if (syncNotesDoc) syncNotesDoc(); ledgerRep.note('document_opened', { id: s.id || '', title: s.displayTitle() }); if (s.recovered) toast('Opened with unsent changes recovered from this browser (newer than the saved copy).'); },
   onConflict: s => renderConflict(s),
   onApplicationCommitted: () => { results.render(); },
@@ -428,6 +456,10 @@ function bindDocMenu() {
     else if (what === 'duplicate') { await session.duplicate(); toast('Duplicated as a new document, formatting and all; the original is unchanged.'); }
     else if (what === 'open') { showPage('yourwork'); }
     else if (what === 'versions') { await showVersions(); }
+    else if (what === 'history') {
+      if (!session.id) { toast('Save this document before opening its history.'); return; }
+      places.open('/capture-history?doc_id=' + encodeURIComponent(session.id));
+    }
     else if (what === 'plaincopy') {
       const out = await session.plainCopy();
       if (!out.ok) { toast('No plain copy was made: ' + out.error); return; }
@@ -472,10 +504,10 @@ function bindDocMenu() {
 function bindSelection() {
   const host = document.getElementById('editor-host');
   let timer = 0;
-  const maybe = () => { clearTimeout(timer); timer = setTimeout(() => { const sel = editor.getSelection(); if (sel.text && sel.text.trim() && editor.hasFocus()) actions.showPopover(); else actions.hidePopover(); }, 220); };
+  const maybe = () => { clearTimeout(timer); timer = setTimeout(() => { const sel = editor.getSelection(); if (editor.hasFocus()) observeWorkSelection(session, sel); if (sel.text && sel.text.trim() && editor.hasFocus()) actions.showPopover(); else actions.hidePopover(); }, 220); };
   host.addEventListener('mouseup', maybe);
   host.addEventListener('keyup', e => { if (e.shiftKey || e.key === 'Shift') maybe(); });
-  editor.onEdit(() => { actions.hidePopover(); if (find.open) runFind(false, false); renderHeader(session); results.refresh(); });
+  editor.onEdit(() => { observeWorkEdit(session); actions.hidePopover(); if (find.open) runFind(false, false); renderHeader(session); results.refresh(); });
   editor.onSelection(() => renderToolbarState());
   document.addEventListener('mousedown', e => { const pop = document.getElementById('sel-popover'); if (!pop.hidden && !pop.contains(e.target) && !host.contains(e.target)) actions.hidePopover(); });
   document.getElementById('sel-popover').addEventListener('keydown', e => { if (e.key === 'Escape') { actions.hidePopover(); editor.focus(); } });

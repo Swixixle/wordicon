@@ -24,7 +24,6 @@ ledger refuses appends by name and keeps what was already written.
 from __future__ import annotations
 
 import json
-import hashlib
 import os
 import re
 import uuid
@@ -33,6 +32,7 @@ import pathlib
 from datetime import datetime, timezone
 
 import wordicon_cli as cli
+import workspace_identity
 
 # every type the ledger will hold; an unknown type is refused by name,
 # never silently kept — the disclosure page lists exactly these
@@ -55,6 +55,11 @@ EVENT_TYPES = (
     "edit_applied",          # a save that changed a document (the revision itself is in the notebook)
     "search_performed",      # a search box used (scope and count here; the words in the capture store)
     "capture_gap",           # an explicitly observed delivery/storage gap, never invented activity
+    "activity_state",        # visible/focused/idle state; never proof of reading
+    "activity_interval",     # bounded coarse estimate, with its observation policy
+    "material_selected",     # nonempty selected range boundary, no selected text
+    "document_edited",       # observed edit batch, distinct from a committed save
+    "document_saved",        # confirmed notebook revision, not a save request
 )
 MAX_BATCH = 100
 MAX_TITLE = 120
@@ -64,8 +69,33 @@ _ID = re.compile(r"^[A-Za-z0-9_.:-]{1,120}$")
 
 
 def scope_id() -> str:
-    """Opaque local-store routing scope; no filesystem path goes to the page."""
-    return "ledger_" + hashlib.sha256(str(pathlib.Path(cli.LOCAL_STATE).resolve()).encode()).hexdigest()[:24]
+    """Read an initialized workspace routing scope; never create one on read."""
+    return workspace_identity.attention_scope()
+
+
+def _interval(value) -> dict:
+    """Closed estimate contract: no event bodies, gestures or arbitrary extras."""
+    keys = {"policy", "state", "start_at", "end_at", "duration_ms", "idle_after_ms", "reason"}
+    if not isinstance(value, dict) or set(value) != keys:
+        raise ValueError("an activity interval has unsupported fields")
+    if value["policy"] != "visibility_focus_idle.v1" or value["state"] not in {"foreground_active_estimate", "foreground_idle_estimate"}:
+        raise ValueError("an activity interval has an unsupported estimate policy or state")
+    if value["reason"] not in {"checkpoint", "idle", "input", "focus", "blur", "hidden", "visible", "pagehide", "recording_off", "context"}:
+        raise ValueError("an activity interval has an unsupported boundary")
+    if type(value["duration_ms"]) is not int or not 0 < value["duration_ms"] <= 30000 or type(value["idle_after_ms"]) is not int or value["idle_after_ms"] != 60000:
+        raise ValueError("an activity interval exceeds its estimate bounds")
+    try:
+        if any(not isinstance(value[k], str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})", value[k]) for k in ("start_at", "end_at")):
+            raise ValueError("an ISO clock boundary is required")
+        dates = [datetime.fromisoformat(value[k].replace("Z", "+00:00")) for k in ("start_at", "end_at")]
+        if any(d.tzinfo is None for d in dates):
+            raise ValueError("timezone required")
+        elapsed = (dates[1] - dates[0]).total_seconds() * 1000
+        if elapsed < 0 or abs(elapsed - value["duration_ms"]) > 2000:
+            raise ValueError("clock/duration mismatch")
+    except (ValueError, TypeError, AttributeError, OverflowError):
+        raise ValueError("an activity interval has invalid clock boundaries") from None
+    return dict(value)
 
 
 def _dir() -> pathlib.Path:
@@ -183,6 +213,9 @@ def append(events: list) -> dict:
             if len(v) > (MAX_TITLE if k == "title" else MAX_FIELD):
                 return refuse(f"event {i} subject.{k} is longer than the ledger keeps")
             subj[k] = v
+        from operation_capture import sanitize_body
+        if sanitize_body(subj)["redactions"]:
+            return refuse("Credential-like activity metadata was refused; no content was recorded.", "unsafe_metadata")
         event_id = e.get("event_id")
         session_id = e.get("session_id")
         if event_id is not None and (not isinstance(event_id, str) or not _ID.fullmatch(event_id)):
@@ -195,6 +228,15 @@ def append(events: list) -> dict:
         row = {"schema": SCHEMA, "event_id": event_id or "legacy_" + uuid.uuid4().hex,
                "session_id": session_id, "scope_id": scope_id(), "type": t,
                "at": str(e.get("at") or "")[:40], "received_at": received_at, "subject": subj}
+        if t == "activity_interval":
+            try:
+                row["interval"] = _interval(e.get("interval"))
+            except ValueError as error:
+                return refuse(str(error))
+        elif "interval" in e:
+            return refuse("interval metadata belongs only to an activity_interval event")
+        if t == "activity_state" and subj.get("kind") not in {"foreground_active_estimate", "foreground_idle_estimate", "inactive"}:
+            return refuse("an activity state has an unsupported estimate state")
         if not event_id:
             row["delivery_idempotency"] = "unavailable_legacy_client"
         prepared.append(row)

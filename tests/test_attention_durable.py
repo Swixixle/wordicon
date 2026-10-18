@@ -16,6 +16,7 @@ SCRATCH = tempfile.TemporaryDirectory(prefix="nk-attention-fixture-", dir="/priv
 os.environ["WORDICON_STATE"] = str(Path(SCRATCH.name) / "state")
 import wordicon_cli as cli
 import ledger
+import workspace_identity
 
 
 class AttentionTests(unittest.TestCase):
@@ -23,6 +24,7 @@ class AttentionTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="nk-attention-test-", dir="/private/tmp")
         self.old = cli.LOCAL_STATE
         cli.LOCAL_STATE = Path(self.temp.name)
+        workspace_identity.ensure(cli.LOCAL_STATE)
 
     def tearDown(self):
         cli.LOCAL_STATE = self.old
@@ -103,6 +105,38 @@ class AttentionTests(unittest.TestCase):
         result = ledger.append([self.event()])
         self.assertEqual(result["code"], "store_unreadable")
         self.assertNotIn("acknowledged", result)
+
+    def test_activity_estimate_contract_keeps_policy_boundaries_and_rejects_content(self):
+        interval = {"policy": "visibility_focus_idle.v1", "state": "foreground_active_estimate",
+                    "start_at": "2026-10-18T09:00:00-04:00", "end_at": "2026-10-18T09:00:15-04:00",
+                    "duration_ms": 15000, "idle_after_ms": 60000, "reason": "checkpoint"}
+        event = {**self.event(), "type": "activity_interval", "interval": interval}
+        self.assertEqual(ledger.append([event])["kept"], 1)
+        self.assertEqual(ledger.read()["events"][0]["interval"], interval)
+        self.assertEqual(ledger.append([event])["duplicates"], 1)
+        for bad in ({**interval, "body": "PRIVATE BODY"}, {**interval, "duration_ms": 60001},
+                    {**interval, "duration_ms": True}, {**interval, "end_at": "invalid"},
+                    {**interval, "state": "reading"}, {**interval, "start_at": "2026-10-18T09:00:00"}):
+            self.assertEqual(ledger.append([{**event, "event_id": "event_invalid", "interval": bad}])["code"], "invalid_event")
+        self.assertEqual(len(ledger.read()["events"]), 1)
+        self.assertNotIn("PRIVATE BODY", next(ledger._dir().glob("events-*.jsonl")).read_text())
+
+    def test_explicit_selected_edited_saved_are_distinct_from_reading_or_save_intent(self):
+        events = [{**self.event("event_"+kind), "type": kind, "subject": {"id": "doc_1", "revision": "2", "body": "PRIVATE"}}
+                  for kind in ("material_selected", "document_edited", "document_saved")]
+        self.assertEqual(ledger.append(events)["kept"], 3)
+        rows = ledger.read()["events"]
+        self.assertEqual({r["type"] for r in rows}, {"material_selected", "document_edited", "document_saved"})
+        self.assertNotIn("PRIVATE", json.dumps(rows))
+
+    def test_unsafe_metadata_is_refused_without_logging_it_or_altering_safe_usage_label(self):
+        for title in ("sk-ant-abcdefghijk123", "Bearer abcdefghijk", "https://user:password@example.test/", "https://example.test/?access_token=secretvalue"):
+            event = {**self.event(), "subject": {"id": "doc_1", "title": title}}
+            self.assertEqual(ledger.append([event])["code"], "unsafe_metadata")
+        self.assertFalse(list(ledger._dir().glob("events-*.jsonl")))
+        safe = {**self.event(), "subject": {"id": "doc_1", "title": "input_tokens: 100; output_tokens: 20"}}
+        self.assertEqual(ledger.append([safe])["kept"], 1)
+        self.assertEqual(ledger.read()["events"][0]["subject"], safe["subject"])
 
 
 if __name__ == "__main__":
