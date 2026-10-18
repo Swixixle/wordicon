@@ -32,7 +32,8 @@
     const questions=section(host,'history-questions','Questions and intent');
     if(!operations.length)none(questions,'No started operation is linked to this selection. Its prepared proposal and exact captured input are shown below.');
     for(const op of operations) {const c=card(questions,op.question||'Saved operation · '+words(op.action_id));c.id='history-'+op.operation_id;
-      c.append(node('p',words(op.status)+' · '+(op.created_at||'time unavailable'),'muted'));
+      const answer=list(nodes.answers).find(a=>a.id==='answer:'+op.operation_id);
+      c.append(node('p','Operation lifecycle: '+words(op.status)+(answer?' · Answer: '+words(answer.current_status):'')+' · '+(op.created_at||'time unavailable'),'muted'));
       if(op.error)c.append(node('p',op.error,'warning'));
       if(op.url)c.append(link('Open saved operation',op.url));
       const cost=op.costs||{};

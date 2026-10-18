@@ -503,12 +503,23 @@ function bindDocMenu() {
 // ---- selection menu -------------------------------------------------------------
 function bindSelection() {
   const host = document.getElementById('editor-host');
-  let timer = 0;
-  const maybe = () => { clearTimeout(timer); timer = setTimeout(() => { const sel = editor.getSelection(); if (editor.hasFocus()) observeWorkSelection(session, sel); if (sel.text && sel.text.trim() && editor.hasFocus()) actions.showPopover(); else actions.hidePopover(); }, 220); };
+  let timer = 0, observationTimer = 0;
+  const observeSettledSelection = () => {
+    if (currentPage === 'work' && !document.hidden && document.hasFocus() && editor.hasFocus())
+      observeWorkSelection(session, editor.getSelection());
+  };
+  const observeSelection = () => {
+    clearTimeout(observationTimer);
+    // The adapter reports selection changes from accessibility controls too.
+    // Keep only a settled range boundary, never its words or individual gestures.
+    // Recheck focus after debounce so leaving Work does not record a stale range.
+    observationTimer = setTimeout(observeSettledSelection, 220);
+  };
+  const maybe = () => { clearTimeout(timer); timer = setTimeout(() => { const sel = editor.getSelection(); observeSettledSelection(); if (sel.text && sel.text.trim() && editor.hasFocus()) actions.showPopover(); else actions.hidePopover(); }, 220); };
   host.addEventListener('mouseup', maybe);
   host.addEventListener('keyup', e => { if (e.shiftKey || e.key === 'Shift') maybe(); });
   editor.onEdit(() => { observeWorkEdit(session); actions.hidePopover(); if (find.open) runFind(false, false); renderHeader(session); results.refresh(); });
-  editor.onSelection(() => renderToolbarState());
+  editor.onSelection(() => { renderToolbarState(); observeSelection(); });
   document.addEventListener('mousedown', e => { const pop = document.getElementById('sel-popover'); if (!pop.hidden && !pop.contains(e.target) && !host.contains(e.target)) actions.hidePopover(); });
   document.getElementById('sel-popover').addEventListener('keydown', e => { if (e.key === 'Escape') { actions.hidePopover(); editor.focus(); } });
 }
