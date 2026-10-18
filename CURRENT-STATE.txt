@@ -7,7 +7,8 @@ integrates changes; builders use separate worktrees and focused commits.
 SHARED IDENTITY
 Repository: https://github.com/Swixixle/wordicon
 Integration branch: codex/nikodemus-integration-20261018
-Runtime/code checkpoint: 76ec0cfeecbe1bd652d55223e795c8e7b7bc21ee
+Deployed code checkpoint: 76ec0cfeecbe1bd652d55223e795c8e7b7bc21ee
+Reviewed quality code checkpoint: ad5a44f239dcf74e36d9700e81374dbfbc22bd1b
 Required recovery ancestor: c9cd9eff59f91622cd8edf264615f02f309a5a1d
 Shared-main comparison: 17894e32d66c860a66fc66cc022fc7c5e1d162ee
 This handoff and its manifests are generated AFTER the named code commit. Their
@@ -108,3 +109,29 @@ The adopted complete order is tracked in docs/integration-backlog.txt. It also
 records the future Code_View software-reuse assessment, after immediate P0–P3
 and without repeating the integrated Receipts work. No Code_View runtime or
 optional-tool installation has been performed.
+
+QUALITY INTEGRATION UPDATE
+P1/P2/P3 focused changes are now integrated on the named local branch, after
+the deployed76ec checkpoint. WebKit teardown now retains outbox IDs and uses
+beacon delivery; unfocused draft undo is ignored. Actual same-origin request
+evidence, negative auth/origin cases and real ledger persistence are retained
+in docs/checkpoints/webkit-ledger-20261018/. Both engines passed notes43,
+editor108 and Ledger13; outbox29 passed. Manual Safari was not run.
+
+The main gate now invokes the previously omitted integration behavior and the
+new cost-display fixture. Isolated missing-test and lineage-sabotage checks failed
+by name and were restored. requirements-test.txt declares DOCX reopening support;
+CI now installs Node and pinned Chromium for the main gate's browser fixtures.
+The browser runner includes Receipts and both new Ledger-engine cases.
+
+Primary costs round to cents, retain exact values in details, and keep unknowns
+and zero cache-read usage explicit. Citation relationships follow cited families;
+legacy language checks are finite, not general semantic entailment verification.
+The final combined gate, generated-marker deployment and safe-copy reopen proof
+are pending. No new model calls were made for these quality repairs.
+
+The initial public push was rejected by automatic approval review as unclear
+disclosure authorization. The owner then explicitly authorized the necessary
+reviewed pushes and code-only publication. Publication will be retried within
+that scope, without force-pushing or merging main. Remote reachability is still
+not asserted until independently checked.
