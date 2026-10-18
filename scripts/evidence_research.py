@@ -30,9 +30,9 @@ STRATEGIES = (
 
 
 def plan() -> dict:
-    return {"version": 4, "limits": copy.deepcopy(LIMITS), "strategies": list(STRATEGIES),
+    return {"version": 5, "limits": copy.deepcopy(LIMITS), "strategies": list(STRATEGIES),
             "completion": "Locate the starting quotation in retrieved text. Without a quotation target, investigate through the disclosed search/read allowance; readability or keyword matches cannot finish the question. Candidate passages remain unverified. A failed final answer may reuse a completed pass after its saved passages are rechecked.",
-            "source_selection": "Order possible HTML/plain-text sources before catalog-like and unsupported-format hints. Preserve all leads; URL hints do not establish content or relevance. Reserve at least one source read for each remaining search strategy. When no carried-over lead matches any meaningful question or work term, the initial reads wait for the first search's fresh leads; the carried leads stay saved and may still be read after discovery has had its chance.",
+            "source_selection": "Order possible HTML/plain-text sources before catalog-like and unsupported-format hints. Preserve all leads; URL hints do not establish content or relevance. Reserve at least one source read for each remaining search strategy. When no carried-over lead matches any meaningful question or work term, the initial reads wait for the first search's fresh leads; the carried leads stay saved and may still be read after discovery has had its chance. When a saved text returns in a later pass, excerpt selection prefers windows not yet shown to the model; reselecting an already-shown window is disclosed by name.",
             "continuation": "Save evidence and failures. If unresolved, Continue checking prepares another bounded pass; nothing resumes or spends in the background.",
             "outbound": "The configured model receives the focused record, failure summaries and bounded retrieved excerpts. Public source hosts receive unauthenticated GET requests, including the source URL. No browser cookies or credentials are used.",
             "cost": "Up to three provider searches plus model input/output token charges for up to four requests; total price is unknown before execution. Provider-internal search processing can add input tokens. Each request has one HTTP attempt; ambiguous failures are not replayed."}
@@ -101,7 +101,7 @@ def goal(parent: dict, root: dict, *, question="", continue_evidence=False) -> d
         previous = parent.get("evidence_research") or {}
         target = previous.get("target_quote", _selection_quote(root["selection"]))
         saved_goal = (parent.get("context") or {}).get("research_goal") or previous.get("goal") or {}
-        retry_answer_only = (not target and previous.get("retrieval_policy_rev") in (2, 3, 4)
+        retry_answer_only = (not target and previous.get("retrieval_policy_rev") in (2, 3, 4, 5)
                              and previous.get("retrieval_pass_complete") is True
                              and previous.get("final_answer_status") == "unavailable"
                              and type(previous.get("usable_source_count")) is int
@@ -209,7 +209,7 @@ def run(context: dict, gateway, trace_id: str, base_prompt: str, on_progress=Non
     fresh_question = ((context.get("research_goal") or {}).get("kind") == "followup_question"
                       or bool((context.get("research_goal") or {}).get("requires_new_source")))
     resume = context.get("research_resume") or {}
-    state = {"version": 4, "retrieval_policy_rev": 4, "retrieval_pass_complete": False,
+    state = {"version": 5, "retrieval_policy_rev": 5, "retrieval_pass_complete": False,
              "stop_reason": None, "checkpoint_id": trace_id, "status": "needs_more_evidence",
              "target_quote": quote, "proofs": [], "sources": [], "steps": [],
              "goal": copy.deepcopy(context.get("research_goal") or {}), "fresh_source_count": 0,
@@ -289,8 +289,29 @@ def run(context: dict, gateway, trace_id: str, base_prompt: str, on_progress=Non
         queue.sort(key=lambda url: (state["candidate_rankings"][url]["retrieval_tier"],
                                     -state["candidate_rankings"][url]["score"]))
 
+    def shown_windows(url, body):
+        """The (section_path -> [(start, end)]) windows already shown to the
+        model for THIS text — from the parent pass's saved sources and from
+        sources this pass has already packed. Matched by body sha when the
+        bytes are identical, by URL when a site re-serves changed bytes; a
+        mirror under a different URL with different bytes is a named open
+        limitation, not silently equated."""
+        digest = hashlib.sha256(body).hexdigest()
+        spans = {}
+        for s in list(resume.get("sources") or []) + list(state["sources"]):
+            if not isinstance(s, dict):
+                continue
+            if s.get("body_sha256") != digest and s.get("url") != url:
+                continue
+            sel = (s.get("inspection") or {}).get("excerpt_selection") or s.get("excerpt_selection") or {}
+            path, start, end = sel.get("section_path"), sel.get("start"), sel.get("end")
+            if isinstance(path, str) and type(start) is int and type(end) is int and end > start:
+                spans.setdefault(path, []).append((start, end))
+        return spans
+
     def capture_source(ref, body, *, reused=False):
-        inspection = evidence_fetch.inspect_quote(body, ref["content_type"], quote, question=screening_question)
+        inspection = evidence_fetch.inspect_quote(body, ref["content_type"], quote, question=screening_question,
+                                                  exclude_spans=shown_windows(ref.get("url"), body))
         text = inspection.get("excerpt") if inspection.get("matched") else inspection.get("text", "")[:3000]
         assessment = evidence_quality.assess_excerpt(text or "", work=work, question=screening_question,
                          title=inspection.get("page_title") or "", url=ref.get("final_url") or ref.get("url") or "")

@@ -1,5 +1,55 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.48.0 — Revision five: the reading problem, first slice
+
+Built to the other builder's four requirements after their review landed a
+fair correction: the v1.47-era report graded acquisition — searches that
+returned, bytes in custody, honest labels — while the question's needed
+passages never reached the model. Inspection of the DEPLOYED r4 records
+(their reproduction ran r3; the requirement was to verify r4 itself)
+pinned it exactly: the final Shakuntala prompt packed 12,000 excerpt
+characters as the same Ryder Act I window twice (chars 52,500–55,500,
+via Gutenberg and its archive.org mirror), an archive.org navigation
+block, and a Wikipedia references region — while the 578KB body in
+custody contained Act IV's departure gift and Act VI's "virtue, ring"
+lament, unshown. The matched terms steering all four windows included
+"help": the question template's own framing.
+
+Three repairs, each record-grounded. Retail product routes (/dp/<id>,
+/gp/product/<id>) rank as catalog hints — URL shape only, deferring reads,
+never excluding; the live Amazon row drops from tier 0 / score 13 to
+tier 1 / −11 while both real text rows hold tier 0. An ISBN in a title is
+a weak clue alone (score nudge, never a tier), because legitimate
+full-text pages print ISBNs. The template's framing words no longer count
+as question terms, so the Shakuntala question reduces to its substance:
+shakuntala, ring. And excerpt selection ADVANCES through reused texts:
+each capture receives the windows already shown to the model for that
+body (matched by body hash or URL; prior passes via the frozen resume,
+this pass via its own sources), prefers any matching unshown window,
+counts the windows it advanced past, and discloses by name when only an
+already-shown window matches. Plan version 5 / policy revision 5: frozen
+older proposals refuse before dispatch; the proposal wording explains the
+advancement in plain language.
+
+Proven: tests/test_excerpt_advancement.py — the continuation test uses a
+Ryder-shaped three-act fixture and asserts the second pass's FINAL PROMPT
+carries the Act IV or Act VI needle instead of the Act I window, with the
+advancement counted; identical bytes under two URLs in one pass advance
+rather than repeat; the one-scene fixture forces and discloses
+reselection; the recorded retail and text rows order correctly; a
+full-text page with an ISBN keeps its standing. Five sabotages
+(exclusions ignored, reselection unflagged, retail hint removed, framing
+words restored, controller feeding no exclusions) each failed by name.
+The evidence journey now also renders TWO stacked results in Chromium and
+asserts every Checking-attempts row in both carries visible text, closed
+and opened — the owner's two empty-rows pastes, with records intact both
+times, are now bounded to the clipboard, and the renderer is pinned
+against the alternative. Named open limitations: a mirror serving
+different bytes is not equated with its original (the one-pass duplicate
+excerpt the records showed is fixed only for identical bytes), and
+advancement selects the next window — it does not verify relevance or
+establish that a question's needed passage exists in the text at all.
+
 ## v1.47.0 — Revision four: question-blind leads wait their turn
 
 Built from the first live revision-three pass (his record, diagnosed from

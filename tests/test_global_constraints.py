@@ -6535,7 +6535,7 @@ def _check_deeper_wing():
               "scripts/evidence_fetch.py", "scripts/evidence_research.py", "scripts/evidence_quality.py",
               "tests/test_acquisition_usage.py", "tests/test_evidence_fetch.py", "tests/test_evidence_research.py",
               "tests/test_evidence_quality.py", "tests/test_quoteless_research.py", "tests/test_deposition_door.py",
-              "tests/test_retrieval_routes.py", "tests/test_read_deferral.py"):
+              "tests/test_retrieval_routes.py", "tests/test_read_deferral.py", "tests/test_excerpt_advancement.py"):
         if not (root / f).exists():
             out.append(f"DEEPER: {f} is missing — the wing shipped without its parts")
     if out:
@@ -6622,6 +6622,28 @@ def _check_deeper_wing():
                       ("keeps its promised once-per-pass retry", "the retryable carve-out")):
         if need not in _erD:
             out.append(f"DEEPER: revision four lost {why} ({need!r})")
+    # revision five (2026-10-18, the Shakuntala record): retail product routes
+    # defer as catalog hints with an ISBN only a weak clue; a reused saved
+    # text ADVANCES — already-shown windows are passed over while an unshown
+    # window matches, and a forced reselection is disclosed by name. The
+    # template's framing words no longer steer window selection. Behavior is
+    # pinned in test_excerpt_advancement.py; these hold the names.
+    _eqD5 = (root / "scripts" / "evidence_quality.py").read_text(encoding="utf-8")
+    for need, why in (("retail_product_path", "the retail route hint"),
+                      ("isbn_in_title_weak_catalog_clue", "the ISBN weak clue"),
+                      ("Framing vocabulary is not question substance", "the framing-stopword law")):
+        if need not in _eqD5:
+            out.append(f"DEEPER: revision five lost {why} ({need!r})")
+    _efD5 = (root / "scripts" / "evidence_fetch.py").read_text(encoding="utf-8")
+    for need, why in (("advanced_past_shown_windows", "the advancement disclosure"),
+                      ("reselected_previously_shown_window", "the reselection disclosure"),
+                      ("advancement never hides the fallback", "the fallback law")):
+        if need not in _efD5:
+            out.append(f"DEEPER: revision five lost {why} ({need!r})")
+    for need, why in (("def shown_windows", "the shown-window ledger"),
+                      ("excerpt selection prefers windows not yet shown to the model", "the plan's advancement sentence")):
+        if need not in _erD:
+            out.append(f"DEEPER: revision five lost {why} ({need!r})")
     _djs3 = (root / "webapp" / "deeper.js").read_text(encoding="utf-8")
     if "No source text retrieved — model explanation, unverified." not in _djs3:
         out.append("DEEPER: the zero-sources notice lost its exact sentence — an unsupported explanation reads as supported")
@@ -6641,7 +6663,7 @@ def _check_deeper_wing():
     r = _spD.run([_sysD.executable, "-m", "pytest", "tests/test_deeper.py", "tests/test_deeper_integration.py",
                   "tests/test_acquisition_usage.py", "tests/test_evidence_fetch.py", "tests/test_evidence_research.py",
                   "tests/test_evidence_quality.py", "tests/test_quoteless_research.py", "tests/test_deposition_door.py",
-                  "tests/test_retrieval_routes.py", "tests/test_read_deferral.py",
+                  "tests/test_retrieval_routes.py", "tests/test_read_deferral.py", "tests/test_excerpt_advancement.py",
                   "-q", "-p", "no:cacheprovider"],
                  cwd=root, capture_output=True, text=True, timeout=600)
     if r.returncode != 0:
@@ -6949,7 +6971,7 @@ def _check_capture(server, paired):
         if need not in cp:
             out.append(f"CAPTURE: capture.py lost {why} ({need!r})")
     rs = (root / "tests" / "journeys" / "run.sh").read_text(encoding="utf-8")
-    if "then lswitch off; before=$(digest); fi" not in rs or "lswitch on" not in rs or "ledger.set_enabled" not in rs:
+    if "then lswitch off; before=$(settle); fi" not in rs or "settle()" not in rs or "lswitch on" not in rs or "ledger.set_enabled" not in rs:
         out.append("CAPTURE: the journeys' byte-identical brackets no longer run with the Ledger off, flipped outside the measured window")
     return out
 

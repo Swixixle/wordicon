@@ -59,6 +59,15 @@ status=0
 # block 104: the store's bytes before and after the quiet journey — browsing
 # with encounter recording off must leave the store byte-identical
 digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); from record_smoke import store_digest; print(store_digest(pathlib.Path(sys.argv[1])))" "$JOURNEY_STATE"); }
+# settle(): the digest once the store has STOPPED MOVING — two reads 400ms
+# apart must agree, bounded at ~4s. Added 2026-10-18 after the map bracket
+# flaked under full-suite load: a PREVIOUS journey's teardown write (a page's
+# final save or beacon, processed by the server after node exited) landed
+# inside the next bracket's measured window. The bracket's law is about the
+# BRACKETED journey's writes; settling both endpoints measures exactly that,
+# and a late write from the bracketed journey itself still fails — settling
+# the after-side waits for it to land rather than letting it slip past.
+settle() { local s1 s2; s2=$(digest); for i in 1 2 3 4 5 6 7 8 9 10; do s1="$s2"; sleep 0.4; s2=$(digest); [ "$s1" = "$s2" ] && break; done; echo "$s2"; }
 # W2: the desk now carries the Ledger's reporter, so merely LOADING the page
 # reports attention (session_start, visibility) on its own clock — honest
 # behavior that would make a byte-identical assertion flaky. The switch is the
@@ -74,14 +83,14 @@ digest() { (cd "$ROOT" && "$PY" -c "import sys,pathlib; sys.path.insert(0,'scrip
 lswitch() { (cd "$ROOT" && "$PY" -c "import sys, pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); import state_root; state_root.apply(pathlib.Path(sys.argv[2])); import ledger; ledger.set_enabled(sys.argv[1] == 'on')" "$1" "$JOURNEY_STATE"); }
 for j in quiet home anatomy chooser speak speakkeep encounter federation shell room deep resume inquiry epistemic partial constitution anchorfit carry wayfinder map moira notebook related narrowing gloss; do
   echo "== journey: $j"
-  if [ "$j" = quiet ] || [ "$j" = speak ] || [ "$j" = map ]; then lswitch off; before=$(digest); fi
+  if [ "$j" = quiet ] || [ "$j" = speak ] || [ "$j" = map ]; then lswitch off; before=$(settle); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
   rc=$?
   cat "$JOURNEY_OUT/$j.log"
   if [ $rc -ne 0 ]; then echo "== $j: FAILED (exit $rc)"; status=1; fi
   if ! grep -q "^JOURNEY $j OK" "$JOURNEY_OUT/$j.log"; then echo "== $j: did not reach its final line — not a pass"; status=1; fi
   if [ "$j" = quiet ] || [ "$j" = speak ] || [ "$j" = map ]; then
-    after=$(digest)
+    after=$(settle)
     if [ -z "$before" ] || [ "$before" != "$after" ]; then echo "== $j: the store changed during a journey that must write nothing ($before -> $after)"; status=1; else echo "ok   $j: the store is byte-identical ($before)"; fi
     lswitch on
   fi

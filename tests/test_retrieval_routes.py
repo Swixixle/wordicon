@@ -227,8 +227,8 @@ def test_zero_reads_and_weak_readable_text_have_different_missing_evidence_messa
 def test_prior_research_plan_requires_fresh_proposal_before_dispatch(isolated):
     tmp, reads, _ = isolated
     ctx = quoteless_context()
-    assert ctx["research_plan"]["version"] == 4
-    for frozen in (2, 3):
+    assert ctx["research_plan"]["version"] == 5
+    for frozen in (2, 3, 4):
         ctx = quoteless_context()
         ctx["research_plan"]["version"] = frozen
         gateway = FakeGateway()

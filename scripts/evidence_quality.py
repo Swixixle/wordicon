@@ -12,7 +12,7 @@ import unicodedata
 from urllib.parse import unquote, urlsplit
 
 
-VERSION = 2
+VERSION = 3
 MAX_TERMS = 128
 MAX_TERM_INPUT = 40000
 MAX_EXCERPT_INPUT = 200000
@@ -49,7 +49,15 @@ both versus actually specifically particular relevant relevance means
 meaning discusses discusses about concerning according referring
 refer referred following first second third one two three four five six
 seven eight nine ten et al s t d ll ve re m
+help helps helped helping understand understands understanding understood
+deeply own idea ideas context contexts term terms
 """.split())
+# The last two lines are the Go deeper question template's own framing
+# ("Help me understand X more deeply on its own terms. Explain the idea in
+# context..."): in the live Shakuntala records these words were among the
+# matched terms steering 3,000-character window selection into reference
+# lists and navigation chrome ("help" matched in all four packed excerpts).
+# Framing vocabulary is not question substance — same law as explain/describe.
 _TOKENS = re.compile(r"[^\W_]+", re.UNICODE)
 _ROMAN = re.compile(r"m{0,3}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$")
 
@@ -116,6 +124,16 @@ def _url_route_hints(value: str) -> dict:
             identifier = following[0].replace("-", "")
             if re.fullmatch(r"(?:[0-9]{9}[0-9x]|97[89][0-9]{10})", identifier):
                 catalog.append("book_isbn_path")
+    # Retail product routes (2026-10-18, the Shakuntala record: an Amazon
+    # /dp/<id> page ranked tier 0, score 13, above the actual full text at 8,
+    # and spent the pass's first read). URL shape only, same law as
+    # /book/show/: no host reputation, and a hint defers, never excludes.
+    for index, part in enumerate(parts):
+        rest = parts[index + 1:]
+        if part == "dp" and rest and re.fullmatch(r"[a-z0-9]{10}", rest[0]):
+            catalog.append("retail_product_path")
+        if part == "gp" and len(rest) >= 2 and rest[0] == "product" and re.fullmatch(r"[a-z0-9]{10}", rest[1]):
+            catalog.append("retail_product_path")
     return {"catalog": list(dict.fromkeys(catalog)),
             "unsupported_format_hint": "pdf" if path.endswith(".pdf") else None}
 
@@ -212,6 +230,12 @@ def rank_candidate(row: dict, *, work: str, question: str) -> dict:
     unsupported = kind["unsupported_format_hint"]
     if unsupported:
         reason.append("url_suffix_indicates_unsupported_pdf")
+    # An ISBN in the TITLE stays a weak clue (his ruling, 2026-10-18):
+    # catalog listings print ISBNs, but legitimate full-text pages can too,
+    # so it nudges the score and never moves the tier or the kind.
+    if re.search(r"(?<![0-9])(?:97[89][-\s]?(?:[0-9][-\s]?){9}[0-9]|(?:[0-9][-\s]?){9}[0-9xX])(?![0-9])", title):
+        score -= 4
+        reason.append("isbn_in_title_weak_catalog_clue")
     retrieval_tier = 2 if unsupported else 1 if kind["candidate_kind"] == "catalog_like" else 0
     if not reason:
         reason.append("no_ordering_signal")

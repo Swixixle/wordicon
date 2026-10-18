@@ -272,22 +272,47 @@ def _binary_kind(body: bytes) -> str:
     return ""
 
 
-def _question_excerpt(rep: dict, question: str, full_text_length: int) -> dict:
+def _span_overlap(start: int, end: int, spans) -> bool:
+    """True when [start, end) shares at least half its length with any span."""
+    length = max(1, end - start)
+    for span in spans or ():
+        s, e = span
+        shared = min(end, e) - max(start, s)
+        if shared * 2 >= length:
+            return True
+    return False
+
+
+def _question_excerpt(rep: dict, question: str, full_text_length: int, exclude_spans=None) -> dict:
     """Lexical window selection only; it makes no relevance judgment.
 
     Scan overlapping 3,000-character windows across every section. Work is
     bounded by the retrieved body's size and at most 32 question terms.
     Distinct term overlap wins; ties retain the first window in source order.
+
+    Revision five (2026-10-18, the Shakuntala record): a continuation that
+    reuses a saved full text must ADVANCE through it, not re-show the model
+    the same window — the deployed record held Ryder's Act IV and Act VI in
+    custody while the same Act I window was packed twice. `exclude_spans`
+    maps a section path to the (start, end) windows already shown to the
+    model for this text; a window sharing at least half its length with one
+    is passed over when any unshown window still matches. When ONLY
+    already-shown windows match, the best of them is reselected and the
+    selection says so by name — advancement never hides the fallback.
     """
     if not isinstance(question, str) or not question.strip():
         return {}
     terms = meaningful_terms(question[:2000])[:32]
     if not terms:
         return {}
+    exclude_spans = exclude_spans or {}
     pattern = re.compile(r"(?<!\w)(?:" + "|".join(re.escape(term) for term in terms) + r")(?!\w)", re.I)
-    best, best_score = None, 0
+    best, best_score = None, 0                 # best among windows NOT yet shown
+    shown_best, shown_best_score = None, 0     # best among already-shown windows
+    excluded_hits = 0
     for section in rep["sections"]:
         text = section["text"]
+        section_spans = exclude_spans.get(section["path"]) or ()
         last_start = max(0, len(text) - QUESTION_EXCERPT_CHARS)
         starts = list(range(0, last_start + 1, QUESTION_EXCERPT_CHARS // 2))
         if not starts or starts[-1] != last_start:
@@ -295,17 +320,33 @@ def _question_excerpt(rep: dict, question: str, full_text_length: int) -> dict:
         for start in starts:
             excerpt = text[start:start + QUESTION_EXCERPT_CHARS]
             overlap = sorted({match.group(0).casefold() for match in pattern.finditer(excerpt)})
+            if not overlap:
+                continue
+            candidate = {"text": excerpt, "selection_method": "question_term_overlap",
+                         "relevance_verified": False,
+                         "text_omitted_chars": max(0, full_text_length - len(excerpt)),
+                         "excerpt_selection": {"section_path": section["path"], "start": start,
+                                               "end": start + len(excerpt), "matched_terms": overlap}}
+            if _span_overlap(start, start + len(excerpt), section_spans):
+                excluded_hits += 1
+                if len(overlap) > shown_best_score:
+                    shown_best_score = len(overlap)
+                    shown_best = candidate
+                continue
             if len(overlap) > best_score:
                 best_score = len(overlap)
-                best = {"text": excerpt, "selection_method": "question_term_overlap",
-                        "relevance_verified": False,
-                        "text_omitted_chars": max(0, full_text_length - len(excerpt)),
-                        "excerpt_selection": {"section_path": section["path"], "start": start,
-                                              "end": start + len(excerpt), "matched_terms": overlap}}
-    return best or {}
+                best = candidate
+    if best is not None:
+        if excluded_hits:
+            best["excerpt_selection"]["advanced_past_shown_windows"] = excluded_hits
+        return best
+    if shown_best is not None:
+        shown_best["excerpt_selection"]["reselected_previously_shown_window"] = True
+        return shown_best
+    return {}
 
 
-def inspect_quote(body: bytes, content_type: str, quote: str, *, question: str = "") -> dict:
+def inspect_quote(body: bytes, content_type: str, quote: str, *, question: str = "", exclude_spans=None) -> dict:
     """Locate a quote in a pure derivative; return offsets and exact kept text.
 
     `ok` means text extraction succeeded, `matched` means located. The status
@@ -364,7 +405,7 @@ def inspect_quote(body: bytes, content_type: str, quote: str, *, question: str =
         return {**metadata, "ok": False, "matched": False,
                 "status": "javascript_required" if features.scripts else "no_extractable_text"}
     if not isinstance(quote, str) or not quote.strip():
-        metadata.update(_question_excerpt(rep, question, len(full_text)))
+        metadata.update(_question_excerpt(rep, question, len(full_text), exclude_spans=exclude_spans))
         return {**metadata, "ok": True, "matched": False, "status": "no_quote",
                 "extracted_chars": text_length}
     matches = []

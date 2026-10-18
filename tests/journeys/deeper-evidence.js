@@ -165,6 +165,32 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
     ok(newQuestion.inputs.question === 'How does the argument differ in the next book?' && !Object.prototype.hasOwnProperty.call(newQuestion.inputs, 'continue_evidence'), 'a new follow-up resets continuation intent and has no continuation flag');
     ok(!(await page.locator('.deeper-proposal').innerText()).includes('Some reads are kept for later search approaches'), 'an older frozen proposal does not promise revision-three allocation');
     ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'evidence and proposal fit a phone-width viewport');
+    // Two stacked results on one page (2026-10-18): the owner's pastes twice
+    // showed the SECOND result's Checking attempts as numbered empty rows.
+    // The records were intact both times, and a lone result renders its rows
+    // — so this pins the stacked case in a real browser, closed and opened:
+    // every attempts row in BOTH results must carry its text.
+    await page.evaluate(() => {
+      const first = {trace_id:'trace_stack_a', title:'First stacked', explanation:'First explanation.',
+        context:{root:{trace_id:'root_fixture',selection:{anchor_name:'A subject'}},focus:{title:'A subject'}},
+        evidence_research:{status:'needs_more_evidence',source_count:1,usable_source_count:1,rounds_used:1,sources_tried:2,checkpoint_id:'ck_a',
+          steps:[{kind:'read',status:'started',url:'https://example.test/a1'},{kind:'read',status:'timeout',url:'https://example.test/a1',reason:'t'},{kind:'search',status:'returned'}]}};
+      const second = {trace_id:'trace_stack_b', title:'Second stacked', explanation:'Second explanation.',
+        context:{root:{trace_id:'root_fixture',selection:{anchor_name:'A subject'}},focus:{title:'A subject'}},
+        evidence_research:{status:'candidate_passages_found',source_count:2,usable_source_count:2,rounds_used:2,sources_tried:3,checkpoint_id:'ck_b',
+          steps:[{kind:'search',status:'started',round:1},{kind:'read',status:'no_quote',url:'https://example.test/b1'},{kind:'screen',status:'candidate_excerpt',url:'https://example.test/b1'},{kind:'answer',status:'returned'}]}};
+      document.querySelector('#result').innerHTML = window.buildDeeperHtml(first) + window.buildDeeperHtml(second);
+    });
+    const stackedClosed = await page.evaluate(() => Array.from(document.querySelectorAll('.deeper-result')).map(card => {
+      const items = Array.from(card.querySelectorAll('details ol li'));
+      return {rows: items.length, empty: items.filter(li => !li.textContent.trim()).length};
+    }));
+    ok(stackedClosed.length === 2 && stackedClosed.every(c => c.rows > 0 && c.empty === 0),
+      'both stacked results carry their attempts text in the DOM: ' + JSON.stringify(stackedClosed));
+    for (const summary of await page.getByText(/Checking attempts/).all()) await summary.click();
+    const stackedOpen = await page.evaluate(() => Array.from(document.querySelectorAll('.deeper-result')).map(card =>
+      Array.from(card.querySelectorAll('details[open] ol li')).filter(li => !(li.innerText || '').trim()).length));
+    ok(stackedOpen.every(n => n === 0), 'opened, every attempts row in both stacked results is visibly non-empty');
     ok(errors.length === 0, 'no browser script errors');
     ok(requests.every(r => new URL(r.url).origin === 'http://127.0.0.1:8499'), 'no request leaves the intercepted fixture origin');
     console.log(`CHECKS ${checks}\nJOURNEY deeper-evidence OK`);

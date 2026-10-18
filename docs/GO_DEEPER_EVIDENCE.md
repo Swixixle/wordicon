@@ -39,6 +39,27 @@ whatever its lexical score, and the deferral is written into the pass's own
 steps with its reason. Lexical absence is not irrelevance; this changes
 when carried leads are read, never whether they may be.
 
+Revision five addresses the reading problem's first slice, pinned from the
+deployed Shakuntala records: the pass held Ryder's full translation in
+custody — the Act IV departure gift and Act VI lament included — while the
+final model request packed the same Act I window twice beside navigation
+chrome and a references region, steered partly by the question template's
+own framing words. Three repairs. Retail product routes (/dp/<id>,
+/gp/product/<id>) now rank as catalog hints — URL shape only, deferred and
+never excluded — and an ISBN in a title is a weak clue alone, since
+legitimate full-text pages print ISBNs too. The template's framing
+vocabulary (help, understand, idea, context, terms and kin) no longer
+counts as question substance, so windows anchor on the question's real
+terms. And a reused saved text ADVANCES: the controller passes each
+capture the windows already shown to the model for that text (by body
+hash, or by URL when a site re-serves changed bytes), selection prefers
+any matching window not yet shown, the advancement is counted in the
+record, and when only an already-shown window matches it is reselected
+with that said by name. A mirror of the same work under a different URL
+with different bytes is a named open limitation, not silently equated.
+Advancement changes which passage is shown next; it does not verify
+relevance, work identity or answer support.
+
 ## The plan is approved before work
 
 New proposals freeze a research plan with at most:

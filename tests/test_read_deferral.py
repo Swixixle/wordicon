@@ -113,6 +113,6 @@ def test_retryable_url_keeps_its_promised_retry_whatever_its_score(isolated):
 
 def test_plan_names_the_deferral_and_proposal_wording_matches(isolated):
     plan = research.plan()
-    assert plan["version"] == 4
+    assert plan["version"] == 5
     assert "the initial reads wait for the first search's fresh leads" in plan["source_selection"]
     assert "stay saved" in plan["source_selection"]
