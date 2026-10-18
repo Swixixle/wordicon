@@ -12,6 +12,18 @@ from test_opencase_workflow import opencase, ops, federation, producers
 import operation_costs
 
 class IntegrityWorkflowTests(SynthesisTests):
+    def test_legacy_unnamed_hold_is_derived_without_rewriting_history(self):
+        self.model.mode='truncated'
+        op=self.run_prepared(self.prepare_model())
+        ref=copy.deepcopy(op['result_ref']);ref['synthesis'].pop('hold_reason')
+        ops.mark(op['op_id'],result_ref=ref)
+        current=ops.get(op['op_id']);cost=operation_costs.total(current)
+        state=opencase.view(current)['synthesis']
+        self.assertEqual(state['hold_reason'],'output_limit')
+        self.assertEqual(state['hold_basis'],'derived_from_preserved_provider_receipt')
+        self.assertEqual(ops.get(op['op_id'])['result_ref'],ref)
+        self.assertEqual(operation_costs.total(current),cost)
+
     def test_review_hold_is_durable_bound_to_receipt_and_preserves_original_and_cost(self):
         op=self.run_prepared(self.prepare_model())
         original=copy.deepcopy(op['result_ref'])

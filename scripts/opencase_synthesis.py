@@ -502,7 +502,19 @@ def view(op):
                 if state.get(key):
                     artifact(op, state[key]["name"])
         except (ValueError, OSError) as e:
-            return {**state, "status": "failed", "answer": "", "citations": [], "error": str(e)}
+            return {**state, "status": "failed", "answer_status": "held", "hold_reason": "artifact_invalid", "answer": "", "citations": [], "error": str(e)}
+        if (state.get("status") in ("failed", "rejected", "truncated", "unknown")
+                and not state.get("hold_reason") and state.get("response_artifact") and state.get("manifest_artifact")):
+            # Name a legacy hold from its original provider receipt without
+            # rewriting the historical state or silently upgrading a failure.
+            try:
+                receipt = json.loads(artifact(op, state["response_artifact"]["name"]))
+                manifest = json.loads(artifact(op, state["manifest_artifact"]["name"]))
+                derived = _normalize(receipt, manifest)
+                if derived.get("answer_status") == "held":
+                    state = {**state, **derived, "hold_basis": "derived_from_preserved_provider_receipt"}
+            except (ValueError, TypeError, KeyError, AttributeError):
+                state = {**state, "answer_status": "held", "hold_reason": "legacy_hold_unclassified"}
         import opencase_review
         return opencase_review.apply(op, state)
     return {
