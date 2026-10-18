@@ -27,6 +27,7 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
     if (rejectedResult) { v.status='unknown';v.result=null;v.producer_state.status='completed';v.error='The producer returned a different subject; result not accepted.'; }
     if(heldAnswer) {v.synthesis={status:'truncated',answer:'',hold_reason:'output_limit',error:'Output allowance reached.'};v.dimensions={display_status:'Answer held',lifecycle:'complete',acquisition:{status:'ready'},answer:{status:'held'}};}
     v.costs={estimated_cost_usd:0.035772,known_estimated_subtotal_usd:0.035772,unknown_components:[]};v.thread_costs={...v.costs,estimated_cost_usd:0.062022};
+    if(rejectedResult) v.costs={estimated_cost_usd:null,known_estimated_subtotal_usd:0,unknown_components:[],accounting_status:'unknown'};
     return route.fulfill({json:v});
   });
   await page.route('**/api/actions/prepare', async route => {
@@ -74,6 +75,7 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   heldAnswer=false;rejectedResult = true;
   await page.reload(); await page.waitForFunction(()=>document.querySelector('#oc-current').textContent.includes('result not accepted'));
   ok((await page.textContent('#oc-progress'))==='unknown','a rejected result cannot inherit the producer’s completed label');
+  ok(/This operation: total unknown/.test(await page.textContent('#oc-current')),'unknown accounting is not displayed as zero');
   ok(errors.length===0,'no page errors: '+JSON.stringify(errors));
   await browser.close(); finish('opencase');
 })().catch(e=>{console.error(e);process.exit(1);});

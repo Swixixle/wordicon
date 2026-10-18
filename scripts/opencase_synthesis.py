@@ -141,7 +141,7 @@ def _manifest(op):
     spec = plan["synthesis"]
     current = {"operation_id": op["op_id"], "question": plan["question"], "result_artifact": op["result_ref"]["result_artifact"]}
     contexts = [current]
-    if spec.get("follow_up_context"):
+    if spec.get("follow_up_context") and not plan.get("reuse_evidence_from"):
         contexts.append(spec["follow_up_context"])
     records, sources, omissions = [], [], []
     seen = set()
@@ -158,7 +158,8 @@ def _manifest(op):
         if _sha(raw) != context["result_artifact"]["sha256"]:
             raise WorkflowError("The frozen follow-up source artifact changed; no model request was sent.", 409)
         result = json.loads(raw)
-        sources.append({**context, "source_statuses": result.get("source_statuses", []), "failures": result.get("failures", [])})
+        sources.append({**context, "source_statuses": result.get("source_statuses", []), "failures": result.get("failures", []),
+                        "acquisition": result.get("dimensions", {}).get("acquisition"), "task_profile": result.get("plan", {}).get("task_profile")})
         originals = result.get("findings", [])
         corrected = findings_for(saved, result)
         if len(originals) != len(corrected):
@@ -202,14 +203,19 @@ def _manifest(op):
         "Keep commission and oath dates distinct; never infer one from the other or treat an older combined label as both. "
         "Use the smallest relevant set of source records; do not cite repeated copies to imply stronger evidence. "
         "Cite relevant factual claims by exact record_id in the answer, exactly one id per bracket, never comma-separated ids inside one bracket. "
-        "Assess whether the evidence answers this question: answered, partial, or insufficient. This is your self-assessment, not external verification. "
+        "Assess whether the evidence answers the actual question: answered, partial, or insufficient. This is your self-assessment, not external verification. "
+        "Use acquisition.capabilities to distinguish required, optional, inapplicable and unimplemented sources. "
+        "An optional missing cross-check, absence of independent corroboration, or an unasked-for fact must NOT by itself make an otherwise adequate answer partial. "
+        "A question asking what an official record documents can be answered by that one record with clear attribution and limits. "
+        "Mention relevant limits briefly; do not invent additional requirements beyond the question. "
+        "A missing termination date means only that no termination is recorded in the supplied capture; it does not prove current service at today's date. "
         "Return only JSON: {\"answer\":\"... [record_id] ...\",\"citations\":[{\"record_id\":\"exact supplied id\"}],"
         "\"answer_status\":\"answered|partial|insufficient\",\"adequacy_reason\":\"Brief evidence-based reason and any remaining gap\"}. "
         "Use no record ids outside the supplied records.\nSOURCE_DATA\n")
     def render():
         return prefix + json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\nEND_SOURCE_DATA"
     for source in sources:
-        coverage = {"operation_id": source["operation_id"], "source_statuses": source["source_statuses"], "failures": source["failures"]}
+        coverage = {"operation_id": source["operation_id"], "source_statuses": source["source_statuses"], "failures": source["failures"], "acquisition": source.get("acquisition"), "task_profile": source.get("task_profile")}
         payload["coverage"].append(coverage)
         if len(render()) > spec["max_input_chars"]:
             payload["coverage"].pop()

@@ -69,7 +69,11 @@
     if (plan.reuse_evidence_from) card.append(node('p','Answer recovery: keep the original question and evidence. This starts one new model attempt; earlier attempts and costs remain in the thread.','warn'));
     card.append(node('h3','Planned sources'));
     const sources = node('ul'); for (const source of (plan.source_scope || [])) sources.append(node('li',source)); card.append(sources);
-    if(plan.source_capabilities?.length) {const caps=node('ul');for(const c of plan.source_capabilities)caps.append(node('li',c.name+': '+c.role+' — '+c.reason+' Availability '+c.availability.replace(/_/g,' ')+'.'));card.append(caps);}
+    if(plan.source_capabilities?.length) {
+      const extra=node('details'),caps=node('ul');extra.append(node('summary','All source capabilities · '+plan.source_capabilities.length));
+      for(const c of plan.source_capabilities)caps.append(node('li',c.name+': '+c.role+' — '+c.reason+' Availability '+c.availability.replace(/_/g,' ')+'.'));
+      extra.append(caps);card.append(extra);
+    }
     card.append(node('p','Failed and empty checks are recorded separately from sources that do not apply or are not implemented.','foot'));
     card.append(detail('Full proposal and captured origin', plan));
     const start = button(pending ? 'Check this Start request' : 'Start investigation', () => startProposal(p, pending, start));
@@ -99,9 +103,9 @@
   function entries(value) { return Array.isArray(value) ? value : value && typeof value === 'object' ? Object.entries(value).map(([name,v]) => typeof v === 'object' ? {name,...v} : {name,status:v}) : []; }
   function costText(value,label) {
     if(!value) return label+': accounting unavailable';
-    const amount=value.estimated_usd ?? value.estimated_cost_usd ?? value.known_estimated_subtotal_usd;
-    return label+': '+(amount==null?'estimate unavailable':'estimated $'+Number(amount).toFixed(6))+
-      (value.unknown_components?.length || value.has_unknown ? ' + unresolved usage' : '')+' · provider-billed amount unconfirmed';
+    if(value.estimated_cost_usd == null || value.accounting_status === 'unknown')
+      return label+': total unknown · known estimated subtotal $'+Number(value.known_estimated_subtotal_usd || 0).toFixed(6)+' · unresolved usage remains';
+    return label+': estimated $'+Number(value.estimated_cost_usd).toFixed(6)+' · provider-billed amount unconfirmed';
   }
   function render(view) {
     const el = $('oc-current'); el.hidden = false; el.replaceChildren();
@@ -134,7 +138,7 @@
       originView(); $('open-case-card').scrollIntoView({block:'start'}); $('oc-question').focus();
     });
     el.append(row(save, follow));
-    if (['truncated','rejected','failed','unknown'].includes(synthesis.status) && view.result) {
+    if ((['truncated','rejected','failed','unknown'].includes(synthesis.status) || ['partial','insufficient'].includes(synthesis.answer_status)) && view.result) {
       const recover=button('Review answer recovery', () => {
         reuseEvidence=view.operation_id; followUp=view.operation_id;origin=view.origin || plan.origin;
         $('oc-question').value=plan.question; $('oc-subject').value=plan.subject_name;
