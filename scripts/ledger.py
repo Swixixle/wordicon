@@ -24,6 +24,11 @@ ledger refuses appends by name and keeps what was already written.
 from __future__ import annotations
 
 import json
+import hashlib
+import os
+import re
+import uuid
+import fcntl
 import pathlib
 from datetime import datetime, timezone
 
@@ -49,10 +54,18 @@ EVENT_TYPES = (
     "material_carried",      # an excerpt carried back to the writing's revision notes
     "edit_applied",          # a save that changed a document (the revision itself is in the notebook)
     "search_performed",      # a search box used (scope and count here; the words in the capture store)
+    "capture_gap",           # an explicitly observed delivery/storage gap, never invented activity
 )
 MAX_BATCH = 100
 MAX_TITLE = 120
 MAX_FIELD = 300
+SCHEMA = "nikodemus.attention.v2"
+_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,120}$")
+
+
+def scope_id() -> str:
+    """Opaque local-store routing scope; no filesystem path goes to the page."""
+    return "ledger_" + hashlib.sha256(str(pathlib.Path(cli.LOCAL_STATE).resolve()).encode()).hexdigest()[:24]
 
 
 def _dir() -> pathlib.Path:
@@ -67,16 +80,39 @@ def enabled() -> bool:
     """On unless the owner turned it off. The default is his ruling, not a
     silent opt-in: the switch is on the Settings page, named."""
     try:
-        return json.loads(_config_path().read_text(encoding="utf-8")).get("enabled", True) is not False
-    except (OSError, json.JSONDecodeError):
+        value = json.loads(_config_path().read_text(encoding="utf-8"))
+        return isinstance(value, dict) and value.get("enabled") is True
+    except FileNotFoundError:
         return True
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        # A damaged or unreadable switch cannot authorize new capture.
+        return False
 
 
 def set_enabled(on: bool) -> dict:
     _dir().mkdir(parents=True, exist_ok=True)
     cfg = {"enabled": bool(on), "changed_at": _now()}
-    _config_path().write_text(json.dumps(cfg, indent=1), encoding="utf-8")
+    with open(_dir() / "append.lock", "a+b") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        temporary = _dir() / (".config-" + uuid.uuid4().hex)
+        try:
+            with open(temporary, "x", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=1)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary, _config_path())
+            _sync_directory()
+        finally:
+            temporary.unlink(missing_ok=True)
     return cfg
+
+
+def _sync_directory():
+    fd = os.open(_dir(), os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def _now() -> str:
@@ -87,47 +123,124 @@ def _month_path(received_at: str) -> pathlib.Path:
     return _dir() / f"events-{received_at[:7]}.jsonl"
 
 
+def _lines(paths):
+    rows, gaps = [], []
+    for path in paths:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as e:
+            gaps.append({"kind": "unreadable_file", "file": path.name, "error_class": type(e).__name__})
+            continue
+        for index, line in enumerate(text.splitlines(), 1):
+            try:
+                row = json.loads(line)
+                if not isinstance(row, dict) or row.get("type") not in EVENT_TYPES:
+                    raise ValueError("not an event")
+            except (ValueError, TypeError):
+                gaps.append({"kind": "malformed_record", "file": path.name, "line": index})
+                continue
+            rows.append((row, path))
+    return rows, gaps
+
+
+def _identity(row):
+    return json.dumps({k: v for k, v in row.items() if k != "received_at"}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
 def append(events: list) -> dict:
-    """Keep a batch of events the owner's page reported. Shape is enforced,
-    never repaired: an unknown type or an oversized field refuses the whole
-    batch by name, so the ledger never holds a line it cannot vouch for."""
+    """Idempotent durable append. Lost acknowledgements never repeat a visit.
+
+    Distinct intentional visits carry distinct event IDs. A process/file lock
+    serializes dedup + append; acknowledged rows have been flushed and fsynced.
+    Original JSONL stays authoritative and the ID lookup is rebuilt on each
+    append, so no derived index can conceal missing or damaged source records.
+    """
+    def refuse(message, code="invalid_event"):
+        return {"error": message, "refused": True, "code": code}
     if not enabled():
-        return {"error": "the Ledger is off (Settings turns it back on); nothing was recorded", "refused": True}
+        return refuse("the Ledger is off (Settings turns it back on); nothing was recorded", "recording_off")
     if not isinstance(events, list) or not events:
-        return {"error": "no events were sent", "refused": True}
+        return refuse("no events were sent")
     if len(events) > MAX_BATCH:
-        return {"error": f"a batch is at most {MAX_BATCH} events; this one is {len(events)}", "refused": True}
+        return refuse(f"a batch is at most {MAX_BATCH} events; this one is {len(events)}")
     received_at = _now()
-    lines = []
+    prepared = []
     for i, e in enumerate(events):
         if not isinstance(e, dict):
-            return {"error": f"event {i} is not an object", "refused": True}
+            return refuse(f"event {i} is not an object")
         t = e.get("type")
         if t not in EVENT_TYPES:
-            return {"error": f"event {i} has a type the ledger does not hold: {t!r}", "refused": True}
-        at = str(e.get("at") or "")[:40]
+            return refuse(f"event {i} has a type the ledger does not hold: {t!r}")
         subject = e.get("subject") or {}
         if not isinstance(subject, dict):
-            return {"error": f"event {i} has a subject that is not an object", "refused": True}
+            return refuse(f"event {i} has a subject that is not an object")
         subj = {}
-        # W2: "revision" links edit_applied to the retained revision row in
-        # the notebook; "scope" names which search box search_performed means.
-        # Still ids, numbers and short titles — a subject never carries a body.
         for k in ("id", "title", "route", "page", "kind", "revision", "scope"):
             v = subject.get(k)
             if v is None:
                 continue
             v = str(v)
             if len(v) > (MAX_TITLE if k == "title" else MAX_FIELD):
-                return {"error": f"event {i} subject.{k} is longer than the ledger keeps", "refused": True}
+                return refuse(f"event {i} subject.{k} is longer than the ledger keeps")
             subj[k] = v
-        lines.append(json.dumps({"type": t, "at": at, "received_at": received_at, "subject": subj},
-                                ensure_ascii=False, sort_keys=True))
+        event_id = e.get("event_id")
+        session_id = e.get("session_id")
+        if event_id is not None and (not isinstance(event_id, str) or not _ID.fullmatch(event_id)):
+            return refuse(f"event {i} has an invalid event_id")
+        if session_id is not None and (not isinstance(session_id, str) or not _ID.fullmatch(session_id)):
+            return refuse(f"event {i} has an invalid session_id")
+        supplied_scope = e.get("scope_id")
+        if supplied_scope is not None and supplied_scope != scope_id():
+            return refuse("The queued event belongs to a different local store.", "scope_mismatch")
+        row = {"schema": SCHEMA, "event_id": event_id or "legacy_" + uuid.uuid4().hex,
+               "session_id": session_id, "scope_id": scope_id(), "type": t,
+               "at": str(e.get("at") or "")[:40], "received_at": received_at, "subject": subj}
+        if not event_id:
+            row["delivery_idempotency"] = "unavailable_legacy_client"
+        prepared.append(row)
     _dir().mkdir(parents=True, exist_ok=True)
-    path = _month_path(received_at)
-    with open(path, "a", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
-    return {"kept": len(lines), "file": path.name}
+    with open(_dir() / "append.lock", "a+b") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        # Recheck under the append lock so a disabled store never accepts a
+        # queued batch just because the first check ran before the toggle.
+        if not enabled():
+            return refuse("the Ledger is off; nothing was recorded", "recording_off")
+        existing, gaps = _lines(sorted(_dir().glob("events-*.jsonl")))
+        if any(g["kind"] == "unreadable_file" for g in gaps):
+            return {**refuse("The existing trail cannot be read safely; delivery is pending.", "store_unreadable"), "capture_gaps": gaps}
+        seen = {r["event_id"]: (r, p) for r, p in existing if r.get("event_id")}
+        new, acknowledgements, sync_paths = [], [], set()
+        for row in prepared:
+            eid = row["event_id"]
+            if eid in seen:
+                prior, path = seen[eid]
+                if _identity(prior) != _identity(row):
+                    return refuse("An event_id was reused for a different activity record.", "event_id_conflict")
+                if path is not None:
+                    sync_paths.add(path)
+            else:
+                new.append(row)
+                seen[eid] = (row, None)
+            acknowledgements.append(eid)
+        path = _month_path(received_at)
+        if new:
+            with open(path, "a+b") as f:
+                # Preserve an interrupted tail as its own observable bad line;
+                # a retry must not concatenate a good event onto a partial one.
+                f.seek(0, os.SEEK_END)
+                if f.tell():
+                    f.seek(-1, os.SEEK_END)
+                    if f.read(1) != b"\n":
+                        f.write(b"\n")
+                f.write(("\n".join(json.dumps(r, ensure_ascii=False, sort_keys=True) for r in new) + "\n").encode())
+                f.flush()
+                os.fsync(f.fileno())
+            _sync_directory()
+        for old_path in sync_paths:
+            with open(old_path, "rb") as f:
+                os.fsync(f.fileno())
+        return {"kept": len(new), "duplicates": len(prepared) - len(new), "acknowledged": acknowledgements,
+                "file": path.name, "capture_gaps": gaps, "scope_id": scope_id()}
 
 
 def read(day: str = "", since: str = "", limit: int = 2000) -> dict:
@@ -141,24 +254,16 @@ def read(day: str = "", since: str = "", limit: int = 2000) -> dict:
     # monthly and few, and the trail is a deliberate press, not a hot path.
     paths = sorted(_dir().glob("events-*.jsonl")) if (day or since) \
         else sorted(_dir().glob("events-*.jsonl"))[-1:]
-    for p in paths:
-        try:
-            text = p.read_text(encoding="utf-8")
-        except OSError:
+    rows, gaps = _lines(paths)
+    for e, _path in rows:
+        when = e.get("received_at") or e.get("at") or ""
+        if day and not (when.startswith(day) or str(e.get("at", "")).startswith(day)):
             continue
-        for line in text.splitlines():
-            try:
-                e = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            when = e.get("received_at") or e.get("at") or ""
-            if day and not (when.startswith(day) or str(e.get("at", "")).startswith(day)):
-                continue
-            if since and when < since:
-                continue
-            out.append(e)
+        if since and when < since:
+            continue
+        out.append(e)
     truncated = len(out) > limit
     return {"events": out[-limit:], "truncated": truncated,
-            "enabled": enabled(),
+            "enabled": enabled(), "scope_id": scope_id(), "capture_gaps": gaps,
             "population": f"the ledger file(s) read whole from the store; {len(out)} event(s) matched"
                           + (f", the newest {limit} returned" if truncated else "")}

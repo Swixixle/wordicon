@@ -1438,62 +1438,18 @@
 // future rename cannot leave a dead name behind inside a rendered string.
 const brand = () => (window.BRAND && window.BRAND.name) || 'Nikodemus';
 
-// ---- the Ledger's desk reporter (W2, his "ok go" 2026-10-17) --------------
-// The workspace shell has webapp/work/ledger.js; the desk is one file, so the
-// same reporter lives inline, same discipline, no divergence allowed: queue
-// capped at 500, batch at 20, a 15s timer only while visible (a reporter that
-// wakes a background tab changes the very attention it records), a PLAIN-
-// STRING sendBeacon at the visibility boundary (text/plain is a simple
-// request — WebKit's teardown never flags it), and a 409 from the store is
-// the Settings switch speaking: reporting stops at once. Events carry ids and
-// short titles, never bodies — the query text lives in the capture store, the
-// revision bodies in the notebook, the acts in their own records. This object
-// only REPORTS; it reads nothing and sends nothing anywhere but his store.
-window.__nikLedger = (function () {
-  const L = { queue: [], timer: 0, enabled: true };
-  function localISO() {
-    const d = new Date(), off = -d.getTimezoneOffset();
-    const pad = n => String(Math.abs(n)).padStart(2, '0');
-    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, -1)
-      + (off >= 0 ? '+' : '-') + pad(Math.trunc(off / 60)) + ':' + pad(off % 60);
-  }
-  L.note = function (type, subject) {
-    if (!L.enabled) return;
-    L.queue.push({ type, at: localISO(), subject: subject || {} });
-    if (L.queue.length > 500) L.queue.splice(0, L.queue.length - 500);   // attention data, not a debt: cap, never balloon
-    if (L.queue.length >= 20) { L.flush(); return; }
-    if (!L.timer && !document.hidden) L.timer = setTimeout(() => L.flush(), 15000);
-  };
-  L.flush = function (beacon) {
-    clearTimeout(L.timer); L.timer = 0;
-    if (!L.queue.length) return;
-    const events = L.queue.splice(0, 100);
-    const body = JSON.stringify({ events });
-    if (beacon && navigator.sendBeacon) {
-      try { navigator.sendBeacon('/api/ledger', body); return; } catch (e) { /* fall through */ }
-    }
-    fetch('/api/ledger', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body })
-      .then(r => { if (r.status === 409) L.enabled = false; })    // the switch is off; stop until it is turned back on
-      .catch(() => { L.queue.unshift(...events); });              // kept for the next flush
-  };
-  L.init = function () {
-    fetch('/api/ledger/config', { credentials: 'same-origin' })
-      .then(r => r.json()).then(d => {
-        L.enabled = d.enabled !== false;
-        // off means nothing is SENT, not merely nothing new queued: the
-        // session_start noted before this answer arrived is dropped too,
-        // so a switched-off desk makes no /api/ledger request at all
-        if (!L.enabled) { L.queue = []; clearTimeout(L.timer); L.timer = 0; }
-      })
-      .catch(() => { /* the reporter never blocks the room */ });
-    document.addEventListener('visibilitychange', () => {
-      L.note(document.hidden ? 'visibility_hidden' : 'visibility_visible', {});
-      if (document.hidden) L.flush(true);   // hand over ONLY when hiding; returning does no work at all
-    });
-    window.addEventListener('pagehide', () => { L.note('session_end', {}); L.flush(true); });
-    L.note('session_start', {});
-  };
-  return L;
+// Both surfaces share the durable reporter, including sendBeacon and the
+// visibilitychange boundary. This small proxy preserves calls during import.
+window.__nikLedger = (() => {
+  const pending = []; let reporter = null;
+  const ready = import('/work/ledger.js').then(({Ledger}) => {
+    reporter = new Ledger();
+    for (const [method, args] of pending.splice(0)) reporter[method](...args);
+    return reporter;
+  }).catch(() => { /* The room stays usable; no activity was transmitted. */ });
+  const invoke = (method, args) => reporter ? reporter[method](...args) : pending.push([method, args]);
+  return {note: (...args) => invoke('note', args), init: (...args) => invoke('init', args),
+          flush: (...args) => invoke('flush', args), setEnabled: (...args) => invoke('setEnabled', args), ready};
 })();
 
 let pendingDecisions = {}; // { [cardIndex]: 'a'|'r'|'v' }

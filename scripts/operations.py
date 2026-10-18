@@ -33,6 +33,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import socket
 import sqlite3
 import threading
@@ -410,7 +411,7 @@ def attach(gateway, op_id: str) -> None:
             try:
                 out = _orig(*args, **kwargs)
             except BaseException as e:  # noqa: BLE001 — the record first, then the same exception
-                event(op_id, "stage_end", stage=stage, outcome="error", detail={"call": _name, "intent_seq": seq, "exception": type(e).__name__, "message": str(e)[:300]})
+                event(op_id, "stage_end", stage=stage, outcome="error", detail={"call": _name, "intent_seq": seq, "exception": type(e).__name__, "message": cli.sanitize_attempt_message(e)})
                 raise
             event(op_id, "stage_end", stage=stage, outcome="ok", detail={"call": _name, "intent_seq": seq})
             return out
@@ -424,11 +425,29 @@ def _stage_of(prompt) -> str:
 
 
 def _hook(op_id: str, kind: str, **f) -> None:
+    # Closed metadata envelope: no prompt, body, arbitrary SDK object or header
+    # can enter the event. Usage categories are typed data, not credential-like
+    # key names; keep the numbers even when a result file was never produced.
+    detail = {}
+    for key in ("call_id", "attempt_id", "provider", "model", "provider_run_id", "provider_model", "stop_reason"):
+        value = f.get(key)
+        detail[key] = value if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.:/+-]{1,200}", value) and not value.startswith("sk-") else None
+    if kind == "attempt_end":
+        usage = f.get("usage_categories")
+        detail["usage_categories"] = [{"category": row["category"], "count": row["count"]} for row in usage
+            if isinstance(row, dict) and row.get("category") in cli.ATTEMPT_USAGE_KEYS
+            and type(row.get("count")) is int and row["count"] >= 0] if isinstance(usage, list) else []
+        detail["usage_complete"] = f.get("usage_complete") if type(f.get("usage_complete")) is bool else None
+        detail["response_observed"] = f.get("response_observed") if type(f.get("response_observed")) is bool else None
+        sdk = f.get("sdk")
+        detail["sdk"] = {key: value for key, value in sdk.items()
+                         if key in {"anthropic", "transport", "transport_version"}
+                         and isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.+-]{0,80}", value)} if isinstance(sdk, dict) else {}
     if kind == "attempt_intent":
-        event(op_id, "attempt_intent", stage=f.get("stage", ""), attempt=f.get("attempt"), detail={"started_at": f.get("started_at", "")})
+        event(op_id, "attempt_intent", stage=f.get("stage", ""), attempt=f.get("attempt"), detail={**detail, "started_at": f.get("started_at", "")})
     elif kind == "attempt_end":
         event(op_id, "attempt_end", stage=f.get("stage", ""), attempt=f.get("attempt"), outcome=f.get("outcome", ""),
-              detail={k: v for k, v in f.items() if k in ("exception", "status_code", "duration_s", "outcome_detail", "retry_after_s", "run_id", "component")})
+              detail={**detail, **{k: v for k, v in f.items() if k in ("exception", "status_code", "duration_s", "outcome_detail", "retry_after_s", "run_id", "component")}})
 
 
 # ---- the recovery table: what the events say happened -----------------------------------

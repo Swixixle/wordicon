@@ -3979,7 +3979,7 @@ def api_ledger_config():
     if request.method == "POST":
         d = request.get_json(force=True, silent=True) or {}
         return jsonify(ledger.set_enabled(bool(d.get("enabled"))))
-    return jsonify({"enabled": ledger.enabled()})
+    return jsonify({"enabled": ledger.enabled(), "scope_id": ledger.scope_id()})
 
 
 @app.route("/ledger")

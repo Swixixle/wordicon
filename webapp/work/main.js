@@ -283,20 +283,65 @@ function renderSettings() {
   const ledRow = el('div', { class: 'kv' }, [
     el('span', { text: 'The Ledger — your own trail: which doors, pages, documents and results had your attention, and when it came and went. Events only — no keystrokes, no content. It lives in your store, the Vault seals it, and it is shown only to you. ' }),
   ]);
-  const ledBtn = el('button', { class: 'btn small', type: 'button', text: '…' });
-  const ledState = el('span', { class: 'muted small-text', text: '' });
-  let ledOn = true;
-  const drawLed = () => { ledBtn.textContent = ledOn ? 'Turn the Ledger off' : 'Turn the Ledger on'; ledState.textContent = ledOn ? ' recording' : ' off — nothing new is recorded; what was written is kept'; };
-  getJSON('/api/ledger/config').then(r => { ledOn = !(r.ok && r.data && r.data.enabled === false); drawLed(); }).catch(drawLed);
+  const ledBtn = el('button', { id:'ledger-recording-toggle', class: 'btn small', type: 'button', text: '…' });
+  const ledState = el('span', { id:'ledger-recording-state', class: 'muted small-text', text: '' });
+  let ledOn = ledgerRep.enabled, ledReady = false, ledSaving = false;
+  let ledNotice = 'Checking the server configuration…';
+  const drawLed = () => {
+    ledBtn.textContent = ledOn == null ? 'Ledger configuration unavailable' : ledOn ? 'Turn the Ledger off' : 'Turn the Ledger on';
+    ledBtn.disabled = !ledReady || ledSaving;
+    const state = ledOn == null ? 'Recording setting unknown.' : (ledReady ? '' : 'Last confirmed: ') + (ledOn ? 'recording.' : 'off; retained events are kept.');
+    ledState.textContent = ' ' + state + (ledNotice ? ' ' + ledNotice : '');
+  };
+  const unknownLed = message => { ledReady = false; ledNotice = message; drawLed(); };
+  drawLed();
+  getJSON('/api/ledger/config').then(r => {
+    if (!r.ok || typeof r.data?.enabled !== 'boolean') { unknownLed('Server configuration unavailable. Reopen Settings to check again.'); return; }
+    ledOn = r.data.enabled; ledReady = true; ledNotice = ''; ledgerRep.setEnabled(ledOn); drawLed(); drawDelivery();
+  }).catch(() => unknownLed('Server configuration unavailable. Reopen Settings to check again.'));
   ledBtn.addEventListener('click', async () => {
-    const r = await postJSON('/api/ledger/config', { enabled: !ledOn });
-    ledOn = !(r.ok && r.data && r.data.enabled === false);
-    ledgerRep.setEnabled(ledOn); drawLed();
-    toast(ledOn ? 'The Ledger is recording again.' : 'The Ledger is off. Nothing new is recorded; your trail so far is kept.');
+    if (!ledReady || ledSaving) return;
+    ledSaving = true; drawLed();
+    try {
+      const r = await postJSON('/api/ledger/config', { enabled: !ledOn });
+      if (!r.ok || typeof r.data?.enabled !== 'boolean') {
+        unknownLed('The server did not confirm the setting change. The prior confirmed setting is retained. Reopen Settings to check again.'); return;
+      }
+      ledOn = r.data.enabled; ledReady = true; ledNotice = '';
+      ledgerRep.setEnabled(ledOn); drawDelivery();
+      toast(ledOn ? 'The Ledger is recording again.' : 'The Ledger is off. Nothing new is recorded; your trail so far is kept.');
+    } catch (_) {
+      unknownLed('The server did not confirm the setting change. The prior confirmed setting is retained. Reopen Settings to check again.');
+    } finally { ledSaving = false; drawLed(); }
   });
   ledRow.appendChild(ledBtn); ledRow.appendChild(ledState);
   ledRow.appendChild(el('button', { class: 'btn small', type: 'button', style: 'margin-left:8px', text: 'Open your trail (new tab)', onclick: () => window.open('/ledger', '_blank', 'noopener') }));
   v.appendChild(ledRow);
+  const delivery = el('section', {id:'ledger-delivery', class:'kv'}, [el('h2', {text:'Activity delivery'})]);
+  const deliveryState = el('p', {id:'ledger-delivery-state', role:'status'});
+  const deliveryError = el('p', {id:'ledger-delivery-error', class:'warn'});
+  const deliveryGaps = el('p', {id:'ledger-delivery-gaps', class:'muted small-text'});
+  const eventIds = el('pre', {id:'ledger-delivery-events', style:'white-space:pre-wrap;overflow-wrap:anywhere'});
+  const drawDelivery = () => {
+    const s = ledgerRep.status();
+    deliveryState.textContent = s.pending_count + (s.scope_confirmed && s.storage_available ? ' pending event(s): ' : ' visible pending event(s), total unconfirmed: ') + s.durable_count + ' stored in this browser, ' + s.memory_only_count + ' held only in this page.' +
+      (s.enabled === false ? ' Recording and delivery are off.' : !s.scope_confirmed ? ' Server scope unconfirmed; stored events from ' + s.unconfirmed_scope_count + ' browser scope(s) are inspection only and will not be sent until configuration returns.' : s.pending_count ? ' Awaiting explicit server acknowledgement.' : ' No delivery pending in the confirmed scope.');
+    deliveryError.textContent = s.last_error || (s.storage_available ? '' : 'Browser storage cannot be inspected; pending delivery may be incomplete.');
+    deliveryGaps.textContent = s.invalid_count + ' invalid browser record(s) preserved, excluded from delivery.' +
+      (s.gaps.length ? ' Capture gaps: ' + s.gaps.join(', ') + '.' : ' No capture gaps reported by this page.');
+    eventIds.textContent = s.event_ids.length ? s.event_ids.join('\n') : s.scope_confirmed && s.storage_available ? 'No pending event IDs in this scope.' : 'No event IDs could be confirmed; pending delivery is unknown.';
+    retryDelivery.disabled = s.enabled === false;
+  };
+  const refreshDelivery = el('button', {id:'ledger-delivery-refresh', class:'btn small', type:'button', text:'Refresh delivery status', onclick:drawDelivery});
+  const retryDelivery = el('button', {id:'ledger-delivery-retry', class:'btn small', type:'button', text:'Retry activity delivery', onclick:async () => {
+    retryDelivery.disabled = true;
+    try { await ledgerRep.flush(); } finally { drawDelivery(); }
+  }});
+  delivery.append(deliveryState, deliveryError, deliveryGaps,
+    el('details', {}, [el('summary', {text:'Pending event IDs'}), eventIds]),
+    el('div', {class:'row'}, [refreshDelivery, retryDelivery]),
+    el('p', {class:'muted small-text', text:'Pending activity metadata remains in this browser until acknowledged. It is outside the Vault until delivered. Refresh only inspects delivery; retry resends the same event IDs.'}));
+  v.appendChild(delivery); drawDelivery();
 }
 
 function renderHelp() {
@@ -468,7 +513,17 @@ async function boot() {
   bindDocMenu(); bindSelection(); bindDestinations(); bindFind(); bindIntake(); actions.bindAsk();
   ledgerRep.init();
   layout.hooks.onChange = () => { if (layout.state.results) results.seen(); };
-  await actions.load();
+  try {
+    await actions.load();
+    if (!actions.registry) throw new Error('Action registry unavailable');
+  } catch (_) {
+    // The local delivery inspector remains reachable during a server outage.
+    // No registry means no action proposal or dispatch is enabled.
+    actions.registry = null; actions.byId = {};
+    showPage('settings'); layout.apply();
+    toast('The local server is unavailable. Actions are unavailable; activity delivery can be inspected in Settings.', 8000);
+    return;
+  }
   results.loadRecent(id => (actions.byId[id] && actions.byId[id].label) || (id || '').replace(/^legacy:\/api\/jobs:/, 'a run: '));
   const known = session.loadIdentity();
   let opened = false;

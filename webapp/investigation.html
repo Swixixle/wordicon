@@ -172,7 +172,7 @@
      so an imported reading's door opens the SAME lane the desk uses; it is
      standalone-safe (desk-only globals are guarded by typeof checks) -->
 <script src="/deeper.js"></script>
-<script src="/opencase.js" defer></script>
+<script type="module" src="/opencase.js"></script>
 <script>
 const STATE = { connectors: [], depositions: [], rooms: [], room: null, producers: {} };
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

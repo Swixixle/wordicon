@@ -6736,11 +6736,12 @@ def _check_ledger(server, paired):
     # W2 (his ruling in docs/adr-extraction.md; "ok go", 2026-10-17): the
     # interaction inventory joined DELIBERATELY — five kinds, named here so
     # the set still cannot drift without a ruling. Events carry ids, numbers
-    # and short titles, never bodies.
+    # and short titles, never bodies. The adopted 2026-10-18 action plan adds
+    # capture_gap explicitly to name observed storage/delivery loss.
     if set(_led.EVENT_TYPES) != {"session_start", "session_end", "page_shown", "place_opened", "place_closed",
                                  "document_opened", "result_viewed", "visibility_hidden", "visibility_visible",
                                  "import_attempted", "question_followed", "material_carried", "edit_applied",
-                                 "search_performed"}:
+                                 "search_performed", "capture_gap"}:
         out.append(f"LEDGER: the event inventory moved without a ruling: {sorted(_led.EVENT_TYPES)}")
     if any("key" in t for t in _led.EVENT_TYPES):
         out.append("LEDGER: a key-shaped event type appeared — keystrokes were ruled OUT (events first)")
@@ -6797,13 +6798,13 @@ def _check_ledger(server, paired):
     for need in ("sendBeacon", "'/api/ledger'", "visibilitychange", "session_start", "409"):
         if need not in wj:
             out.append(f"LEDGER: the reporter lost {need!r}")
-    # W2: the DESK carries the same reporter inline (index.html is one file),
+    # The DESK imports the same durable reporter with a small call queue,
     # same discipline — and the five ruled interaction events are emitted at
     # their press points, by name. A missing emission is an event the
     # disclosure promises and the page never sends.
     dh = Path("webapp/index.html").read_text(encoding="utf-8")
     for need, why in (("window.__nikLedger", "the desk reporter"), ("__nikLedger.init()", "the reporter's start"),
-                      ("sendBeacon", "the teardown-safe handover"), ("visibilitychange", "the visibility boundary"),
+                      ("import('/work/ledger.js')", "the shared reporter with teardown/visibility handling"),
                       ("'result_viewed'", "the look at a past result"), ("'document_opened'", "the document opening"),
                       ("'edit_applied'", "the applied edit"), ("'material_carried'", "the carry-back"),
                       ("'import_attempted'", "the import attempt"), ("'search_performed'", "the search event")):

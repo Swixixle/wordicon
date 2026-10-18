@@ -1,7 +1,9 @@
 /* Open Case's bounded public-record workflow. Only Start dispatches. Every
  * reopened view reads Nikodemus's durable record, never a producer report. */
+import { Ledger } from '/work/ledger.js';
 (() => {
   'use strict';
+  const ledger = new Ledger();
   const ACTION = 'investigate.opencase.question';
   const PENDING = 'nikodemus.opencase.pending.v1';
   const $ = id => document.getElementById(id);
@@ -35,7 +37,13 @@
     el.append(button('Use question alone', () => { origin = null; followUp = null; originView(); }, 'quiet'));
     if (followUp) el.append(node('div', 'Follow-up to ' + followUp, 'foot'));
   }
-  function setOrigin(value) { origin = value; proposal = null; $('oc-proposal').replaceChildren(); originView(); $('open-case-card').scrollIntoView({block:'start',behavior:'smooth'}); $('oc-question').focus(); }
+  // These are observed navigation/carry boundaries, not evidence of reading
+  // or agreement. The question and source bodies remain in their own records.
+  function noteOrigin(value) {
+    const id = value?.doc_id || value?.deposition_id;
+    if (id) ledger.note('material_carried', {id, revision:value.revision ?? '', kind:'investigation_origin', scope:'open_case'});
+  }
+  function setOrigin(value) { origin = value; noteOrigin(value); proposal = null; $('oc-proposal').replaceChildren(); originView(); $('open-case-card').scrollIntoView({block:'start',behavior:'smooth'}); $('oc-question').focus(); }
   let reuseEvidence = '';
   async function prepare(event) {
     event.preventDefault(); if (busy) return; busy = true; error(null); $('oc-prepare').disabled = true;
@@ -47,6 +55,7 @@
         synthesis:{enabled:$('oc-synthesis').checked,max_requests:1,max_output_tokens:reuseEvidence?8192:4096,max_input_chars:40000},
         allowance:{max_cost_usd:0,paid_models:false}, origin:origin || {kind:'question',text:question}, follow_up_of:followUp};
       proposal = await api('/api/actions/prepare', {action_id:ACTION, subject:{kind:'description',text:question,title:question.slice(0,100)}, inputs});
+      if (followUp && !reuseEvidence) ledger.note('question_followed', {id:followUp, kind:'investigation_follow_up', scope:'open_case'});
       drawProposal(proposal);
     } catch (e) { error(e); } finally { busy = false; $('oc-prepare').disabled = false; }
   }
@@ -129,6 +138,7 @@
     const save = button(view.saved ? 'Saved' : 'Save investigation', async () => { try { await api('/api/open-case/operations/'+enc(selected)+'/save', {}); await open(selected); await historyList(); } catch(e) {error(e);} });
     save.id = 'oc-save'; save.disabled = !!view.saved;
     const follow = button('Ask a follow-up…', () => {
+      ledger.note('page_shown', {page:'investigation_follow_up', id:view.operation_id || selected, scope:'open_case'});
       reuseEvidence = ''; followUp = view.operation_id || selected; origin = view.origin || plan.origin || {kind:'question',text:plan.question};
       proposal = null; $('oc-proposal').replaceChildren(); error(null);
       $('oc-subject').value = plan.subject_name || ''; $('oc-profile').value = plan.subject_type || 'federal_judge_district';
@@ -265,14 +275,16 @@
     el.append(detail('Frozen investigation plan',plan));
     el.append(node('p','Operation '+(view.operation_id || selected)+' · reopening reads these saved records.','foot'));
   }
-  async function open(id, bringIntoView = false) {
+  async function open(id, bringIntoView = false, recordVisit = bringIntoView) {
     if (!id) return; selected = id; clearTimeout(timer);
     try {
       const v = await api('/api/open-case/operations/'+enc(id)); if (selected !== id) return;
-      render(v); const url = new URL(location.href); url.searchParams.set('operation',id); history.replaceState(null,'',url);
+      render(v);
+      if (recordVisit) ledger.note('result_viewed', {id, kind:'investigation', scope:'open_case'});
+      const url = new URL(location.href); url.searchParams.set('operation',id); history.replaceState(null,'',url);
       if (bringIntoView) $('oc-current').scrollIntoView({block:'start',behavior:'smooth'});
       if (active.has(v.status)) timer = setTimeout(()=>open(id),1800);
-    } catch(e) { error(e); timer = setTimeout(()=>open(id),5000); }
+    } catch(e) { error(e); timer = setTimeout(()=>open(id, false, recordVisit),5000); }
   }
   async function historyList() {
     const d = await api('/api/open-case/operations'); const el = $('oc-history'); el.replaceChildren();
@@ -280,12 +292,21 @@
     if (!el.childElementCount) el.append(node('p','No investigations yet. Start with a question above.','foot'));
   }
   async function boot() {
+    ledger.init();
+    ledger.note('page_shown', {page:'investigation', scope:'open_case'});
     $('oc-form').addEventListener('submit',prepare);
     $('oc-question').addEventListener('input',()=>{reuseEvidence='';});
     $('oc-profile').addEventListener('change',()=>{if($('oc-profile').value==='senator') $('oc-task-profile').value='public_records';});
     try {
       const params = new URLSearchParams(location.search), key = params.get('origin_key');
-      if (key) { const raw = sessionStorage.getItem(key); if (raw) origin = JSON.parse(raw); }
+      if (key) {
+        const raw = sessionStorage.getItem(key);
+        if (raw) {
+          origin = JSON.parse(raw);
+          const observed = 'nikodemus.opencase.origin-observed.v1.' + key;
+          if (!sessionStorage.getItem(observed)) { noteOrigin(origin); sessionStorage.setItem(observed, '1'); }
+        }
+      }
       originView();
       const c = await api('/api/connectors');
       for (const x of (c.connectors || []).filter(x=>x.producer === 'open_case' && x.enabled)) { const opt = node('option',x.display || x.connector_id); opt.value=x.connector_id; $('oc-connector').append(opt); }
@@ -296,7 +317,7 @@
         $('oc-synthesis').disabled = r.synthesis.available === false;
         $('oc-synthesis-config').textContent = (r.synthesis.available === false ? (r.synthesis.reason || 'No model API is configured.') : `${r.synthesis.provider || 'Configured API'} · ${r.synthesis.model || 'configured model'}.`) + ' Optional: one request, at most 4,096 output tokens. '+(r.synthesis.cost || '')+' No model tools or automatic retries; no plugin subscription required.';
       }
-      await historyList(); if (params.get('operation')) await open(params.get('operation'));
+      await historyList(); if (params.get('operation')) await open(params.get('operation'), false, true);
       const pending = sessionStorage.getItem(PENDING); if(pending) {const v=JSON.parse(pending);drawProposal(v.proposal,v.request);}
     } catch(e) {error(e);}
     document.addEventListener('click',e=> {const b=e.target.closest('[data-oc-deposition]'); if(b) setOrigin({kind:'deposition',deposition_id:b.dataset.ocDeposition,item_ref:b.dataset.ocItem,title:b.dataset.ocTitle});});

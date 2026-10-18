@@ -2501,6 +2501,7 @@ ATTEMPT_EVENT_KEYS = (
     "started_at", "started_mono", "finished_mono", "duration_s",
     "outcome", "exception", "message", "status_code", "retry_after_s",
     "usage", "overlapped", "outcome_detail", "saw_content", "sdk",
+    "call_id", "attempt_id", "provider_run_id", "provider_model", "stop_reason", "usage_complete",
 )
 
 # Outcome details that are not plain success or plain failure. A partial
@@ -2862,16 +2863,29 @@ class Gateway:
     dispatch_hook = None
 
     def _record_attempt(self, *, stage, attempt, started_at, t0, t1,
-                        outcome, exc=None, usage=None, outcome_detail="") -> None:
+                        outcome, exc=None, usage=None, outcome_detail="",
+                        call_id="", response=None) -> None:
         ledger = getattr(self, "attempts", None)
         label = _current_label(ledger) if isinstance(ledger, AttemptLedger) else {}
+        partial = getattr(exc, "response_record", None) or {}
+        provider_run_id = getattr(response, "id", None) or partial.get("response_id")
+        raw_response = partial.get("response")
+        provider_model = getattr(response, "model", None) or (raw_response.get("model") if isinstance(raw_response, dict) else None)
+        stop_reason = getattr(response, "stop_reason", None) or partial.get("stop_reason")
+        usage_complete = False if isinstance(exc, StreamInterrupted) else (True if response is not None and _usage_fields(usage) is not None else None)
+        attempt_id = f"{call_id}:{attempt}" if call_id else ""
+        usage_categories = [{"category": k, "count": v} for k, v in (_usage_fields(usage) or {}).items()]
         hook = getattr(self, "dispatch_hook", None)
         if hook is not None:
             hook("attempt_end", stage=label.get("stage") or stage, attempt=attempt, outcome=outcome,
                  exception=((getattr(exc, "cause_class", "") or type(exc).__name__) if exc is not None else ""),
                  status_code=_status_code_of(exc), duration_s=round(t1 - t0, 3), outcome_detail=outcome_detail,
                  retry_after_s=_retry_after_of(exc), run_id=label.get("run_id") or (ledger.run_id if isinstance(ledger, AttemptLedger) else ""),
-                 component=label.get("component") or "")
+                 component=label.get("component") or "", provider=self.name,
+                 model=getattr(self, "model", "") or self.name, call_id=call_id, attempt_id=attempt_id,
+                 provider_run_id=provider_run_id, provider_model=provider_model, stop_reason=stop_reason,
+                 usage_categories=usage_categories, usage_complete=usage_complete,
+                 response_observed=response is not None or bool(partial), sdk=_client_versions())
         if not isinstance(ledger, AttemptLedger):
             return
         ledger.record({
@@ -2907,6 +2921,9 @@ class Gateway:
             # was measured on. An attempt that does not name its client is
             # a measurement with no units.
             "sdk": _client_versions(),
+            "call_id": call_id, "attempt_id": attempt_id,
+            "provider_run_id": provider_run_id, "provider_model": provider_model, "stop_reason": stop_reason,
+            "usage_complete": usage_complete,
         })
 
     def _call_with_attempts(self, stage: str, make_call, *, max_attempts=None):
@@ -2920,6 +2937,7 @@ class Gateway:
         if type(attempt_limit) is not int or attempt_limit < 1:
             raise ValueError("max_attempts must be a positive integer")
         rate_limited, transient = self._retryable()
+        call_id = "call_" + uuid.uuid4().hex
         attempt = 0
         while True:
             attempt += 1
@@ -2930,11 +2948,13 @@ class Gateway:
                 # the intent is on disk BEFORE the attempt; if it cannot be
                 # written, nothing is sent (an untracked attempt is the one
                 # kind of attempt the record may never contain)
-                hook("attempt_intent", stage=stage, attempt=attempt, started_at=started_at)
+                hook("attempt_intent", stage=stage, attempt=attempt, started_at=started_at,
+                     provider=self.name, model=getattr(self, "model", "") or self.name,
+                     call_id=call_id, attempt_id=f"{call_id}:{attempt}")
             try:
                 response = make_call()
             except rate_limited as e:
-                self._record_attempt(stage=stage, attempt=attempt, started_at=started_at,
+                self._record_attempt(stage=stage, attempt=attempt, started_at=started_at, call_id=call_id,
                                      t0=t0, t1=time.monotonic(), outcome="error", exc=e)
                 wait = _retry_after_of(e)
                 if (wait is not None and wait <= self.RETRY_AFTER_BUDGET_S
@@ -2968,7 +2988,7 @@ class Gateway:
                 # that one stops, keeps the diagnostic metadata, and hands the
                 # retry to the owner, exactly as a rate limit does.
                 t1 = time.monotonic()
-                self._record_attempt(stage=stage, attempt=attempt, started_at=started_at,
+                self._record_attempt(stage=stage, attempt=attempt, started_at=started_at, call_id=call_id,
                                      t0=t0, t1=t1, outcome="error", exc=e,
                                      usage=(e.response_record or {}).get("usage"),
                                      outcome_detail=("partial_stream_failure" if e.saw_content
@@ -2984,7 +3004,7 @@ class Gateway:
                 continue
             except transient as e:
                 t1 = time.monotonic()
-                self._record_attempt(stage=stage, attempt=attempt, started_at=started_at,
+                self._record_attempt(stage=stage, attempt=attempt, started_at=started_at, call_id=call_id,
                                      t0=t0, t1=t1, outcome="error", exc=e)
                 if attempt >= attempt_limit:
                     raise
@@ -2994,12 +3014,12 @@ class Gateway:
                 time.sleep(backoff)
                 continue
             except BaseException as e:  # noqa: BLE001 — record, then re-raise unchanged
-                self._record_attempt(stage=stage, attempt=attempt, started_at=started_at,
+                self._record_attempt(stage=stage, attempt=attempt, started_at=started_at, call_id=call_id,
                                      t0=t0, t1=time.monotonic(), outcome="error", exc=e)
                 raise
-            self._record_attempt(stage=stage, attempt=attempt, started_at=started_at,
+            self._record_attempt(stage=stage, attempt=attempt, started_at=started_at, call_id=call_id,
                                  t0=t0, t1=time.monotonic(), outcome="ok",
-                                 usage=getattr(response, "usage", None))
+                                 usage=getattr(response, "usage", None), response=response)
             return response
 
 
