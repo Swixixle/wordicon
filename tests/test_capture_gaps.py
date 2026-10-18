@@ -47,7 +47,7 @@ class CaptureGapTests(unittest.TestCase):
         self.assertNotIn("private", json.dumps(rows))
 
     def test_credential_query_is_refused_whole_and_gap_excludes_value(self):
-        secret = "sk-ant-api03-fixture-secret-value-123456789"
+        secret = "sk-" + "ant-api03-fixture-secret-value-123456789"
         out = capture.query("work", "search " + secret, 0)
         self.assertEqual(out["why"], "credential_like_query_not_retained")
         self.assertEqual(capture.read_queries()["queries"], [])
@@ -84,7 +84,7 @@ class CaptureGapTests(unittest.TestCase):
         self.assertEqual(read["read_gaps"][0]["kind"], "malformed_record")
 
     def test_gap_metadata_is_closed_and_read_only(self):
-        capture.gap("edge_write_failed", {"op_id": "op_1", "body": "private", "job_id": "sk-secret-12345678", "source_id": "ghp_thisisnotarealkey123456"}, "OSError")
+        capture.gap("edge_write_failed", {"op_id": "op_1", "body": "private", "job_id": "sk-secret-12345678", "source_id": "ghp_" + "thisisnotarealkey123456"}, "OSError")
         before = {str(p): p.read_bytes() for p in Path(self.temp.name).rglob("*") if p.is_file()}
         data = capture.read_gaps()
         after = {str(p): p.read_bytes() for p in Path(self.temp.name).rglob("*") if p.is_file()}

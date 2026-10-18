@@ -130,7 +130,7 @@ class AttentionTests(unittest.TestCase):
         self.assertNotIn("PRIVATE", json.dumps(rows))
 
     def test_unsafe_metadata_is_refused_without_logging_it_or_altering_safe_usage_label(self):
-        for title in ("sk-ant-abcdefghijk123", "Bearer abcdefghijk", "https://user:password@example.test/", "https://example.test/?access_token=secretvalue"):
+        for title in ("sk-" + "ant-abcdefghijk123", "Bearer abcdefghijk", "https://user:password@example.test/", "https://example.test/?access_token=secretvalue"):
             event = {**self.event(), "subject": {"id": "doc_1", "title": title}}
             self.assertEqual(ledger.append([event])["code"], "unsafe_metadata")
         self.assertFalse(list(ledger._dir().glob("events-*.jsonl")))

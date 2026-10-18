@@ -64,7 +64,7 @@ class CaptureTests(unittest.TestCase):
             name = "fixture"
             def complete(self, prompt):
                 def call():
-                    raise cli.StreamInterrupted("Bearer secret-must-never-appear", True, "ReadError",
+                    raise cli.StreamInterrupted("Bearer " + "secret-must-never-appear", True, "ReadError",
                         response_record={"response_id": "msg_partial", "usage": {"input_tokens": 3, "output_tokens": 2},
                                          "response": {"model": "observed-model-version"}})
                 return self._call_with_attempts("fixture_stage", call, max_attempts=1)

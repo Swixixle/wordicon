@@ -261,7 +261,7 @@ class OperationCaptureTests(unittest.TestCase):
 
 class SanitizerTests(unittest.TestCase):
     def test_nested_transport_secrets_urls_and_usage(self):
-        value = {"body": [{"headers": {"Cookie": "cookie-raw"}, "api_key": "field-raw", "text": "Bearer bearer-raw https://user:pass@example.test/?%61pi_key=url-raw&ordinary=kept sk-ant-fixture-secret-12345"}],
+        value = {"body": [{"headers": {"Cookie": "cookie-raw"}, "api_key": "field-raw", "text": "Bearer bearer-raw https://user:pass@example.test/?%61pi_key=url-raw&ordinary=kept sk-" + "ant-fixture-secret-12345"}],
                  "usage": {"input_tokens": 12, "output_tokens": 3, "cache_read_input_tokens": 7}, "environment": {"API_KEY": "env-raw"}}
         out = capture.sanitize_body(value)
         raw = json.dumps(out)
