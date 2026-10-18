@@ -18,7 +18,19 @@ jobs:
         with:
           python-version: "3.14"
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-test.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install pinned browser dependencies for the main integration gate
+        working-directory: tests/journeys
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Verify the exact committed checkout
+        run: |
+          python3 scripts/code_manifest.py generate --commit HEAD > "$RUNNER_TEMP/code-manifest.json"
+          python3 scripts/code_manifest.py verify --manifest "$RUNNER_TEMP/code-manifest.json" --working-tree
       - name: Secret scan (owned code, values never echoed)
         run: python3 scripts/scan_secrets.py --tracked
       - name: Full constraint suite (offline — no keys, no corpus)
@@ -43,7 +55,7 @@ jobs:
         with:
           node-version: "22"
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-test.txt
       - name: Install Playwright (pinned) and its Chromium
         working-directory: tests/journeys
         run: |

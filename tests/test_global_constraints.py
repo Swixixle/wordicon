@@ -6525,6 +6525,7 @@ _INTEGRATION_MODULES = (
 )
 _INTEGRATION_PYTESTS = (
     "tests/test_attention_durable.py", "tests/test_capture_durable.py", "tests/test_capture_gaps.py",
+    "tests/test_code_manifest.py",
     "tests/test_capture_history.py", "tests/test_capture_routes.py", "tests/test_evidence_lineage.py",
     "tests/test_opencase_grounded_view.py", "tests/test_opencase_grounding.py",
     "tests/test_opencase_integrity_workflow.py", "tests/test_opencase_synthesis.py",
@@ -6536,7 +6537,7 @@ _INTEGRATION_NODE_TESTS = (
     "tests/test_cost_display.mjs",
 )
 _INTEGRATION_SUPPORT = (
-    "scripts/opencase_capabilities.json", "tests/fixtures/receipts.json",
+    "scripts/opencase_capabilities.json", "tests/fixtures/receipts.json", "scripts/code_manifest.py",
     "webapp/capture-history.html", "webapp/capture-history.js", "webapp/opencase.js", "webapp/receipts.js",
     "webapp/work/cost-display.js",
 )
@@ -6579,7 +6580,7 @@ def _check_integration_wing():
             summary = next((line for line in reversed(combined) if "passed" in line or "PASS " in line or "CHECKS " in line), "passed")
             print(f"INTEGRATION: {label}: {summary}")
     if _iu.find_spec("pytest") is None:
-        out.append("INTEGRATION: pytest is unavailable — install the declared Python test dependencies; the 16 suites did not run")
+        out.append("INTEGRATION: pytest is unavailable — install the declared Python test dependencies; the registered suites did not run")
     else:
         run("registered Python suites", [_sys.executable, "-m", "pytest", *_INTEGRATION_PYTESTS, "-q", "-p", "no:cacheprovider"], 180)
     node = _sh.which("node")

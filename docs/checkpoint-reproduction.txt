@@ -1,0 +1,83 @@
+VERIFY A SHARED CHECKPOINT IN A FRESH ENVIRONMENT
+
+Use the repository URL, branch and FULL code commit from the canonical tracked
+CURRENT-STATE.txt, plus the externally supplied manifest/bundle SHA-256. A local
+path on the builder's Mac is not shared delivery. The integration owner publishes
+those artifacts; this tool neither uploads them nor claims remote reachability.
+
+Normal clone (replace placeholders with the published identities)
+  git clone --branch <integration-branch> <repository-url> review-checkout
+  git -C review-checkout checkout --detach <full-code-commit>
+
+Portable bundle
+  Verify the downloaded bundle's SHA-256 against the separately supplied checksum
+  using shasum -a 256 (macOS), sha256sum (Linux), or an equivalent local SHA-256 tool.
+  git clone <downloaded-bundle> review-checkout
+  git -C review-checkout checkout --detach <full-code-commit>
+  git -C review-checkout bundle verify <absolute-downloaded-bundle-path>
+Check required recovery ancestry in the fresh clone as well:
+  git -C review-checkout merge-base --is-ancestor <required-recovery-commit> <full-code-commit>
+A nonzero exit means the declared ancestry has not been established.
+A complete bundle created with --all carries required ancestry. If verification
+reports missing prerequisite commits, obtain the complete bundle; do not claim a
+fresh clone is reproducible from an incomplete incremental bundle.
+
+Code manifest
+The stdlib-only scripts/code_manifest.py reads Git objects with replacement refs
+disabled. It has no app imports, network calls, checkout writes or store access.
+Each manifest names the full commit, tree, object format and every tracked blob's
+path, Git mode/object id, byte count and SHA-256. It does not read .env, a live
+store or any other untracked file. Symlinks hash their link-target bytes without
+following them. A tracked secret would still belong to the Git tree: secret-scan
+and review the source before publication. A manifest is not a secret sanitizer.
+
+From inside the checked-out code:
+  python3 scripts/code_manifest.py verify --manifest <published-code-manifest.json> --working-tree
+
+This verifies the manifest against committed objects, then requires exact checkout
+HEAD, tracked bytes and executable modes. It refuses directory symlink traversal,
+missing/changed files, extra or missing manifest entries and unsupported submodule
+entries. It never treats a partial tracked-file manifest as full coverage.
+Without --working-tree it verifies only the Git commit's objects; this is useful
+for checking an ancestor without changing an existing checkout, but does not
+prove that a running deployment or dirty working directory matches the commit.
+
+For an integration owner generating a new deterministic manifest:
+  python3 scripts/code_manifest.py generate --commit <full-code-commit> > <external-manifest.json>
+The JSON is printed to stdout. Store it as a release artifact outside the named
+commit, or commit it afterward while clearly distinguishing code and metadata
+commits. Do not try to embed a commit's own future hash inside that commit.
+Compare generated manifests byte-for-byte or by SHA-256 between environments.
+Expected commit/hash values must come from a trusted checkpoint channel; the
+manifest alone does not authenticate the publisher or prove test results.
+
+Reproduce declared tests in a new local virtual environment
+  python3 -m venv .venv
+  .venv/bin/python -m pip install -r requirements-test.txt
+  cd tests/journeys
+  npm ci
+  npx playwright install chromium webkit
+  cd ../..
+  .venv/bin/python scripts/scan_secrets.py --tracked
+  .venv/bin/python tests/test_global_constraints.py
+  bash tests/journeys/run.sh
+Use Python3.14 and Node22 to match the pinned CI workflow. Linux CI installs the
+Playwright system dependencies with --with-deps. The main suite requires only
+Chromium for its two local page fixtures; the journey runner also needs WebKit.
+On macOS, TMPDIR=/private/tmp avoids temporary-directory alias containment errors.
+Run the final full suite and journeys once against the integrated checkpoint;
+focused development commands do not replace release checks.
+
+requirements-test.txt adds python-docx==1.2.0 to the existing application/test
+requirements. This independent reader is used to reopen generated DOCX files.
+Release metadata: https://pypi.org/project/python-docx/1.2.0/ (Python>=3.9, MIT).
+It is test-only; no global installation or change to a live runtime is required.
+With test dependencies installed, the known private-corpus sanitization and
+corpus-title anatomy checks still skip because the owner's corpus is deliberately
+excluded. Report any additional missing dependency or skip explicitly.
+
+The full constraint suite uses scratch stores and poisoned model providers.
+The registered page fixtures intercept their requests. The real-source/model
+acceptance, Playwright WebKit, manual Safari, and restart checks are separate
+claims. Never substitute a fixture result for live verification. Do not import
+private writing or owner credentials into the review checkout to remove a skip.

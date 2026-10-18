@@ -1,0 +1,5 @@
+# Application plus reproducible optional readers used by the full constraint gate.
+-r requirements.txt
+# Opens generated DOCX files independently; without this the gate names a skip.
+# Verified release metadata: https://pypi.org/project/python-docx/1.2.0/
+python-docx==1.2.0
