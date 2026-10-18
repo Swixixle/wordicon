@@ -180,8 +180,9 @@ def prepare(question, inputs):
         "origin": origin, "outbound_origin": outbound_origin, "follow_up_of": parent_id, "allowance": dict(ALLOWANCE), "connector": _identity(c) if c else None,
         "source_scope": source_scope, "synthesis": model_plan,
         "source_capabilities": json.loads(Path(__file__).with_name("opencase_capabilities.json").read_text())["profiles"][typ][task_profile] if not reuse else [],
-        "steps": ["Create a case for this question", "Check the public records supported by the selected profile",
-                  "Keep findings, source checks, failures and a signed case export", "Save a local copy in Nikodemus"],
+        "steps": (["Verify the frozen saved evidence and corrections", "Make one model answer attempt under the reviewed allowance", "Keep this attempt beside its original question and history"] if reuse else
+                  ["Create a case for this question", "Check the public records supported by the selected profile",
+                   "Keep findings, source checks, failures and a signed case export", "Save a local copy in Nikodemus"]),
         "limitations": ["The question is saved as the investigation's purpose; it is not a model instruction to search arbitrary topics.",
                         "Coverage is limited to the selected public-record profile; source failures and empty results remain visible.",
                         "Producer model enrichment is disabled. An optional model answer uses only the saved source records when explicitly selected."],

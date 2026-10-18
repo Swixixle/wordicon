@@ -411,7 +411,12 @@ def total(op, ancestry=False):
         if not ancestry or not parent:
             break
         op = _operation(parent)
-    return _summary([row for op in operations for row in _rows_for(op)], [op["op_id"] for op in operations])
+    all_rows = [(op, _rows_for(op)) for op in operations]
+    result = _summary([row for _, rows in all_rows for row in rows], [op["op_id"] for op in operations])
+    result["unaccounted_operation_ids"] = [op["op_id"] for op, rows in all_rows if not rows]
+    if result["unaccounted_operation_ids"]:
+        result.update(accounting_status="unknown", estimated_cost_usd=None, actual_cost_usd=None)
+    return result
 
 
 def ledger_summary():

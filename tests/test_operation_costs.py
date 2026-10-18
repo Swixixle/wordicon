@@ -138,6 +138,14 @@ class CostTests(unittest.TestCase):
         ops.event(other["op_id"], "stage_intent", stage="open_case.synthesis")
         self.assertIsNone(costs.total(other)["estimated_cost_usd"])
 
+    def test_pending_child_does_not_disappear_from_thread_total(self):
+        first = self.source_and_receipt(self.op, self.receipt())
+        pending = self.new_op('pending-child', first['op_id'])
+        got = costs.total(pending, ancestry=True)
+        self.assertIsNone(got['estimated_cost_usd'])
+        self.assertEqual(got['known_estimated_subtotal_usd'], .035772)
+        self.assertEqual(got['unaccounted_operation_ids'], [pending['op_id']])
+
     def test_failed_then_successful_followup_ancestry_and_duplicate_import(self):
         first = self.source_and_receipt(self.op, self.receipt())
         second = self.new_op("second", first["op_id"])

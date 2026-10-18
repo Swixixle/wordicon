@@ -58,7 +58,7 @@
     card.append(node('p', [plan.subject_name, profileNames[plan.subject_type] || plan.subject_type, plan.jurisdiction].filter(Boolean).join(' · '), 'foot'));
     const synthesis = plan.synthesis || {};
     card.append(node('p', synthesis.enabled ? '$0 public-record collection + model API usage charges' : '$0 paid-model allowance · paid enrichment disabled', synthesis.enabled?'body':'ok'));
-    card.append(node('p', 'Open Case gathers public records for this official. Findings retain their source labels. The record may be partial.' + (synthesis.enabled ? ' Your configured model then writes an answer using the saved evidence, with record citations.' : ' The question is saved as context; no model writes an answer.'), 'body'));
+    card.append(node('p', (plan.reuse_evidence_from ? 'Nikodemus reuses the frozen saved evidence and its source labels.' : 'Open Case gathers public records for this official. Findings retain their source labels. The record may be partial.') + (synthesis.enabled ? ' Your configured model then writes an answer using the saved evidence, with record citations.' : ' The question is saved as context; no model writes an answer.'), 'body'));
     if (synthesis.enabled) {
       card.append(node('p', `Model: ${synthesis.provider || 'configured API'} · ${synthesis.model || 'configured model'}. Allowance: one request, up to ${synthesis.max_output_tokens || 2048} output tokens and ${synthesis.max_input_chars || 40000} input characters; no tools or automatic retry.`, 'body'));
       card.append(node('p', synthesis.cost || plan.cost || 'API usage is billed separately.', 'warn'));

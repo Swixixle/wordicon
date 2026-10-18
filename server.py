@@ -4593,7 +4593,7 @@ def _start_open_case(prepared, request_key):
             return jsonify({"operation_id": row["op_id"], "status": "queued", "kind": "investigation", "dispatched": False})
         if not ops.claim(row["op_id"], OPS_DISPATCHER.token):
             return jsonify({"error": "This investigation was already claimed."}), 409
-        ops.mark(row["op_id"], "running", local_state="Sending the approved investigation to Open Case")
+        ops.mark(row["op_id"], "running", local_state="Preparing an answer from the saved evidence" if plan.get("reuse_evidence_from") else "Sending the approved investigation to Open Case")
         opencase.launch(row["op_id"])
         return jsonify({"operation_id": row["op_id"], "status": "running", "kind": "investigation", "dispatched": True})
     except ops.OperationsError as e:
