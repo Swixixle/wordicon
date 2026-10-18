@@ -21,6 +21,27 @@ const { BASE, DIR, ok, finish, pairedContext } = require('./lib');
 const { webkit } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const { isDeepStrictEqual } = require('node:util');
+
+// Attention delivery is a local record of opening a page, not a producer Start.
+// Admit only an exact local batch acknowledged and persisted by the Ledger;
+// a matching URL alone never licenses an arbitrary POST or discarded fields.
+function savedAttentionDelivery(request, acknowledgement, ledger) {
+  let u, body;
+  try { u = new URL(request.url); body = JSON.parse(request.body); } catch (_) { return false; }
+  if (request.method !== 'POST' || u.origin !== new URL(BASE).origin || u.pathname !== '/api/ledger' || u.search || u.hash
+      || !body || Object.keys(body).join(',') !== 'events' || !Array.isArray(body.events) || !body.events.length || body.events.length > 100
+      || acknowledgement.status !== 200 || !Array.isArray(acknowledgement.ids) || !Array.isArray(ledger.events)) return false;
+  const ids = body.events.map(e => e && e.event_id);
+  if (!isDeepStrictEqual([...new Set(ids)].sort(), [...new Set(acknowledgement.ids)].sort())) return false;
+  return body.events.every(e => {
+    if (!e || typeof e !== 'object' || Object.keys(e).some(k => !['event_id','session_id','scope_id','type','at','subject','interval'].includes(k))
+        || !/^event_[A-Za-z0-9_.:-]+$/.test(e.event_id || '') || !/^session_[A-Za-z0-9_.:-]+$/.test(e.session_id || '')
+        || e.scope_id !== ledger.scope_id) return false;
+    const saved = ledger.events.find(row => row.event_id === e.event_id);
+    return saved && saved.schema === 'nikodemus.attention.v2' && Object.entries(e).every(([key, value]) => isDeepStrictEqual(saved[key], value));
+  });
+}
 
 // Safari/macOS has two native traversal modes. Select the documented
 // Option-Tab mode only after a bare page (no application JS) proves ordinary
@@ -63,9 +84,9 @@ async function nativeTraversal(context) {
   const navigation = await nativeTraversal(ctx);
   ok(navigation.supported, 'native keyboard traversal reaches all bare-page controls without changing preferences: ' + JSON.stringify(navigation));
   const page = await ctx.newPage();
-  const errs = [], posts = [];
+  const errs = [], posts = [], postRequests = [];
   page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errs.push(String(e.message)); });
-  page.on('request', r => { if (r.method() !== 'GET') posts.push(r.method() + ' ' + new URL(r.url()).pathname); });
+  page.on('request', r => { if (r.method() !== 'GET') { posts.push(r.method() + ' ' + new URL(r.url()).pathname); postRequests.push(r); } });
 
   await page.goto(BASE + '/work');
   await page.waitForSelector('.pm-editor');
@@ -323,9 +344,27 @@ async function nativeTraversal(context) {
   await page.click('a[data-page="investigate"]');
   await page.waitForSelector('.card[data-producer="ethicalalt"] .facts');
   await page.waitForTimeout(400);
+  // Make the timer-driven delivery deterministic here; this calls the same
+  // pending-outbox flush as the timer, never a model/producer operation.
+  await page.waitForFunction(() => !window.__work.ledger.inflight);
+  await page.evaluate(() => window.__work.ledger.flush());
   const inv = await page.textContent('#investigate-view');
   ok(/EthicalAlt/.test(inv) && /Open Case/.test(inv) && /PUBLIC EYE/.test(inv) && /Rabbit Hole/.test(inv), 'Investigate shows the four instruments');
-  ok(!posts.slice(postsInv).length, 'opening Investigate contacted no producer and started nothing: ' + JSON.stringify(posts.slice(postsInv)));
+  const deliveries = await Promise.all(postRequests.slice(postsInv).map(async r => {
+    const response = await r.response(); let ack = {}; try { ack = await response.json(); } catch (_) { /* invalid replies fail below */ }
+    return { request: {method:r.method(), url:r.url(), body:r.postData()}, acknowledgement: {status:response?.status(), ids:ack.acknowledged} };
+  }));
+  const attention = await (await page.request.get(BASE + '/api/ledger')).json();
+  ok(deliveries.every(d => savedAttentionDelivery(d.request, d.acknowledgement, attention)), 'opening Investigate contacted no producer and started nothing: ' + JSON.stringify(posts.slice(postsInv)));
+  const observed = deliveries.find(d => savedAttentionDelivery(d.request, d.acknowledgement, attention)
+    && JSON.parse(d.request.body).events.some(e => e.type === 'page_shown' && e.subject.page === 'investigate'));
+  ok(!!observed, 'opening Investigate delivered its scoped page event with an exact local acknowledgement and saved record');
+  ok(!!observed && [
+    {...observed.request, url:'https://foreign.invalid/api/ledger'},
+    {...observed.request, url:BASE + '/api/operations'},
+    {...observed.request, body:JSON.stringify({...JSON.parse(observed.request.body), action_id:'investigate.opencase.question'})},
+    {...observed.request, body:JSON.stringify({events:JSON.parse(observed.request.body).events.map(e => ({...e, private_body:'not attention metadata'}))})}
+  ].every(r => !savedAttentionDelivery(r, observed.acknowledgement, attention)), 'attention exception refuses foreign origins, operation Starts and extra request or event fields');
   const reg = await (await page.request.get(BASE + '/api/actions')).json();
   const ea = reg.actions.find(a => a.id === 'investigate.ethicalalt.lookup');
   ok(ea && ea.readiness && ea.readiness.producer && ea.readiness.producer.configured === true, 'EthicalAlt readiness is derived from the connector record (configured in the scratch state)');
