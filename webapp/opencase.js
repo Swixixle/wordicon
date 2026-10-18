@@ -58,7 +58,7 @@
     card.append(node('p', [plan.subject_name, profileNames[plan.subject_type] || plan.subject_type, plan.jurisdiction].filter(Boolean).join(' · '), 'foot'));
     const synthesis = plan.synthesis || {};
     card.append(node('p', synthesis.enabled ? '$0 public-record collection + model API usage charges' : '$0 paid-model allowance · paid enrichment disabled', synthesis.enabled?'body':'ok'));
-    card.append(node('p', (plan.reuse_evidence_from ? 'Nikodemus reuses the frozen saved evidence and its source labels.' : 'Open Case gathers public records for this official. Findings retain their source labels. The record may be partial.') + (synthesis.enabled ? ' Your configured model then writes an answer using the saved evidence, with record citations.' : ' The question is saved as context; no model writes an answer.'), 'body'));
+    card.append(node('p', (plan.reuse_evidence_from ? 'Nikodemus reuses the frozen saved evidence and its source labels.' : 'Open Case gathers public records for this official. Findings retain their source labels. The record may be partial.') + (synthesis.enabled ? (synthesis.answer_contract==='checked_excerpts.v1'?' Your configured model selects relevant source passages. Nikodemus checks each quotation against the saved text before displaying it; broader interpretation still requires review.':' Your configured model then writes an answer using the saved evidence, with record citations.') : ' The question is saved as context; no model writes an answer.'), 'body'));
     if (synthesis.enabled) {
       card.append(node('p', `Model: ${synthesis.provider || 'configured API'} · ${synthesis.model || 'configured model'}. Allowance: one request, up to ${synthesis.max_output_tokens || 2048} output tokens and ${synthesis.max_input_chars || 40000} input characters; no tools or automatic retry.`, 'body'));
       card.append(node('p', synthesis.cost || plan.cost || 'API usage is billed separately.', 'warn'));
@@ -122,7 +122,7 @@
     if (view.progress) el.append(node('p',progressText(view.progress),'body'));
     el.append(node('p', 'Public-record collection: ' + (result.actual_cost_usd === 0 ? '$0' : 'cost not yet reported') + ' · collection model runs: ' + (result.model_runs || []).length, 'foot'));
     if (plan.synthesis?.enabled) el.append(node('p','Optional model answer: '+(synthesis.status || 'waiting for evidence')+' · API dollar total: '+(synthesis.actual_cost_usd == null ? 'not reported' : '$'+synthesis.actual_cost_usd),'foot'));
-    if (view.dimensions?.answer?.adequacy) el.append(node('p','Answer adequacy (model assessment): '+view.dimensions.answer.adequacy,'foot'));
+    if (view.dimensions?.answer?.adequacy) el.append(detail('Model assessment · unverified interpretation',view.dimensions.answer.adequacy));
     if (view.dimensions) el.append(node('p', 'Activity: '+view.dimensions.lifecycle+' · source coverage: '+view.dimensions.acquisition.status+' · answer: '+view.dimensions.answer.status,'foot'));
     if (view.costs) {el.append(node('p',costText(view.costs,'This operation'),'body'));el.append(node('p',costText(view.thread_costs,'This question and preceding attempts'),'foot'));el.append(detail('All component costs and accounting basis',view.costs));}
     el.append(node('p', view.saved ? 'Saved to your investigations.' : 'Progress and evidence are kept automatically.', 'foot'));
@@ -160,21 +160,32 @@
       if (state === 'partial') el.append(node('p','Partial result: inspect the source failures and coverage below before drawing conclusions.','warn'));
       if (synthesis.answer) {
         el.append(node('h2',synthesis.answer_format==='checked_excerpts'?'Relevant passages from the saved evidence':'Model answer · interpretation needs review'));
-        el.append(node('p','Model synthesis · '+(plan.synthesis?.model || 'configured model'),'foot'));
+        el.append(node('p',(synthesis.answer_format==='checked_excerpts'?'Model-selected passages · ':'Model synthesis · ')+(plan.synthesis?.model || 'configured model'),'foot'));
         el.append(node('p',synthesis.support_verification || 'Citations identify saved records; they do not independently verify the model’s interpretation.','foot'));
         const citations=entries(synthesis.citations), answer=node('p',null,'body');
         answer.style.whiteSpace='pre-line';
         // Link only the locally resolved record ids. Model text remains text,
         // and every link lands on the preserved excerpt actually in its input.
-        const pattern=/\[([^\]\n]+)\]/g; let cursor=0, match;
-        while ((match=pattern.exec(synthesis.answer))) {
-          answer.append(document.createTextNode(synthesis.answer.slice(cursor,match.index)));
-          const index=citations.findIndex(c=>c.record_id===match[1]);
-          if(index>=0) {const a=node('a','['+(index+1)+']');a.href='#oc-citation-'+(index+1);a.title='Inspect saved evidence: '+(citations[index].title || match[1]);answer.append(a);}
-          else answer.append(document.createTextNode(match[0]));
-          cursor=pattern.lastIndex;
+        if(synthesis.answer_format==='checked_excerpts') {
+          for(const selection of entries(synthesis.selections)) {
+            answer.append(document.createTextNode('Saved source passage: “'+selection.quote+'” '));
+            const index=citations.findIndex(c=>c.record_id===selection.record_id);
+            if(index>=0) {const a=node('a','['+(index+1)+']');a.href='#oc-citation-'+(index+1);a.title='Inspect the saved source';answer.append(a);}
+            answer.append(document.createTextNode('\n\n'));
+          }
+          if(!entries(synthesis.selections).length) answer.append(document.createTextNode('No passages were selected from the supplied evidence.'));
+        } else {
+          const pattern=/\[([^\]\n]+)\]/g; let cursor=0, match;
+          while ((match=pattern.exec(synthesis.answer))) {
+            answer.append(document.createTextNode(synthesis.answer.slice(cursor,match.index)));
+            const index=citations.findIndex(c=>c.record_id===match[1]);
+            if(index>=0) {const a=node('a','['+(index+1)+']');a.href='#oc-citation-'+(index+1);a.title='Inspect saved evidence: '+(citations[index].title || match[1]);answer.append(a);}
+            else answer.append(document.createTextNode(match[0]));
+            cursor=pattern.lastIndex;
+          }
+          answer.append(document.createTextNode(synthesis.answer.slice(cursor)));
         }
-        answer.append(document.createTextNode(synthesis.answer.slice(cursor)));el.append(answer);
+        el.append(answer);
         recordRows(el,'Cited evidence',citations,(n,c)=>{
           const index=citations.indexOf(c)+1;n.id='oc-citation-'+index;
           n.append(node('strong','['+index+'] '+(c.title || c.label || 'Saved evidence')));
@@ -200,6 +211,21 @@
       if(synthesis.held_answer) el.append(detail('Held model answer · unsupported claim reported',synthesis.held_answer));
       if (synthesis.error) el.append(node('p','Model answer needs attention: '+synthesis.error.replace(/\.*$/,'')+'. The source records below remain available.','warn'));
       if (plan.synthesis?.enabled) el.append(detail('Model run and usage',synthesis));
+      if(view.record_chronology?.status==='available') {
+        const chronology=view.record_chronology, section=node('section');section.id='oc-record-chronology';
+        section.append(node('h2','Recorded judicial appointments'),node('p',chronology.introduction,'foot'));
+        const table=node('table');table.style.cssText='width:100%;text-align:left;border-spacing:8px';
+        const head=node('tr');for(const label of ['Court','Commission','Termination','Oath']) head.append(node('th',label));table.append(head);
+        for(const appointment of chronology.appointments) {
+          const tr=node('tr');for(const field of ['court_name','commission_date','termination_date','oath_date']) {
+            const value=appointment.rows.find(r=>r.field_path.endsWith('/'+field));tr.append(node('td',value?.value || 'Not supplied'));
+          }table.append(tr);
+        }
+        section.append(table);
+        for(const limit of chronology.limitations.slice(1,4)) section.append(node('p',limit,'foot'));
+        for(const citation of chronology.citations) if(citation.result_artifact_url) section.append(link('Inspect saved FJC source record',citation.result_artifact_url));
+        section.append(detail('All typed fields and source provenance',chronology));el.append(section);
+      }
       const renderFinding = (n,f) => {
         n.append(node('strong',f.title || f.signal_type || f.id || 'Finding'));
         if(f.evidence_label || f.evidence_kind) n.append(node('div',f.evidence_label || f.evidence_kind,'foot'));

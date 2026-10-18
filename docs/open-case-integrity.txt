@@ -44,3 +44,24 @@ test_opencase_integrity_workflow.py (includes inherited synthesis/workflow
 regressions), test_global_constraints.py, tests/journeys/opencase.js.
 Live acceptance is recorded separately under integration/verification; passing
 fixtures alone is not evidence of a useful live investigation.
+
+LIVE REVIEW FINDING AND FOLLOW-UP REPAIR
+
+A well-formed answer with real citations can still add an unsupported inference.
+The live 05:40 UTC follow-up inferred retirement timing from unrelated FJC
+clerkship text. A workspace review now appends a receipt-bound hold; it never
+rewrites the original answer, source artifacts, provider receipt or costs.
+The earlier inference of current service from missing termination is held too.
+These review records survive reopen; recovery requires an explicit new Start.
+
+New checked-excerpt proposals accept model-selected exact passages only. The
+server renders source attribution and citations after validating each passage
+against the frozen text. Arbitrary prose is not accepted beside those passages.
+Older frozen proposals/receipts retain their original versioned contract.
+Quote validation establishes what a saved source says, not its truth, relevance
+or completeness. Answer adequacy remains the model's labeled self-assessment.
+
+The judicial-biography screen separately projects typed FJC appointment fields
+without a model call: commission, termination, and oath are separate. Missing
+fields stay missing. This display does not infer a start of active service,
+current tenure or vacancy timing. It never upgrades completion by itself.

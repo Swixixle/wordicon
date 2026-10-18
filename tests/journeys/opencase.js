@@ -7,7 +7,7 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   const page = await ctx.newPage();
   const errors = [], starts = [], prepares = [];
   page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errors.push(e.message); });
-  let saved = false, reads = 0, rejectedResult = false, heldAnswer = false, reviewReason = '';
+  let saved = false, reads = 0, rejectedResult = false, heldAnswer = false, reviewReason = '', checkedPassages = false;
   const origin = {kind:'selection',text:'A preserved passage about a judge.',doc_id:'fixture-document',revision:7,range:{start:0,end:34},title:'Origin fixture'};
   let plan;
   const result = {job_id:'job-fixture',case_id:'case-fixture',status:'partial',actual_cost_usd:0,model_runs:[],
@@ -25,6 +25,8 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
     if (path.endsWith('/answer-review')) {reviewReason=route.request().postDataJSON().reason;return route.fulfill({json:{saved:true}});}
     if (path.endsWith('/operations')) return route.fulfill({json:{operations:plan?[{operation_id:'op_fixture',question:plan.question,status:'complete',saved}]:[]}});
     const v = view();
+    if(checkedPassages) Object.assign(v.synthesis,{answer_format:'checked_excerpts',selections:[{record_id:'op_fixture:fjc-1',quote:'Literal [op_fixture:fjc-1] remains source text.'}]});
+    v.record_chronology={status:'available',introduction:'Source-attributed fields; separate from the model answer.',limitations:['Record view','Commission and oath are distinct.','Missing termination does not establish present service.'],citations:[],appointments:[{rows:[{field_path:'/court_name',value:'Fixture appeals court'},{field_path:'/commission_date',value:'2021-06-17'},{field_path:'/termination_date',value:'2022-06-29'},{field_path:'/oath_date',value:null}]}]};
     if(reviewReason) {v.synthesis={status:'rejected',answer:'',held_answer:'Original unsupported interpretation',hold_reason:'support_disputed',error:reviewReason,reviews:[{reason:reviewReason}]};v.dimensions={display_status:'Answer held',lifecycle:'complete',acquisition:{status:'ready'},answer:{status:'held'}};}
     if (rejectedResult) { v.status='unknown';v.result=null;v.producer_state.status='completed';v.error='The producer returned a different subject; result not accepted.'; }
     if(heldAnswer) {v.synthesis={status:'truncated',answer:'',hold_reason:'output_limit',error:'Output allowance reached.'};v.dimensions={display_status:'Answer held',lifecycle:'complete',acquisition:{status:'ready'},answer:{status:'held'}};}
@@ -52,6 +54,7 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   ok(starts.length===1 && starts[0].prepared_id==='prep_fixture' && !!starts[0].request_key,'Start dispatches the frozen proposal under one request key');
   ok(/Partial result/.test(await page.textContent('#oc-current')) && /Credential unavailable/.test(await page.textContent('#oc-current')),'partial results show source failure beside retained findings');
   ok(/FJC checked/.test(await page.textContent('#oc-current')),'source progress is visible');
+  ok(/2022-06-29/.test(await page.textContent('#oc-record-chronology')) && /Not supplied/.test(await page.textContent('#oc-record-chronology')),'record chronology separates known dates from the missing oath');
   ok((await page.locator('#oc-current a[href^="javascript:"]').count())===0,'untrusted source URLs cannot become executable links');
   await page.click('#oc-save');
   await page.waitForFunction(()=>document.querySelector('#oc-save').textContent==='Saved');
@@ -68,6 +71,9 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   ok(/Cited evidence/.test(await page.textContent('#oc-current')) && /API dollar total: not reported/.test(await page.textContent('#oc-current')) && /input_tokens/.test(await page.textContent('#oc-current')),'saved model answer exposes resolved evidence and usage without claiming a dollar total');
   ok((await page.locator('#oc-current a[href="#oc-citation-1"]').count())===1 && /Fixture biography retained/.test(await page.textContent('#oc-citation-1')),'answer citations link to the saved source excerpt actually supplied to the model');
   ok(starts.length===1,'reopening an optional model answer never sends Start');
+  checkedPassages=true;await page.reload();await page.waitForFunction(()=>document.querySelector('#oc-current').textContent.includes('Relevant passages from the saved evidence'));
+  ok(/Literal \[op_fixture:fjc-1\] remains source text/.test(await page.textContent('#oc-current')) && (await page.locator('#oc-current a[href="#oc-citation-1"]').count())===1,'checked quotations retain source brackets literally with a separate citation link');
+  checkedPassages=false;
   await page.getByText('Flag an unsupported answer',{exact:true}).click();
   await page.fill('#oc-review-reason','The evidence does not establish the added timing inference.');await page.click('#oc-review-hold');
   await page.waitForFunction(()=>document.querySelector('#oc-progress').textContent==='Answer held');

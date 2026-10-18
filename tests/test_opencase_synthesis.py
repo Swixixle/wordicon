@@ -36,6 +36,14 @@ class ModelFixture(cli.AnthropicAPIGateway):
         text = json.dumps({"answer": f"The source supplies a biography [{answer_id}]. It does not establish misconduct.",
                            "citations": [{"record_id": cited_id}], "answer_status": "partial",
                            "adequacy_reason": "A biography is present, but the source does not establish all requested conduct."})
+        if prompt.startswith("Select relevant passages"):
+            data = {"selections": [{"record_id": cited_id, "quote": payload["records"][0]["excerpt"]}],
+                    "answer_status": "partial", "adequacy_reason": "The selected biography supplies only part of the requested evidence."}
+            if self.mode == "inline":
+                data["answer"] = "Unbound prose with an invented citation [invented-record]."
+            if self.mode == "fabricated_retirement":
+                data["selections"][0]["quote"] = "Justice Breyer's retirement took effect before she began active Supreme Court service."
+            text = json.dumps(data)
         if self.mode == "independence":
             answer = "Independent records corroborate the date " + " ".join("[" + r["record_id"] + "]" for r in payload["records"]) + "."
             text = json.dumps({"answer": answer, "citations": [{"record_id": r["record_id"]} for r in payload["records"]],
@@ -103,6 +111,8 @@ class SynthesisTests(WorkflowTests):
         self.assertIsNone(got["synthesis"]["actual_cost_usd"])
         self.assertEqual(got["synthesis"]["answer_status"], "partial")
         self.assertEqual(got["synthesis"]["adequacy_basis"], "model_self_assessment")
+        self.assertEqual(got["synthesis"]["answer_format"], "checked_excerpts")
+        self.assertFalse(got["synthesis"]["grounding_validation"]["semantic_entailment_verified"])
         with patch.object(producers, "_request", side_effect=AssertionError("local reopen")):
             opencase._run(op["op_id"], resume=True)
         self.assertEqual(len(self.model.calls), 1)
@@ -162,6 +172,32 @@ class SynthesisTests(WorkflowTests):
             self.assertTrue(response["response"]["text"])
         self.assertEqual(len(self.model.calls), 3)
 
+    def test_fabricated_retirement_quote_is_held_and_survives_reopen_without_rebilling(self):
+        original_fixture = self.fixture
+        def clerkship(*args, **kwargs):
+            response = original_fixture(*args, **kwargs)
+            if args[2].endswith("/result"):
+                response["json"]["findings"][0]["body"] = "Career: Law clerk, Hon. Stephen G. Breyer, Supreme Court of the United States, 1999-2000."
+                response["raw"] = json.dumps(response["json"]).encode()
+            return response
+        self.model.mode = "fabricated_retirement"
+        with patch.object(self, "fixture", side_effect=clerkship):
+            op = self.run_prepared(self.prepare_model(), "held-retirement")
+        state = opencase.view(op)["synthesis"]
+        self.assertEqual(state["hold_reason"], "quote_invalid")
+        self.assertIn("Stephen G. Breyer", self.model.calls[0][0])
+        self.assertEqual(len(self.model.calls), 1)
+        original = opencase.artifact(op, state["response_artifact"]["name"])
+        ref = dict(op["result_ref"]);ref.pop("synthesis")
+        ops.mark(op["op_id"], "unknown", result_ref=ref)
+        with patch.object(producers, "_request", side_effect=AssertionError("saved evidence only")):
+            synthesis.run(op["op_id"])
+        reopened = opencase.view(ops.get(op["op_id"]))["synthesis"]
+        self.assertEqual(reopened["hold_reason"], "quote_invalid")
+        self.assertEqual(reopened["usage"]["output_tokens"], 45)
+        self.assertEqual(len(self.model.calls), 1)
+        self.assertEqual(opencase.artifact(ops.get(op["op_id"]), reopened["response_artifact"]["name"]), original)
+
     def test_followup_binds_previous_question_evidence_and_origin(self):
         first = self.run_prepared(self.prepare(origin={"kind": "description", "text": "original passage"}), "first")
         follow = self.run_prepared(self.prepare_model(follow_up_of=first["op_id"]), "follow")
@@ -178,6 +214,7 @@ class SynthesisTests(WorkflowTests):
     def test_default_allowance_and_upper_bound(self):
         default = self.prepare(synthesis={"enabled": True})["inputs"]["plan"]["synthesis"]
         self.assertEqual(default["max_output_tokens"], 4096)
+        self.assertEqual(default["answer_contract"], synthesis.ANSWER_CONTRACT)
         maximum = self.prepare(synthesis={"enabled": True, "max_output_tokens": 8192})
         self.assertEqual(maximum["inputs"]["plan"]["synthesis"]["max_output_tokens"], 8192)
         with self.assertRaises(opencase.WorkflowError):
@@ -249,6 +286,25 @@ class SynthesisTests(WorkflowTests):
         self.assertIn("lineage", payload["records"][0])
         self.assertEqual(payload["records"][0]["lineage"]["identity_status"], "unresolved")
 
+    def test_approved_legacy_contract_does_not_silently_change_to_v3(self):
+        with patch.object(synthesis, "run"):
+            op = self.run_prepared(self.prepare_model())
+        new_manifest, new_prompt = synthesis._manifest(op)
+        self.assertEqual(new_manifest["schema"], synthesis.SCHEMA)
+        self.assertTrue(new_prompt.startswith("Select relevant passages"))
+        legacy_op = json.loads(json.dumps(op))
+        legacy_op["execution"]["plan"]["synthesis"].pop("answer_contract")
+        legacy_op["execution"]["plan"]["synthesis"].pop("answer_format")
+        synthesis.validate(legacy_op["execution"]["plan"])
+        old_manifest, old_prompt = synthesis._manifest(legacy_op)
+        self.assertEqual(old_manifest["schema"], synthesis.LEGACY_SCHEMA)
+        self.assertTrue(old_prompt.startswith("Answer the investigation question"))
+        self.assertIn('"answer":"...', old_prompt)
+        legacy_op["execution"]["plan"]["synthesis"]["answer_contract"] = "unknown.future.v9"
+        with self.assertRaises(opencase.WorkflowError):
+            synthesis.validate(legacy_op["execution"]["plan"])
+        self.assertEqual(self.model.calls, [])
+
     def test_two_renderings_remain_one_family_in_prompt_and_output_guard(self):
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
         from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -286,7 +342,7 @@ class SynthesisTests(WorkflowTests):
         with patch.object(self, "fixture", side_effect=renderings):
             op = self.run_prepared(self.prepare(synthesis={"enabled": True}))
         state = opencase.view(op)["synthesis"]
-        self.assertEqual(state["hold_reason"], "independence_unsupported")
+        self.assertEqual(state["hold_reason"], "schema_invalid")
         manifest = json.loads(opencase.artifact(op, state["manifest_artifact"]["name"]))
         first, second = manifest["records"]
         self.assertNotEqual(first["source_sha256"], second["source_sha256"])
@@ -296,6 +352,10 @@ class SynthesisTests(WorkflowTests):
         self.assertIn('"provenance_family_id": "fjc:person:1234"', actual_prompt)
         self.assertNotIn("180", op["execution"]["plan"]["question"])
         self.assertIn("Independent records", state["partial_text"])
+        # Existing v2 receipts keep their original independence guard on replay.
+        receipt = json.loads(opencase.artifact(op, state["response_artifact"]["name"]))
+        legacy = synthesis._normalize(receipt, {**manifest, "schema": synthesis.LEGACY_SCHEMA})
+        self.assertEqual(legacy["hold_reason"], "independence_unsupported")
 
 
 class PartialStreamTests(unittest.TestCase):
@@ -330,6 +390,126 @@ class PartialStreamTests(unittest.TestCase):
         self.assertEqual(response["usage"], {"input_tokens": 90, "output_tokens": 4, "cache_read_input_tokens": 6})
         self.assertEqual(ledger.events()[0]["outcome_detail"], "partial_stream_failure")
         self.assertEqual(ledger.events()[0]["usage"]["output_tokens"], 4)
+
+
+class CheckedExcerptTests(unittest.TestCase):
+    def setUp(self):
+        self.record = {"record_id": "op_fixture:record_1", "source_sha256": "a" * 64,
+            "excerpt": "Commission date: 2022-04-08\nTermination: Appointment to Another Judicial Position — 2022-06-29\nCareer: Law clerk, Hon. Stephen G. Breyer, Supreme Court of the United States, 1999-2000"}
+        self.manifest = {"schema": synthesis.SCHEMA, "answer_contract": synthesis.ANSWER_CONTRACT,
+                         "records": [self.record], "allowance": {}}
+        self.data = {"selections": [{"record_id": self.record["record_id"], "quote": "Commission date: 2022-04-08"}],
+                     "answer_status": "partial", "adequacy_reason": "Only the captured commission field is selected."}
+
+    def receipt(self, data=None, raw=None):
+        return {"response": {"text": raw if raw is not None else json.dumps(data if data is not None else self.data),
+            "stop_reason": "end_turn", "stream_complete": True, "usage": {"input_tokens": 20, "output_tokens": 30}, "usage_complete": True}}
+
+    def normalize(self, data=None, raw=None, manifest=None):
+        return synthesis._normalize(self.receipt(data, raw), manifest or self.manifest)
+
+    def test_exact_passages_render_server_attribution_with_offsets_and_no_truth_claim(self):
+        state = self.normalize()
+        self.assertEqual(state["status"], "complete")
+        self.assertEqual(state["answer"], 'Saved source passage: “Commission date: 2022-04-08” [op_fixture:record_1]')
+        selected = state["selections"][0]
+        self.assertEqual(self.record["excerpt"][selected["excerpt_start"]:selected["excerpt_end"]], selected["quote"])
+        self.assertEqual(selected["quote_sha256"], synthesis._sha(selected["quote"].encode()))
+        self.assertEqual(selected["source_sha256"], self.record["source_sha256"])
+        self.assertEqual(state["answer_format"], "checked_excerpts")
+        self.assertFalse(state["grounding_validation"]["semantic_entailment_verified"])
+        self.assertEqual(state["adequacy_basis"], "model_self_assessment")
+        self.assertNotIn(state["adequacy_reason"], state["answer"])
+
+    def test_existing_breyer_name_and_valid_citation_cannot_support_retirement_inference(self):
+        self.assertIn("Breyer", self.record["excerpt"])
+        data = {**self.data, "selections": [{"record_id": self.record["record_id"],
+             "quote": "Justice Breyer's retirement took effect before she began active Supreme Court service."}]}
+        state = self.normalize(data)
+        self.assertEqual((state["status"],state["hold_reason"]), ("rejected", "quote_invalid"))
+        self.assertEqual(state["answer"], "")
+        self.assertIn("Breyer", state["partial_text"])
+        self.assertEqual(state["usage"]["output_tokens"], 30)
+
+    def test_corrected_historical_rendering_is_held_without_rewriting_original(self):
+        record = {**self.record, "excerpt":"Commission (oath) date: 2022-04-08",
+                  "correction":{"name":"verified-correction.json","sha256":"b"*64},
+                  "semantic_record":{"schema":"fjc.judicial_biography.observed.v1"}}
+        data = {**self.data,"selections":[{"record_id":record["record_id"],"quote":record["excerpt"]}]}
+        state = self.normalize(data,manifest={**self.manifest,"records":[record]})
+        self.assertEqual(state["hold_reason"],"corrected_rendering")
+        self.assertIn("Commission (oath)",state["partial_text"])
+        self.assertEqual(record["excerpt"],"Commission (oath) date: 2022-04-08")
+
+    def test_source_brackets_are_literal_text_not_model_citations(self):
+        record = {**self.record,"excerpt":"Notes [1] and [op_other:record] are literal captured text."}
+        data = {**self.data,"selections":[{"record_id":record["record_id"],"quote":record["excerpt"]}]}
+        state = self.normalize(data,manifest={**self.manifest,"records":[record]})
+        self.assertEqual(state["status"],"complete")
+        self.assertEqual([r["record_id"] for r in state["citations"]],[record["record_id"]])
+        self.assertIn("[1] and [op_other:record]",state["answer"])
+
+    def test_coverage_notices_and_explicit_unavailable_flags_cannot_be_answer_evidence(self):
+        for extra, reason in (({"is_absence":True}, "coverage_not_evidence"),
+                              ({"evidence_kind":"acquisition_notice"}, "coverage_not_evidence"),
+                              ({"excerpt_selection":{"allowed":False}}, "selection_unavailable")):
+            with self.subTest(extra=extra):
+                record = {**self.record, **extra}
+                state = self.normalize({**self.data,"answer_status":"answered"}, manifest={**self.manifest,"records":[record]})
+                self.assertEqual(state["hold_reason"],reason)
+                self.assertEqual(state["answer"],"")
+
+    def test_extra_answer_prose_and_nested_claims_are_not_an_escape_hatch(self):
+        for extra in ({"answer":"Unsupported causal inference"},{"citations":[]},{"summary":"extra"}):
+            with self.subTest(extra=extra):
+                self.assertEqual(self.normalize({**self.data, **extra})["hold_reason"], "schema_invalid")
+        nested = {**self.data, "selections": [{**self.data["selections"][0], "claim":"Unsupported narrative"}]}
+        self.assertEqual(self.normalize(nested)["hold_reason"], "quote_invalid")
+
+    def test_exact_contiguous_text_required_no_normalization_or_outside_records(self):
+        for quote in (" ", "Commission Date: 2022-04-08", "Commission date: 2022-04-08 ... 2022-06-29", "Commission date: 2022-04-08\nCareer:"):
+            with self.subTest(quote=quote):
+                data = {**self.data, "selections": [{"record_id": self.record["record_id"], "quote":quote}]}
+                self.assertEqual(self.normalize(data)["hold_reason"], "quote_invalid")
+        data = {**self.data, "selections": [{"record_id":"outside", "quote":self.record["excerpt"]}]}
+        self.assertEqual(self.normalize(data)["hold_reason"], "quote_invalid")
+        # A word retained elsewhere in source storage but omitted from the
+        # supplied excerpt must not be accepted as model-visible evidence.
+        short = {**self.manifest, "records": [{**self.record,"excerpt":"Commission date: 2022-04-08","excerpt_truncated":True}]}
+        data["selections"][0] = {"record_id":self.record["record_id"],"quote":"Career: Law clerk"}
+        self.assertEqual(self.normalize(data,manifest=short)["hold_reason"], "quote_invalid")
+
+    def test_count_size_duplicates_and_total_are_bounded(self):
+        too_many = {**self.data,"selections": self.data["selections"]*13}
+        self.assertEqual(self.normalize(too_many)["hold_reason"], "schema_invalid")
+        duplicate = {**self.data,"selections": self.data["selections"]*2}
+        self.assertEqual(self.normalize(duplicate)["hold_reason"], "quote_invalid")
+        long = {**self.record,"excerpt":"x"*3001}
+        data = {**self.data,"selections":[{"record_id":long["record_id"],"quote":long["excerpt"]}]}
+        self.assertEqual(self.normalize(data,manifest={**self.manifest,"records":[long]})["hold_reason"], "quote_invalid")
+        records = [{**self.record,"record_id":str(i),"excerpt":str(i)*2000} for i in range(7)]
+        data["selections"]=[{"record_id":r["record_id"],"quote":r["excerpt"]} for r in records]
+        self.assertEqual(self.normalize(data,manifest={**self.manifest,"records":records})["hold_reason"], "quote_invalid")
+        records = [{**self.record,"record_id":str(i)*6000,"excerpt":str(i)} for i in range(3)]
+        data["selections"]=[{"record_id":r["record_id"],"quote":r["excerpt"]} for r in records]
+        self.assertEqual(self.normalize(data,manifest={**self.manifest,"records":records})["hold_reason"], "quote_invalid")
+
+    def test_empty_selection_is_only_insufficient_and_legacy_replays_are_unchanged(self):
+        empty = {**self.data,"selections":[],"answer_status":"insufficient"}
+        state = self.normalize(empty)
+        self.assertEqual(state["status"], "complete")
+        self.assertEqual(state["answer_status"], "insufficient")
+        self.assertEqual(state["citations"], [])
+        self.assertEqual(self.normalize({**empty,"answer_status":"answered"})["hold_reason"], "schema_invalid")
+        old = {"answer":"The record lists a date [op_fixture:record_1].", "citations":[{"record_id":"op_fixture:record_1"}],
+               "answer_status":"partial", "adequacy_reason":"Legacy self-assessment."}
+        for schema in ("nikodemus.open_case.synthesis.v1", synthesis.LEGACY_SCHEMA):
+            with self.subTest(schema=schema):
+                state = self.normalize(old,manifest={**self.manifest,"schema":schema})
+                self.assertEqual(state["status"], "complete")
+                self.assertEqual(state["answer"], old["answer"])
+                self.assertNotIn("answer_format", state)
+        self.assertEqual(self.normalize(raw='{"selections":[],"selections":[],"answer_status":"insufficient","adequacy_reason":"none"}')["hold_reason"], "invalid_json")
 
 
 if __name__ == "__main__":

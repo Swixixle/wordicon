@@ -23,6 +23,7 @@ import testmode
 import vault
 import wordicon_cli as cli
 import opencase_synthesis as synthesis
+import opencase_grounding
 
 ACTION = "investigate.opencase.question"
 CONTRACT = "open-case-investigation-v1"
@@ -455,6 +456,7 @@ def view(op):
         "result": result, "result_ref": ref, "producer_state": op.get("producer_state"), "events": events,
         "synthesis": synthesis.view(op), "dimensions": dimensions,
         "findings": findings, "evidence_groups": evidence_lineage.group(findings),
+        "record_chronology": opencase_grounding.build_record_chronology(plan, findings, operation_id=op['op_id'], result_artifact=ref.get('result_artifact')),
         "costs": operation_costs.total(op), "thread_costs": operation_costs.total(op, ancestry=True),
         "custody": ref.get("custody"), "deposition_id": (ref.get("custody") or {}).get("deposition_id"),
         "saved": bool(saves), "saved_at": saves[-1]["at"] if saves else None, "autosaved": True,
