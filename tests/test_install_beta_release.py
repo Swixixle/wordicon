@@ -22,7 +22,7 @@ release = importlib.util.module_from_spec(spec); spec.loader.exec_module(release
 
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix='nk-release-', dir='/private/tmp')
+        self.tmp = tempfile.TemporaryDirectory(prefix='nk-release-', dir=Path(tempfile.gettempdir()).resolve())
         self.root = Path(self.tmp.name)
         self.source, self.dest, self.state, self.beta = [self.root / x for x in ['source','runtime','state','beta']]
         for p in [self.source,self.dest,self.state,self.beta]: p.mkdir()
