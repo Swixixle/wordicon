@@ -18,8 +18,10 @@ Portable bundle
 Check required recovery ancestry in the fresh clone as well:
   git -C review-checkout merge-base --is-ancestor <required-recovery-commit> <full-code-commit>
 A nonzero exit means the declared ancestry has not been established.
-A complete bundle created with --all carries required ancestry. If verification
-reports missing prerequisite commits, obtain the complete bundle; do not claim a
+A bundle created from the reviewed branch and recovery tags, without excluding
+parents, carries required ancestry. Avoid --all when unrelated refs have not been
+reviewed for sharing. If verification reports missing prerequisite commits,
+obtain the complete bundle; do not claim a
 fresh clone is reproducible from an incomplete incremental bundle.
 
 Code manifest
@@ -60,7 +62,7 @@ Reproduce declared tests in a new local virtual environment
   cd ../..
   .venv/bin/python scripts/scan_secrets.py --tracked
   .venv/bin/python tests/test_global_constraints.py
-  bash tests/journeys/run.sh
+  PYTHON="$PWD/.venv/bin/python" bash tests/journeys/run.sh
 Use Python3.14 and Node22 to match the pinned CI workflow. Linux CI installs the
 Playwright system dependencies with --with-deps. The main suite requires only
 Chromium for its two local page fixtures; the journey runner also needs WebKit.
