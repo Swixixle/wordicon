@@ -23,6 +23,13 @@ class IdentityTests(unittest.TestCase):
         c=lineage.for_finding(record(nid='2'))
         self.assertEqual(a['source_record_id'],b['source_record_id']);self.assertNotEqual(a['substantive_revision_id'],b['substantive_revision_id'])
         self.assertNotEqual(a['source_record_id'],c['source_record_id'])
+    def test_known_record_can_have_unknown_historical_revision(self):
+        f=record();f['source_identity'].pop('substantive_revision_sha256')
+        got=lineage.for_finding(f)
+        self.assertEqual(got['identity_status'],'resolved')
+        self.assertEqual(got['substantive_revision_status'],'unknown')
+        self.assertEqual(got['provenance_family_id'],'fjc:1')
+
     def test_explicit_mirror_same_family_unresolved_url_does_not_resolve(self):
         a=record(); b=copy.deepcopy(a);b['source_url']='https://mirror.example/biography'
         self.assertEqual(lineage.for_finding(a)['provenance_family_id'],lineage.for_finding(b)['provenance_family_id'])

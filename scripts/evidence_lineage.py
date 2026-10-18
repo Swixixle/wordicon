@@ -20,10 +20,11 @@ def for_finding(finding, capture_id=''):
     source = identity.get('record_identity') or identity.get('source_record_id')
     family = identity.get('provenance_family_id')
     revision = identity.get('substantive_revision_sha256')
-    resolved = bool(source and family and revision and identity.get('namespace'))
+    resolved = bool(source and family and identity.get('namespace'))
     return {'schema': SCHEMA, 'capture_id': str(capture_id) + ':' + str(finding.get('id') or _sha(finding)),
             'capture_sha256': _sha(finding), 'source_record_id': source if resolved else None,
             'substantive_revision_id': revision if resolved else None,
+            'substantive_revision_status': 'identified' if resolved and revision else 'unknown',
             'provenance_family_id': family if resolved else None,
             'identity_status': 'resolved' if resolved else 'unresolved',
             'basis': identity if resolved else 'No authoritative upstream identity supplied; URL and text alone do not resolve identity.',
