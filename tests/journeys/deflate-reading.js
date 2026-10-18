@@ -11,7 +11,7 @@ const read=n=>fs.readFileSync(fs.existsSync(path.join(FILES,n))?path.join(FILES,
 (async()=>{
  const browser=await playwright[ENGINE].launch(),context=await pairedContext(browser),page=await context.newPage();
  ok(browser.browserType().name() === ENGINE,'Deflate reading is measured in '+ENGINE);
- const errors=[],prepares=[],deeperPrepares=[],deeperStarts=[],starts=[],uploads=[],mutations=[];let costMissing=false,currentPinRemoved=false;let saved=false,accepted=false,loseFirst=true;
+ const errors=[],prepares=[],deeperPrepares=[],deeperStarts=[],starts=[],uploads=[],mutations=[];let costMissing=false,currentPinRemoved=false;let saved=false,accepted=false,loseFirst=true,incompletePhase=null,historyReads=0;
  const origin={kind:'operation',operation_id:'op_open_case_parent',title:'Original appointment investigation',question:'What additional source can help?',parent_origin:{kind:'selection',doc_id:'doc_original',revision:2,text:'Original captured passage'}};
  await context.addInitScript(value=>{if(!sessionStorage.getItem('fixture-origin'))sessionStorage.setItem('fixture-origin',JSON.stringify(value));},origin);
  page.on('pageerror',e=>{if(!benignPageError(e))errors.push(e.message);});
@@ -40,15 +40,17 @@ const read=n=>fs.readFileSync(fs.existsSync(path.join(FILES,n))?path.join(FILES,
    claims:[{passageId:'ready',text:'A meeting occurred.',displayType:'Checkable claim',wouldSettle:'Inspect the original meeting record.'}]}}},
   artifacts:[{name:'producer-deposition.json',sha256:'b'.repeat(64),url:'/api/deflate/operations/op_deflate_fixture/artifacts/producer-deposition.json'},{name:'producer-model_001.request.json',sha256:'c'.repeat(64),url:'/api/deflate/operations/op_deflate_fixture/artifacts/producer-model_001.request.json'}]});
  const uploadView=()=>{const v=view();v.operation_id='op_upload_fixture';v.plan.input={kind:'upload',name:'retained.mp3'};v.original_upload={name:'retained.mp3',bytes:original.length,sha256:originalHash,media_type:'audio/mpeg',url:'/api/deflate/operations/op_upload_fixture/original'};v.deposition.payload.claims.passages.push({id:'legacy',title:'Earlier metadata only',readingGate:{status:'ready'},basedOn:{inputHash:sourceHash},stale:[],reading:{by:'model',model:'fixture',contract:'reading-2'}});return v;};
+ const incompleteMessage='The provider response contained credential-shaped content; only its explicitly redacted capture was retained. <img src=x onerror="window.BAD_ERROR=true">';
+ const currentView=()=>{const v=view();if(!incompletePhase)return v;v.saved=false;v.deposition.gaps=[];v.deposition.payload.claims.passages=[];v.deposition.payload.claims.passagesHeld=[];v.deposition.payload.claims.claims=[];v.costs={accounting_status:'estimated',estimated_cost_usd:.05625,known_estimated_subtotal_usd:.05625,actual_cost_usd:null};if(incompletePhase==='running'){v.status='running';v.progress='Starting...';v.result=null;v.error='';}else{v.status='complete';v.progress='Partial reading saved. Review the held passages and source gaps.';v.result={state:'partial',acquisition:{status:'done'},reading:{status:'error',done:0,total:1,error:{code:'sensitive_response',message:incompleteMessage}}};v.error='Reading error (sensitive_response): '+incompleteMessage;}return v;};
  await context.route('**/*',async route=>{
   const request=route.request(),url=new URL(request.url()),p=url.pathname;
   if(url.origin!==new URL(BASE).origin)return route.abort();
   if(request.method()==='POST')mutations.push(p);
   if(p==='/api/deflate/status')return route.fulfill({json:{available:true}});
   if(p==='/api/ledger/config')return route.fulfill({json:{enabled:false}});
-  if(p==='/api/deflate/operations')return route.fulfill({json:{operations:accepted?[view()]:[]}});
+  if(p==='/api/deflate/operations'){historyReads++;return route.fulfill({json:{operations:accepted?[currentView()]:[]}});}
   if(p==='/api/deflate/operations/op_deflate_fixture/save'){saved=true;return route.fulfill({json:view()});}
-  if(p==='/api/deflate/operations/op_deflate_fixture'){const v=view();if(currentPinRemoved){v.deposition=null;v.current_verification={ok:false};v.error='Current pinned-key verification is unavailable. Original signed bytes remain saved.';}return route.fulfill({json:v});}
+  if(p==='/api/deflate/operations/op_deflate_fixture'){const v=currentView();if(currentPinRemoved){v.deposition=null;v.current_verification={ok:false};v.error='Current pinned-key verification is unavailable. Original signed bytes remain saved.';}return route.fulfill({json:v});}
   if(p==='/api/deflate/operations/op_upload_fixture')return route.fulfill({json:uploadView()});
   if(p==='/api/deflate/operations/op_upload_fixture/original')return route.fulfill({body:original,contentType:'audio/mpeg',headers:{'Content-Disposition':'attachment; filename="retained.mp3"','X-Content-SHA256':originalHash}});
   // WebKit omits a File request body from Playwright's route inspector. The
@@ -153,6 +155,21 @@ const read=n=>fs.readFileSync(fs.existsSync(path.join(FILES,n))?path.join(FILES,
  ok(deeperStarts.length===2&&JSON.stringify(deeperStarts[1])===JSON.stringify(pendingDeeper),'explicit Go deeper recovery retains the same original source-bound request identity');
  await page.locator('.deeper-proposal').getByRole('button',{name:'Close',exact:true}).click();
  await require('./deflate-lifecycle')(page,{BASE,ok,view,setSaved:value=>{saved=value;}});
+ // A retained producer reading error may exist with no root error, no holds
+ // and empty gaps. Backend fixtures cover deriving this view without writes.
+ incompletePhase='running';await page.goto(BASE+'/deflate-reading?operation=op_deflate_fixture');
+ await page.waitForFunction(()=>document.getElementById('dr-progress')?.textContent==='Starting...');
+ const beforePollMutations=mutations.length,beforePollHistory=historyReads;
+ ok((await page.locator('#dr-history').innerText()).includes('Starting...'),'history initially reflects the observed running operation');
+ incompletePhase='partial';await page.waitForFunction(()=>document.getElementById('dr-current')?.textContent.includes('sensitive_response'));
+ const failedText=await page.locator('#dr-current').innerText();
+ ok(failedText.includes('Reading error (sensitive_response): '+incompleteMessage),'the retained nested reading error code and message are visible even with empty gaps');
+ ok(await page.locator('#dr-current img').count()===0&&!await page.evaluate(()=>window.BAD_ERROR),'producer error markup is rendered as literal text');
+ ok((await page.locator('#dr-history').innerText()).includes('Partial reading saved.')&&!(await page.locator('#dr-history').innerText()).includes('Starting...')&&historyReads===beforePollHistory,'each polled view updates its history card without Save or extra history requests');
+ ok(failedText.includes('No reading has cleared its checks.')&&await page.locator('#dr-transcript').count()===1&&await page.getByRole('button',{name:'↓ Go deeper',exact:true}).count()===0,'incomplete reading retains its source without promoting a cleared passage');
+ await page.reload();await page.waitForFunction(()=>document.getElementById('dr-current')?.textContent.includes('sensitive_response'));
+ ok(mutations.length===beforePollMutations&&(await page.locator('#dr-current').innerText()).includes('$0.06 estimated'),'reopening the named failure preserves its estimate with no Save, import, Start or other mutation');
+ await page.screenshot({path:path.join(OUT,'deflate-incomplete-reading-'+ENGINE+'.png'),fullPage:true});
  ok(errors.length===0,'no page errors: '+JSON.stringify(errors));
  await browser.close();finish(NAME);
 })().catch(e=>{console.error(e);process.exit(1);});

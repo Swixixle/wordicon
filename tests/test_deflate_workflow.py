@@ -190,6 +190,46 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/deflate/operations/missing').status_code,404)
         self.assertFalse(ops.db_path().exists())
 
+    def test_nested_stage_errors_survive_new_finish_and_historical_readonly_reopen(self):
+        for field, code in (("reading", "sensitive_response"), ("acquisition", "decoder_unavailable")):
+            with self.subTest(stage=field):
+                def incomplete(job):
+                    job['state']='partial';job[field].update(status='error',error={'code':code,'message':'The stage could not finish.'})
+                self.hook=incomplete
+                with patch.object(producers,'_request',side_effect=self.fixture):
+                    proposal=self.prepare();reply=self.start(proposal,key='nested-'+field)
+                self.assertEqual(reply.status_code,200,reply.json);oid=reply.json['operation_id']
+                op=dw._read_operation(oid)
+                self.assertIn(code,op['last_error'])
+                # Historical rows predate this display fix. Reading their
+                # retained nested failure must not repair or rewrite them.
+                ops.mark(oid,op['status'],last_error='')
+                original=dw._read_operation(oid);original_cost=costs.total(original)
+                before={p.relative_to(cli.LOCAL_STATE):p.read_bytes() for p in cli.LOCAL_STATE.rglob('*') if p.is_file()}
+                with patch.object(producers,'_request',side_effect=AssertionError('No producer read')),patch.object(ops,'_connect',side_effect=AssertionError('No writable database')):
+                    response=self.client.get('/api/deflate/operations/'+oid)
+                    listing=dw.list_views()
+                self.assertEqual(response.status_code,200)
+                self.assertEqual(response.json['error'],field.title()+' error ('+code+'): The stage could not finish.')
+                self.assertIn(code,next(v for v in listing if v['operation_id']==oid)['error'])
+                self.assertEqual(response.json['costs'],original_cost)
+                self.assertEqual(response.json['result_ref'],original['result_ref'])
+                self.assertEqual(response.json['status'],original['status'])
+                self.assertEqual(before,{p.relative_to(cli.LOCAL_STATE):p.read_bytes() for p in cli.LOCAL_STATE.rglob('*') if p.is_file()})
+                self.assertEqual(dw._read_operation(oid)['last_error'],'')
+
+    def test_retained_stage_error_is_bounded_sanitized_and_does_not_hide_custody_failure(self):
+        message='Bearer '+('fixture' * 20)+' <img src=x onerror=alert(1)> '+('x' * 1000)
+        error=dw._producer_error({'reading':{'error':{'code':'sensitive_response','message':message}},'acquisition':{'error':{'code':'decoder_unavailable'}}})
+        self.assertIn('sensitive_response',error);self.assertIn('decoder_unavailable',error)
+        self.assertIn('[redacted]',error);self.assertNotIn('fixture' * 20,error)
+        self.assertLess(len(error),850)
+        self.assertEqual(dw._producer_error({'reading':{'status':'partial','message':'Progress is not a named error'}}),'')
+        self.hook=lambda job:job['reading'].update(error={'code':'sensitive_response','message':'Retained failure'})
+        _,oid=self.run_one()
+        with patch.object(dw,'_current_deposition',return_value=(None,{'ok':False,'why':'Current custody verification failed'})):
+            self.assertEqual(dw.view(dw._read_operation(oid))['error'],'Current custody verification failed')
+
     def test_upload_is_exact_local_then_staged_only_after_start(self):
         raw=b'ID3'+b'\x00'*64+b'chosen audio'
         response=self.client.post('/api/deflate/uploads?name=chosen.mp3',data=raw,content_type='audio/mpeg')

@@ -595,6 +595,28 @@ def _ingest_attempts(op,c,job):
     return issues
 
 
+def _producer_error(job):
+    """Bounded display of retained stage errors; no inferred failure or write."""
+    if not isinstance(job, dict): return ""
+    stages = [("Deflate", job.get("error"))]
+    for field, label in (("acquisition", "Acquisition"), ("reading", "Reading")):
+        stage = job.get(field)
+        if isinstance(stage, dict): stages.append((label, stage.get("error")))
+    stages.append(("Signed export", job.get("export_gap")))
+    messages = []
+    for label, value in stages:
+        if isinstance(value, dict):
+            code, message = value.get("code"), value.get("message")
+        else:
+            code, message = None, value
+        code = code.strip()[:80] if isinstance(code, str) else ""
+        message = message.strip()[:600] if isinstance(message, str) else ""
+        if not code and not message: continue
+        text = label + " error" + (" (" + code + ")" if code else "") + (": " + message if message else "")
+        messages.append(operation_capture.sanitize_body(text)["value"])
+    return "\n".join(messages)
+
+
 def _finish(op_id,c,job,kept):
     op = _read_operation(op_id); state = job["state"]
     acquisition = job.get("acquisition") or {}
@@ -639,7 +661,7 @@ def _finish(op_id,c,job,kept):
             "accounting_status":"reported_zero","basis":"settled_bridge_local_transcription_no_paid_acquisition_contract","currency":"USD",
             "estimated_cost_usd":0.0,"known_estimated_subtotal_usd":0.0,"actual_cost_usd":0.0,"receipt_sha256":kept["sha256"],"usage":[]}
         costs._append(op_id,row)
-    _mark(op_id,word,local_state=label,last_error=str((job.get("error") or {}).get("message") or job.get("export_gap") or (ref.get("accounting_issues") or [{}])[0].get("detail") or ""),result_ref=ref)
+    _mark(op_id,word,local_state=label,last_error=_producer_error(job) or str((ref.get("accounting_issues") or [{}])[0].get("detail") or ""),result_ref=ref)
 
 
 def original_upload(op):
@@ -702,6 +724,7 @@ def view(op):
     if ref.get("result_artifact"):
         try: result = json.loads(artifact(op,ref["result_artifact"]["name"]))
         except (WorkflowError,ValueError) as exc: error = str(exc)
+    if not error: error = _producer_error(result)
     if ref.get("deposition_artifact"):
         envelope, current_verification = _current_deposition(op, ref, result)
         if not current_verification["ok"]:
