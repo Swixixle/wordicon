@@ -8,14 +8,16 @@ async function attachLedgerTrace(context, out, label) {
   const safeURL = value => { try { const u = new URL(value); u.search = ''; u.hash = ''; return u.href; } catch { return String(value).split(/[?#]/)[0]; } };
   const headers = h => Object.fromEntries(Object.entries(h).filter(([k]) => /^(origin|referer|host|content-type|content-length|sec-fetch-.*|access-control-.*|vary|location)$/i.test(k)).map(([k,v]) => [k, /referer|location/i.test(k) ? safeURL(v) : v]));
   const emit = value => fs.appendFileSync(filename, JSON.stringify({at:new Date().toISOString(), ...value}) + '\n');
-  const relevant = value => { try { return new URL(value).pathname.startsWith('/api/ledger'); } catch { return false; } };
+  const relevant = value => { try { return /^\/api\/(ledger|operations)(?:\/|$)/.test(new URL(value).pathname); } catch { return false; } };
   await context.exposeBinding('__ledgerTrace', (_source, value) => emit(value));
   await context.addInitScript(() => {
+    let phase = 'active';
+    for(const name of ['beforeunload','pagehide','pageshow','visibilitychange']) addEventListener(name, () => {phase=name;window.__ledgerTrace({kind:'lifecycle',phase,visibility:document.visibilityState,page_origin:location.origin,page_path:location.pathname}).catch(()=>{});},{capture:true});
     const note = (kind, value, options = {}) => {
       try {
-        const u = new URL(value, location.href); if (!u.pathname.startsWith('/api/ledger')) return;
+        const u = new URL(value, location.href); if (!/^\/api\/(ledger|operations)(?:\/|$)/.test(u.pathname)) return;
         u.search = ''; u.hash = '';
-        window.__ledgerTrace({kind, page_origin:location.origin, page_path:location.pathname,
+        window.__ledgerTrace({kind, phase, signal_aborted:options.signal?.aborted === true, page_origin:location.origin, page_path:location.pathname,
           raw_path:String(value).split(/[?#]/)[0], url:u.href, method:options.method || (kind === 'beacon_initiator' ? 'POST' : 'GET'),
           content_type:new Headers(options.headers || {}).get('Content-Type'),
           initiator:(new Error()).stack}).catch(() => {});

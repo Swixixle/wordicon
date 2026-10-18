@@ -1,0 +1,188 @@
+{
+  "engine": "webkit",
+  "browser_version": "26.0",
+  "playwright_version": "1.56.0",
+  "manual_safari": false,
+  "origin": "http://127.0.0.1:8487",
+  "event_ids": [
+    "event_f6cb63f5-5011-444b-914b-593e28435d5e",
+    "event_1b955c0a-6224-4953-a4b6-163832ff534f",
+    "event_726ddfe3-410b-487c-ae0e-fd569fc7f9a1",
+    "event_97627a06-4c1e-451f-8e08-6225e31de8b3",
+    "event_c3e0e290-ae38-48e3-8ef5-1b9fa7cf909d",
+    "event_c47be069-2be8-4e61-acbc-308913a1eaee",
+    "event_fe670168-14c5-49f9-8e14-fee92c6a4428",
+    "event_0ec910d3-dd14-40da-8847-e9d0c08d5d47",
+    "event_4496710e-b8c6-4136-9c7e-58ab23f34d79",
+    "event_8d6533f7-dd17-49b5-9e51-3e047d1b689b",
+    "event_968bd8fc-6b96-4138-8829-af4502f1d8d9",
+    "event_9d57d129-6351-43e2-b06b-7057a24c900f",
+    "event_b2204227-62cf-483c-b06b-98f77508f647",
+    "event_b51747ac-caba-4873-8c02-5540239406dd",
+    "event_d796ecfa-4d0f-4234-9a68-9501eb2ef5cd",
+    "event_fecbd78a-f280-4e1c-90e4-cb56ba27f099",
+    "event_fef8f1f3-3299-454f-bebf-dc632cd746a4",
+    "event_17ce6d8d-4e97-4675-8e46-024419d92bd0",
+    "event_679b6c5c-6467-496b-8168-fbbf7c4afc89",
+    "event_fa844558-76ff-4685-84db-7bc65aac14dc"
+  ],
+  "session_ids": [
+    "session_ea58b0ed-a795-4fa9-9bb1-505b1fdd250a",
+    "session_228a2359-fb57-4d0c-9b35-566806a8c101"
+  ],
+  "persisted_rows": 20,
+  "duplicate_ids": 0,
+  "lost_reply_status": 200,
+  "cross_origin_status": 403,
+  "unauthorized_status": 401,
+  "preflight_status": 401,
+  "opaque_origin_browser_rejected": true,
+  "page_errors": [],
+  "operation_lifecycle": {
+    "synthetic_page_transitions": true,
+    "real_cancelled_navigation": true,
+    "requests": [
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_0",
+        "method": "GET",
+        "phase": "poll-before-hide"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_0",
+        "method": "GET",
+        "phase": "poll-after-restore"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_1",
+        "method": "GET",
+        "phase": "poll-after-restore"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_2",
+        "method": "GET",
+        "phase": "poll-after-restore"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations?limit=30",
+        "method": "GET",
+        "phase": "list-1"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations?limit=30",
+        "method": "GET",
+        "phase": "list-2"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_open",
+        "method": "GET",
+        "phase": "open-1"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_open",
+        "method": "GET",
+        "phase": "open-2"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_refresh",
+        "method": "GET",
+        "phase": "refresh-1"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_refresh",
+        "method": "GET",
+        "phase": "refresh-2"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_retry_refresh",
+        "method": "GET",
+        "phase": "retry_refresh-1"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_retry_refresh",
+        "method": "GET",
+        "phase": "retry_refresh-2"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_retry_refresh",
+        "method": "GET",
+        "phase": "retry_refresh-3"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_cancelled_navigation",
+        "method": "GET",
+        "phase": "cancelled_navigation-1"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_cancelled_navigation",
+        "method": "GET",
+        "phase": "cancelled_navigation-2"
+      }
+    ],
+    "observed_operation_requests": [
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_0",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_0",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_1",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_2",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations?limit=30",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations?limit=30",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_open",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_open",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_refresh",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_refresh",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_retry_refresh",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_retry_refresh",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_retry_refresh",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_cancelled_navigation",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_cancelled_navigation",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_webkit_write/recover",
+        "method": "POST"
+      }
+    ]
+  }
+}

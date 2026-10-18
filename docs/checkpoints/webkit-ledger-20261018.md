@@ -87,3 +87,54 @@ and reopening without dispatch. Its focused rerun passed14/14. The totals now
 include Receipts and both Ledger engines, and report the actual number of completed
 journeys from their CHECKS records instead of assuming an old journey count.
 No full browser-suite pass is claimed by this registration-only follow-up.
+
+## Results reads during navigation — follow-up on31d9073
+
+Both remote journey runs39109320333 (2f0e918) and39109788137 (31d9073)
+failed the unchanged WebKit page-error assertion on operation-detail GETs.
+The Ledger persistence and origin checks passed. A fresh local trace reproduced
+why: `beforeunload` fired at08:14:39.404Z, an in-flight GET was cancelled at.405,
+and Results issued two further `/api/operations/job_seed_*` GETs at.405/.406.
+WebKit emitted access-control page errors before `pagehide` at.407. These were
+same-origin reads from `Results.poll`, not Ledger POSTs or a changed CORS policy.
+The selected original trace rows and its full-file SHA256 are retained in
+`lifecycle-webkit-before.excerpt.json` in the checkpoint directory.
+
+Results now owns an AbortController for its list/detail GETs. `beforeunload`
+and `pagehide` stop those reads and subsequent iterations; old-generation
+responses cannot update a restored page. `pageshow` starts a new generation
+and resumes interrupted list reads, newly opened records and explicit refreshes
+of terminal records. A temporary503 does not erase a pending detail refresh.
+Start, recover, attempt and other POST requests retain their existing semantics.
+
+A cancelled navigation has a deliberate limit: dismissing an unsaved-work
+confirmation leaves Results reads paused with a visible “Updates paused” status
+and “Resume updates” button. Clicking the button, or the next trusted pointer or
+key input in that still-visible document, resumes the pending reads. The status
+travels with the Results body into the narrow stacked layout; it does not replace
+any displayed result or proposal.
+It does not resume merely because a dialog was dismissed, from synthetic input,
+or from a timer that might run during an accepted but slow navigation.
+A genuine `pageshow` restoration resumes automatically. The visible status clears
+when reads resume. Manual Safari was not run.
+
+The focused Chromium and Playwright WebKit journeys each pass37/37. The existing
+real reload/lost-reply persistence and cross-origin assertions remain. The added
+controlled operation responses test early teardown, page restoration, list/Open/
+terminal refresh recovery,503 retry, an actual dismissed navigation confirmation,
+wide and stacked recovery controls, and one explicitly sent POST retaining its
+original receipt without replay.
+All operation/action requests are observed to assert no extra mutation. Open Case
+passes32/32 with the shared fetch helper. The final Work journey passes117/117
+with the independently reviewed keyboard fixture3c974a3. Independent WebKit UI
+review passes11/11, including retained content, no render/layout requests, stacked
+visibility, exactly one Resume GET and no mutation. A repeated Work run against
+the same mock producer initially hit its intentional first-receipt cache and
+failed the fresh-investigation-id assertion; restarting only the scratch server
+reset that cache for the final117-check pass. The full37-journey release gate remains
+a separate integration-owner run after these changes are merged.
+
+The `lifecycle-*` logs, browser proofs and scrubbed traces in the checkpoint
+folder contain only disposable fixture records. Their URL, phase, initiator,
+method, safe headers, response status and cancellation evidence are retained;
+cookies, authentication headers and request bodies are excluded.

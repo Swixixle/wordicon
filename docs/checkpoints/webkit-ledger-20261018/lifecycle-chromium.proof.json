@@ -1,0 +1,188 @@
+{
+  "engine": "chromium",
+  "browser_version": "141.0.7390.37",
+  "playwright_version": "1.56.0",
+  "manual_safari": false,
+  "origin": "http://127.0.0.1:8487",
+  "event_ids": [
+    "event_b2480d5c-430f-4c4a-a3e6-19c8ef480a1b",
+    "event_181710ae-0ff4-4ac4-b0fe-fa1b0bd7ade6",
+    "event_3abb1479-37b9-4bd0-9707-c68960b5d3ab",
+    "event_4fbcbce4-d31a-4295-9208-2e556f4cd90f",
+    "event_5937eb6f-2dd1-4f2e-ac94-9b827c2b6f37",
+    "event_80c40905-9c3b-4002-b6c7-0aa8c30b77fe",
+    "event_89562b7f-360c-4f8a-a3bc-b4deb9cb00dd",
+    "event_8b9c4f50-2929-4b70-88bb-89c93d71062d",
+    "event_99550bd9-b4ae-4128-83b1-4114894bd507",
+    "event_9a36d9f3-2d81-4560-ab2b-68a78a398d16",
+    "event_b7842fd9-c854-48fe-8f5b-523972fab98d",
+    "event_d3bbf757-b247-4721-b610-3a756d7339e5",
+    "event_346f2a79-f6b6-4a61-8fa3-d5828965dd8e",
+    "event_598de55a-1fa4-4404-930a-e60d1bc711a2",
+    "event_7421e6cd-f827-4687-bf26-4858904d4782",
+    "event_7a056aac-2625-4671-8521-95cf36b8a5a3",
+    "event_800a0ff4-d0f0-48b4-9d64-245f0b625d94",
+    "event_0c496c12-b630-4a24-b876-706d8d9ce67a",
+    "event_2481e4f5-2c1f-46da-a222-e47b490e38b2",
+    "event_b8209058-63fd-47ed-b144-95d8c8d498ff"
+  ],
+  "session_ids": [
+    "session_d4ae9405-009d-4120-b85d-14c60cb09a0d",
+    "session_226b8c3c-2450-4a65-807e-abf5f11e6c15"
+  ],
+  "persisted_rows": 20,
+  "duplicate_ids": 0,
+  "lost_reply_status": 200,
+  "cross_origin_status": 403,
+  "unauthorized_status": 401,
+  "preflight_status": 401,
+  "opaque_origin_browser_rejected": true,
+  "page_errors": [],
+  "operation_lifecycle": {
+    "synthetic_page_transitions": true,
+    "real_cancelled_navigation": true,
+    "requests": [
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_0",
+        "method": "GET",
+        "phase": "poll-before-hide"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_0",
+        "method": "GET",
+        "phase": "poll-after-restore"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_1",
+        "method": "GET",
+        "phase": "poll-after-restore"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_2",
+        "method": "GET",
+        "phase": "poll-after-restore"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations?limit=30",
+        "method": "GET",
+        "phase": "list-1"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations?limit=30",
+        "method": "GET",
+        "phase": "list-2"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_open",
+        "method": "GET",
+        "phase": "open-1"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_open",
+        "method": "GET",
+        "phase": "open-2"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_refresh",
+        "method": "GET",
+        "phase": "refresh-1"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_refresh",
+        "method": "GET",
+        "phase": "refresh-2"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_retry_refresh",
+        "method": "GET",
+        "phase": "retry_refresh-1"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_retry_refresh",
+        "method": "GET",
+        "phase": "retry_refresh-2"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_retry_refresh",
+        "method": "GET",
+        "phase": "retry_refresh-3"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_cancelled_navigation",
+        "method": "GET",
+        "phase": "cancelled_navigation-1"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_cancelled_navigation",
+        "method": "GET",
+        "phase": "cancelled_navigation-2"
+      }
+    ],
+    "observed_operation_requests": [
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_0",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_0",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_1",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_2",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations?limit=30",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations?limit=30",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_open",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_open",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_refresh",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_refresh",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_retry_refresh",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_retry_refresh",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_retry_refresh",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_cancelled_navigation",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_cancelled_navigation",
+        "method": "GET"
+      },
+      {
+        "url": "http://127.0.0.1:8487/api/operations/lifecycle_chromium_write/recover",
+        "method": "POST"
+      }
+    ]
+  }
+}

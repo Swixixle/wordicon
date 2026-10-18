@@ -29,6 +29,59 @@ export class Results {
     if (this.notesHost) this.mine.render(this.notesHost);     // mounted once, for the life of the page
     this.bindTabs();
     this.pollTimer = 0;
+    this.pageActive = true;
+    this.recentNeeded = false;
+    this.readController = new AbortController();
+    this.pageHidden = false;
+    const pauseReads = () => {
+      this.pageActive = false;
+      this.readController.abort();
+      clearTimeout(this.pollTimer); clearTimeout(this._refresh);
+      this.readStatus.hidden = false;
+    };
+    const resumeReads = () => {
+      if (this.pageActive) return;
+      this.pageActive = true;
+      this.readStatus.hidden = true;
+      this.readController = new AbortController();
+      if (this.recentNeeded) this.loadRecent(this.recentLabelOf);
+      this.poll();
+    };
+    this.readStatus = el('div', {id:'results-updates-status', class:'card row', role:'status', hidden:true}, [
+      el('span', {text:'Updates paused'}),
+      el('button', {id:'results-resume-updates', class:'btn small', type:'button', text:'Resume updates', onclick:resumeReads}),
+    ]);
+    this.body.prepend(this.readStatus);
+    // WebKit cancels fetches after beforeunload, before pagehide. Stop the
+    // sequential detail loop in that interval as well as on a cached hide.
+    window.addEventListener('beforeunload', pauseReads);
+    window.addEventListener('pagehide', () => { this.pageHidden = true; pauseReads(); });
+    window.addEventListener('pageshow', () => { this.pageHidden = false; resumeReads(); });
+    // If an unsaved-work prompt cancels navigation, no pageshow follows.
+    // Resume on the next real interaction, never on a timer while leaving.
+    const resumedInteraction = event => {
+      if (event.target.closest?.('#results-resume-updates')) return;
+      if (event.isTrusted && !this.pageHidden && !document.hidden) resumeReads();
+    };
+    window.addEventListener('pointerdown', resumedInteraction, {capture:true});
+    window.addEventListener('keydown', resumedInteraction, {capture:true});
+  }
+
+  // A completed list/detail read must not start the next read from a dying
+  // document. An aborted generation is ignored even if pageshow has already
+  // restored this same view from the back/forward cache. These are GETs only;
+  // explicit recovery and Start actions keep their existing request semantics.
+  async readJSON(url) {
+    const controller = this.readController;
+    const cancelled = () => !this.pageActive || controller !== this.readController || controller.signal.aborted;
+    if (cancelled()) return {cancelled:true};
+    try {
+      const reply = await getJSON(url, {signal:controller.signal});
+      return cancelled() ? {cancelled:true} : reply;
+    } catch (error) {
+      if (cancelled()) return {cancelled:true};
+      throw error;
+    }
   }
 
   bindTabs() {
@@ -89,8 +142,10 @@ export class Results {
   // the record, with their state as the record has it. No proposal is in
   // memory for them, so a card reads from the operation itself.
   async loadRecent(labelOf) {
-    const r = await getJSON('/api/operations?limit=30');
-    if (!r.ok) return;
+    this.recentNeeded = true; this.recentLabelOf = labelOf;
+    const r = await this.readJSON('/api/operations?limit=30');
+    if (r.cancelled || !r.ok) return;
+    this.recentNeeded = false;
     for (const o of (r.data.operations || [])) {
       if (this.tracked.has(o.operation_id)) continue;
       this.tracked.set(o.operation_id, { id: o.operation_id, kind: o.kind, status: o.status, prepared: null, label: labelOf ? labelOf(o.action_id) : o.action_id,
@@ -108,7 +163,10 @@ export class Results {
     if (this.hooks.onView) this.hooks.onView(id, kind);     // the Ledger: a result had his attention
     this.showTab('results');
     const t = this.tracked.get(id);
-    getJSON('/api/operations/' + encodeURIComponent(id)).then(r => {
+    t.detailNeeded = true;
+    this.readJSON('/api/operations/' + encodeURIComponent(id)).then(r => {
+      if (r.cancelled) return;
+      t.detailNeeded = false;
       if (!r.ok) { t.status = 'unknown'; t.last = { error: r.data.error }; this.render(); return; }
       const d = r.data;
       t.last = d; t.kind = d.kind || kind; t.startedAt = d.created_at || t.startedAt;
@@ -144,19 +202,23 @@ export class Results {
   }
   async poll() {
     clearTimeout(this.pollTimer);
+    if (!this.pageActive) return;
     if (this.polling) { this.pollAgain = true; return; }     // one poll at a time; a second request waits for it
     this.polling = true;
     let busy = false;
     try {
       for (const t of this.tracked.values()) {
+        if (!this.pageActive) break;
         // a finished operation is read once more when it came from the list
         // without its recovery line; otherwise a terminal state is not re-read
-        const needsDetail = t.fromStore && t.last && !t.last.recovery;
+        const needsDetail = t.detailNeeded || (t.fromStore && (!t.last || !t.last.recovery));
         if (['done', 'complete', 'failed', 'unknown'].includes(t.status) && !needsDetail) continue;
         let r;
-        try { r = await getJSON('/api/operations/' + encodeURIComponent(t.id)); } catch (e) { busy = true; continue; }
-        if (r.status === 404) { t.status = 'unknown'; t.last = r.data; continue; }
+        try { r = await this.readJSON('/api/operations/' + encodeURIComponent(t.id)); } catch (e) { busy = true; continue; }
+        if (r.cancelled) break;
+        if (r.status === 404) { t.detailNeeded = false; t.status = 'unknown'; t.last = r.data; continue; }
         if (!r.ok) { busy = true; continue; }
+        t.detailNeeded = false;
         const d = r.data;
         const before = t.status;
         t.last = d;
@@ -165,11 +227,13 @@ export class Results {
         if (t.status !== before && ['done', 'complete', 'failed'].includes(t.status)) { this.bumpUnseen(); if (this.hooks.onActivity) this.hooks.onActivity(); }
         if (!['done', 'complete', 'failed', 'unknown'].includes(t.status)) busy = true;
       }
-      try { this.render(); } catch (e) { console.error('results render failed', e); }
+      if (this.pageActive) try { this.render(); } catch (e) { console.error('results render failed', e); }
     } finally {
       this.polling = false;
+      // A restore can arrive while the old read is still settling. Preserve
+      // that requested poll, but never schedule another read after pagehide.
+      if (this.pageActive && (busy || this.pollAgain)) { this.pollAgain = false; this.pollTimer = setTimeout(() => this.poll(), POLL_MS); }
     }
-    if (busy || this.pollAgain) { this.pollAgain = false; this.pollTimer = setTimeout(() => this.poll(), POLL_MS); }
   }
 
   summary() {
@@ -200,6 +264,7 @@ export class Results {
   // ---- rendering ---------------------------------------------------------------
   render() {
     const b = this.body; b.textContent = '';
+    b.appendChild(this.readStatus);
     if (this.notesHost) this.notesHost.hidden = (this.tab !== 'notes');
     if (this.tab === 'results') this.renderResults(b);
     else if (this.tab === 'feedback') this.renderFeedback(b);

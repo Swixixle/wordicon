@@ -1,0 +1,119 @@
+ok   the workspace is measured in WebKit, the engine the owner writes in: webkit
+ok   native keyboard traversal reaches all bare-page controls without changing preferences: {"platform":"darwin","engine":"webkit","key":"Alt+Tab","tab":["first","field"],"option_tab":["first","second","link","field"],"supported":true,"preferences_changed":false}
+ok   no page errors on /work: []
+ok   the writing surface is #0f2350: rgb(15, 35, 80)
+ok   the writing is #ffd97d: rgb(255, 217, 125)
+ok   autosave: the header says Saved: untitled · Saved 4:26 AM · 18 words
+ok   the header names the draft by its first line
+ok   the notebook holds the exact text, line breaks included
+ok   and the structure beside it (two paragraphs), under the versioned fingerprint
+ok   typing posted nothing to /api/jobs or /api/operations: ["PUT /api/notebook/documents/doc_d84a4e62afeb510475cdd46b","PUT /api/notebook/documents/doc_e82d099ed608bf08c4f0847f"]
+ok   typing did save (a PUT to the notebook)
+ok   the selection menu offers three plain routes: ["Get feedback","Analyze this passage","Find related words"]
+ok   and a More line naming the rest
+ok   the menu opens below the selected words, not over the top of the draft
+ok   the proposal names the exact scope (5 words): Find related wordsScope: your selection — 5 words, 23 characters, sent exactly as selected.Tool: Find related words · re
+ok   the mock lane says no provider request, no charge — never "local"
+ok   the proposal never labels model work "local"
+ok   preparing posted a prepare and no Start
+ok   Escape closes the proposal
+ok   and nothing was started
+ok   with nothing selected the scope is the whole draft
+ok   the result names its origin: From this draft, revision 1
+ok   and says the draft has not changed since
+ok   and offers the full result
+ok   the operation completed through the one job path with groups: 2
+ok   the operation links to its immutable snapshot
+ok   the snapshot is on disk: snap_5a11554dca6bd7a021b7e45d
+ok   after typing, the card says the draft changed and to review the earlier version
+ok   the editor element survived four toggles
+ok   the selection survived the toggles: [3,9]
+ok   and its direction (anchor after head) survived: backward
+ok   and the scroll position survived: 240px
+ok   a save still pending when the sides toggled kept its words
+ok   and that save landed after the toggles
+ok   undo still works after the toggles (the last typing came back out)
+ok   both sides are open again
+ok   Results has its own Hide
+ok   Focus hides Tools, Results and the activity strip
+ok   and shows Exit focus
+ok   Exit focus restores exactly the arrangement before: Tools open, Results closed
+ok   at 1152×720 the shell is narrow (both sides would squeeze the writing)
+ok   Tools is a drawer over the left
+ok   the drawer has a Close
+ok   Escape closes the drawer
+ok   Results is a section below the draft
+ok   and not a side
+ok   and its four tabs (Results, Feedback, Notes, Sources) came down with it
+ok   a tab in the section still switches
+ok   the stacked section is a pinned sheet at the foot of the view: {"pinned":true,"h":180,"notesInside":true}
+ok   the note surface moved down with the tabs
+ok   the Notes tab shows the note surface in the section
+ok   the header wraps its formatting bar onto its own row rather than overlapping (2 rows, no overflow)
+ok   the draft keeps its height (380px)
+ok   Back to writing puts the caret back in the draft
+ok   back at 1440 the sides are sides again
+ok   and the tabs went back to the side
+ok   at 1280×800 both sides stay open as sides, narrowed, the writing keeps 710px, and Hide is in reach
+ok   the readers proposal says three calls, one per reader
+ok   the reading arrived without stealing the caret; the words typed meanwhile are in the draft
+ok   all three readers answered: 3 of 3 readers answered
+ok   and nothing combines them
+ok   the Feedback tab lists the reading
+ok   with nothing selected, Find related words asks for a selection instead of inventing one
+ok   and started nothing
+ok   Ask "related words" proposes Find related words
+ok   and started nothing
+ok   Ask "map" opens the Map as a place inside the shell
+ok   opening the Map started nothing
+ok   Back to writing closes the place
+ok   the editor element survived the Map round trip
+ok   Your work lists the draft, from the index
+ok   and the runs, with the index’s own population line: 210 items from 17 stores, generation 1 · built 3:39 AM — a d
+ok   the cards show registry labels, not action ids: He threw it once, cleanly, and the room laughed. 4:26 AM | Get feedback — He threw it once, cleanly,
+ok   a word from the draft finds the draft: ["writing:He threw it once, cleanly, and","operation:Get feedback — He threw it onc","reading:Readers: He threw it once, cle"]
+ok   and the run that was made from it
+ok   searching sent the words to nothing but the local index (a GET): []
+ok   a malformed query is answered, not crashed
+ok   Archive takes the draft out of the ordinary listing
+ok   and the archive filter shows it, kept whole
+ok   the archived document is still in the notebook, untouched
+ok   Investigate shows the four instruments
+ok   opening Investigate contacted no producer and started nothing: []
+ok   EthicalAlt readiness is derived from the connector record (configured in the scratch state)
+ok   PUBLIC EYE is honestly not available: no connector kind exists for this producer yet; the connector contract (origin, credential reference, pinned key) has to be declared before a lookup or a start can be derived
+ok   no fixture constant on the page
+ok   the EthicalAlt card says live use is not enabled, that starting works here only against the fixture producer, that the contract is read from the producer’s source — and keeps the commit identifier out of its face
+ok   the contract details name each route with its file:line in the producer’s source, and say the package export is not served by main
+ok   the cost is said on the card: unknown here, billed on the producer’s side
+ok   the page says the rooms’ package route is not served by main at the pinned revisions
+ok   the proposal names what leaves and to whom: Start an investigation (EthicalAlt)Scope: what you named — “Exemplar Holdings”.Tool: Start an investigation (EthicalAlt)
+ok   and nothing was started by proposing
+ok   the investigation card names the producer, the upstream id, the start’s outcome and its delivery
+ok   the unsigned export is kept with its size on the card and its hash in the details: unsigned structured export (670 bytes)
+ok   the receipt’s verification is said plainly on the card, with the method and key in the details, and correlates by investigation id
+ok   the three replies are kept byte for byte and shown as chips
+ok   and the card says what a signature does and does not mean
+ok   the record holds the intent before and the outcome after the start, the export’s read, and the receipt’s request: ["stage_intent:POST","stage_end:POST=ok","stage_intent:GET ","stage_end:GET =ok","stage_intent:POST","stage_end:POST=ok"]
+ok   the name itself is not in the events — the snapshot holds it
+ok   Ask shows the rest of the request as the subject it would propose
+ok   and Enter proposes the investigation with that subject, starting nothing
+ok   a reload reopens the same document
+ok   with its text
+ok   after the reload the run made here is listed from the record, Done
+ok   restoring the page started nothing: []
+ok   an operation a dead process left after its first dispatch intent is unknown, by the record: delivery_unknown
+ok   one never dispatched and without a proposal is not resumed, and says why: interrupted before dispatch and not resumable: no verifying 
+ok   the Activity list shows the unknown operation as unknown, not as running
+ok   the card says a dispatch was recorded and its outcome was not, with the count from the record
+ok   Check status reads the record and sends nothing: ["POST /api/operations/job_seed_dead01/recover"]
+ok   and the operation stays unknown — it is never replayed
+ok   Start another attempt is refused for an operation with no proposal to rebuild, and nothing was sent
+ok   the store names its dispatcher and its population
+ok   a Tab walk reaches every control of the header, Tools, the editor and Results, including both grips (31 stops; native Alt+Tab)
+ok   the Tools grip resizes on the arrow keys (280 → 232px)
+ok   Tab outside a list leaves the editor (the keyboard is never trapped in the draft) and types nothing
+ok   no page errors across the workspace journey: []
+ok   work: no request left the scratch origin
+CHECKS 117
+JOURNEY work OK

@@ -1,0 +1,31 @@
+{
+  "schema": "nikodemus.results-paused-row-review.v1",
+  "engine": "webkit",
+  "browser_version": "26.0",
+  "displayed_fixture_content_sha256": "d7e8cfe884cc45d6a3a907775acac9d175c4d54573cfcf6d323abf4be0b93875",
+  "checks": {
+    "pause_preserves_content": true,
+    "render_preserves_content": true,
+    "render_no_requests": true,
+    "retained_status_node": true,
+    "narrow_stacked_status_visible": true,
+    "narrow_preserves_content": true,
+    "layout_no_requests": true,
+    "native_resume_click_one_get": true,
+    "no_mutation_or_start": true,
+    "pageshow_clears_notice": true,
+    "no_page_errors": true
+  },
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/api/operations/row_probe"
+    }
+  ],
+  "page_errors": [],
+  "observed_source_sha256": {
+    "webapp/work/results.js": "dcdadf01a077ce22262bec540eedf59158d36fac349f161240355d80aa36af6e",
+    "webapp/work/util.js": "bc488e41303398eb7d522ea25ab136161e7f1a63d1a77fa7d1b190d95e48e247"
+  },
+  "review_helper_sha256": "08cdadfe511e719692455bf215beca6bf3cd47537431516db5ec5cc44f34ace6"
+}

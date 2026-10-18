@@ -1,7 +1,7 @@
 // workspace-v2 — small shared helpers. No framework, no CDN.
 
-export async function getJSON(url) {
-  const r = await fetch(url, { credentials: 'same-origin' });
+export async function getJSON(url, { signal } = {}) {
+  const r = await fetch(url, { credentials: 'same-origin', signal });
   let d = null;
   try { d = await r.json(); } catch (e) { d = { error: 'not JSON (HTTP ' + r.status + ')' }; }
   return { ok: r.ok, status: r.status, data: d };

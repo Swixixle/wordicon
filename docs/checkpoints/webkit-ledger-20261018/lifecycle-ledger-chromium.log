@@ -1,0 +1,39 @@
+ok   Ledger delivery is measured in chromium
+ok   the lost reply followed one successful durable append
+ok   without acknowledgement the exact event remains queued
+ok   reload preserves original event identity and session clock
+ok   retry acknowledges the same event and leaves exactly one persisted row
+ok   navigation threshold events all persist once across beacon and acknowledged retry
+ok   paired cross-origin POST remains refused without an origin allowance
+ok   unpaired Ledger POST remains refused
+ok   unauthorized preflight gets no cross-origin permission
+ok   browser fetch from an unauthorized opaque origin is rejected
+ok   rejected cross-origin and unpaired events never enter the Ledger
+ok   beforeunload aborts pending operation GETs before pagehide
+ok   a cancelled poll starts no later detail read in the departing page
+ok   restore creates a fresh read generation and resumes pending details
+ok   restored reads complete all three records
+ok   page restoration clears the paused-updates status
+ok   restore completes list with 2 recorded GET attempts
+ok   the restored list keeps the completed record
+ok   restore completes open with 2 recorded GET attempts
+ok   the restored open keeps the completed record
+ok   restore completes refresh with 2 recorded GET attempts
+ok   the restored refresh keeps the completed record
+ok   restore completes retry_refresh with 3 recorded GET attempts
+ok   the restored retry_refresh keeps the completed record
+ok   declining a real navigation confirmation keeps the document and paused reads
+ok   untrusted input does not resume a cancelled navigation
+ok   pausing retains the displayed result content
+ok   cancelled navigation visibly offers Updates paused and Resume updates
+ok   stacked Results also retains visible paused status and recovery
+ok   Resume updates clears the status using a read-only action
+ok   restore completes cancelled_navigation with 2 recorded GET attempts
+ok   the restored cancelled_navigation keeps the completed record
+ok   lifecycle resumption uses same-origin operation GETs only
+ok   page lifecycle preserves the one explicitly sent write and its receipt
+ok   restore issues no Start or replayed mutation
+ok   navigation and retry raise no Ledger page error: []
+ok   ledger-delivery-chromium: no request left the scratch origin
+CHECKS 37
+JOURNEY ledger-delivery-chromium OK

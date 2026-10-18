@@ -1,0 +1,138 @@
+{
+  "source_trace_sha256": "bc24f5a30c2aa376482e1acbfe24697c47bfcf725ff6b73618ba863b601fb14f",
+  "selection": "Each observed pageerror with eight preceding and two following trace rows; no rows rewritten.",
+  "rows": [
+    {
+      "at": "2026-10-18T08:14:39.401Z",
+      "kind": "request",
+      "url": "http://127.0.0.1:8487/api/operations/job_03774181ead8",
+      "method": "GET",
+      "resource_type": "fetch",
+      "headers": {
+        "referer": "http://127.0.0.1:8487/work",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin"
+      }
+    },
+    {
+      "at": "2026-10-18T08:14:39.403Z",
+      "kind": "response",
+      "url": "http://127.0.0.1:8487/api/operations/job_03774181ead8",
+      "method": "GET",
+      "status": 200,
+      "headers": {
+        "content-type": "application/json",
+        "content-length": "1181"
+      }
+    },
+    {
+      "at": "2026-10-18T08:14:39.404Z",
+      "kind": "fetch_initiator",
+      "phase": "pageshow",
+      "signal_aborted": false,
+      "page_origin": "http://127.0.0.1:8487",
+      "page_path": "/work",
+      "raw_path": "/api/operations/job_fdefcf4274b5",
+      "url": "http://127.0.0.1:8487/api/operations/job_fdefcf4274b5",
+      "method": "GET",
+      "content_type": null,
+      "initiator": "note@web-inspector://bootstrap.js:551:31\n@web-inspector://bootstrap.js:555:51\ngetJSON@http://127.0.0.1:8487/work/util.js:4:24\ngetJSON@http://127.0.0.1:8487/work/util.js:3:31\nreadJSON@http://127.0.0.1:8487/work/results.js:58:34\nreadJSON@http://127.0.0.1:8487/work/results.js:53:20\npoll@http://127.0.0.1:8487/work/results.js:196:38"
+    },
+    {
+      "at": "2026-10-18T08:14:39.404Z",
+      "kind": "request",
+      "url": "http://127.0.0.1:8487/api/operations/job_fdefcf4274b5",
+      "method": "GET",
+      "resource_type": "fetch",
+      "headers": {
+        "referer": "http://127.0.0.1:8487/work",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin"
+      }
+    },
+    {
+      "at": "2026-10-18T08:14:39.404Z",
+      "kind": "lifecycle",
+      "phase": "beforeunload",
+      "visibility": "visible",
+      "page_origin": "http://127.0.0.1:8487",
+      "page_path": "/work"
+    },
+    {
+      "at": "2026-10-18T08:14:39.405Z",
+      "kind": "lifecycle",
+      "phase": "beforeunload",
+      "visibility": "visible",
+      "page_origin": "null",
+      "page_path": "blank"
+    },
+    {
+      "at": "2026-10-18T08:14:39.405Z",
+      "kind": "requestfailed",
+      "url": "http://127.0.0.1:8487/api/operations/job_fdefcf4274b5",
+      "method": "GET",
+      "failure": {
+        "errorText": "cancelled"
+      }
+    },
+    {
+      "at": "2026-10-18T08:14:39.405Z",
+      "kind": "fetch_initiator",
+      "phase": "beforeunload",
+      "signal_aborted": false,
+      "page_origin": "http://127.0.0.1:8487",
+      "page_path": "/work",
+      "raw_path": "/api/operations/job_seed_never01",
+      "url": "http://127.0.0.1:8487/api/operations/job_seed_never01",
+      "method": "GET",
+      "content_type": null,
+      "initiator": "note@web-inspector://bootstrap.js:551:31\n@web-inspector://bootstrap.js:555:51\ngetJSON@http://127.0.0.1:8487/work/util.js:4:24\ngetJSON@http://127.0.0.1:8487/work/util.js:3:31\nreadJSON@http://127.0.0.1:8487/work/results.js:58:34\nreadJSON@http://127.0.0.1:8487/work/results.js:53:20\npoll@http://127.0.0.1:8487/work/results.js:196:38"
+    },
+    {
+      "at": "2026-10-18T08:14:39.406Z",
+      "kind": "pageerror",
+      "message": "/127.0.0.1:8487/api/operations/job_seed_never01 due to access control checks."
+    },
+    {
+      "at": "2026-10-18T08:14:39.406Z",
+      "kind": "fetch_initiator",
+      "phase": "beforeunload",
+      "signal_aborted": false,
+      "page_origin": "http://127.0.0.1:8487",
+      "page_path": "/work",
+      "raw_path": "/api/operations/job_seed_dead01",
+      "url": "http://127.0.0.1:8487/api/operations/job_seed_dead01",
+      "method": "GET",
+      "content_type": null,
+      "initiator": "note@web-inspector://bootstrap.js:551:31\n@web-inspector://bootstrap.js:555:51\ngetJSON@http://127.0.0.1:8487/work/util.js:4:24\ngetJSON@http://127.0.0.1:8487/work/util.js:3:31\nreadJSON@http://127.0.0.1:8487/work/results.js:58:34\nreadJSON@http://127.0.0.1:8487/work/results.js:53:20\npoll@http://127.0.0.1:8487/work/results.js:196:38"
+    },
+    {
+      "at": "2026-10-18T08:14:39.406Z",
+      "kind": "pageerror",
+      "message": "/127.0.0.1:8487/api/operations/job_seed_dead01 due to access control checks."
+    },
+    {
+      "at": "2026-10-18T08:14:39.407Z",
+      "kind": "lifecycle",
+      "phase": "pagehide",
+      "visibility": "visible",
+      "page_origin": "http://127.0.0.1:8487",
+      "page_path": "/work"
+    },
+    {
+      "at": "2026-10-18T08:14:39.407Z",
+      "kind": "beacon_initiator",
+      "phase": "pagehide",
+      "signal_aborted": false,
+      "page_origin": "http://127.0.0.1:8487",
+      "page_path": "/work",
+      "raw_path": "/api/ledger",
+      "url": "http://127.0.0.1:8487/api/ledger",
+      "method": "POST",
+      "content_type": null,
+      "initiator": "note@web-inspector://bootstrap.js:551:31\n@web-inspector://bootstrap.js:557:54\nflush@http://127.0.0.1:8487/work/ledger.js:306:37\nflush@http://127.0.0.1:8487/work/ledger.js:283:17\nnote@http://127.0.0.1:8487/work/ledger.js:272:38\nactivitySegment@http://127.0.0.1:8487/work/ledger.js:151:64\nactivityCheck@http://127.0.0.1:8487/work/ledger.js:172:27\n@http://127.0.0.1:8487/work/ledger.js:135:90"
+    }
+  ]
+}
