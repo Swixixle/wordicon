@@ -384,6 +384,7 @@ def _normalize(receipt, manifest):
                 raise ValueError("The attributed passage display exceeds its supported character bound.")
             state.update(status="complete", answer=answer or "No passages were selected from the supplied evidence.",
                          citations=normalized, selections=selected, answer_status=answer_status,
+                         evidence_relationships=evidence_lineage.citation_relationships(normalized),
                          adequacy_reason=adequacy_reason,
                          grounding_validation={"method": "exact_contiguous_excerpt_match", "checked": len(selected),
                                                "semantic_entailment_verified": False, "source_truth_verified": False})
@@ -418,6 +419,8 @@ def _normalize(receipt, manifest):
         if inline != cited:
             raise ValueError("The answer's inline source references do not match its validated citation list.")
         lineage_check = evidence_lineage.validate_answer(parsed["answer"], normalized)
+        state["evidence_relationships"] = lineage_check["evidence_relationships"]
+        state["lineage_validation"] = lineage_check
         if not lineage_check.get("ok"):
             return held("rejected", "independence_unsupported", lineage_check.get("reason") or "The answer claims independent corroboration without supported source lineage.")
         state.update(status="complete", answer=parsed["answer"], citations=normalized,
@@ -503,6 +506,23 @@ def view(op):
                     artifact(op, state[key]["name"])
         except (ValueError, OSError) as e:
             return {**state, "status": "failed", "answer_status": "held", "hold_reason": "artifact_invalid", "answer": "", "citations": [], "error": str(e)}
+        if state.get("status") == "complete" and state.get("response_artifact") and state.get("manifest_artifact"):
+            # Reopen derives relationships from the exact retained response and
+            # frozen source map, not from the model's description or later sources.
+            # This is a view projection: historical artifacts/state stay unchanged.
+            try:
+                receipt = json.loads(artifact(op, state["response_artifact"]["name"]))
+                manifest = json.loads(artifact(op, state["manifest_artifact"]["name"]))
+                derived = _normalize(receipt, manifest)
+                if derived.get("evidence_relationships"):
+                    state = {**state, "evidence_relationships": derived["evidence_relationships"]}
+                    if derived.get("lineage_validation"):
+                        state["lineage_validation"] = derived["lineage_validation"]
+                if derived.get("hold_reason") == "independence_unsupported":
+                    state = {**state, **derived, "held_answer": state.get("answer", ""),
+                             "hold_basis": "derived_from_preserved_response_and_citation_lineage"}
+            except (ValueError, TypeError, KeyError, AttributeError):
+                state = {**state, "evidence_relationships_error": "Preserved response and evidence relationships could not be reconstructed."}
         if (state.get("status") in ("failed", "rejected", "truncated", "unknown")
                 and not state.get("hold_reason") and state.get("response_artifact") and state.get("manifest_artifact")):
             # Name a legacy hold from its original provider receipt without

@@ -56,4 +56,37 @@ class IdentityTests(unittest.TestCase):
     def test_deflate_tampered_transcript(self):
         with self.assertRaises(ValueError):lineage.for_deflate({'payload':{'transcript':{'included':True,'text':'wrong','sha256':'bad'}}})
 
+    def test_citation_relationships_keep_copies_revisions_and_unknowns_separate(self):
+        citations=[{'record_id':'original','lineage':lineage.for_finding(record(), 'first')},
+                   {'record_id':'mirror','lineage':lineage.for_finding(record(body='Old renderer'), 'second')},
+                   {'record_id':'revision','lineage':lineage.for_finding(record(revision='new'), 'third')},
+                   {'record_id':'unknown','lineage':lineage.for_finding({'source_url':'https://other.example'})}]
+        before=copy.deepcopy(citations)
+        got=lineage.citation_relationships(citations+[citations[0]])
+        self.assertEqual(got['record_count'],4)
+        self.assertEqual(got['resolved_primary_family_count'],1)
+        self.assertEqual(got['same_family_groups'][0]['record_ids'],['original','mirror','revision'])
+        self.assertEqual(got['same_family_groups'][0]['revision_ids'],['abc','new'])
+        self.assertEqual(got['unresolved_record_ids'],['unknown'])
+        self.assertFalse(got['independence_verified'])
+        self.assertEqual(citations,before)
+
+    def test_statement_relationships_do_not_borrow_an_unrelated_family(self):
+        citations=[{'record_id':'original','lineage':lineage.for_finding(record(), 'first')},
+                   {'record_id':'copy','lineage':lineage.for_finding(record(), 'second')},
+                   {'record_id':'other','lineage':lineage.for_finding(record(nid='2'), 'third')}]
+        for phrase in ['The date is confirmed by two sources', 'The second record agrees',
+                       'No contradiction is recorded, and two sources confirm the date']:
+            with self.subTest(phrase=phrase):
+                got=lineage.validate_answer(phrase+' [original] [copy]. Another subject is recorded [other].',citations)
+                self.assertFalse(got['ok'])
+                self.assertEqual(got['evidence_relationships']['resolved_primary_family_count'],2)
+                self.assertEqual(got['statement_checks'][-1]['relationships']['resolved_primary_family_count'],1)
+        self.assertTrue(lineage.validate_answer('The second record agrees within the same source family [original] [copy]. Another subject [other].',citations)['ok'])
+        self.assertFalse(lineage.validate_answer('The same family independently corroborates this [original] [copy]. Another [other].',citations)['ok'])
+        for phrase in ['The date is confirmed by two sources', 'The second record agrees']:
+            self.assertTrue(lineage.validate_answer(phrase+' [original] [other].',citations)['ok'])
+        for conjunction in ['and','AND','But','BUT']:
+            self.assertFalse(lineage.validate_answer('The second record agrees [original] [copy] '+conjunction+' an unrelated subject [other].',citations)['ok'])
+
 if __name__=='__main__':unittest.main()

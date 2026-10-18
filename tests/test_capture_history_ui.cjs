@@ -32,6 +32,7 @@ operation.links=[{from:'prep_fixture',to:'op_fixture',relation:'started_from',ba
       if(u.origin!==base){outbound.push(u.href);return route.abort();}
       if(u.pathname==='/capture-history')return route.fulfill({contentType:'text/html',body:fs.readFileSync(path.join(root,'webapp/capture-history.html'),'utf8')});
       if(u.pathname==='/capture-history.js')return route.fulfill({contentType:'application/javascript',body:fs.readFileSync(path.join(root,'webapp/capture-history.js'),'utf8')});
+      if(u.pathname==='/work/cost-display.js')return route.fulfill({contentType:'application/javascript',body:fs.readFileSync(path.join(root,'webapp/work/cost-display.js'),'utf8')});
       if(u.pathname==='/api/capture/history')return u.searchParams.get('operation_id')==='unpaired'?route.fulfill({status:401,json:{error:'Pair first'}}):route.fulfill({json:u.searchParams.has('doc_id')?prepared:operation});
       return route.fulfill({status:404,body:'Fixture route unavailable'});
     });
@@ -48,7 +49,7 @@ operation.links=[{from:'prep_fixture',to:'op_fixture',relation:'started_from',ba
     await page.goto(base+'/capture-history?operation_id=op_fixture');await page.waitForSelector('#history-answers');
     ok(await page.locator('#history-gaps').innerText().then(t=>t.includes('recorded response bytes are unavailable')),'capture gaps remain visible at the top');
     ok(await page.locator('#history-questions').innerText().then(t=>t.includes('Cost is unknown or incomplete')),'missing accounting is not displayed as free');
-    ok(await page.locator('#history-questions').innerText().then(t=>t.includes('Known estimated subtotal: $0.004000. Accounting is incomplete; unknown components are not counted as free.')),'known usage subtotal preserves visibly incomplete accounting');
+    ok(await page.locator('#history-questions').innerText().then(t=>t.includes('Known subtotal: less than $0.01 estimated. Accounting is incomplete; unknown components are not counted as free.')),'rounded known subtotal preserves small nonzero cost and visibly incomplete accounting');
     ok(await page.locator('#history-attempts').innerText().then(t=>t.includes('Source timed out')),'failed source attempt remains readable');
     ok(await page.locator('#history-answers').innerText().then(t=>t.includes('held')&&t.includes('does not establish the inference')),'held answer remains distinct from completed operation lifecycle');
     ok(await page.locator('#history-sources img').count()===0&&!(await page.evaluate(()=>window.unsafe)),'source titles are text, never executable HTML');

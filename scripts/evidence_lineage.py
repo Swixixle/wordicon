@@ -81,25 +81,84 @@ def group(records):
             'note': 'Different source families are distinct records; independence still requires provenance evidence.'}
 
 
-def validate_answer(answer, citations):
-    """Conservatively block unsupported positive independence language.
+def citation_relationships(citations):
+    """A read-only projection of the cited records, never of model prose.
 
-    This is a structural claim guard, not a semantic truth verifier. Distinct
-    resolved primary families are necessary, not sufficient, for corroboration.
+    Family identity comes from the frozen evidence manifest. Repeated citations,
+    changed revisions and copied renderings cannot increase the family count.
+    Different primary families are necessary, not sufficient, for independence.
     """
-    positive = False
-    for sentence in re.split(r'[.!?;,\n]+|\band\b|\bbut\b', answer.lower()):
-        if re.search(r'\bindependen\w*|\bcorroborat\w*|\bseparate\s+(?:sources|records)', sentence):
-            if not re.search(r'\b(?:not|no|without|cannot|can.t|doesn.t|do not|lack\w*|unresolved|unknown|unproven)\b', sentence):
-                positive = True
-    if not positive:
-        return {'ok': True, 'reason': ''}
-    families = set()
-    for citation in citations:
+    records, families, unresolved, derived, primary = {}, {}, [], [], set()
+    for index, citation in enumerate(citations):
+        rid = citation.get('record_id') or 'unbound:' + str(index)
+        if rid in records:
+            continue
         lineage = citation.get('lineage') or {}
-        if (lineage.get('identity_status') == 'resolved' and lineage.get('provenance_family_id')
-                and (citation.get('evidence_kind') or lineage.get('evidence_kind')) == 'official_primary_record'):
-            families.add(lineage['provenance_family_id'])
-    if len(families) < 2:
-        return {'ok': False, 'reason': 'The answer claims independent corroboration without at least two resolved primary-source families. Copies and interpretations are not independent evidence.'}
-    return {'ok': True, 'reason': 'Distinct primary families are present; independence remains an interpretation requiring review.'}
+        records[rid] = lineage
+        family = lineage.get('provenance_family_id')
+        kind = citation.get('evidence_kind') or lineage.get('evidence_kind')
+        if lineage.get('independence') == 'derived_interpretation' or kind == 'derived_interpretation':
+            derived.append(rid)
+        if lineage.get('identity_status') != 'resolved' or not family:
+            unresolved.append(rid)
+            continue
+        bucket = families.setdefault(family, {'provenance_family_id': family, 'record_ids': [],
+                                             'source_record_ids': [], 'revision_ids': []})
+        bucket['record_ids'].append(rid)
+        for field, source in [('source_record_ids', 'source_record_id'), ('revision_ids', 'substantive_revision_id')]:
+            value = lineage.get(source)
+            if value not in bucket[field]:
+                bucket[field].append(value)
+        if kind == 'official_primary_record' and rid not in derived:
+            primary.add(family)
+    copies = [b for b in families.values() if len(b['record_ids']) > 1]
+    return {'schema': 'nikodemus.citation_relationships.v1', 'record_count': len(records),
+            'resolved_family_count': len(families), 'resolved_primary_family_count': len(primary),
+            'families': list(families.values()), 'same_family_groups': copies,
+            'unresolved_record_ids': unresolved, 'derived_record_ids': derived,
+            'independence_verified': False,
+            'basis': 'Frozen cited-record lineage; no title, URL, name or model claim establishes independence.',
+            'note': ('Some cited records share a source family. Agreement between those copies or revisions is not independent corroboration. '
+                     if copies else '') + 'Distinct source families alone do not verify independent corroboration or source truth.'}
+
+
+def validate_answer(answer, citations):
+    """Supplement legacy prose with a statement-local structural guard.
+
+    Current checked-excerpt answers add no free model claim. Legacy prose needs
+    both explicit citation relationships and a conservative language screen;
+    this screen is not complete semantic validation. An unrelated second family
+    elsewhere in the answer cannot license a claim about copies of one record.
+    """
+    all_relationships = citation_relationships(citations)
+    by_id = {c['record_id']: c for c in citations if c.get('record_id')}
+    checks = []
+    # Keep periods inside record IDs intact. Clause splits keep a negated claim
+    # from licensing a later positive one in the same sentence.
+    for clause in re.split(r'(?<=[.!?])\s+|[;\n]+|\s+(?:and|but)\s+', answer, flags=re.IGNORECASE):
+        words = re.sub(r'\[[^\]\n]+\]', '', clause).lower()
+        claim = re.search(r'\bindependen\w*|\bcorroborat\w*|\bseparate\s+(?:sources|records)|'
+                          r'\bconfirm\w*\b.*\b(?:two|multiple|both|second)\b|'
+                          r'\b(?:two|multiple|both|second)\b.*\b(?:confirm\w*|agree\w*|support\w*|verif\w*)\b', words)
+        if not claim:
+            continue
+        negative = re.search(r'\b(?:not|no|without|cannot|can.t|doesn.t|do not|lack\w*)\s+(?:\w+\s+){0,2}(?:independen\w*|corroborat\w*|confirm\w*|agree\w*|verif\w*)\b|'
+                             r'\b(?:independence|corroboration)\s+(?:is\s+)?(?:unresolved|unknown|unproven)\b', words)
+        qualified_copy = (re.search(r'\b(?:same|one|single|shared)\s+(?:underlying\s+)?(?:source\s+)?(?:family|record|source)\b', words)
+                          and not re.search(r'\bindependen\w*|\bcorroborat\w*', words))
+        ids = list(dict.fromkeys(re.findall(r'\[([^\]\n]+)\]', clause)))
+        # Pre-manifest callers had no record IDs; preserve their conservative
+        # all-citation behavior. Actual synthesis records always carry IDs.
+        local = [by_id[rid] for rid in ids if rid in by_id] if by_id else citations
+        relationships = citation_relationships(local)
+        eligible = relationships['resolved_primary_family_count'] >= 2
+        ok = bool(negative or qualified_copy or eligible)
+        checks.append({'record_ids': ids, 'relationships': relationships, 'ok': ok,
+                       'basis': 'qualified_copy' if qualified_copy else 'negated_claim' if negative else 'statement_citations'})
+        if not ok:
+            return {'ok': False, 'reason': 'This statement claims corroboration or agreement without two resolved primary-source families among its own citations. Copies may agree, but must be identified as copies of one family, not independent evidence.',
+                    'evidence_relationships': all_relationships, 'statement_checks': checks,
+                    'semantic_verification': False}
+    return {'ok': True, 'reason': 'Citation relationships checked; independence and factual support still require review.',
+            'evidence_relationships': all_relationships, 'statement_checks': checks,
+            'semantic_verification': False}

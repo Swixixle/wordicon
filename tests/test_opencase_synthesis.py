@@ -392,6 +392,78 @@ class PartialStreamTests(unittest.TestCase):
         self.assertEqual(ledger.events()[0]["usage"]["output_tokens"], 4)
 
 
+class AnswerRelationshipTests(unittest.TestCase):
+    """Exercise retained answer text against its actual frozen citation map."""
+    def setUp(self):
+        import evidence_lineage
+        self.records = []
+        for rid, family, revision in [('original', 'fjc:1', 'r1'), ('copy', 'fjc:1', 'r1'), ('other', 'official:2', 'r2')]:
+            finding = {'id': rid, 'evidence_kind': 'official_primary_record',
+                'source_identity': {'namespace': 'fixture_authority', 'record_identity': family,
+                    'provenance_family_id': family, 'substantive_revision_sha256': revision}}
+            self.records.append({'record_id': rid, 'excerpt': 'Commission date: 2022-04-08',
+                'lineage': evidence_lineage.for_finding(finding, capture_id=rid)})
+        self.manifest = {'schema': synthesis.LEGACY_SCHEMA, 'records': self.records, 'allowance': {}}
+
+    def normalize(self, answer, ids):
+        data = {'answer': answer, 'citations': [{'record_id': rid} for rid in ids],
+                'answer_status': 'answered', 'adequacy_reason': 'Fixture self-assessment, not independent verification.'}
+        receipt = {'response': {'text': json.dumps(data), 'stop_reason': 'end_turn', 'stream_complete': True}}
+        return synthesis._normalize(receipt, self.manifest)
+
+    def test_same_family_paraphrases_are_held_even_with_unrelated_family_elsewhere(self):
+        for phrase in ['The date is confirmed by two sources', 'The second record agrees']:
+            state = self.normalize(phrase + ' [original] [copy]. Another record [other].', ['original', 'copy', 'other'])
+            self.assertEqual(state['hold_reason'], 'independence_unsupported')
+            self.assertEqual(state['answer'], '')
+            self.assertIn(phrase, state['partial_text'])
+            self.assertEqual(state['evidence_relationships']['resolved_primary_family_count'], 2)
+            self.assertEqual(state['lineage_validation']['statement_checks'][0]['relationships']['resolved_primary_family_count'], 1)
+
+    def test_qualified_copy_agreement_and_distinct_families_remain_viewable(self):
+        copy_state = self.normalize('The second record agrees within the same source family [original] [copy].', ['original', 'copy'])
+        self.assertEqual(copy_state['status'], 'complete')
+        self.assertEqual(copy_state['evidence_relationships']['resolved_primary_family_count'], 1)
+        for phrase in ['The date is confirmed by two sources', 'The second record agrees']:
+            state = self.normalize(phrase + ' [original] [other].', ['original', 'other'])
+            self.assertEqual(state['status'], 'complete')
+            self.assertFalse(state['evidence_relationships']['independence_verified'])
+            self.assertFalse(state['lineage_validation']['semantic_verification'])
+
+    def test_checked_quotes_keep_literal_claim_but_display_record_relationships(self):
+        text = 'The second record agrees.'
+        records = [{**r, 'excerpt': text} for r in self.records[:2]]
+        data = {'selections': [{'record_id': r['record_id'], 'quote': text} for r in records],
+                'answer_status': 'partial', 'adequacy_reason': 'Fixture selection only.'}
+        receipt = {'response': {'text': json.dumps(data), 'stop_reason': 'end_turn'}}
+        state = synthesis._normalize(receipt, {**self.manifest, 'schema': synthesis.SCHEMA, 'records': records})
+        self.assertEqual(state['status'], 'complete')
+        self.assertEqual([s['quote'] for s in state['selections']], [text, text])
+        self.assertEqual(state['evidence_relationships']['resolved_primary_family_count'], 1)
+        self.assertIn('not independent corroboration', state['evidence_relationships']['note'])
+        self.assertFalse(state['grounding_validation']['semantic_entailment_verified'])
+
+    def test_reopen_derives_hold_from_saved_manifest_without_changing_history(self):
+        import copy
+        answer = 'The date is confirmed by two sources [original] [copy]. Another subject [other].'
+        receipt = {'response': {'text': json.dumps({'answer': answer,
+            'citations': [{'record_id': rid} for rid in ['original','copy','other']],
+            'answer_status': 'answered', 'adequacy_reason': 'Historical model assessment.'}), 'stop_reason': 'end_turn'}}
+        state = {'status': 'complete', 'answer': answer, 'citations': self.records,
+                 'response_artifact': {'name':'response.json'}, 'manifest_artifact': {'name':'manifest.json'}}
+        op = {'execution': {'plan': {'synthesis': {'enabled': True}}}, 'result_ref': {'synthesis': state}}
+        before = copy.deepcopy(op)
+        data = {'response.json': json.dumps(receipt).encode(), 'manifest.json': json.dumps(self.manifest).encode()}
+        with patch.object(opencase, 'artifact', side_effect=lambda op, name: data[name]), \
+             patch('opencase_review.apply', side_effect=lambda op, state: state), \
+             patch.object(ops, 'event', side_effect=AssertionError('a view must not write')):
+            reopened = synthesis.view(op)
+        self.assertEqual(reopened['hold_reason'], 'independence_unsupported')
+        self.assertEqual(reopened['held_answer'], answer)
+        self.assertEqual(reopened['response_artifact'], state['response_artifact'])
+        self.assertEqual(op, before)
+
+
 class CheckedExcerptTests(unittest.TestCase):
     def setUp(self):
         self.record = {"record_id": "op_fixture:record_1", "source_sha256": "a" * 64,

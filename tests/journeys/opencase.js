@@ -30,7 +30,8 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
     if(reviewReason) {v.synthesis={status:'rejected',answer:'',held_answer:'Original unsupported interpretation',hold_reason:'support_disputed',error:reviewReason,reviews:[{reason:reviewReason}]};v.dimensions={display_status:'Answer held',lifecycle:'complete',acquisition:{status:'ready'},answer:{status:'held'}};}
     if (rejectedResult) { v.status='unknown';v.result=null;v.producer_state.status='completed';v.error='The producer returned a different subject; result not accepted.'; }
     if(heldAnswer) {v.synthesis={status:'truncated',answer:'',hold_reason:'output_limit',error:'Output allowance reached.'};v.dimensions={display_status:'Answer held',lifecycle:'complete',acquisition:{status:'ready'},answer:{status:'held'}};}
-    v.costs={estimated_cost_usd:0.035772,known_estimated_subtotal_usd:0.035772,unknown_components:[]};v.thread_costs={...v.costs,estimated_cost_usd:0.062022};
+    v.costs={estimated_cost_usd:0.130282,known_estimated_subtotal_usd:0.130282,unknown_components:[],entries:[{basis:'provider_usage_rate_card_estimate',usage:[{category:'cache_read_input_tokens',count:0}]}]};v.thread_costs={...v.costs,estimated_cost_usd:0.192304};
+    v.synthesis.evidence_relationships={record_count:2,resolved_family_count:1,note:'These cited records share a source family; agreement is not independent corroboration.'};
     if(rejectedResult) v.costs={estimated_cost_usd:null,known_estimated_subtotal_usd:0,unknown_components:[],accounting_status:'unknown'};
     return route.fulfill({json:v});
   });
@@ -73,6 +74,7 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   ok(starts.length===1,'reopening an optional model answer never sends Start');
   checkedPassages=true;await page.reload();await page.waitForFunction(()=>document.querySelector('#oc-current').textContent.includes('Relevant passages from the saved evidence'));
   ok(/Literal \[op_fixture:fjc-1\] remains source text/.test(await page.textContent('#oc-current')) && (await page.locator('#oc-current a[href="#oc-citation-1"]').count())===1,'checked quotations retain source brackets literally with a separate citation link');
+  ok(/2 cited records · 1 resolved source families/.test(await page.textContent('#oc-evidence-relationships')) && /not independent corroboration/.test(await page.textContent('#oc-evidence-relationships')),'literal source selections carry a visible same-family relationship limit');
   checkedPassages=false;
   await page.getByText('Flag an unsupported answer',{exact:true}).click();
   await page.fill('#oc-review-reason','The evidence does not establish the added timing inference.');await page.click('#oc-review-hold');
@@ -83,7 +85,9 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   reviewReason='';
   heldAnswer=true;await page.reload();await page.waitForSelector('#oc-answer-recovery');
   ok((await page.textContent('#oc-progress'))==='Answer held','held answers do not inherit source completion');
-  ok(/estimated \$0.035772/.test(await page.textContent('#oc-current')) && /estimated \$0.062022/.test(await page.textContent('#oc-current')),'operation and thread estimates include earlier attempts');
+  ok(/about \$0.13 estimated/.test(await page.textContent('#oc-current')) && /about \$0.19 estimated/.test(await page.textContent('#oc-current')),'operation and thread estimates round to cents while including earlier attempts');
+  ok(/0.130282/.test(await page.textContent('#oc-current')) && /0.192304/.test(await page.textContent('#oc-current')),'accounting details retain full calculation precision');
+  ok(/cache-read tokens: 0 recorded/.test(await page.textContent('#oc-current')) && /provider-billed amount unconfirmed/.test(await page.textContent('#oc-current')),'zero provider cache reads stay visible without a billing or savings claim');
   await page.click('#oc-answer-recovery');await page.waitForSelector('#oc-start');
   ok(prepares.at(-1).inputs.reuse_evidence_from==='op_fixture' && prepares.at(-1).inputs.synthesis.max_output_tokens===8192,'recovery proposes a larger single allowance over the saved evidence');
   ok(starts.length===1,'reviewing recovery sends no paid Start');
@@ -91,6 +95,17 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   await page.reload(); await page.waitForFunction(()=>document.querySelector('#oc-current').textContent.includes('result not accepted'));
   ok((await page.textContent('#oc-progress'))==='unknown','a rejected result cannot inherit the producer’s completed label');
   ok(/This operation: total unknown/.test(await page.textContent('#oc-current')),'unknown accounting is not displayed as zero');
+  await page.unroute('**/api/operations');
+  await page.route('**/api/operation-costs',route=>route.fulfill({json:{accounting_status:'unknown',estimated_cost_usd:null,
+    known_estimated_subtotal_usd:0.192304,unaccounted_operation_ids:['older-unknown'],
+    entries:[{basis:'provider_usage_rate_card_estimate',usage:[{category:'cache_read_input_tokens',count:0}]}]}}));
+  await page.goto(BASE+'/work');
+  await page.waitForFunction(()=>!!window.__work);
+  await page.locator('a[data-page="settings"]').click();
+  await page.waitForFunction(()=>document.querySelector('#settings-view').textContent.includes('about $0.19 estimated'));
+  const settings=await page.textContent('#settings-view');
+  ok(/Usage accounting: total unknown · known subtotal about \$0.19 estimated/.test(settings),'Settings uses the same rounding while retaining incomplete total status');
+  ok(/cache-read tokens: 0 recorded/.test(settings) && /0.192304/.test(settings),'Settings preserves zero cache reads and precise accounting details');
   ok(errors.length===0,'no page errors: '+JSON.stringify(errors));
   await browser.close(); finish('opencase');
 })().catch(e=>{console.error(e);process.exit(1);});

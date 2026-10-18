@@ -13,6 +13,7 @@ import { YourWork } from './yourwork.js';
 import { Investigate } from './investigate.js';
 import { Intake } from './intake.js';
 import { Ledger } from './ledger.js';
+import { costText, cacheReadText } from './cost-display.js';
 
 // the Ledger's reporter: attention events only, owned and disclosed (2026-10-16)
 const ledgerRep = new Ledger();
@@ -300,8 +301,8 @@ function renderSettings() {
   v.appendChild(costsPanel);
   getJSON('/api/operation-costs').then(r => {
     if(!r.ok) {costsPanel.textContent='Operation usage accounting is unavailable.';return;}
-    const c=r.data;costsPanel.textContent='Usage accounting · known estimate $'+Number(c.known_estimated_subtotal_usd || 0).toFixed(6)+
-      (c.accounting_status==='unknown'?' + unresolved usage':'')+'. Provider-billed model charges remain unconfirmed. ';
+    const c=r.data;costsPanel.textContent=costText(c,'Usage accounting');
+    costsPanel.appendChild(el('div',{class:'muted small-text',text:cacheReadText(c)}));
     costsPanel.appendChild(el('div',{class:'muted small-text',text:(c.unaccounted_operation_ids || []).length+' older operations have no complete accounting record; they are not treated as free.'}));
     const details=el('details',{},[el('summary',{text:'Component ledger and rate basis'})]);
     details.appendChild(el('pre',{style:'white-space:pre-wrap;overflow-wrap:anywhere',text:JSON.stringify(c,null,2)}));costsPanel.appendChild(details);

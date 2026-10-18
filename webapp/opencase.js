@@ -1,6 +1,7 @@
 /* Open Case's bounded public-record workflow. Only Start dispatches. Every
  * reopened view reads Nikodemus's durable record, never a producer report. */
 import { Ledger } from '/work/ledger.js';
+import { costText, cacheReadText } from '/work/cost-display.js';
 (() => {
   'use strict';
   const ledger = new Ledger();
@@ -110,12 +111,6 @@ import { Ledger } from '/work/ledger.js';
     for (const item of items) { const card = node('div', null, 'item'); render(card,item); host.append(card); }
   }
   function entries(value) { return Array.isArray(value) ? value : value && typeof value === 'object' ? Object.entries(value).map(([name,v]) => typeof v === 'object' ? {name,...v} : {name,status:v}) : []; }
-  function costText(value,label) {
-    if(!value) return label+': accounting unavailable';
-    if(value.estimated_cost_usd == null || value.accounting_status === 'unknown')
-      return label+': total unknown · known estimated subtotal $'+Number(value.known_estimated_subtotal_usd || 0).toFixed(6)+' · unresolved usage remains';
-    return label+': estimated $'+Number(value.estimated_cost_usd).toFixed(6)+' · provider-billed amount unconfirmed';
-  }
   function render(view) {
     const el = $('oc-current'); el.hidden = false; el.replaceChildren();
     const plan = view.plan || view.prepared?.inputs?.plan || {};
@@ -133,7 +128,7 @@ import { Ledger } from '/work/ledger.js';
     if (plan.synthesis?.enabled) el.append(node('p','Optional model answer: '+(synthesis.status || 'waiting for evidence')+' · API dollar total: '+(synthesis.actual_cost_usd == null ? 'not reported' : '$'+synthesis.actual_cost_usd),'foot'));
     if (view.dimensions?.answer?.adequacy) el.append(detail('Model assessment · unverified interpretation',view.dimensions.answer.adequacy));
     if (view.dimensions) el.append(node('p', 'Activity: '+view.dimensions.lifecycle+' · source coverage: '+view.dimensions.acquisition.status+' · answer: '+view.dimensions.answer.status,'foot'));
-    if (view.costs) {el.append(node('p',costText(view.costs,'This operation'),'body'));el.append(node('p',costText(view.thread_costs,'This question and preceding attempts'),'foot'));el.append(detail('All component costs and accounting basis',view.costs));}
+    if (view.costs) {el.append(node('p',costText(view.costs,'This operation'),'body'));el.append(node('p',costText(view.thread_costs,'This question and preceding attempts'),'foot'));el.append(node('p',cacheReadText(view.thread_costs || view.costs),'foot'));el.append(detail('All component costs and accounting basis',view.costs));el.append(detail('Preceding attempts · precise accounting',view.thread_costs));}
     el.append(node('p', view.saved ? 'Saved to your investigations.' : 'Progress and evidence are kept automatically.', 'foot'));
     const save = button(view.saved ? 'Saved' : 'Save investigation', async () => { try { await api('/api/open-case/operations/'+enc(selected)+'/save', {}); await open(selected); await historyList(); } catch(e) {error(e);} });
     save.id = 'oc-save'; save.disabled = !!view.saved;
@@ -174,6 +169,11 @@ import { Ledger } from '/work/ledger.js';
         el.append(node('h2',synthesis.answer_format==='checked_excerpts'?'Relevant passages from the saved evidence':'Model answer · interpretation needs review'));
         el.append(node('p',(synthesis.answer_format==='checked_excerpts'?'Model-selected passages · ':'Model synthesis · ')+(plan.synthesis?.model || 'configured model'),'foot'));
         el.append(node('p',synthesis.support_verification || 'Citations identify saved records; they do not independently verify the model’s interpretation.','foot'));
+        if(synthesis.evidence_relationships) {
+          const relations=synthesis.evidence_relationships;
+          const p=node('p',relations.record_count+' cited records · '+relations.resolved_family_count+' resolved source families. '+relations.note,'foot');
+          p.id='oc-evidence-relationships';el.append(p,detail('Cited record relationships',relations));
+        }
         const citations=entries(synthesis.citations), answer=node('p',null,'body');
         answer.style.whiteSpace='pre-line';
         // Link only the locally resolved record ids. Model text remains text,

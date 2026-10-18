@@ -1,0 +1,68 @@
+P3 evidence relationships and spending display — 18 October 2026
+
+Base code: 76ec0cfeecbe1bd652d55223e795c8e7b7bc21ee
+Owned branch: codex/independence-costs-20261018
+The canonical CURRENT-STATE.txt on the shared integration checkout was read
+before implementation. This note is the focused worktree handoff; the integration
+owner updates that shared checkpoint after selective integration.
+
+Changes
+- A derived citation_relationships projection groups the exact cited records by
+  their frozen lineage, exposing copies, revisions, unresolved identities and
+  primary-family counts. No title, similar text or name creates a family.
+- Legacy prose's supplementary language guard evaluates the inline citations
+  attached to each statement. A separate cited family elsewhere cannot license
+  a claim about copies. Same-family agreement remains allowed when explicitly
+  qualified as such. Distinct primary families satisfy only the structural
+  prerequisite; the output never claims independent truth was verified.
+- Current checked excerpts preserve literal source quotations. Their relationship
+  projection is shown beside the answer, separate from the quoted words.
+- Reopen reconstructs relationships from the saved response and frozen manifest.
+  A formerly accepted unsupported legacy corroboration claim becomes a named
+  read-only derived hold. Original state, response and artifacts remain unchanged;
+  its prior answer is retained for inspection. No model is called or auto-retried.
+- Open Case, Settings and capture history share cost-display formatting. Primary
+  estimates show cents ('about $0.13 estimated', 'about $0.19 estimated'); tiny
+  positive charges show 'less than $0.01 estimated'. Full ledger precision stays
+  in details and accounting code is unchanged. Unknown totals stay unknown with
+  a known subtotal; ceilings remain separate. Cache-read zero stays explicitly
+  visible, incomplete usage stays incomplete, and no cache savings/invoice is inferred.
+
+Focused verification (offline fixtures only)
+  Python Open Case suites: 118 pass, including actual normalize/reopen relationships.
+  Python lineage: 9 pass; accounting: 9 pass.
+  Node cost formatting: 11 checks pass.
+  Chromium Open Case + actual Work Settings journey: 32 checks pass.
+  Chromium capture-history page: 20 checks pass.
+  git diff --check: clean.
+Tests include 'confirmed by two sources', 'the second record agrees', uppercase
+AND/BUT citation laundering, qualified copies, two resolved primary families,
+unknown lineage, retained source quotation, zero provider cache-read, small cost,
+and incomplete accounting. An independent read-only reviewer found the uppercase
+conjunction case; it was fixed and regression-covered before commit.
+
+Commands from this checkout (use installed venv/Playwright as appropriate):
+  PYTHONDONTWRITEBYTECODE=1 TMPDIR=/private/tmp python -m unittest discover -s tests -p 'test_opencase*.py'
+  python -m unittest discover -s tests -p test_evidence_lineage.py
+  python -m unittest discover -s tests -p test_operation_costs.py
+  node tests/test_cost_display.mjs
+  node tests/test_capture_history_ui.cjs
+  JOURNEY_DIR=<scratch> JOURNEY_PORT=<scratch port> node tests/journeys/opencase.js
+The latter uses the standard seeded, paired journey server with gateway poisoned
+and test-mode egress disabled. Every browser request stays on its fixture origin.
+
+Limits / integration
+This is not full semantic entailment validation. The legacy prose screen is
+supplementary and finite; evidence relationships and the current exact-excerpt
+contract provide the durable boundaries. Two distinct families do not prove
+independence, factual agreement, relevance or truth. Full release/global/WebKit
+gates and deployment belong to the integration owner. No paid/live/provider
+verification was performed here, and no existing store was changed.
+
+Runtime files to include: scripts/evidence_lineage.py, scripts/opencase_synthesis.py,
+webapp/opencase.js, webapp/work/main.js, NEW webapp/work/cost-display.js,
+webapp/capture-history.html, webapp/capture-history.js.
+New formatting fixture: tests/test_cost_display.mjs. Existing lineage/synthesis,
+Open Case journey and capture-history browser fixtures were extended. Register
+the new fixture in the shared gate during integration; do not drop its module
+from deployment. The separately staged Deflate UI was not modified.

@@ -1,5 +1,6 @@
 /* Read-only local reconstruction. Text is always text; only explicit saved
  * references become links. No automatic continuation, retries or source calls. */
+import { estimatedDollars } from '/work/cost-display.js';
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
@@ -41,7 +42,7 @@
       const estimate=cost.estimated_cost_usd??cost.known_estimated_subtotal_usd;
       const known=typeof estimate==='number'&&Number.isFinite(estimate);
       const costText=cost.accounting_status==='reported_zero'&&!incomplete?'Recorded collection cost: $0.':known?
-        'Known estimated '+(incomplete?'subtotal':'cost')+': $'+estimate.toFixed(6)+'. '+(incomplete?'Accounting is incomplete; unknown components are not counted as free. ':'')+'Provider billing remains unconfirmed.':
+        'Known '+(incomplete?'subtotal':'cost')+': '+estimatedDollars(estimate)+'. '+(incomplete?'Accounting is incomplete; unknown components are not counted as free. ':'')+'Provider billing remains unconfirmed.':
         'Cost is unknown or incomplete; missing usage is not counted as free.';
       c.append(node('p',costText,'muted'));
       c.append(details('Operation identity and usage accounting',op));
