@@ -38,6 +38,7 @@ const projection=JSON.parse(fs.readFileSync(path.join(ROOT,'tests/fixtures/recei
   await page.getByRole('button',{name:'Build local evidence review',exact:true}).click();
   await page.waitForSelector('#oc-receipts summary');
   ok(reads===1&&starts.length===0&&prepares.length===0,'Receipts reads local saved evidence without preparing or dispatching');
+  ok((await page.locator('#oc-receipts').innerText()).includes('Repeated captures from one family do not provide independent corroboration.'),'source-family limits are visible before opening matrix details');
   const panel=page.locator('#oc-receipts');
   ok((await panel.textContent()).includes('2003-01-02 · Court One · commission date')&&(await panel.textContent()).includes('Field comparisons and candidate conflicts · 0'),'typed timeline renders the commission date without inventing a conflict');
   ok((await panel.locator('img').count())===0,'source markup is rendered as text');

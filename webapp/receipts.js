@@ -19,6 +19,9 @@
   function render(host,data,onFollowUp) {
     host.replaceChildren();
     host.append(node('p','Derived from saved evidence in '+data.manifest.inputs.length+' investigation(s). No source or model requests are made.'));
+    const resolved=data.evidence_matrix.filter(r=>r.lineage?.identity_status==='resolved' && r.lineage?.provenance_family_id);
+    const families=new Set(resolved.map(r=>r.lineage.provenance_family_id));
+    host.append(node('p',data.evidence_matrix.length+' retained record references · '+families.size+' identified source family/families · '+(data.evidence_matrix.length-resolved.length)+' unresolved family reference(s). Repeated captures from one family do not provide independent corroboration.'));
     group(host,'Evidence matrix',data.evidence_matrix,(n,r)=>{
       n.append(node('strong',r.title),node('p',r.state.replace(/_/g,' ')+' · '+r.evidence_kind.replace(/_/g,' ')),source(r));
       if(r.excerpt)n.append(detail('Saved source text',r.excerpt));
