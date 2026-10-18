@@ -1,0 +1,88 @@
+{
+  "schema": "nikodemus.ci-receipt.v1",
+  "repository": "Swixixle/wordicon",
+  "run_id": 39117557126,
+  "url": "https://github.com/Swixixle/wordicon/actions/runs/39117557126",
+  "head_sha": "45de0db165455ac61c2f5713576cddf3ad662489",
+  "status": "completed",
+  "conclusion": "success",
+  "jobs": [
+    {
+      "name": "suite",
+      "databaseId": 117646325224,
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-10-18T10:00:39Z",
+      "completedAt": "2026-10-18T10:03:55Z",
+      "url": "https://github.com/Swixixle/wordicon/actions/runs/39117557126/job/117646325224"
+    },
+    {
+      "name": "journeys",
+      "databaseId": 117646325425,
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-10-18T10:00:39Z",
+      "completedAt": "2026-10-18T10:13:17Z",
+      "url": "https://github.com/Swixixle/wordicon/actions/runs/39117557126/job/117646325425"
+    }
+  ],
+  "suite": {
+    "global_constraints": "passed_with_explicit_skips",
+    "registered_python": {
+      "passed": 316,
+      "subtests_passed": 41
+    },
+    "ledger_outbox_checks": 29,
+    "capture_history_browser_checks": 20,
+    "work_selection_capture_browser_checks": 20,
+    "cost_display_checks": 11,
+    "separate_focused_exploration_dispatch_pytest_passed": 47,
+    "skipped_checks": [
+      {
+        "name": "focus TRACKED_SINCE first-commit check",
+        "reason": "CI checkout is shallow; first tracked commit is unavailable."
+      },
+      {
+        "name": "DOCX conversion",
+        "reason": "LibreOffice is not installed in CI."
+      },
+      {
+        "name": "private-corpus sanitization",
+        "reason": "Owner private accepted-concepts corpus is intentionally not in the repository."
+      },
+      {
+        "name": "corpus titles in anatomy",
+        "reason": "Owner private corpus is intentionally not in the repository."
+      }
+    ],
+    "counting_note": "Registered suite tests, subtests, JavaScript/browser checks, and the separate 47-test step are reported separately; they are not presented as one disjoint total."
+  },
+  "browser": {
+    "completed_journeys": 39,
+    "checks": 1800,
+    "exit_code": 0,
+    "scope": "Offline scratch-store fixtures with gateway poisoned; no live provider acceptance implied."
+  },
+  "evidence": [
+    {
+      "name": "ci-39117557126-state.json",
+      "sha256": "87dae423b71d49780893969066dd244d9a33591d3bc08436088c7d4bc1314084",
+      "bytes": 5106
+    },
+    {
+      "name": "ci-39117557126-suite.log",
+      "sha256": "e4e088c4d40cdc7d804c21efeb0595c087e06b75d889ce2fad8321debddd57fd",
+      "bytes": 776003
+    },
+    {
+      "name": "ci-39117557126-journeys.log",
+      "sha256": "07e922a7e13cc2122c17186508fa3b0272fc2a87ac1230b14392c9a67d8cde4b",
+      "bytes": 740250
+    }
+  ],
+  "verification_limits": [
+    "A skip is not a pass.",
+    "This receipt reports this exact remote commit and run only.",
+    "Live operation and restart acceptance are separate evidence."
+  ]
+}

@@ -1,144 +1,139 @@
 NIKODEMUS SHARED CHECKPOINT — 18 October 2026
 
-This is the canonical tracked handoff. Verify what is already installed before
-reinstalling or repeating work. Preserve stores, signed originals, credentials,
-unrelated edits and the recovery ancestry. No routine permission round is needed
-for the adopted implementation order.
+Verify completed work before reinstalling or repeating it. Preserve existing
+stores, signed originals, credentials, unrelated edits and recovery ancestry.
+The adopted implementation order remains authorized; routine permission rounds
+are unnecessary. Private proof, recordings, source bodies, identifiers, keys and
+store copies are excluded from shared code and release assets.
 
-IDENTITY
+IDENTITY AND RELEASE
 Repository: https://github.com/Swixixle/wordicon
 Branch: codex/nikodemus-integration-20261018
-Quality runtime commit: 088441cff864ddbf22dbd28475ac2303b34e61d7
-Required recovery: c9cd9eff59f91622cd8edf264615f02f309a5a1d
-Capture/Receipts recovery: 76ec0cfeecbe1bd652d55223e795c8e7b7bc21ee
-Both recovery tags are published and are ancestors of the quality runtime.
-The handoff commit follows the runtime commit and changes documentation only.
-Read its exact identity from Git and checkpoint.json; do not embed its own
-future hash recursively. The runtime manifest identifies every tracked file at
-the installed commit. The shared manifest identifies this later handoff tree.
+Installed runtime: 45de0db165455ac61c2f5713576cddf3ad662489
+All 408 tracked files, executable modes and generated markers independently match.
+The source was clean at installation. Any later documentation commit is separate
+from the installed runtime; read its full identity from Git and checkpoint.json.
 
-RELEASE STATUS
-Installed and restarted successfully: all396 tracked files and executable modes
-match the quality commit. Both generated markers now name its same full SHA.
-The installer preserved configuration/store paths and made a private code backup.
-Independent full-file audit passed. Private safe-copy reconstruction passed in
-two fresh processes; actual managed server restart and browser reopen also passed.
-The previously saved Receipts continuation retained exact artifact/projection
-hashes. Both revisions and the49-character passage snapshot reopened unchanged.
-
-Fresh bundle reproduction: full constraint gate PASS;37 named browser journeys,
-1,678 checks, PASS. Linux CI for the exact same commit also PASS:
-https://github.com/Swixixle/wordicon/actions/runs/39111641158
-Local gate has2 explicit private-corpus skips. CI has4: shallow Git history,
-LibreOffice conversion and those same2 private-corpus checks. Browser journeys
-have no reported skips. Manual Safari was not run.
-See docs/checkpoints/quality-acceptance-20261018.txt and the code-only receipts.
-
-Downloadable code/checksum release:
+Required recovery ancestors:
+  c9cd9eff59f91622cd8edf264615f02f309a5a1d
+  76ec0cfeecbe1bd652d55223e795c8e7b7bc21ee
+Preserved quality runtime: 088441cff864ddbf22dbd28475ac2303b34e61d7
+Preserved quality handoff: 02c870a2988c3a93b5a40c60bb25a7c1f2ae5889
+The existing downloadable quality release remains an earlier checkpoint:
 https://github.com/Swixixle/wordicon/releases/tag/codex/nikodemus-quality-20261018
-checkpoint.json supplies the full handoff/runtime commits and every bundle/file
-manifest. Verify the separate archive checksum before cloning. Runtime and later
-documentation-only handoff are deliberately identified separately.
+Its independently fetched archive and three code bundles verified successfully.
+Do not describe that older archive as containing this later Deflate acceptance.
+Release destination for this checkpoint:
+https://github.com/Swixixle/wordicon/releases/tag/codex/nikodemus-deflate-20261018
+The release assets carry code bundles, full commit/file manifests and a checksum.
+Verify its published assets before treating a downloaded package as this checkpoint.
+Exact-45de0db remote CI passed its suite and browser jobs:
+https://github.com/Swixixle/wordicon/actions/runs/39117557126
+It passed all 39 browser journeys / 1,800 checks, with no browser skips. The suite
+passed 316 registered Python tests plus 41 subtests; the separate focused run
+passed 47. Four explicit suite skips: shallow-history TRACKED_SINCE, unavailable
+LibreOffice DOCX conversion, private-corpus sanitization, and private titles/anatomy.
+These are not passes. Code-only receipt: docs/checkpoints/deflate-ci-20261018.json.
+Do not sum overlapping suites.
 
-DEPENDENCIES AND PRIVATE STATE
-Open Case: https://github.com/Swixixle/Open-Case
-62a197ae6ac4c33d09daf353b6162c8208a8f87d, branch
-codex/nikodemus-investigations, port8000, original store and signing identity.
-Deflate portable code: cfe84c3ec4992dac345f363b36a9bf86fe77ec28, branch
-codex/nikodemus-producer-20261018. The maintained merged0.15.2 producer is on
-port3123. The bounded bridge and HTML prose extraction fix are already deployed;
-all135 original record files survived that deployment unchanged.
-The release bundles carry all three selected commits and required ancestry.
-No independent public branch push is claimed for Open Case or Deflate.
-Ethical Alternatives: 1a71460a9bbae62124f9cf774f25f4c05c0b1f61, port3001, with
-pre-existing dirty files preserved. DB/index errors and unsigned current exports
-still block its next live slice. No new EA paid research has been started.
-
-Managed Nikodemus runtime: ~/nikodemus-preview/candidate-r89, port8421.
-Existing store: ~/nikodemus-preview/preview-20260916T154715Z/state.
-The separate main wordicon checkout has unrelated edits; do not reset it.
-This task's root integration directory contains PRIVATE proof, copies and
-backups. Never publish it wholesale. Only reviewed Git code and synthetic
-fixtures belong in shared branches/bundles. Private-derived proofs stay local.
+DEPENDENCIES
+Open Case: 62a197ae6ac4c33d09daf353b6162c8208a8f87d,
+branch codex/nikodemus-investigations; original store and signing identity retained.
+Deflate: 06db4506dde8b1991bfe11e18d4048d710c6f713, following
+cfe84c3ec4992dac345f363b36a9bf86fe77ec28. All 175 installed tracked files and the
+eight-file selective manifest verified. All 161 prior noncache records survived
+the producer update unchanged. The prior manifest, code and signing identity remain.
+Ethical Alternatives active baseline: 1a71460a9bbae62124f9cf774f25f4c05c0b1f61;
+existing unrelated dirty work is preserved. No reset, new identity or replacement
+store is needed for these capabilities.
 
 WORKING CAPABILITIES
-Open Case question, proposal, explicit Start, progress, findings, sources, Save,
-restart, reopen and follow-up work inside Nikodemus for the demonstrated FJC
-judicial-record scope. Existing model APIs are optional usage-based tools;
-paid plugin subscriptions are not required. Repeated paid Starts are guarded.
-Truncated and unsupported answers remain held. Copied or paraphrased records
-from one provenance family do not become independent corroboration. Commission
-and oath dates stay distinct. Finite legacy language checks are not general
-semantic entailment verification.
+Open Case supports question, proposal, explicit Start, progress, sources, saved
+findings, reopen and follow-up for the demonstrated FJC judicial-record scope.
+Optional existing model APIs do not require paid plugin subscriptions. Truncated
+and unsupported answers remain held. Commission and oath dates stay distinct;
+copies or paraphrases within one source family are not independent corroboration.
 
-Capture retains supported operation-attached model inputs, outputs, failures,
-costs, named capture gaps, document revisions, exact passage snapshots and coarse
-observed activity. Queued event IDs survived outage recovery without duplicates.
-This is not complete activity capture, keystroke recording or proven personal
-memory improvement. Keep unsupported scopes visible rather than claiming them.
+Capture retains supported operation model inputs/outputs/failures, accounting,
+document revisions, exact passage snapshots, capture gaps and coarse observable
+activity. Stable workspace identity and queued delivery IDs survive restarts and
+outages. This does not claim all activity capture, keystroke replay or improved
+personal memory. Read-only operation/history views do not initialize SQLite.
 
 Receipts reconstructs saved evidence matrices, missing material, typed chronology,
 source-family coverage and targeted continuation proposals without model calls.
-One real FJC continuation was saved, restarted and reopened with its parent gap
-and origin. It retained the commission date and explicitly missing oath date;
-it did not generate an answer or acquire a separate oath record.
+A real continuation saved and reopened with its origin and explicitly missing
+oath date. It did not invent an oath record or treat acquisition as an answer.
 
-QUALITY REPAIRS
-The main gate executes integrity, capture, Receipts, installer and cost-display
-behavior. Isolated missing-test and source-family sabotage checks failed by name
-and were restored. Registered browser runs include Receipts and both Ledger
-engines. Missing prerequisites fail rather than silently skipping a journey.
-Read-only operation listing/detail/history no longer initialize or write SQLite.
-Costs round to cents on primary controls, retain precision in details, distinguish
-unknown from zero, and separate estimated usage from confirmed provider bills.
-Zero observed provider cache-read usage remains zero; local evidence reuse is
-not provider prompt-cache savings.
+Deflate's URL/MP3 workflow is installed and live-tested inside Nikodemus: review,
+optional bounded reading, explicit Start, progress, retained source, attributed
+signed reading, Save and reopen. A failed first reading stays preserved; a
+separate continuation produced a useful reading. A controlled local MP3 retained
+its exact original and signed transcript, with one proper-name transcription error.
+Go deeper continued the selected signed reading with explicit source/question/
+origin and cost ancestry. All three reopened in the actual UI after managed restart;
+independent pre/post evidence and accounting comparisons passed without dispatch.
+A follow-up proposal preserved prior context and was cancelled without Start.
 
-WebKit teardown preserves delivery IDs and stops Results GETs at beforeunload,
-before WebKit cancels requests. Restored pages use a fresh read generation.
-If navigation is cancelled, Updates paused / Resume updates remains visible,
-including narrow layouts; a real interaction or Resume restarts reads only.
-Dismissal of the navigation dialog alone does not automatically resume reads.
-Start/write requests are not aborted, replayed or retried by this mechanism.
-Authorization, origin, CORS/CSP/CSRF controls and negative checks remain intact.
-Mac WebKit keyboard fixtures use a native control probe for Option+Tab; named
-control coverage remains required. Playwright WebKit is not manual Safari.
+Go deeper answer quality remains unverified: its final request contained 28
+direct-fetched excerpts, 42,041 characters from nine body hashes, yet its prose
+describes them as search-only. All four URLs it names were fetched and supplied.
+Bounded excerpts are not complete-page or semantic-support certification. Preserve
+the original answer and this discrepancy; no automatic promotion is authorized.
+Signatures establish custody and exact signed bytes, not truth or interpretation.
 
 COSTS
-The six earlier known model calls total0.192304USD estimated (about$0.19).
-The four-operation ancestry totals0.130282USD (about$0.13). Provider billing is
-unconfirmed. Capture, Receipts and this quality verification added no model
-calls. The real Receipts continuation's collection cost was$0. Missing historical
-charges remain unknown. Do not reset or re-label these earlier attempts.
+Thirteen new model calls have a known subtotal of 1.471666 USD: initial failed
+reading 0.056250, successful continuation 0.055282, Go deeper tokens 1.360134.
+Five provider web-search uses remain unpriced by the shared rate card; the all-in
+estimate and billed total are unknown. Local MP3 acquisition reports $0 API cost.
+Earlier six calls remain separately recorded at 0.192304 USD estimated. The
+selected eight-operation ancestry has a known subtotal of 1.601948 USD, not a
+confirmed total. Observed provider cache categories for these calls are zero;
+source reuse is not provider caching, and missing historical metadata stays unknown.
 
-NEXT CAPABILITY: DEFLATE LIVE ACCEPTANCE
-The producer bridge exists. A Nikodemus URL/MP3 consumer was staged against76ec;
-it requires selective integration over the quality code, not a directory overlay.
-Review also found that reading promotion and direct Go deeper preparation/run
-need matching transcript/passage source hashes and duplicate-held exclusion.
-Finish those checks before accepting the new live Deflate workflow; signing
-alone does not establish that a passage actually used the declared source.
-Preserve Results navigation guards, shared cost display, portable tests and the
-registered gate. The old stage includes stale unmanifested copies: never copy
-its whole directory over the maintained source.
-Then demonstrate URL/upload → retained text → useful reading → evidence →
-Go deeper → Save → restart/reopen, retaining question, origin, source bytes,
-model attempts, failures and cost receipts. Run actual live acceptance separately
-from intercepted browser fixtures. No live bridge reading is accepted yet.
-Existing MP3 decoding uses mpg123-decoder WASM and cached Whisper base.en;
-a controlled38-second MP3 transcribed locally without network or paid calls.
-System ffmpeg currently fails on its missing x265 library; this affects the
-YouTube conversion path, not the tested MP3 upload decoder. Do not fake a fix
-by aliasing incompatible library versions.
-Producer tests:26focused passes;473full passes,1optional skip,1 independently
-reproduced existing YouTube recovery UI failure. Stage test counts are historical
-development evidence, not acceptance of a newly merged or deployed consumer.
+VERIFICATION AND LIMITS
+Integrated consumer baseline: full gate passed 314 registered Python tests plus
+39 subtests with two private-corpus skips; all 39 browser journeys/1,786 checks
+passed. Error-display fix: 27 backend cases plus two subtests, 11 history cases,
+60 Chromium and 60 WebKit checks passed. Exact current remote CI passed both jobs
+with the separate totals and skips above. Additional suite checks passed: outbox
+29, capture-history browser 20, Work-selection browser 20, cost display 11.
+The producer fix passed 24 focused tests; its broader run remains 476 passes,
+two failures and one skip, including a prior YouTube UI failure and a teardown race.
+No full green producer-suite or manual Safari claim. WebKit read-cancellation,
+visible Resume, auth/origin controls and named keyboard coverage remain intact.
+See docs/checkpoints/deflate-acceptance-20261018.txt for the separate live proof.
 
-CONTINUE THE ADOPTED ORDER
-Supported capture and Receipts are working; preserve and extend them where the
-next integration exposes explicit gaps. Continue Deflate, Ethical Alternatives,
-Public Eye/Lantern, Rabbit Hole, optional ELI review, grounded personal memory,
-then simplification/export/restore and a short walkthrough. Keep optional paid
-plugins optional. Reuse existing programs, identities and records.
-docs/integration-backlog.txt records the complete accepted order and the later
-Code_View software-reuse assessment. No Code_View runtime has been installed.
+NEXT: ETHICAL ALTERNATIVES
+Reuse https://github.com/Swixixle/ETHICAL_ALTERNATIVES, branch block107/export-v2,
+commit 84986abd243dc3fe74a7b56a2487bdf19007f936. These four files are staged unchanged:
+  server/routes/profiles.index.route.js
+  server/services/jcs.js
+  server/services/profileExportV2.js
+  server/services/test_profileExportV2.mjs
+Its 48 offline exporter/JCS checks passed with synthetic keys and
+zero network calls. This is not live route, database-schema or signing acceptance.
+Endpoint diagnosis reached hostname-verified TLS 1.3; the authenticated Render
+PostgreSQL connection failed before any query, without a SQLSTATE. Cause remains
+unproved. No authenticated provider-log route was found in the available CLI,
+connector or browser inventory; unexposed owner sessions remain unknown. Obtain a
+sanitized failure classification, repair only the proved issue,
+then validate an existing saved-profile signed export in an explicit read-only
+session. No EA deployment, import, new key, migration or paid research occurred.
+No EA bundle is included in the proposed release package; its code bundles cover
+Nikodemus, Open Case and Deflate. Its blocked database access need not stop
+independent inventory for later adapters.
+
+CONTINUE IN ORDER
+Preserve Open Case integrity, supported capture and Receipts. Complete remaining
+Deflate acceptance/quality gaps without replaying saved paid work; then Ethical
+Alternatives, Public Eye/Lantern, Rabbit Hole, optional ELI review, grounded personal
+memory with evaluation, simplification/export/restore and the short walkthrough.
+Known Deflate gaps include inaccurate acquisition wording, unpriced search tools,
+broader formats/restricted sources, manual Safari, polling disclosure stability
+and an old staged-file label when switching input kinds. The frozen input remains
+correct. Existing ffmpeg conversion is broken; tested MP3 decoding does not use it.
+The complete adopted order and later Code_View software-reuse assessment remain
+in docs/integration-backlog.txt. No Code_View runtime or general personal-model
+learning capability has been installed. Keep paid plugins optional.

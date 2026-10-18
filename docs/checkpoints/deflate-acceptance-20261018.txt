@@ -1,0 +1,118 @@
+DEFLATE ACCEPTANCE — 18 October 2026
+Code-only acceptance record; private proof stays local.
+
+Installed Nikodemus: 45de0db165455ac61c2f5713576cddf3ad662489
+Branch: codex/nikodemus-integration-20261018
+Installed Deflate producer: 06db4506dde8b1991bfe11e18d4048d710c6f713
+Producer baseline: cfe84c3ec4992dac345f363b36a9bf86fe77ec28
+Open Case unchanged: 62a197ae6ac4c33d09daf353b6162c8208a8f87d
+
+REAL WORKFLOW
+Nikodemus now supports a URL or chosen MP3, frozen proposal, optional model
+reading with a disclosed allowance, explicit Start, progress, retained source,
+signed attributed reading, costs, Save and reopen. Model reading remains opt-in;
+its default proposed allowance is $0.50. Go deeper has its own disclosed limits.
+
+The first URL workflow ended partial after its reading failed following three calls.
+Its source, partial work, failure and usage receipts remain intact. A typed
+Anthropic thinking signature had been
+mistaken for a credential. The narrow producer fix accepts that typed field while
+preserving credential checks elsewhere; it does not repair the historical result.
+A separately started continuation produced a useful signed passage reading and
+retained all three requests, responses and cost receipts.
+
+A controlled 38-second MP3 completed with the local Whisper model and no API call.
+The original download matched the chosen bytes; the signed transcript was saved.
+One proper name was misspelled. This verifies the tested MP3 path, not arbitrary
+recordings, transcription accuracy or video conversion.
+
+Go deeper launched from the saved reading, retained its exact selected source,
+reading, question and origin, and completed six search requests plus one answer
+request. Twelve readable source records were retained; the final request received
+28 excerpts, 42,041 characters, from nine distinct source-body hashes. Those hashes
+do not establish nine independent provenance families.
+
+The answer incorrectly describes directly fetched excerpts as search-only material.
+All four URLs it names in source guidance were directly fetched and supplied to
+the answer request. The narrower claim that complete pages were not read is not
+disproved by bounded excerpts. The result remains advisory and unverified; cited
+URLs and signatures do not certify support or factual truth. No answer, held
+reading or missing-evidence field was automatically promoted or rewritten.
+
+PERSISTENCE AND CAPTURE
+Independent audits verified all 408 Nikodemus tracked files, executable modes and
+both markers, plus all 175 installed tracked producer files and its eight-file
+selective manifest. The producer update preserved all 161 pre-existing noncache
+records, environment, signing identity and previous manifest.
+
+After the actual managed Nikodemus restart, URL, MP3 and Go deeper records matched
+their pre-restart evidence, attempts, costs and ancestry. The real UI reopened all
+three through Activity and saved work. A later follow-up proposal retained the
+signed source and one prior step; it was cancelled without Start. Audits issued no
+network/model requests, SQL initialization or live-store writes.
+
+All seven Go deeper responses and six requests have exact SDK-body captures. The
+last request has two declared redactions; its full hashed prompt is retained in
+the research checkpoint and matches the capture's declared sanitized projection.
+These are available SDK arguments/results, not transport-wire captures.
+The real UI also reopened the old failed reading with its named sensitive_response
+error; the successful continuation remains a separate saved result.
+
+COSTS — USD ESTIMATES, NOT INVOICES
+Thirteen new model calls: failed reading 0.056250; successful reading 0.055282;
+Go deeper known token subtotal 1.360134. New known subtotal: 1.471666 (about $1.47).
+Five web-search uses have unpriced tool charges. The new all-in total and final
+provider billing remain unknown. Observed provider cache categories for these
+calls are zero; missing historical metadata remains unknown.
+The earlier six calls remain a separate 0.192304 estimate. The selected eight-
+operation ancestry has a known subtotal of 1.601948, not a confirmed total; it
+includes only the relevant earlier ancestry. Local MP3 acquisition reports $0
+in API charges.
+
+FIXTURES, SEPARATE FROM LIVE PROOF
+The integrated consumer baseline passed its full constraint gate: 314 registered
+Python tests plus 39 subtests, two explicit private-corpus skips; 39 browser
+journeys passed 1,786 checks. The later error-display change passed 27 backend
+cases plus two subtests, 11 history cases, and 60 Chromium/60 WebKit checks.
+The Work fixture now admits only acknowledged, persisted local Ledger events;
+other mutations and off-origin requests still fail. Exact-45de0db remote CI is
+successful for both suite and browser jobs:
+https://github.com/Swixixle/wordicon/actions/runs/39117557126
+That run passed 39 browser journeys / 1,800 checks. Its suite passed 316 registered
+Python tests plus 41 subtests; a separate focused run passed 47. Additional checks:
+outbox 29, capture-history browser 20, Work-selection browser 20, cost display 11.
+These suite layers overlap and must not be summed as disjoint tests. Four explicit
+CI skips: shallow-history TRACKED_SINCE, unavailable LibreOffice DOCX conversion,
+private-corpus sanitization, and private titles/anatomy.
+Code-only receipt: docs/checkpoints/deflate-ci-20261018.json.
+Playwright WebKit is not manual Safari acceptance.
+
+The producer fix passed 24 focused bridge tests. Its broader run had 476 passes,
+two failures and one skip: an independently reproduced prior YouTube recovery UI
+failure and an automatic-reading teardown race not reproduced in the focused run.
+The private deployment helper passed 14 scratch safety tests. No wholly green
+broader producer suite is claimed.
+
+REMAINING GAPS
+Keep the inaccurate Go deeper acquisition wording visible as an answer-quality
+gap; preserve its original output and evidence for a future bounded repair.
+Tool-price accounting, broader video/restricted-source acceptance, manual Safari,
+expanded-disclosure stability during polling and the stale staged-file label when
+switching input kinds remain unfinished. The frozen proposal identifies the
+correct input. System ffmpeg's missing x265 dependency still affects its conversion
+path; the tested MP3 decoder uses the existing WASM decoder and Whisper base.en.
+Continue Ethical Alternatives after diagnosing its authenticated database failure;
+its existing exporter has 48 offline checks, but no live export acceptance or
+deployment. Reuse branch block107/export-v2 at
+84986abd243dc3fe74a7b56a2487bdf19007f936 in
+https://github.com/Swixixle/ETHICAL_ALTERNATIVES:
+  server/routes/profiles.index.route.js
+  server/services/jcs.js
+  server/services/profileExportV2.js
+  server/services/test_profileExportV2.mjs
+Those four unchanged files are staged only. No EA deployment or paid research has
+occurred. The Deflate release package covers only Nikodemus, Open Case
+and Deflate, with no EA bundle. The saved-profile route still needs database and
+live-key validation. Release destination:
+https://github.com/Swixixle/wordicon/releases/tag/codex/nikodemus-deflate-20261018
+Check the published assets and their checksum before using the code package.
