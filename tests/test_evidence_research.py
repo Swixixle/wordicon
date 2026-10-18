@@ -50,6 +50,17 @@ def missing(url):
             "detail": "The source returned HTTP 404."}
 
 
+def complete_rounds(rounds):
+    """Declare empty results for the remaining approved discovery requests.
+
+    Callers opt in when the goal stays unresolved. FakeGateway itself never
+    invents a response, so an undeclared or over-budget request still fails.
+    """
+    rounds = list(rounds)
+    assert len(rounds) <= 6
+    return rounds + [("No further candidate in this strategy.", [])] * (6 - len(rounds))
+
+
 class FakeGateway(cli.Gateway):
     """The only model boundary in these tests; no SDK or transport is used."""
     name = "synthetic-evidence"
@@ -152,7 +163,7 @@ def test_paraphrase_or_absent_quote_obtains_text_without_quotation_proof(isolate
     responses[url] = found(url)
     ctx = context()
     ctx["root"]["selection"].update(quote=quote, quote_status=kind)
-    gateway = FakeGateway([("Read this candidate.", [lead(url)]), ("No new lead.", []), ("No new lead.", [])])
+    gateway = FakeGateway(complete_rounds([("Read this candidate.", [lead(url)]), ("No new lead.", []), ("No new lead.", [])]))
     result = execute(gateway, ctx)
     state = result["evidence_research"]
     assert reads == [url]
@@ -160,27 +171,27 @@ def test_paraphrase_or_absent_quote_obtains_text_without_quotation_proof(isolate
     assert state["proofs"] == [] and state["target_quote"] == ""
     assert state["source_count"] == 1
     assert state["usable_source_count"] == 0
-    assert len(gateway.search_calls) == 3
+    assert len(gateway.search_calls) == 6
     assert state["remaining_requirement"]
 
 
 def test_exhaustion_obeys_all_caps_and_saves_progress_for_continuation(isolated):
     tmp, reads, responses = isolated
-    urls = [f"https://archive.example/edition-{n}" for n in range(6)]
+    urls = [f"https://archive.example/edition-{n}" for n in range(18)]
     responses.update({url: missing(url) for url in urls})
-    rounds = [("Candidate routes.", [lead(url) for url in urls[i:i + 2]]) for i in range(0, 6, 2)]
+    rounds = complete_rounds([("Candidate routes.", [lead(url) for url in urls[i:i + 3]]) for i in range(0, 18, 3)])
     gateway = FakeGateway(rounds)
     result = execute(gateway)
     state = result["evidence_research"]
     assert reads == urls
-    assert len(gateway.search_calls) == 3 and len(gateway.final_prompts) == 1
-    assert state["rounds_used"] == 3 and state["sources_tried"] == 6 and state["model_calls"] == 4
+    assert len(gateway.search_calls) == 6 and len(gateway.final_prompts) == 1
+    assert state["rounds_used"] == 6 and state["sources_tried"] == 18 and state["model_calls"] == 7
     assert state["status"] == "needs_more_evidence" and state["source_count"] == 0
     assert state["attempted_urls"] == urls
     assert state["remaining_requirement"]
     checkpoint = saved(tmp)
     assert checkpoint["evidence_research"] == state
-    assert len(checkpoint["model_records"]) == 4
+    assert len(checkpoint["model_records"]) == 7
     assert len(list((tmp / "deeper_evidence" / state["checkpoint_id"]).glob("event_*.json"))) == len(state["steps"])
     assert all(record["prompt"] for record in checkpoint["model_records"])
     assert all("prompt" not in record for record in result["research_model_records"])
@@ -208,17 +219,17 @@ def test_final_failure_keeps_proof_and_returns_deterministic_partial(isolated, f
 
 def test_search_transport_failures_move_to_distinct_strategy_without_replay(isolated):
     tmp, reads, _ = isolated
-    gateway = FakeGateway([TimeoutError(), RuntimeError(), OSError()], final=RuntimeError())
+    gateway = FakeGateway([TimeoutError(), RuntimeError(), OSError(), TimeoutError(), RuntimeError(), OSError()], final=RuntimeError())
     result = execute(gateway)
     assert reads == []
-    assert len(gateway.search_calls) == 3
-    assert len({prompt for prompt, _ in gateway.search_calls}) == 3
-    assert result["evidence_research"]["model_calls"] == 4
+    assert len(gateway.search_calls) == 6
+    assert len({prompt for prompt, _ in gateway.search_calls}) == 6
+    assert result["evidence_research"]["model_calls"] == 7
     assert all(record["web_search_requests"] is None and record["response_observed"] is False
                for record in result["acquisition_records"])
     assert result["evidence_research"]["status"] == "needs_more_evidence"
     assert "incomplete" in json.loads(result["raw"])["explanation"]
-    assert [record["status"] for record in saved(tmp)["model_records"]] == ["failed"] * 4
+    assert [record["status"] for record in saved(tmp)["model_records"]] == ["failed"] * 7
 
 
 def test_source_bytes_hash_and_inspection_survive_in_checkpoint(isolated):
@@ -274,14 +285,14 @@ def test_changed_saved_bytes_are_refused_and_fresh_routes_still_run(isolated):
     source = first["evidence_research"]["sources"][0]
     (tmp / "deeper_evidence" / "trace_first" / f"{source['body_sha256']}.body").write_bytes(b"Tampered source.")
     responses[next_url] = found(next_url, b"A different readable work, with no matching passage.")
-    gateway = FakeGateway([("Alternate.", [lead(next_url)]), ("No new lead.", []), ("No new lead.", [])])
+    gateway = FakeGateway(complete_rounds([("Alternate.", [lead(next_url)]), ("No new lead.", []), ("No new lead.", [])]))
     result = execute(gateway, context(research_resume=resume), trace="trace_second")
     state = result["evidence_research"]
     assert reads == [first_url, next_url]
     assert state["status"] == "needs_more_evidence" and state["proofs"] == []
     rejected = next(step for step in state["steps"] if step["kind"] == "reuse")
     assert rejected["status"] == "unavailable" and "hash" in rejected["reason"]
-    assert len(gateway.search_calls) == 3
+    assert len(gateway.search_calls) == 6
 
 
 @pytest.mark.parametrize("mutation", ["cap", "strategy", "remove"])
@@ -306,8 +317,8 @@ def test_duplicate_leads_do_not_repeat_reads_or_accept_model_json_citations(isol
     url, invented = "https://archive.example/no-match", "https://invented.example/model-only"
     responses[url] = found(url, b"Readable text without the target passage.")
     prose = json.dumps({"explanation": "Here are invented references.", "citations": [lead(invented)]})
-    gateway = FakeGateway([(prose, [lead(url), lead(url + "#chapter")]),
-                           (prose, [lead(url)]), (prose, [lead(url)])])
+    gateway = FakeGateway(complete_rounds([(prose, [lead(url), lead(url + "#chapter")]),
+                           (prose, [lead(url)]), (prose, [lead(url)])]))
     result = execute(gateway)
     assert reads == [url]
     assert result["evidence_research"]["status"] == "needs_more_evidence"
@@ -331,8 +342,8 @@ def test_dispatch_intent_checkpoint_exists_before_model_boundary(isolated):
             assert saved(tmp)["model_records"][-1]["status"] == "started"
             return super().complete_once(prompt)
 
-    result = execute(CheckpointGateway([("No candidates.", [])] * 3))
-    assert result["evidence_research"]["model_calls"] == 4
+    result = execute(CheckpointGateway([("No candidates.", [])] * 6))
+    assert result["evidence_research"]["model_calls"] == 7
 
 
 def final_evidence(prompt):
@@ -345,7 +356,7 @@ def test_new_matching_passage_cannot_be_crowded_out_by_six_reused_nonmatches(iso
     old_urls = [f"https://archive.example/old-{n}" for n in range(6)]
     responses.update({url: found(url, (f"Unrelated edition {n}. " + "Other words. " * 400).encode())
                       for n, url in enumerate(old_urls)})
-    rounds = [("Candidate editions.", [lead(url) for url in old_urls[i:i + 2]]) for i in range(0, 6, 2)]
+    rounds = complete_rounds([("Candidate editions.", [lead(url) for url in old_urls[i:i + 2]]) for i in range(0, 6, 2)])
     first = execute(FakeGateway(rounds), trace="trace_old")
     assert first["evidence_research"]["source_count"] == 6
     assert first["evidence_research"]["status"] == "needs_more_evidence"
@@ -371,9 +382,9 @@ def test_alternate_strategy_reads_new_lead_before_old_queue_leftovers(isolated):
     gateway = FakeGateway([("Several early leads.", [lead(url) for url in old_urls]),
                            ("A better alternate edition.", [lead(new_url)])])
     result = execute(gateway)
-    assert reads == old_urls[:2] + [new_url]
+    assert reads == old_urls[:3] + [new_url]
     assert result["evidence_research"]["status"] == "quote_located"
-    assert result["evidence_research"]["sources_tried"] == 3
+    assert result["evidence_research"]["sources_tried"] == 4
     assert len(gateway.search_calls) == 2
 
 
@@ -386,11 +397,11 @@ def test_new_followup_question_requires_fresh_source_despite_reused_root_proof(i
     ctx = context(research_resume=research.freeze_resume({**first, "trace_id": "trace_root"}),
                   research_goal={"kind": "followup_question", "target_quote": ""},
                   question="How does the will relate to memory?")
-    gateway = FakeGateway([("A passage for the new question.", [lead(fresh_url)]),
-                           ("No new lead.", []), ("No new lead.", [])])
+    gateway = FakeGateway(complete_rounds([("A passage for the new question.", [lead(fresh_url)]),
+                           ("No new lead.", []), ("No new lead.", [])]))
     result = execute(gateway, ctx, trace="trace_followup")
     assert reads == [root_url, fresh_url]
-    assert len(gateway.search_calls) == 3
+    assert len(gateway.search_calls) == 6
     state = result["evidence_research"]
     assert state["status"] == "candidate_passages_found"
     assert state["source_count"] == 2 and state["fresh_source_count"] == 1
@@ -491,7 +502,7 @@ def test_transient_source_failure_can_retry_once_in_each_new_approved_pass(isola
     url = "https://archive.example/temporarily-unavailable"
     responses[url] = {"ok": False, "status": http_status, "final_url": url, "outcome": outcome,
                       "detail": "The source is temporarily unavailable."}
-    rounds = [("Try this candidate.", [lead(url)])] * 3
+    rounds = [("Try this candidate.", [lead(url)])] * 6
     first = execute(FakeGateway(rounds), trace="trace_first")
     assert reads == [url]
     assert first["evidence_research"]["url_outcomes"][url] == {"status": outcome, "http_status": http_status}
@@ -517,7 +528,7 @@ def test_permanent_not_found_stays_skipped_in_new_approved_continuation(isolated
     _, reads, responses = isolated
     url = "https://archive.example/permanently-missing"
     responses[url] = missing(url)
-    rounds = [("This is the same missing candidate.", [lead(url)])] * 3
+    rounds = [("This is the same missing candidate.", [lead(url)])] * 6
     first = execute(FakeGateway(rounds), trace="trace_first")
     resume = research.freeze_resume({**first, "trace_id": "trace_first"})
     assert resume["retryable_urls"] == []
@@ -540,11 +551,11 @@ def test_new_question_rediscovered_full_work_reuses_bytes_and_focuses_later_pass
     ctx = context(research_resume=research.freeze_resume({**first, "trace_id": "trace_book"}),
                   research_goal={"kind": "followup_question", "target_quote": ""},
                   question="What does voluntary intention reveal about choice and will?")
-    gateway = FakeGateway([("The same full work contains the relevant later passage.", [lead(url)]),
-                           ("No new lead.", []), ("No new lead.", [])])
+    gateway = FakeGateway(complete_rounds([("The same full work contains the relevant later passage.", [lead(url)]),
+                           ("No new lead.", []), ("No new lead.", [])]))
     result = execute(gateway, ctx, trace="trace_later_question")
     assert reads == [url]
-    assert len(gateway.search_calls) == 3 and len(gateway.final_prompts) == 1
+    assert len(gateway.search_calls) == 6 and len(gateway.final_prompts) == 1
     state = result["evidence_research"]
     assert state["status"] == "candidate_passages_found" and state["sources_tried"] == 0
     assert state["sources"][0]["body_sha256"] == first["evidence_research"]["sources"][0]["body_sha256"]
@@ -560,7 +571,7 @@ def test_fresh_question_new_page_precedes_six_reused_nonmatches_in_grounding(iso
     urls = [f"https://archive.example/old-edition-{n}" for n in range(6)]
     responses.update({url: found(url, (f"Unrelated source {n}. " + "Historical material. " * 300).encode())
                       for n, url in enumerate(urls)})
-    rounds = [("Older candidates.", [lead(url) for url in urls[i:i + 2]]) for i in range(0, 6, 2)]
+    rounds = complete_rounds([("Older candidates.", [lead(url) for url in urls[i:i + 2]]) for i in range(0, 6, 2)])
     first = execute(FakeGateway(rounds), trace="trace_older_material")
     fresh_url = "https://archive.example/voluntary-intention"
     relevant = "Voluntary intention determines the relation between choice and will."
@@ -568,8 +579,8 @@ def test_fresh_question_new_page_precedes_six_reused_nonmatches_in_grounding(iso
     ctx = context(research_resume=research.freeze_resume({**first, "trace_id": "trace_older_material"}),
                   research_goal={"kind": "followup_question", "target_quote": ""},
                   question="How does voluntary intention relate to choice and will?")
-    gateway = FakeGateway([("A source for the new question.", [lead(fresh_url)]),
-                           ("No new lead.", []), ("No new lead.", [])])
+    gateway = FakeGateway(complete_rounds([("A source for the new question.", [lead(fresh_url)]),
+                           ("No new lead.", []), ("No new lead.", [])]))
     result = execute(gateway, ctx, trace="trace_fresh_question")
     assert reads == urls + [fresh_url]
     assert result["evidence_research"]["source_count"] == 7
@@ -587,8 +598,8 @@ def test_continue_source_only_result_requires_new_search_unless_answer_failed(is
     ctx = context(question="How does memory relate to attention?")
     ctx["root"]["selection"].update(quote="", quote_status="none")
     final = None if answer_available else RuntimeError("Final answer transport unavailable")
-    first = execute(FakeGateway([("A source.", [lead(first_url)]),
-                                 ("No new lead.", []), ("No new lead.", [])], final=final),
+    first = execute(FakeGateway(complete_rounds([("A source.", [lead(first_url)]),
+                                 ("No new lead.", []), ("No new lead.", [])]), final=final),
                     ctx, trace="trace_initial_reading")
     assert first["evidence_research"]["status"] == "candidate_passages_found"
     parent = {**first, "trace_id": "trace_initial_reading", "mode": "deepen"}
@@ -597,12 +608,12 @@ def test_continue_source_only_result_requires_new_search_unless_answer_failed(is
     continuation["research_goal"] = research.goal(parent, ctx["root"], continue_evidence=True)
     assert continuation["research_goal"]["requires_new_source"] is answer_available
     responses[new_url] = found(new_url, b"Another readable passage develops the relation of memory and attention.")
-    gateway = FakeGateway([("A further source.", [lead(new_url)]),
-                           ("No new lead.", []), ("No new lead.", [])] if answer_available else [])
+    gateway = FakeGateway(complete_rounds([("A further source.", [lead(new_url)]),
+                           ("No new lead.", []), ("No new lead.", [])]) if answer_available else [])
     result = execute(gateway, continuation, trace="trace_continued_reading")
     assert result["evidence_research"]["status"] == "candidate_passages_found"
     assert result["evidence_research"]["final_answer_status"] == "available"
-    assert len(gateway.search_calls) == (3 if answer_available else 0)
+    assert len(gateway.search_calls) == (6 if answer_available else 0)
     assert reads == ([first_url, new_url] if answer_available else [first_url])
 
 
@@ -622,8 +633,8 @@ def test_repeated_generic_continue_keeps_substantive_question_and_late_excerpt(d
     responses[url] = found(url, body, "text/html")
     substantive_question = "What does voluntary intention reveal about choice and will?"
     initial_context = deeper.build_context(subject, {"question": substantive_question})
-    first_gateway = ExternalFakeGateway([("The complete work.", [lead(url)]),
-                                         ("No new lead.", []), ("No new lead.", [])],
+    first_gateway = ExternalFakeGateway(complete_rounds([("The complete work.", [lead(url)]),
+                                         ("No new lead.", []), ("No new lead.", [])]),
                                         final=RuntimeError("Initial final answer unavailable"))
     parent = deeper.run(initial_context, first_gateway)
     assert parent["evidence_research"]["status"] == "candidate_passages_found"

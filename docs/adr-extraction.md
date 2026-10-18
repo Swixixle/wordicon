@@ -164,6 +164,17 @@ datasets generated later, optionally, from the same records.
   disagreements preserved — consensus is never verification; a coverage
   matrix that names what was NOT captured or analyzed. First measured
   runs here set W5's cap value.
+  **Ruling noted (2026-10-18, his "manually decide your token limits and
+  price ranges"):** the research allowance becomes owner-set dials in
+  Settings when W5's cap lands — presets (quick look / standard / deep
+  dive) over raw sliders, the chosen numbers frozen into each proposal
+  exactly as the fixed plan is today. Dollars stay honest: token limits
+  are enforceable, prices are not knowable in advance, so a money dial is
+  an ESTIMATED ceiling from worst-case token math against an owner-kept
+  rates table, plus a mid-run tripwire that aborts into the checkpoint
+  when observed usage crosses the line — shown as "up to roughly $X,"
+  never as a promise. The measured runs now accumulating are the preset
+  calibration data. Build order remains his to call.
 - **W4 — the other providers, and the lanes.** OpenAI and Google
   adapters beside Anthropic's; keys in the existing secret mechanism,
   never in the corpus; structured outputs per provider, validated

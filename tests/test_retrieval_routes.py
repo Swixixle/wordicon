@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from test_evidence_research import (FakeGateway, context, execute,
+from test_evidence_research import (FakeGateway, complete_rounds, context, execute,
                                     found, isolated, lead, research)
 
 
@@ -54,31 +54,31 @@ def test_inherited_failures_leave_a_read_for_third_search_strategy(isolated):
                       for url, (status, http_status) in zip(urls, outcomes)})
     actual = "https://edition.example/texts/dante-purgatorio-desire-freedom"
     responses[actual] = found(actual, PASSAGE)
-    gateway = ObservedGateway([
+    gateway = ObservedGateway(complete_rounds([
         ("Try the first candidates.", [lead(url) for url in urls[2:4]]),
         ("Try another edition.", [lead(url) for url in urls[4:6]]),
-        ("A public text of the relevant passage.", [lead(actual)])], reads)
+        ("A public text of the relevant passage.", [lead(actual)])]), reads)
     state = execute(gateway, quoteless_context(inherited=[lead(url) for url in urls[:2]]))["evidence_research"]
-    assert len(gateway.search_calls) == 3
-    assert gateway.reads_before_search == [2, 4, 5]
-    assert reads[-1] == actual and len(reads) == 6
-    assert state["rounds_used"] == 3 and state["model_calls"] == 4
+    assert len(gateway.search_calls) == 6
+    assert gateway.reads_before_search == [2, 4, 6, 7, 7, 7]
+    assert reads[-1] == actual and len(reads) == 7
+    assert state["rounds_used"] == 6 and state["model_calls"] == 7
     assert state["source_count"] == 1 and state["usable_source_count"] == 1
     assert state["status"] == "candidate_passages_found"
     assert actual in gateway.final_prompts[0]
     assert set(urls + [actual]) <= set(state["candidate_rankings"])
-    assert len(state["attempted_urls"]) == 6  # An untried lead remains available.
+    assert len(state["attempted_urls"]) == 7  # The seventh read is now available within one press.
 
 
 @pytest.mark.parametrize("failed_rounds", [False, True])
 def test_reservation_preserves_final_read_after_empty_or_failed_searches(isolated, failed_rounds):
     _, reads, responses = isolated
-    inherited = [f"https://archive.example/lead-{n}" for n in range(10)]
+    inherited = [f"https://archive.example/lead-{n}" for n in range(20)]
     responses.update({url: failure(url, "timeout") for url in inherited})
     actual = "https://edition.example/texts/dante-purgatorio-desire-freedom"
     responses[actual] = found(actual, PASSAGE)
-    first_rounds = [TimeoutError("one transport attempt"), OSError("one transport attempt")] if failed_rounds else [
-        ("No new leads.", []), ("No new leads.", [])]
+    first_rounds = ([TimeoutError("one transport attempt")] * 5 if failed_rounds else
+                    [("No new leads.", [])] * 5)
     gateway = ObservedGateway(first_rounds + [("A fresh text.", [lead(actual)])], reads)
     # revision four: a question-blind inherited queue defers its initial reads
     # (tested in test_read_deferral.py). This test's subject is the RESERVATION
@@ -86,24 +86,24 @@ def test_reservation_preserves_final_read_after_empty_or_failed_searches(isolate
     # way live same-question leads do.
     on_question = [{**lead(url), "title": f"Dante Purgatorio reading {n}"} for n, url in enumerate(inherited)]
     state = execute(gateway, quoteless_context(inherited=on_question))["evidence_research"]
-    assert gateway.reads_before_search == [2, 4, 5]
-    assert reads[-1] == actual and len(reads) == 6
-    assert state["rounds_used"] == 3 and state["model_calls"] == 4
+    assert gateway.reads_before_search == [3, 6, 9, 12, 15, 17]
+    assert reads[-1] == actual and len(reads) == 18
+    assert state["rounds_used"] == 6 and state["model_calls"] == 7
     assert len(gateway.final_prompts) == 1
     assert all(max_uses == 1 for _, max_uses in gateway.search_calls)
 
 
-def test_fresh_question_still_allocates_two_reads_per_search(isolated):
+def test_fresh_question_allocates_three_reads_per_search(isolated):
     _, reads, responses = isolated
-    urls = [f"https://archive.example/lead-{n}" for n in range(6)]
+    urls = [f"https://archive.example/lead-{n}" for n in range(18)]
     responses.update({url: failure(url, "access_denied", 403) for url in urls})
-    gateway = ObservedGateway([("Candidate leads.", [lead(url) for url in urls[offset:offset + 2]])
-                               for offset in (0, 2, 4)], reads)
+    gateway = ObservedGateway([("Candidate leads.", [lead(url) for url in urls[offset:offset + 3]])
+                               for offset in (0, 3, 6, 9, 12, 15)], reads)
     ctx = quoteless_context()
     ctx["research_goal"] = {"kind": "followup_question", "target_quote": "", "question": QUESTION}
     state = execute(gateway, ctx)["evidence_research"]
-    assert gateway.reads_before_search == [0, 2, 4]
-    assert reads == urls and state["sources_tried"] == 6
+    assert gateway.reads_before_search == [0, 3, 6, 9, 12, 15]
+    assert reads == urls and state["sources_tried"] == 18
 
 
 def test_unreadable_formats_and_catalogs_are_deferred_but_retained(isolated):
@@ -117,7 +117,7 @@ def test_unreadable_formats_and_catalogs_are_deferred_but_retained(isolated):
     responses[pdf] = failure(pdf, "unsupported_content_type", 200)
     responses[catalog] = failure(catalog, "access_denied", 403)
     responses[text] = found(text, PASSAGE)
-    gateway = FakeGateway([("Candidates in return order.", rows), ("No new leads.", []), ("No new leads.", [])])
+    gateway = FakeGateway(complete_rounds([("Candidates in return order.", rows), ("No new leads.", []), ("No new leads.", [])]))
     result = execute(gateway, quoteless_context())
     assert reads == [text, catalog, pdf]
     assert {row["url"] for row in result["citations"]} == {text, catalog, pdf}
@@ -131,8 +131,8 @@ def test_only_catalog_and_pdf_candidates_are_not_silently_dropped(isolated):
     pdf = "https://academy.example/dante.pdf"
     responses[catalog] = failure(catalog, "access_denied", 403)
     responses[pdf] = failure(pdf, "unsupported_content_type", 200)
-    gateway = FakeGateway([("Only difficult routes.", [lead(pdf), lead(catalog)]),
-                           ("No alternate format.", []), ("No public text.", [])])
+    gateway = FakeGateway(complete_rounds([("Only difficult routes.", [lead(pdf), lead(catalog)]),
+                           ("No alternate format.", []), ("No public text.", [])]))
     state = execute(gateway, quoteless_context())["evidence_research"]
     assert reads == [catalog, pdf]
     assert set(state["url_outcomes"]) == {catalog, pdf}
@@ -142,7 +142,7 @@ def test_only_catalog_and_pdf_candidates_are_not_silently_dropped(isolated):
 
 def test_rediscovered_candidate_can_improve_retrieval_tier_despite_lower_overlap_score(isolated):
     _, reads, responses = isolated
-    first = ["https://edition.example/first", "https://edition.example/second"]
+    first = ["https://edition.example/first", "https://edition.example/second", "https://edition.example/third"]
     revisited, catalog = "https://edition.example/revisited", "https://store.example/item"
     responses.update({url: failure(url, "access_denied", 403)
                       for url in first + [revisited, catalog]})
@@ -154,10 +154,10 @@ def test_rediscovered_candidate_can_improve_retrieval_tier_despite_lower_overlap
     later_rank = research.evidence_quality.rank_candidate(later, work=work, question=QUESTION)
     assert earlier_rank["retrieval_tier"] == 1 and later_rank["retrieval_tier"] == 0
     assert later_rank["score"] < earlier_rank["score"]
-    gateway = FakeGateway([
+    gateway = FakeGateway(complete_rounds([
         ("Initial candidates.", [earlier] + [lead(url) for url in first]),
         ("Revised metadata for the pending URL.", [competitor, later]),
-        ("No new candidates.", [])])
+        ("No new candidates.", [])]))
     ctx = quoteless_context()
     ctx["focus"]["work"] = work
     state = execute(gateway, ctx)["evidence_research"]
@@ -174,7 +174,7 @@ def test_search_prompt_discloses_reader_formats_and_inherited_failures(isolated)
     ctx["research_resume"].update(attempted_urls=[blocked, pdf],
         url_outcomes={blocked: {"status": "access_denied", "http_status": 403},
                       pdf: {"status": "unsupported_content_type", "http_status": 200}})
-    gateway = FakeGateway([("No public alternative.", [])] * 3)
+    gateway = FakeGateway([("No public alternative.", [])] * 6)
     execute(gateway, ctx)
     assert reads == []
     for prompt, _ in gateway.search_calls:
@@ -197,7 +197,7 @@ def test_search_prompt_bounds_prior_history_and_retains_original_failure_on_retr
     ctx["research_resume"].update(attempted_urls=historical, retryable_urls=[retry],
         url_outcomes={url: {"status": "timeout", "http_status": None} for url in historical})
     responses[retry] = failure(retry, "not_found", 404)
-    gateway = FakeGateway([("No public alternative.", [])] * 3)
+    gateway = FakeGateway([("No public alternative.", [])] * 6)
     execute(gateway, ctx)
     assert reads == [retry]
     for prompt, _ in gateway.search_calls:
@@ -211,10 +211,10 @@ def test_search_prompt_bounds_prior_history_and_retains_original_failure_on_retr
 
 def test_zero_reads_and_weak_readable_text_have_different_missing_evidence_messages(isolated):
     _, reads, responses = isolated
-    none = execute(FakeGateway([("No usable route.", [])] * 3), quoteless_context(), trace="trace_no_text")
+    none = execute(FakeGateway([("No usable route.", [])] * 6), quoteless_context(), trace="trace_no_text")
     url = "https://archive.example/irrelevant"
     responses[url] = found(url, b"An entirely unrelated weather bulletin about rain and snow.")
-    weak = execute(FakeGateway([("A candidate.", [lead(url)]), ("No more.", []), ("No more.", [])]),
+    weak = execute(FakeGateway(complete_rounds([("A candidate.", [lead(url)]), ("No more.", []), ("No more.", [])])),
                    quoteless_context(), trace="trace_weak_text")
     assert none["evidence_research"]["source_count"] == 0
     assert none["evidence_research"]["remaining_requirement"].startswith("No readable source text was obtained")
@@ -227,8 +227,8 @@ def test_zero_reads_and_weak_readable_text_have_different_missing_evidence_messa
 def test_prior_research_plan_requires_fresh_proposal_before_dispatch(isolated):
     tmp, reads, _ = isolated
     ctx = quoteless_context()
-    assert ctx["research_plan"]["version"] == 5
-    for frozen in (2, 3, 4):
+    assert ctx["research_plan"]["version"] == 6
+    for frozen in (2, 3, 4, 5):
         ctx = quoteless_context()
         ctx["research_plan"]["version"] = frozen
         gateway = FakeGateway()

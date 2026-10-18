@@ -140,6 +140,18 @@
     const limits = plan.limits || plan;
     const items = [[limits.max_search_rounds, 'search rounds'], [limits.max_source_reads, 'direct source reads'], [limits.max_model_calls, 'model calls']]
       .filter(([value]) => countKnown(value)).map(([value, label]) => value + ' ' + label);
+    if (plan.version >= 6) {
+      const contextLimit = countKnown(limits.max_grounding_chars)
+        ? message('The answer can receive up to ' + limits.max_grounding_chars.toLocaleString('en-US') + ' characters of source passages, with their saved locations.') : '';
+      return `<div class="deeper-research-plan">${message('One Start lets the tool follow further leads and examine several passages from a saved work within the approved allowance.')}
+        <details><summary style="cursor:pointer">Research allowance and cost</summary>
+          ${message('Evidence checking: ' + (items.length ? 'up to ' + items.join(', ') + '.' : 'within the frozen research limits.'))}
+          ${contextLimit}
+          ${message('Each discovery request allows one provider search; the final model request writes the answer from the collected passages. Saved passages can be inspected without another download or another press of Continue checking.')}
+          ${message('Readable pages are tried before catalog hints, and some reads are reserved for later searches. Earlier passage locations are remembered so new reading can advance through the work. Matching words does not establish that an answer is supported.')}
+          ${message('Search and model token charges may apply; actual cost is unknown until reported. This allowance is not a dollar cap or a completion-time guarantee. If the allowance runs out, the record keeps the evidence and remaining question for a separately reviewed continuation.')}
+        </details></div>`;
+    }
     return `<div class="deeper-research-plan">${message('Evidence checking: ' + (items.length ? 'up to ' + items.join(', ') + '.' : 'within the frozen research limits.'))}${plan.version >= 2 ? message('For a question without exact quoted wording, checking continues through the available source-read or search allowance. Finding readable text or matching topic terms does not establish that the answer is supported.') : ''}${plan.version >= 3 ? message('Links that look like readable pages are tried first. Some reads are kept for later search approaches, so the first set of links cannot use the whole allowance.') : ''}${plan.version >= 4 ? message('If none of the carried-over links matches the question\'s own terms, the first reads wait for fresh search results instead — the carried links stay saved and can still be read later.') : ''}${plan.version >= 5 ? message('When a saved text comes back in a later pass, the next excerpt is taken from parts not yet shown to the model; if only an already-shown part matches, the record says it was reused.') : ''}${message('If an attempt fails, checking can continue through other source leads and targeted follow-up searches within those limits. Search and model token charges may apply; actual cost is unknown until reported. Reaching a limit preserves the evidence and remaining question for a separately reviewed continuation.')}</div>`;
   }
 
@@ -212,8 +224,13 @@
         </details>
       </article>`;
     }).join('');
-    const progress = [[research.rounds_used, 'search rounds used'], [research.sources_tried, 'sources tried'], [research.source_count, 'readable source texts obtained'], [research.usable_source_count, 'source texts retained as candidates']]
+    const readableCounts = countKnown(research.fresh_source_count) && countKnown(research.reused_source_count)
+      ? [[research.fresh_source_count, 'new readable source reads'], [research.reused_source_count, 'saved source reads reused']]
+      : [[research.source_count, 'readable source texts obtained (new/reused split not recorded)']];
+    const progress = [[research.rounds_used, 'search rounds used'], [research.sources_tried, 'new source reads attempted'], ...readableCounts, [research.usable_source_count, 'source texts retained as candidates']]
       .filter(([value]) => countKnown(value)).map(([value, label]) => value + ' ' + label).join(' · ');
+    const answerInput = [[research.grounding_passage_count, 'passages'], [research.unique_source_count, 'distinct saved texts'], [research.grounding_chars, 'source characters']]
+      .filter(([value]) => countKnown(value)).map(([value, label]) => value.toLocaleString('en-US') + ' ' + label).join(' · ');
     return `<section class="deeper-evidence" aria-label="Recorded source evidence" style="margin:16px 0">
       <div class="section-label">${fixture ? 'MOCK FIXTURE · Evidence demonstration' : 'Recorded source evidence'}</div>
       ${paragraph(fixture ? 'Simulated evidence only — no live source check was performed.' : labels[research.status] || 'Evidence status not recognized')}
@@ -224,6 +241,7 @@
       ${research.remaining_requirement ? message(research.remaining_requirement) : ''}
       ${research.final_answer_status === 'unavailable' ? message('A grounded answer is not yet available. Continue checking can prepare another answer using the saved evidence.') : ''}
       ${progress ? message(progress) : ''}
+      ${answerInput ? message('Included in the answer request: ' + answerInput + '. These counts describe supplied text, not verified understanding.') : ''}
       ${proofHtml}
       ${sourceScreeningHtml(research.sources)}
       ${steps.length ? `<details><summary style="cursor:pointer">Checking attempts · ${steps.length}</summary><ol>${steps.map(step => `<li style="overflow-wrap:anywhere">${esc([step.kind, step.status, step.url ? safeSourceUrl(step.url) || 'Source URL omitted' : '', step.reason].filter(Boolean).join(' · '))}</li>`).join('')}</ol></details>` : ''}

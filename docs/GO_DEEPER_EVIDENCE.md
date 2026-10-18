@@ -60,18 +60,30 @@ with different bytes is a named open limitation, not silently equated.
 Advancement changes which passage is shown next; it does not verify
 relevance, work identity or answer support.
 
+Revision six gives one approved Start enough room for a larger research pass:
+six searches, eighteen source reads, seven model requests and up to 60,000
+source-passage characters in the answer request. It also selects several distinct
+passages from each saved body for the answer request during the same pass. A whole work in custody
+must not be represented only by the first locally promising window, nor should
+the owner need another Continue press just to inspect its later sections.
+These are work allowances, not a claim that every question can be answered or
+that a particular dollar total or completion time is guaranteed.
+
 ## The plan is approved before work
 
 New proposals freeze a research plan with at most:
 
-- Three search requests, with one provider search allowed in each.
-- Six credential-free public source reads, each limited to 2 MiB and three
+- Six discovery requests, with one provider search allowed in each.
+- Eighteen credential-free public source reads, each limited to 2 MiB and three
   revalidated redirects. Redirects can make additional HTTP GETs within that
   read allowance. Only public HTML and plain text are supported.
-- Four model requests total: up to three discovery requests and one tool-free
+- Seven model requests total: up to six discovery requests and one tool-free
   explanation. Each has one HTTP attempt; SDK retries are disabled. The
   ordinary model output ceiling remains 24,000 tokens per request. That is
   an output limit, not a limit on billable input or total price.
+- Up to six distinct 3,000-character passages per saved source body, with a
+  60,000-character total source-text allowance for the final answer request.
+  Reading further within saved bytes does not incur another source download.
 
 Search, model input and model output can all incur charges. Provider-internal
 search processing can substantially increase input tokens. The proposal says
@@ -79,8 +91,9 @@ the total price is unknown; this is a bounded-work plan, not a dollar cap.
 There are no background runs. The mock lane remains one offline fixture and
 does not fetch sources. Previously frozen proposals without a research plan
 retain the original single-call behavior; prepare a new proposal to use this
-feature. Frozen revision-one and revision-two research proposals are refused
-before dispatch; prepare a new revision-three proposal. A pass may use more
+feature. Frozen research proposals from an earlier revision are refused before
+dispatch; prepare a new revision-six proposal so its larger allowance is
+explicit before Start. A pass may use more
 of the same disclosed allowance than an older stopping policy did. Other
 lanes retain their existing search allowances.
 
@@ -97,15 +110,15 @@ completion guarantee.
 
 ## What happens when a route fails
 
-The controller first considers saved, unused leads. Discovery then tries a
-readable primary text, a different edition/archive, and a more precise
-passage search. Every read batch leaves at least one read available for each
-remaining search strategy. With a full inherited queue, this can allocate
-two initial reads, then two, one and one after the three search strategies.
-A new question with no initial reads can use two after each strategy. Empty
-or failed searches do not release later strategies' reservations early;
-unused reads become available once the discovery strategies have run.
-Quotation matches and revalidated answer-only retries retain their shortcuts.
+The controller first considers saved, unused leads. Discovery uses the six
+strategies frozen in the proposal to find readable primary texts, alternate
+routes and more specific passages. Every read batch leaves at least one read
+available for each remaining search strategy. Empty or failed searches do not
+release later strategies' reservations early; unused reads become available
+once the discovery strategies have run. Quotation matches and revalidated
+answer-only retries retain their shortcuts. The larger allowance is a ceiling,
+not a requirement to spend all seven model requests after the requested
+wording has already been located.
 
 Discovery is explicitly told that the reader accepts public HTML/plain text,
 and to seek a supported edition when a PDF or blocked route cannot be read.
@@ -129,15 +142,29 @@ finish that question. All-weak passages and unmatched quotations remain
 `needs_more_evidence`, even if readable text was obtained.
 Absence from one retrieved edition does not prove a quotation false.
 
-The final model receives up to 12,000 source-excerpt characters. Matched
+The final model receives up to 60,000 source-passage characters. Matched
 passages and current-question sources take priority over older material.
-For other passages, deterministic term overlap selects a bounded window from
-the complete extracted text, including later chapters. Generic terms such as
-chapter, ever and his no longer count as substantive overlap. Concept words
-such as will are retained. That selection is
-labeled with offsets and method and does not verify relevance. Omitted text
-is disclosed. Generated prose remains advisory and may still be wrong; the
-mechanical evidence panel is independent of it.
+For other passages, selection considers the complete extracted text and can
+supply up to six distinct windows of at most 3,000 characters from each saved
+body during this same run. Generic numbered section and chapter boundaries
+help spread the selections through a work instead of exhausting the allowance
+on one early scene. Each supplied passage retains its source, body hash,
+section and text offsets. Identical bodies under different URLs do not consume
+the answer allowance twice. Changed bytes are not assumed to share offsets
+with an older body, even when the URL is unchanged.
+
+Only passage ranges actually packed into the final answer request enter the
+shown-window ledger. Later passes prefer matching unshown ranges; forced reuse
+is recorded. Older revision-five records without that ledger use their recorded
+excerpt selection as a compatibility assumption; that metadata does not recover
+their actual final-prompt manifest. A mirror
+with different bytes is still a separate body; no equivalence is invented.
+Generic question-framing terms such as help, understand and context do not steer
+selection. Concept words such as will remain eligible. Selection and screening
+are heuristic: larger input and chapter distribution do not verify relevance,
+work identity or answer support. Omitted text is disclosed. Generated prose
+remains advisory and may still be wrong; the mechanical evidence panel is
+independent of it.
 
 When the recorded readable-source count is explicitly zero, the result puts
 "No source text retrieved" above the explanation and identifies the model
@@ -145,8 +172,12 @@ explanation as unverified. That count cannot establish whether the model used
 recall, the supplied context or inference. A failed final answer gets a separate unavailable
 notice. Readable-but-excluded excerpts get a distinct warning. Missing legacy
 counts are not treated as zero; reused readable sources still count as
-evidence even when the current pass makes no new source requests. Fixture
-results keep their fixture identification.
+evidence even when the current pass makes no new source requests. New records
+distinguish newly readable source reads from saved reads reused, and report the
+passage count, distinct saved-body count and source characters actually supplied
+to the answer request. These counts do not assert model understanding. Legacy
+records explicitly leave the new/reused split unknown. Fixture results keep
+their fixture identification.
 
 Excerpt screening records meaningful question/work matches and generic
 catalog or access-page hints. A useful passage merely mentioning a catalog
@@ -155,7 +186,11 @@ answer grounding, with their bytes and reasons retained. This is a lexical
 heuristic: translations, synonyms and difficult questions can be falsely
 excluded. Passing it does not certify a passage as the work itself or as
 support for the answer. Saved references prefer useful earlier excerpts over
-later weak reads so continuation retains the best available source.
+later weak reads so continuation retains the best available source. Up to
+eighteen distinct saved bodies carry forward, with omitted-reference counts
+recorded; duplicate appearances cannot displace all the other works.
+Up to 128 submitted-window descriptors per carried body travel to the next
+pass. Older omitted descriptors are counted; the original checkpoints remain.
 If a generic question such as "explain more" has no meaningful terms, the
 frozen subject supplies the screening terms. The record names that fallback;
 the owner's actual question is preserved and no completion shortcut is added.
@@ -175,6 +210,12 @@ excerpt without another download. A source-only continuation with an available
 answer also performs fresh discovery. Retrying an unavailable final answer
 can reuse a completed revision-two-or-later pass with revalidated useful excerpts
 without another search. An older landing-page result has no such shortcut.
+For revision-six records, this retries the failed answer's exact submitted
+passages in their original order. Body, representation, section and passage
+hashes and offsets are rechecked. A missing body, descriptor or required hash
+records a replay gap and reopens discovery instead of silently substituting
+weaker passages. Legacy records without a manifest re-extract their best
+available passages without treating the failed request as a completed reading.
 
 If the final model request fails or returns unusable JSON, a deterministic
 status card keeps the evidence and offers continuation. The run does not
@@ -215,7 +256,12 @@ All automated checks use fixtures, synthetic HTTP transports or mocked
 source retrieval. They exercise the real controller, extractor, matcher,
 file persistence and UI without live model calls. Failed-source/alternate-
 success scenarios, misleading discovery prose, budgets, cached-byte tampering,
-late-chapter selection and final-answer failure have explicit checks.
+late-chapter selection and final-answer failure have explicit checks. Revision
+six checks the actual answer prompt for distinct located passages from Acts I,
+IV and VI in one pass. This proves those located passages were supplied to the
+answer request; it does not prove model understanding. The browser journey checks the 6/18/7 proposal, 60,000-character
+allowance, new/reused counts and supplied passage volume, while retaining the
+revision-five checks for populated attempts in both stacked results.
 
 ```sh
 python -m pytest tests/test_deeper.py tests/test_deeper_integration.py \
@@ -229,7 +275,9 @@ PYTHON=python bash tests/journeys/run-deeper.sh
 node tests/journeys/deeper-evidence.js
 ```
 
-Revision three is prepared against `d329c19c7691bcfc7ce391e91e21dcc3886c2fd3`.
+Revision six is prepared against the supplied revision-five commit `c096409`
+on `candidate-r89`. Revision three was prepared against
+`d329c19c7691bcfc7ce391e91e21dcc3886c2fd3`.
 Revision two was based on `1abc1ecc9eb4be8a766e428e0b0aa05053d124e3`.
 The original evidence package was based on `38b94207cbcf9f1e6d40249df08cc10e215558a1`.
 Apply the incremental patch

@@ -15,7 +15,7 @@ import json
 
 import pytest
 
-from test_evidence_research import (FakeGateway, context, execute,
+from test_evidence_research import (FakeGateway, complete_rounds, context, execute, final_evidence,
                                     found, isolated, lead, research)
 
 import evidence_fetch
@@ -100,7 +100,7 @@ def test_template_framing_words_no_longer_count_as_question_terms():
 def pass_one(reads, responses):
     url = "https://texts.example/ryder/full"
     responses[url] = found(url, ryder_body())
-    gateway = FakeGateway([("A full text.", [lead(url)]), ("No new leads.", []), ("No new leads.", [])])
+    gateway = FakeGateway(complete_rounds([("A full text.", [lead(url)]), ("No new leads.", []), ("No new leads.", [])]))
     result = execute(gateway, shak_context(), trace="trace_pass_one")
     sel = result["evidence_research"]["sources"][0]["inspection"]["excerpt_selection"]
     text = result["evidence_research"]["sources"][0]  # inspection text removed; read packed window from checkpoint sources
@@ -115,51 +115,40 @@ def test_first_pass_selects_the_act_i_window(isolated):
     assert "advanced_past_shown_windows" not in sel and "reselected_previously_shown_window" not in sel
 
 
-def test_continuation_reaches_the_act_iv_and_vi_regions_instead_of_the_same_window(isolated):
+def test_first_pass_now_supplies_all_three_act_regions_without_another_press(isolated):
     tmp, reads, responses = isolated
-    url, first, sel1 = pass_one(reads, responses)
-    resume = research.freeze_resume({**first, "trace_id": "trace_pass_one"})
-    # the continuation reuses the saved body before any new read
-    gateway2 = FakeGateway([("No new leads.", []), ("No new leads.", []), ("No new leads.", [])])
-    second = execute(gateway2, shak_context(research_resume=resume,
-                                            research_goal={"kind": "continue_evidence", "target_quote": "",
-                                                           "question": QUESTION}), trace="trace_pass_two")
-    reused = [s for s in second["evidence_research"]["sources"] if s.get("url") == url]
-    assert reused, "the saved text was not reused"
-    sel2 = reused[0]["inspection"]["excerpt_selection"]
-    assert sel2.get("advanced_past_shown_windows", 0) >= 1
-    assert sel2["start"] != sel1["start"]
-    # the newly shown window is a REAL act region, not filler: it carries the
-    # departure gift or the king's lament
-    ck = json.loads((tmp / "deeper_evidence" / "trace_pass_two" / "checkpoint.json").read_text())
-    final = [r for r in ck["model_records"] if r.get("stage") == "complete"]
-    prompt = final[-1]["prompt"] if final else ""
-    assert ("wear this ring" in prompt) or ("virtue, ring" in prompt), "the advanced window did not reach Act IV/VI text"
-    assert prompt.count(ACT_I[:40]) == 0 or sel2["start"] != sel1["start"]
-    # a third pass excludes both shown windows and still advances or says it reused
-    resume3 = research.freeze_resume({**second, "trace_id": "trace_pass_two"})
-    gateway3 = FakeGateway([("No new leads.", []), ("No new leads.", []), ("No new leads.", [])])
-    third = execute(gateway3, shak_context(research_resume=resume3,
-                                           research_goal={"kind": "continue_evidence", "target_quote": "",
-                                                          "question": QUESTION}), trace="trace_pass_three")
-    reused3 = [s for s in third["evidence_research"]["sources"] if s.get("url") == url]
-    sel3 = reused3[0]["inspection"]["excerpt_selection"]
-    assert sel3.get("advanced_past_shown_windows") or sel3.get("reselected_previously_shown_window")
+    url, result, _ = pass_one(reads, responses)
+    checkpoint = json.loads((tmp / "deeper_evidence" / "trace_pass_one" / "checkpoint.json").read_text())
+    prompt = next(call["prompt"] for call in checkpoint["model_records"] if call["stage"] == "complete")
+    sources = final_evidence(prompt)["sources"]
+    text = "\n".join(source["text"] for source in sources)
+    assert all(needle in text for needle in ("watering debt", "wear this ring", "virtue, ring"))
+    assert reads == [url]
+    locations = [(source["excerpt_selection"]["section_path"],
+                  source["excerpt_selection"]["start"], source["excerpt_selection"]["end"])
+                 for source in sources]
+    assert len(locations) >= 3 and len(set(locations)) == len(locations)
 
 
-def test_same_pass_duplicate_bytes_advance_rather_than_repeat(isolated):
-    tmp, reads, responses = isolated
+def test_same_pass_duplicate_bytes_do_not_repeat_packed_passages(isolated):
+    _, reads, responses = isolated
     a, b = "https://texts.example/ryder/full", "https://mirror.example/ryder/full"
     body = ryder_body()
     responses[a] = found(a, body)
     responses[b] = found(b, body)
-    gateway = FakeGateway([("Two copies.", [lead(a), lead(b)]), ("No new leads.", []), ("No new leads.", [])])
+    gateway = FakeGateway(complete_rounds([("Two copies.", [lead(a), lead(b)])]))
     result = execute(gateway, shak_context(), trace="trace_twin")
     sources = [s for s in result["evidence_research"]["sources"] if s.get("url") in (a, b)]
-    assert len(sources) == 2
-    sels = [s["inspection"]["excerpt_selection"] for s in sources]
-    assert sels[0]["start"] != sels[1]["start"], "identical bytes were shown twice at the same window"
-    assert sels[1].get("advanced_past_shown_windows", 0) >= 1
+    assert len(sources) == 2 and reads == [a, b]
+    assert sources[1]["duplicate_of_url"] == a
+    packed = final_evidence(gateway.final_prompts[0])["sources"]
+    assert {source["url"] for source in packed} == {a}
+    locations = [(source["body_sha256"], source["excerpt_selection"]["section_path"],
+                  source["excerpt_selection"]["start"], source["excerpt_selection"]["end"])
+                 for source in packed]
+    assert len(set(locations)) == len(locations)
+    assert all(needle in "\n".join(source["text"] for source in packed)
+               for needle in ("watering debt", "wear this ring", "virtue, ring"))
 
 
 def test_reselection_is_disclosed_when_only_the_shown_window_matches(isolated):
@@ -167,10 +156,10 @@ def test_reselection_is_disclosed_when_only_the_shown_window_matches(isolated):
     url = "https://texts.example/one-scene"
     body = (ACT_I + FILLER * 80).encode()            # the terms live in one window only
     responses[url] = found(url, body)
-    gateway = FakeGateway([("One scene.", [lead(url)]), ("No new leads.", []), ("No new leads.", [])])
+    gateway = FakeGateway(complete_rounds([("One scene.", [lead(url)]), ("No new leads.", []), ("No new leads.", [])]))
     first = execute(gateway, shak_context(), trace="trace_one_scene")
     resume = research.freeze_resume({**first, "trace_id": "trace_one_scene"})
-    gateway2 = FakeGateway([("No new leads.", []), ("No new leads.", []), ("No new leads.", [])])
+    gateway2 = FakeGateway(complete_rounds([("No new leads.", []), ("No new leads.", []), ("No new leads.", [])]))
     second = execute(gateway2, shak_context(research_resume=resume,
                                             research_goal={"kind": "continue_evidence", "target_quote": "",
                                                            "question": QUESTION}), trace="trace_one_scene_b")
@@ -181,6 +170,7 @@ def test_reselection_is_disclosed_when_only_the_shown_window_matches(isolated):
 
 def test_plan_names_the_advancement():
     plan = research.plan()
-    assert plan["version"] == 5
-    assert "excerpt selection prefers windows not yet shown to the model" in plan["source_selection"]
-    assert "disclosed by name" in plan["source_selection"]
+    assert plan["version"] == 6
+    assert "six distinct passages" in plan["source_selection"]
+    assert "Only passages actually supplied" in plan["source_selection"]
+    assert "reselecting a previously shown window is disclosed" in plan["source_selection"]

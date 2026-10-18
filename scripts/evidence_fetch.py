@@ -33,6 +33,7 @@ TEXT_TYPES = {"text/html", "application/xhtml+xml", "text/plain"}
 REDIRECT_CODES = {301, 302, 303, 307, 308}
 MAX_GROUNDING_CHARS = 12000
 QUESTION_EXCERPT_CHARS = 3000
+MAX_PASSAGES_PER_INSPECTION = 8
 
 
 class FetchRefused(ValueError):
@@ -346,7 +347,193 @@ def _question_excerpt(rep: dict, question: str, full_text_length: int, exclude_s
     return {}
 
 
-def inspect_quote(body: bytes, content_type: str, quote: str, *, question: str = "", exclude_spans=None) -> dict:
+_NUMBERED_DIVISION = re.compile(
+    r"^(?:act|chapter|book|part|canto|section)\s+"
+    r"(?:[ivxlcdm]+|\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b", re.I)
+
+
+def _passage_regions(section: dict) -> list[dict]:
+    """Locate printed divisions without changing the Library representation.
+
+    HTML headings and short numbered division labels supply reading diversity,
+    not verified work identity. A prose paragraph beginning 'Act IV ...' is not
+    a heading merely because it mentions an act. Offsets remain addresses in the
+    original extracted section, even when that section contains a whole book.
+    """
+    text = section["text"]
+    boundaries = [{"start": 0, "heading": section.get("heading", ""),
+                   "numbered_division": False}]
+    for para in section.get("paragraphs", []):
+        sentences = [s for s in para.get("sentences", []) if s.get("start", -1) >= 0]
+        if not sentences:
+            continue
+        start = text.rfind("\n", 0, sentences[0]["start"]) + 1
+        end = text.find("\n", start)
+        line = text[start:end if end >= 0 else len(text)].strip()
+        numbered = (bool(_NUMBERED_DIVISION.match(line)) and len(line) <= 160
+                    and not re.search(r"[.!?;]", line))
+        is_heading = bool(re.fullmatch(r"h[1-6]", para.get("tag", "")))
+        if not line or not (is_heading or numbered):
+            continue
+        boundary = {"start": start, "heading": line[:240],
+                    "numbered_division": numbered}
+        if start == boundaries[-1]["start"]:
+            boundaries[-1] = boundary
+        elif start > boundaries[-1]["start"]:
+            boundaries.append(boundary)
+    return [{**boundary, "end": (boundaries[i + 1]["start"]
+                                if i + 1 < len(boundaries) else len(text))}
+            for i, boundary in enumerate(boundaries)]
+
+
+def _question_passages(rep: dict, question: str, passage_limit: int,
+                       exclude_spans=None) -> list[dict]:
+    """Select distinct lexical passages, spreading a read across a whole work.
+
+    One best window per printed division is considered before a second window
+    from a division. Among equally complete question-term matches, numbered
+    divisions precede other sections; rarer question terms carry more weight
+    than frequent names when selecting a passage within a division. This
+    is a disclosed lexical heuristic, never a finding that the text is relevant
+    or that a question has been answered. Already shown windows are bypassed as
+    in r5; fallback to one shown window is explicit when no new match remains.
+    """
+    if not isinstance(question, str) or not question.strip():
+        return []
+    terms = meaningful_terms(question[:2000])[:32]
+    if not terms:
+        return []
+    pattern = re.compile(r"(?<!\w)(?:" + "|".join(re.escape(t) for t in terms) + r")(?!\w)", re.I)
+    counts = {term: 0 for term in terms}
+    for section in rep["sections"]:
+        for match in pattern.finditer(section["text"]):
+            term = match.group(0).casefold()
+            counts[term] = counts.get(term, 0) + 1
+    exclude_spans = exclude_spans or {}
+    candidates, shown, excluded_hits = [], [], 0
+    for section_index, section in enumerate(rep["sections"]):
+        text = section["text"]
+        section_hash = hashlib.sha256(text.encode()).hexdigest()
+        for region in _passage_regions(section):
+            first, stop = region["start"], region["end"]
+            last = max(first, stop - QUESTION_EXCERPT_CHARS)
+            starts = set(range(first, last + 1, QUESTION_EXCERPT_CHARS // 2))
+            starts.add(last)
+            # Term-centered candidates prevent the fixed stride from clipping
+            # a cluster just across a window edge. Quantization bounds the total
+            # candidates by body size, even on highly repetitive pages.
+            for hit in pattern.finditer(text, first, stop):
+                for proposed in (hit.start() - 250, hit.end() + 250 - QUESTION_EXCERPT_CHARS):
+                    start = first + ((proposed - first) // 250) * 250
+                    starts.add(min(last, max(first, start)))
+            starts = sorted(starts)
+            for start in starts:
+                end = min(start + QUESTION_EXCERPT_CHARS, stop)
+                excerpt = text[start:end]
+                raw_hits = list(pattern.finditer(excerpt))
+                if not raw_hits:
+                    continue
+                # Center on the rarer topic term(s), leaving context on both
+                # sides. Otherwise repeated names can push the topic sentence
+                # against the end of a window and hide its immediate reply.
+                rare_count = min(counts[hit.group(0).casefold()] for hit in raw_hits)
+                anchors = [hit for hit in raw_hits if counts[hit.group(0).casefold()] == rare_count]
+                center = start + (anchors[0].start() + anchors[-1].end()) // 2
+                start = min(last, max(first, center - QUESTION_EXCERPT_CHARS // 2))
+                end = min(start + QUESTION_EXCERPT_CHARS, stop)
+                excerpt = text[start:end]
+                hits = [match.group(0).casefold() for match in pattern.finditer(excerpt)]
+                matched = sorted(set(hits))
+                if not matched:
+                    continue
+                selection = {"section_path": section["path"], "start": start, "end": end,
+                             "matched_terms": matched, "heading": region["heading"]}
+                passage = {"text": excerpt, "excerpt_selection": selection,
+                           "text_sha256": hashlib.sha256(excerpt.encode()).hexdigest(),
+                           "section_sha256": section_hash,
+                           "selection_method": "question_terms_across_divisions",
+                           "relevance_verified": False}
+                # A repeated protagonist's name must not swamp the rarer topic
+                # word. Capped inverse-frequency overlap is lexical only; it
+                # does not imply that this passage answers the question.
+                score = (len(matched), int(region["numbered_division"]),
+                         sum(min(8, hits.count(term)) / counts[term] for term in matched),
+                         -section_index, -start)
+                candidate = (score, (section["path"], first), passage)
+                if _span_overlap(start, end, exclude_spans.get(section["path"], ())):
+                    excluded_hits += 1
+                    shown.append(candidate)
+                else:
+                    candidates.append(candidate)
+    candidates.sort(key=lambda candidate: candidate[0], reverse=True)
+    selected, selected_regions, selected_spans = [], set(), {}
+    for distinct_regions in (True, False):
+        for _score, region_id, passage in candidates:
+            location = passage["excerpt_selection"]
+            path, start, end = location["section_path"], location["start"], location["end"]
+            if distinct_regions and region_id in selected_regions:
+                continue
+            # Within a single inspection, no character is offered twice. The
+            # half-window rule above is retained only for prior shown spans.
+            if any(min(end, previous_end) > max(start, previous_start)
+                   for previous_start, previous_end in selected_spans.get(path, ())):
+                continue
+            if excluded_hits:
+                location["advanced_past_shown_windows"] = excluded_hits
+            selected.append(passage)
+            selected_regions.add(region_id)
+            selected_spans.setdefault(path, []).append((start, end))
+            if len(selected) >= passage_limit:
+                return selected
+    if not selected and shown:
+        fallback = max(shown, key=lambda candidate: candidate[0])[2]
+        fallback["excerpt_selection"]["reselected_previously_shown_window"] = True
+        selected.append(fallback)
+    return selected
+
+
+def _replay_passages(rep: dict, requested: list[dict], representation_sha256: str) -> list[dict]:
+    """Resolve a failed answer's recorded input without selecting new passages."""
+    if not isinstance(requested, list) or not 1 <= len(requested) <= MAX_PASSAGES_PER_INSPECTION:
+        raise ValueError("A bounded nonempty passage manifest is required.")
+    sections = {section["path"]: section for section in rep["sections"]}
+    passages = []
+    for descriptor in requested:
+        if not isinstance(descriptor, dict):
+            raise ValueError("A passage descriptor is malformed.")
+        if not isinstance(descriptor.get("section_path"), str):
+            raise ValueError("A passage section is malformed.")
+        if (descriptor.get("representation_sha256")
+                and descriptor["representation_sha256"] != representation_sha256):
+            raise ValueError("The passage representation no longer matches.")
+        section = sections.get(descriptor.get("section_path"))
+        start, end = descriptor.get("start"), descriptor.get("end")
+        if (section is None or type(start) is not int or type(end) is not int
+                or not 0 <= start < end <= len(section["text"])
+                or end - start > QUESTION_EXCERPT_CHARS):
+            raise ValueError("A passage location no longer resolves.")
+        text = section["text"][start:end]
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        section_digest = hashlib.sha256(section["text"].encode()).hexdigest()
+        if ((descriptor.get("text_sha256") and descriptor["text_sha256"] != digest)
+                or (descriptor.get("section_sha256") and descriptor["section_sha256"] != section_digest)):
+            raise ValueError("A passage hash no longer matches.")
+        heading = section.get("heading", "")
+        for region in _passage_regions(section):
+            if region["start"] <= start < region["end"]:
+                heading = region["heading"]
+                break
+        passages.append({"text": text, "text_sha256": digest,
+                         "section_sha256": section_digest,
+                         "selection_method": "replayed_answer_input", "relevance_verified": False,
+                         "excerpt_selection": {"section_path": section["path"], "start": start,
+                                               "end": end, "heading": heading,
+                                               "replayed_answer_input": True}})
+    return passages
+
+
+def inspect_quote(body: bytes, content_type: str, quote: str, *, question: str = "", exclude_spans=None,
+                  passage_limit: int | None = None, requested_passages=None) -> dict:
     """Locate a quote in a pure derivative; return offsets and exact kept text.
 
     `ok` means text extraction succeeded, `matched` means located. The status
@@ -359,10 +546,20 @@ def inspect_quote(body: bytes, content_type: str, quote: str, *, question: str =
     nondeterministic created_at omitted. Repeated
     matches are counted; up to eight section matches are described. A title
     is page-supplied metadata and is never promoted to a work identity.
+    With `passage_limit`, unmatched reads additionally expose that many distinct
+    <=3,000-character `passages`, selected across printed divisions. Each carries
+    its own location and hashes. The top-level r5 excerpt remains compatible.
+    Exact/normalized quotation matches retain their existing path unchanged.
+    For an answer-only retry without a quote, `requested_passages` replays exact
+    ranges from its prior answer-input manifest. Invalid locations/hashes fail
+    by name instead of silently replacing the material the answer was using.
     """
     import library
     import moira
 
+    if passage_limit is not None and (type(passage_limit) is not int
+                                      or not 1 <= passage_limit <= MAX_PASSAGES_PER_INSPECTION):
+        raise ValueError(f"passage_limit must be between 1 and {MAX_PASSAGES_PER_INSPECTION}")
     if not isinstance(body, bytes) or len(body) > MAX_BYTES:
         return {"ok": False, "matched": False, "status": "invalid_body"}
     mime = (content_type or "").split(";", 1)[0].strip().lower()
@@ -406,6 +603,15 @@ def inspect_quote(body: bytes, content_type: str, quote: str, *, question: str =
                 "status": "javascript_required" if features.scripts else "no_extractable_text"}
     if not isinstance(quote, str) or not quote.strip():
         metadata.update(_question_excerpt(rep, question, len(full_text), exclude_spans=exclude_spans))
+        if requested_passages is not None:
+            try:
+                metadata["passages"] = _replay_passages(
+                    rep, requested_passages, metadata["representation_sha256"])
+            except ValueError as exc:
+                return {**metadata, "ok": False, "matched": False,
+                        "status": "passage_replay_mismatch", "passages": [], "detail": str(exc)}
+        elif passage_limit is not None:
+            metadata["passages"] = _question_passages(rep, question, passage_limit, exclude_spans)
         return {**metadata, "ok": True, "matched": False, "status": "no_quote",
                 "extracted_chars": text_length}
     matches = []
@@ -428,6 +634,8 @@ def inspect_quote(body: bytes, content_type: str, quote: str, *, question: str =
     best = matches[0] if matches else {}
     if not matches:
         metadata.update(_question_excerpt(rep, question, len(full_text)))
+        if passage_limit is not None:
+            metadata["passages"] = _question_passages(rep, question, passage_limit, exclude_spans)
     return {**metadata, "ok": True, "matched": bool(matches),
             "status": best.get("status", "not_found"),
             "extracted_chars": text_length, "match_count": count,

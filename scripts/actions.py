@@ -102,7 +102,10 @@ ACTIONS = [
        outbound_fields=("exact selected thread and its source caveats", "question", "disclosed recent exploration context",
                         "retrieved excerpts and failure summaries", "public source GET URLs"),
        recipient="configured model, its search service and public source hosts", provider="model",
-       calls="live: up to 3 search requests and 1 final model request, plus 6 source reads; mock: 1 fixture", result_type="run",
+       # r6 integration note: the PROPOSAL derives its calls line from the
+       # frozen plan's limits; this registry string is the ⌘K listing's
+       # shorthand and must say the same numbers, not the old allowance
+       calls="live: up to 6 search requests and 1 final model request, plus 18 source reads (7 model requests total); mock: 1 fixture", result_type="run",
        legacy_entry="a Sprout thread's Go deeper button",
        note="follows the selected work or idea; opening a proposal starts nothing; curiosity is not a ruling"),
     _a("explore.refract", "Find related words", group="explore", kind="dispatch",
@@ -486,7 +489,12 @@ def prepare(action_id: str, subject: dict, inputs: dict, server_gateway) -> dict
         disclosure["research_plan"] = deeper_context["research_plan"]
         disclosure["source_standing"] = "Mechanical checks concern wording in retrieved text. No source admission, authorship certification or interpretive support ruling."
         if (rd.get("lane") or {}).get("lane") != "mock":
-            disclosure["calls"] = "up to 3 search requests (one search each), up to 6 public source reads, then 1 tool-free model explanation; no background continuation"
+            limits = deeper_context["research_plan"]["limits"]
+            disclosure["calls"] = (f"up to {limits['max_search_rounds']} search requests "
+                                   f"({limits['searches_per_request']} search each), "
+                                   f"up to {limits['max_source_reads']} public source reads, "
+                                   f"then 1 tool-free model explanation; at most {limits['max_model_calls']} "
+                                   "model requests total; no background continuation")
             disclosure["cost"] = deeper_context["research_plan"]["cost"]
             disclosure["leaves_this_machine"] = {
                 "recipient": "configured model provider and public source hosts",

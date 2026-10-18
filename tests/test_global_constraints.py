@@ -6535,7 +6535,8 @@ def _check_deeper_wing():
               "scripts/evidence_fetch.py", "scripts/evidence_research.py", "scripts/evidence_quality.py",
               "tests/test_acquisition_usage.py", "tests/test_evidence_fetch.py", "tests/test_evidence_research.py",
               "tests/test_evidence_quality.py", "tests/test_quoteless_research.py", "tests/test_deposition_door.py",
-              "tests/test_retrieval_routes.py", "tests/test_read_deferral.py", "tests/test_excerpt_advancement.py"):
+              "tests/test_retrieval_routes.py", "tests/test_read_deferral.py", "tests/test_excerpt_advancement.py",
+              "tests/test_passage_reading.py", "tests/test_research_allowance.py"):
         if not (root / f).exists():
             out.append(f"DEEPER: {f} is missing — the wing shipped without its parts")
     if out:
@@ -6664,6 +6665,7 @@ def _check_deeper_wing():
                   "tests/test_acquisition_usage.py", "tests/test_evidence_fetch.py", "tests/test_evidence_research.py",
                   "tests/test_evidence_quality.py", "tests/test_quoteless_research.py", "tests/test_deposition_door.py",
                   "tests/test_retrieval_routes.py", "tests/test_read_deferral.py", "tests/test_excerpt_advancement.py",
+                  "tests/test_passage_reading.py", "tests/test_research_allowance.py",
                   "-q", "-p", "no:cacheprovider"],
                  cwd=root, capture_output=True, text=True, timeout=600)
     if r.returncode != 0:

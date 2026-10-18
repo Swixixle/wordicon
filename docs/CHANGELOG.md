@@ -1,5 +1,41 @@
 # Changelog — Wordicon Sovereign Corpus Blueprint
 
+## v1.49.0 — Revision six: a larger research pass that reads across the work
+
+One Start now authorizes up to six discovery requests, eighteen public source
+reads, and one final answer (seven model requests total). Six distinct search
+strategies are implemented, with later reads reserved. The proposal and live
+progress derive their counts from the same plan. These are work allowances,
+not a dollar cap; provider search input can dominate the actual charge.
+
+Saved works can supply six distinct 3,000-character passages in the same pass,
+within 60,000 total source characters. Generic printed-section boundaries,
+question-term coverage and term-centered windows spread reading across a work.
+Byte-identical mirrors and identical passages cannot fill the answer twice.
+The fullest question/section coverage gets room first, with remaining space
+distributed across other bodies. This heuristic does not verify relevance.
+
+The acceptance fixture is the complete 578,395-byte public-domain Ryder HTML,
+with its hash and provenance. One source read now supplies the Act I offer and
+refusal, Act IV departure gift and Act VI recollection to the saved final
+prompt, with exact extracted-text locations. No work-specific selection rule
+was added. Synthetic chapter, saturation, failure and continuation cases also
+exercise the bounds and reading behavior.
+
+Only submitted final-input ranges enter the shown-window history; selected
+but unpacked passages remain available. Up to eighteen distinct bodies carry
+forward, rather than six possibly duplicated references. A final-input
+manifest preserves hashes, locations and character counts. After a failed
+answer, retry revalidates and replays that exact evidence input; missing bodies
+or hashes reopen research instead of silently substituting a partial reading.
+The card separates new/reused readable sources from passages actually supplied.
+
+Plan/policy revision six refuses older frozen research proposals before
+dispatch. Exact-quotation early stopping, isolated fixtures, source admission,
+credential-free fetching and the ban on silent ambiguous retries remain.
+The source-input regression is verified offline; a correct live provider
+answer and macOS deployment remain separate checks.
+
 ## v1.48.0 — Revision five: the reading problem, first slice
 
 Built to the other builder's four requirements after their review landed a

@@ -18,10 +18,10 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
       requests.push({url:request.url(), method:request.method(), body:request.postDataJSON()});
       if (new URL(request.url()).pathname === '/api/actions/prepare') {
         return route.fulfill({contentType:'application/json', body:JSON.stringify({prepared_id:'prep_fixture', disclosure:{
-          available:true, calls:4, cost:'unknown', lane:{external:true, model:'fixture-model'},
+          available:true, calls:proposalVersion >= 6 ? 7 : 4, cost:'unknown', lane:{external:true, model:'fixture-model'},
           exploration:{question:request.postDataJSON().inputs.question, root:{trace_id:'root_fixture'},
             research_goal:request.postDataJSON().inputs.continue_evidence ? {kind:'continue_evidence',question:'What does the later chapter say about memory?'} : {kind:'followup_question',question:request.postDataJSON().inputs.question},
-            research_plan:{version:proposalVersion,limits:{max_search_rounds:3,max_source_reads:6,max_model_calls:4}}},
+            research_plan:{version:proposalVersion,limits:proposalVersion >= 6 ? {max_search_rounds:6,max_source_reads:18,max_model_calls:7,max_grounding_chars:60000} : {max_search_rounds:3,max_source_reads:6,max_model_calls:4}}},
         }})});
       }
       return route.fulfill({contentType:'text/html', body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><main id="result"></main>'});
@@ -109,6 +109,13 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
     text = await render({evidence_research:candidates});
     ok(text.includes('Candidate passages collected; answer support remains unverified') && !text.includes('Quotation wording located'), 'candidate passages have no wording or answer-proof claim');
     ok(text.includes('3 readable source texts obtained') && text.includes('2 source texts retained as candidates'), 'readable source count stays distinct from screened candidate count');
+    ok(text.includes('new/reused split not recorded') && !text.includes('new readable source reads'), 'legacy totals never invent a fresh-versus-reused breakdown');
+    text = await render({evidence_research:{...candidates,source_count:10,fresh_source_count:4,reused_source_count:6,grounding_passage_count:12,unique_source_count:3,grounding_chars:36000}});
+    ok(text.includes('4 new readable source reads') && text.includes('6 saved source reads reused') && !text.includes('10 readable source texts obtained'), 'new source reading and saved source reuse are displayed separately');
+    ok(text.includes('Included in the answer request: 12 passages · 3 distinct saved texts · 36,000 source characters.') && text.includes('not verified understanding'), 'final answer input reports passages, unique saved texts and actual text volume without claiming understanding');
+    await render({evidence_research:{...candidates,grounding_passage_count:null,unique_source_count:'3',grounding_chars:-1}});
+    ok(!(await page.locator('.deeper-result').innerText()).includes('Included in the answer request:'), 'missing or invalid final-input counts are not invented');
+    text = await render({evidence_research:candidates});
     ok(text.includes('This pass reached its source-read allowance. The research question remains open.'), 'read allowance ends the pass without declaring the question answered');
     ok(await page.getByRole('button',{name:'Continue checking',exact:true}).count() === 1, 'candidate passages offer Continue checking');
     ok(!(await page.locator('.deeper-source-screening').getAttribute('open')), 'source screening starts collapsed');
@@ -164,6 +171,19 @@ const ok = (condition, label) => { assert.ok(condition, label); checks++; consol
     const newQuestion = requests.filter(r => r.method === 'POST').at(-1).body;
     ok(newQuestion.inputs.question === 'How does the argument differ in the next book?' && !Object.prototype.hasOwnProperty.call(newQuestion.inputs, 'continue_evidence'), 'a new follow-up resets continuation intent and has no continuation flag');
     ok(!(await page.locator('.deeper-proposal').innerText()).includes('Some reads are kept for later search approaches'), 'an older frozen proposal does not promise revision-three allocation');
+    await page.locator('.deeper-proposal [data-deeper-action="cancel"]').click();
+    proposalVersion = 6;
+    await page.locator('.deeper-result textarea').fill('What role does the ring play across the work?');
+    await page.getByRole('button',{name:'Review next step',exact:true}).click();
+    await page.locator('.deeper-proposal').waitFor();
+    text = await page.locator('.deeper-proposal').innerText();
+    ok(text.includes('One Start lets the tool follow further leads and examine several passages from a saved work') && !text.includes('6 search rounds'), 'revision-six proposal leads with one-press research and keeps numeric detail collapsed');
+    await page.getByText('Research allowance and cost',{exact:true}).click();
+    text = await page.locator('.deeper-proposal').innerText();
+    ok(text.includes('6 search rounds, 18 direct source reads, 7 model calls') && text.includes('Calls: 7'), 'revision-six proposal displays the frozen 6/18/7 allowances');
+    ok(text.includes('60,000 characters of source passages') && text.includes('without another download or another press of Continue checking'), 'revision-six proposal discloses larger answer input and same-run saved-text reading');
+    ok(text.includes('actual cost is unknown') && text.includes('not a dollar cap or a completion-time guarantee'), 'larger allowance never promises a dollar cap or a completion time');
+    ok(text.includes('Nothing has started.') && requests.every(r => !r.url.endsWith('/api/operations')), 'larger research allowance retains the explicit Start gate');
     ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'evidence and proposal fit a phone-width viewport');
     // Two stacked results on one page (2026-10-18): the owner's pastes twice
     // showed the SECOND result's Checking attempts as numbered empty rows.

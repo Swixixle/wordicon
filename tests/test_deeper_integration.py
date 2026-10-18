@@ -132,6 +132,24 @@ def test_open_prepare_and_abandon_make_no_model_call(app):
     assert ops.list_ops()["total"] == 0
 
 
+def test_external_proposal_discloses_the_controller_allowance_without_dispatch(app, monkeypatch):
+    class ExternalLane(app.gateway_class):
+        name = "offline-external-lane"
+        is_external = True
+
+    monkeypatch.setattr(server, "server_gateway", ExternalLane)
+    proposal = prepare(app)
+    disclosure = proposal["disclosure"]
+    limits = disclosure["research_plan"]["limits"]
+    assert limits["max_search_rounds"] == 6 and limits["max_source_reads"] == 18
+    assert limits["max_model_calls"] == 7 and limits["max_grounding_chars"] == 60000
+    assert "6 search requests" in disclosure["calls"]
+    assert "18 public source reads" in disclosure["calls"]
+    assert "7 model requests total" in disclosure["calls"]
+    assert "not a dollar cap" in disclosure["cost"]
+    assert app.prompts == [] and app.dispatched == []
+
+
 def test_direct_job_cannot_bypass_the_proposal(app):
     response = app.client.post("/api/jobs", json={
         "mode": "deepen", "deepen_context": {"focus": "arbitrary client material"},
