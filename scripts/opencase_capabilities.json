@@ -1,0 +1,1304 @@
+{
+  "schema": "open_case.source_capabilities.v1",
+  "contract_version": "open_case.evidence_semantics.v1",
+  "source_base_commit": "3583c0ee24f43d955ee9e3a93f5de37040496bca",
+  "source_changes_pending": true,
+  "source_module": "services/investigation_coverage.py",
+  "note": "Local proposal roles; credentials and upstream availability are checked at start. No network or model calls are made to prepare this contract.",
+  "profiles": {
+    "federal_judge_district": {
+      "public_records": [
+        {
+          "id": "fjc_biographical",
+          "name": "Federal Judicial Center biographies",
+          "role": "required",
+          "reason": "The federal-judge public-record profile requires an authoritative judicial biography; answer adequacy remains a separate check.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "courtlistener",
+          "name": "CourtListener",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "free_law_project_judge_db",
+          "name": "Free Law Project Judge Db",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "pacer",
+          "name": "Pacer",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "ejudiciary_disclosure",
+          "name": "Ejudiciary Disclosure",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "news_search",
+          "name": "News Search",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "bar_complaints",
+          "name": "Bar Complaints",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "senate_confirmation",
+          "name": "Senate Confirmation",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "reversal_rate",
+          "name": "Reversal Rate",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "recusal_history",
+          "name": "Recusal History",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "sanctions_issued",
+          "name": "Sanctions Issued",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "courtlistener_opinions",
+          "name": "Courtlistener Opinions",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "fjc_reversal_stats",
+          "name": "Fjc Reversal Stats",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "ejudiciary_ptrs",
+          "name": "Ejudiciary Ptrs",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "law_school_records",
+          "name": "Law School Records",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "bar_admission",
+          "name": "Bar Admission",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "pre_bench_career",
+          "name": "Pre Bench Career",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "fec",
+          "name": "FEC campaign finance",
+          "role": "inapplicable",
+          "reason": "This judicial subject has no requested candidate-finance or legislator-vote investigation.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "congress",
+          "name": "Congress.gov / Senate votes",
+          "role": "inapplicable",
+          "reason": "This judicial subject has no requested candidate-finance or legislator-vote investigation.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "usaspending",
+          "name": "USAspending",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "indiana_cf",
+          "name": "Indiana campaign finance",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "lda",
+          "name": "Senate lobbying disclosures",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "regulations",
+          "name": "Regulations.gov",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "govinfo",
+          "name": "GovInfo",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        }
+      ],
+      "judicial_biography": [
+        {
+          "id": "fjc_biographical",
+          "name": "Federal Judicial Center biographies",
+          "role": "required",
+          "reason": "Authoritative FJC biography supplies the requested judicial appointments and commission dates.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "courtlistener",
+          "name": "CourtListener",
+          "role": "optional",
+          "reason": "Additional judicial records can add context; they are not required to report the FJC biography.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "free_law_project_judge_db",
+          "name": "Free Law Project Judge Db",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "pacer",
+          "name": "Pacer",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "ejudiciary_disclosure",
+          "name": "Ejudiciary Disclosure",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "news_search",
+          "name": "News Search",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "bar_complaints",
+          "name": "Bar Complaints",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "senate_confirmation",
+          "name": "Senate Confirmation",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "reversal_rate",
+          "name": "Reversal Rate",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "recusal_history",
+          "name": "Recusal History",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "sanctions_issued",
+          "name": "Sanctions Issued",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "courtlistener_opinions",
+          "name": "Courtlistener Opinions",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "fjc_reversal_stats",
+          "name": "Fjc Reversal Stats",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "ejudiciary_ptrs",
+          "name": "Ejudiciary Ptrs",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "law_school_records",
+          "name": "Law School Records",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "bar_admission",
+          "name": "Bar Admission",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "pre_bench_career",
+          "name": "Pre Bench Career",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "fec",
+          "name": "FEC campaign finance",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "congress",
+          "name": "Congress.gov / Senate votes",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "usaspending",
+          "name": "USAspending",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "indiana_cf",
+          "name": "Indiana campaign finance",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "lda",
+          "name": "Senate lobbying disclosures",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "regulations",
+          "name": "Regulations.gov",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "govinfo",
+          "name": "GovInfo",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        }
+      ]
+    },
+    "federal_judge_circuit": {
+      "public_records": [
+        {
+          "id": "fjc_biographical",
+          "name": "Federal Judicial Center biographies",
+          "role": "required",
+          "reason": "The federal-judge public-record profile requires an authoritative judicial biography; answer adequacy remains a separate check.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "courtlistener",
+          "name": "CourtListener",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "free_law_project_judge_db",
+          "name": "Free Law Project Judge Db",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "pacer",
+          "name": "Pacer",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "ejudiciary_disclosure",
+          "name": "Ejudiciary Disclosure",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "news_search",
+          "name": "News Search",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "bar_complaints",
+          "name": "Bar Complaints",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "senate_confirmation",
+          "name": "Senate Confirmation",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "reversal_rate",
+          "name": "Reversal Rate",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "recusal_history",
+          "name": "Recusal History",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "sanctions_issued",
+          "name": "Sanctions Issued",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "courtlistener_opinions",
+          "name": "Courtlistener Opinions",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "fjc_reversal_stats",
+          "name": "Fjc Reversal Stats",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "ejudiciary_ptrs",
+          "name": "Ejudiciary Ptrs",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "law_school_records",
+          "name": "Law School Records",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "bar_admission",
+          "name": "Bar Admission",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "pre_bench_career",
+          "name": "Pre Bench Career",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "fec",
+          "name": "FEC campaign finance",
+          "role": "inapplicable",
+          "reason": "This judicial subject has no requested candidate-finance or legislator-vote investigation.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "congress",
+          "name": "Congress.gov / Senate votes",
+          "role": "inapplicable",
+          "reason": "This judicial subject has no requested candidate-finance or legislator-vote investigation.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "usaspending",
+          "name": "USAspending",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "indiana_cf",
+          "name": "Indiana campaign finance",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "lda",
+          "name": "Senate lobbying disclosures",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "regulations",
+          "name": "Regulations.gov",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "govinfo",
+          "name": "GovInfo",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        }
+      ],
+      "judicial_biography": [
+        {
+          "id": "fjc_biographical",
+          "name": "Federal Judicial Center biographies",
+          "role": "required",
+          "reason": "Authoritative FJC biography supplies the requested judicial appointments and commission dates.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "courtlistener",
+          "name": "CourtListener",
+          "role": "optional",
+          "reason": "Additional judicial records can add context; they are not required to report the FJC biography.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "free_law_project_judge_db",
+          "name": "Free Law Project Judge Db",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "pacer",
+          "name": "Pacer",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "ejudiciary_disclosure",
+          "name": "Ejudiciary Disclosure",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "news_search",
+          "name": "News Search",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "bar_complaints",
+          "name": "Bar Complaints",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "senate_confirmation",
+          "name": "Senate Confirmation",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "reversal_rate",
+          "name": "Reversal Rate",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "recusal_history",
+          "name": "Recusal History",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "sanctions_issued",
+          "name": "Sanctions Issued",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "courtlistener_opinions",
+          "name": "Courtlistener Opinions",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "fjc_reversal_stats",
+          "name": "Fjc Reversal Stats",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "ejudiciary_ptrs",
+          "name": "Ejudiciary Ptrs",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "law_school_records",
+          "name": "Law School Records",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "bar_admission",
+          "name": "Bar Admission",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "pre_bench_career",
+          "name": "Pre Bench Career",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "fec",
+          "name": "FEC campaign finance",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "congress",
+          "name": "Congress.gov / Senate votes",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "usaspending",
+          "name": "USAspending",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "indiana_cf",
+          "name": "Indiana campaign finance",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "lda",
+          "name": "Senate lobbying disclosures",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "regulations",
+          "name": "Regulations.gov",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "govinfo",
+          "name": "GovInfo",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        }
+      ]
+    },
+    "federal_judge_scotus": {
+      "public_records": [
+        {
+          "id": "fjc_biographical",
+          "name": "Federal Judicial Center biographies",
+          "role": "required",
+          "reason": "The federal-judge public-record profile requires an authoritative judicial biography; answer adequacy remains a separate check.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "courtlistener",
+          "name": "CourtListener",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "free_law_project_judge_db",
+          "name": "Free Law Project Judge Db",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "pacer",
+          "name": "Pacer",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "ejudiciary_disclosure",
+          "name": "Ejudiciary Disclosure",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "news_search",
+          "name": "News Search",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "bar_complaints",
+          "name": "Bar Complaints",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "senate_confirmation",
+          "name": "Senate Confirmation",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "reversal_rate",
+          "name": "Reversal Rate",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "recusal_history",
+          "name": "Recusal History",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "sanctions_issued",
+          "name": "Sanctions Issued",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "courtlistener_opinions",
+          "name": "Courtlistener Opinions",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "fjc_reversal_stats",
+          "name": "Fjc Reversal Stats",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "ejudiciary_ptrs",
+          "name": "Ejudiciary Ptrs",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "law_school_records",
+          "name": "Law School Records",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "bar_admission",
+          "name": "Bar Admission",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "pre_bench_career",
+          "name": "Pre Bench Career",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "fec",
+          "name": "FEC campaign finance",
+          "role": "inapplicable",
+          "reason": "This judicial subject has no requested candidate-finance or legislator-vote investigation.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "congress",
+          "name": "Congress.gov / Senate votes",
+          "role": "inapplicable",
+          "reason": "This judicial subject has no requested candidate-finance or legislator-vote investigation.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "usaspending",
+          "name": "USAspending",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "indiana_cf",
+          "name": "Indiana campaign finance",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "lda",
+          "name": "Senate lobbying disclosures",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "regulations",
+          "name": "Regulations.gov",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "govinfo",
+          "name": "GovInfo",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        }
+      ],
+      "judicial_biography": [
+        {
+          "id": "fjc_biographical",
+          "name": "Federal Judicial Center biographies",
+          "role": "required",
+          "reason": "Authoritative FJC biography supplies the requested judicial appointments and commission dates.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "courtlistener",
+          "name": "CourtListener",
+          "role": "optional",
+          "reason": "Additional judicial records can add context; they are not required to report the FJC biography.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "free_law_project_judge_db",
+          "name": "Free Law Project Judge Db",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "pacer",
+          "name": "Pacer",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "ejudiciary_disclosure",
+          "name": "Ejudiciary Disclosure",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "news_search",
+          "name": "News Search",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "bar_complaints",
+          "name": "Bar Complaints",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "senate_confirmation",
+          "name": "Senate Confirmation",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "reversal_rate",
+          "name": "Reversal Rate",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "recusal_history",
+          "name": "Recusal History",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "sanctions_issued",
+          "name": "Sanctions Issued",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "courtlistener_opinions",
+          "name": "Courtlistener Opinions",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "fjc_reversal_stats",
+          "name": "Fjc Reversal Stats",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "ejudiciary_ptrs",
+          "name": "Ejudiciary Ptrs",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "law_school_records",
+          "name": "Law School Records",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "bar_admission",
+          "name": "Bar Admission",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "pre_bench_career",
+          "name": "Pre Bench Career",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "fec",
+          "name": "FEC campaign finance",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "congress",
+          "name": "Congress.gov / Senate votes",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "usaspending",
+          "name": "USAspending",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "indiana_cf",
+          "name": "Indiana campaign finance",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "lda",
+          "name": "Senate lobbying disclosures",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "regulations",
+          "name": "Regulations.gov",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        },
+        {
+          "id": "govinfo",
+          "name": "GovInfo",
+          "role": "inapplicable",
+          "reason": "This judicial-biography task does not request campaign finance, contracts, lobbying, or regulatory records.",
+          "implemented": true,
+          "availability": "not_applicable"
+        }
+      ]
+    },
+    "senator": {
+      "public_records": [
+        {
+          "id": "fec",
+          "name": "FEC campaign finance",
+          "role": "required",
+          "reason": "The public-record legislator profile requires campaign-finance and vote collection.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "congress",
+          "name": "Congress.gov / Senate votes",
+          "role": "required",
+          "reason": "The public-record legislator profile requires campaign-finance and vote collection.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "lda",
+          "name": "Senate lobbying disclosures",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "regulations",
+          "name": "Regulations.gov",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "govinfo",
+          "name": "GovInfo",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "govinfo_hearings",
+          "name": "Govinfo Hearings",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "congress_amendments",
+          "name": "Congress Amendments",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "fec_jfc",
+          "name": "Fec Jfc",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "fec_schedule_b",
+          "name": "Fec Schedule B",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "opensecrets",
+          "name": "Opensecrets",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "followthemoney",
+          "name": "Followthemoney",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "fec_historical",
+          "name": "Fec Historical",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "news_archive",
+          "name": "News Archive",
+          "role": "unimplemented",
+          "reason": "Declared in the source registry; no working adapter is dispatched.",
+          "implemented": false,
+          "availability": "unimplemented"
+        },
+        {
+          "id": "usaspending",
+          "name": "USAspending",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        },
+        {
+          "id": "indiana_cf",
+          "name": "Indiana campaign finance",
+          "role": "optional",
+          "reason": "Useful supplementary coverage for the broad public-record profile.",
+          "implemented": true,
+          "availability": "checked_at_start"
+        }
+      ]
+    }
+  }
+}

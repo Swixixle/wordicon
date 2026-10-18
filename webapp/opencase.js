@@ -36,13 +36,15 @@
     if (followUp) el.append(node('div', 'Follow-up to ' + followUp, 'foot'));
   }
   function setOrigin(value) { origin = value; proposal = null; $('oc-proposal').replaceChildren(); originView(); $('open-case-card').scrollIntoView({block:'start',behavior:'smooth'}); $('oc-question').focus(); }
+  let reuseEvidence = '';
   async function prepare(event) {
     event.preventDefault(); if (busy) return; busy = true; error(null); $('oc-prepare').disabled = true;
     try {
       const question = $('oc-question').value.trim();
       const inputs = {question, subject_name:$('oc-subject').value.trim(), subject_type:$('oc-profile').value,
         jurisdiction:$('oc-jurisdiction').value.trim(), connector_id:$('oc-connector').value,
-        synthesis:{enabled:$('oc-synthesis').checked,max_requests:1,max_output_tokens:2048,max_input_chars:40000},
+        task_profile:$('oc-task-profile').value, reuse_evidence_from:reuseEvidence,
+        synthesis:{enabled:$('oc-synthesis').checked,max_requests:1,max_output_tokens:reuseEvidence?8192:4096,max_input_chars:40000},
         allowance:{max_cost_usd:0,paid_models:false}, origin:origin || {kind:'question',text:question}, follow_up_of:followUp};
       proposal = await api('/api/actions/prepare', {action_id:ACTION, subject:{kind:'description',text:question,title:question.slice(0,100)}, inputs});
       drawProposal(proposal);
@@ -59,12 +61,16 @@
     card.append(node('p', 'Open Case gathers public records for this official. Findings retain their source labels. The record may be partial.' + (synthesis.enabled ? ' Your configured model then writes an answer using the saved evidence, with record citations.' : ' The question is saved as context; no model writes an answer.'), 'body'));
     if (synthesis.enabled) {
       card.append(node('p', `Model: ${synthesis.provider || 'configured API'} · ${synthesis.model || 'configured model'}. Allowance: one request, up to ${synthesis.max_output_tokens || 2048} output tokens and ${synthesis.max_input_chars || 40000} input characters; no tools or automatic retry.`, 'body'));
-      card.append(node('p', 'API usage charges apply. This is a request and token allowance, not an enforceable dollar cap. The dollar total is unknown; returned token usage will be saved.', 'warn'));
+      card.append(node('p', synthesis.cost || plan.cost || 'API usage is billed separately.', 'warn'));
+      if (synthesis.allowance_usd != null) card.append(node('p',`Estimate allowance: $${Number(synthesis.allowance_usd).toFixed(2)}. Conservative maximum for this proposal: $${Number(synthesis.max_estimated_cost_usd).toFixed(6)}. Provider billing is confirmed separately.`, 'body'));
+      if (synthesis.rate_card) card.append(detail('Rate and reservation basis', synthesis.rate_card));
     }
     card.append(node('p', 'Nikodemus keeps the captured origin. Open Case receives your question and its origin references; source requests use the public subject details shown in this plan.', 'foot'));
+    if (plan.reuse_evidence_from) card.append(node('p','Answer recovery: keep the original question and evidence. This starts one new model attempt; earlier attempts and costs remain in the thread.','warn'));
     card.append(node('h3','Planned sources'));
     const sources = node('ul'); for (const source of (plan.source_scope || [])) sources.append(node('li',source)); card.append(sources);
-    card.append(node('p','Availability varies by source; failed and empty checks will be recorded.','foot'));
+    if(plan.source_capabilities?.length) {const caps=node('ul');for(const c of plan.source_capabilities)caps.append(node('li',c.name+': '+c.role+' — '+c.reason+' Availability '+c.availability.replace(/_/g,' ')+'.'));card.append(caps);}
+    card.append(node('p','Failed and empty checks are recorded separately from sources that do not apply or are not implemented.','foot'));
     card.append(detail('Full proposal and captured origin', plan));
     const start = button(pending ? 'Check this Start request' : 'Start investigation', () => startProposal(p, pending, start));
     start.id = 'oc-start';
@@ -91,6 +97,12 @@
     for (const item of items) { const card = node('div', null, 'item'); render(card,item); host.append(card); }
   }
   function entries(value) { return Array.isArray(value) ? value : value && typeof value === 'object' ? Object.entries(value).map(([name,v]) => typeof v === 'object' ? {name,...v} : {name,status:v}) : []; }
+  function costText(value,label) {
+    if(!value) return label+': accounting unavailable';
+    const amount=value.estimated_usd ?? value.estimated_cost_usd ?? value.known_estimated_subtotal_usd;
+    return label+': '+(amount==null?'estimate unavailable':'estimated $'+Number(amount).toFixed(6))+
+      (value.unknown_components?.length || value.has_unknown ? ' + unresolved usage' : '')+' · provider-billed amount unconfirmed';
+  }
   function render(view) {
     const el = $('oc-current'); el.hidden = false; el.replaceChildren();
     const plan = view.plan || view.prepared?.inputs?.plan || {};
@@ -101,24 +113,37 @@
       : view.producer_status || result.status || view.producer_state?.status || view.status || 'unknown';
     el.append(node('div','Open Case investigation', 'section-label'));
     el.append(node('h2', view.question || plan.question || 'Investigation'));
-    const status = node('p', state === 'completed' ? 'Completed' : state.replace(/_/g,' '), ['failed','interrupted','unknown'].includes(state) ? 'warn' : 'body');
+    const status = node('p', view.dimensions?.display_status || (state === 'completed' ? 'Completed' : state.replace(/_/g,' ')), ['failed','interrupted','unknown'].includes(state) ? 'warn' : 'body');
     status.id = 'oc-progress'; status.setAttribute('role','status'); el.append(status);
     if (view.progress) el.append(node('p',progressText(view.progress),'body'));
     el.append(node('p', 'Public-record collection: ' + (result.actual_cost_usd === 0 ? '$0' : 'cost not yet reported') + ' · collection model runs: ' + (result.model_runs || []).length, 'foot'));
     if (plan.synthesis?.enabled) el.append(node('p','Optional model answer: '+(synthesis.status || 'waiting for evidence')+' · API dollar total: '+(synthesis.actual_cost_usd == null ? 'not reported' : '$'+synthesis.actual_cost_usd),'foot'));
+    if (view.dimensions?.answer?.adequacy) el.append(node('p','Answer adequacy (model assessment): '+view.dimensions.answer.adequacy,'foot'));
+    if (view.dimensions) el.append(node('p', 'Activity: '+view.dimensions.lifecycle+' · source coverage: '+view.dimensions.acquisition.status+' · answer: '+view.dimensions.answer.status,'foot'));
+    if (view.costs) {el.append(node('p',costText(view.costs,'This operation'),'body'));el.append(node('p',costText(view.thread_costs,'This question and preceding attempts'),'foot'));el.append(detail('All component costs and accounting basis',view.costs));}
     el.append(node('p', view.saved ? 'Saved to your investigations.' : 'Progress and evidence are kept automatically.', 'foot'));
     const save = button(view.saved ? 'Saved' : 'Save investigation', async () => { try { await api('/api/open-case/operations/'+enc(selected)+'/save', {}); await open(selected); await historyList(); } catch(e) {error(e);} });
     save.id = 'oc-save'; save.disabled = !!view.saved;
     const follow = button('Ask a follow-up…', () => {
-      followUp = view.operation_id || selected; origin = view.origin || plan.origin || {kind:'question',text:plan.question};
+      reuseEvidence = ''; followUp = view.operation_id || selected; origin = view.origin || plan.origin || {kind:'question',text:plan.question};
       proposal = null; $('oc-proposal').replaceChildren(); error(null);
       $('oc-subject').value = plan.subject_name || ''; $('oc-profile').value = plan.subject_type || 'federal_judge_district';
       $('oc-jurisdiction').value = plan.jurisdiction || 'United States'; $('oc-question').value = '';
       if (plan.connector_id) $('oc-connector').value = plan.connector_id;
-      $('oc-synthesis').checked = false;
+      $('oc-synthesis').checked = false; $('oc-task-profile').value = plan.task_profile || 'public_records';
       originView(); $('open-case-card').scrollIntoView({block:'start'}); $('oc-question').focus();
     });
     el.append(row(save, follow));
+    if (['truncated','rejected','failed','unknown'].includes(synthesis.status) && view.result) {
+      const recover=button('Review answer recovery', () => {
+        reuseEvidence=view.operation_id; followUp=view.operation_id;origin=view.origin || plan.origin;
+        $('oc-question').value=plan.question; $('oc-subject').value=plan.subject_name;
+        $('oc-profile').value=plan.subject_type; $('oc-task-profile').value=plan.task_profile || 'public_records';
+        $('oc-jurisdiction').value=plan.jurisdiction; $('oc-synthesis').checked=true;
+        if(plan.connector?.connector_id) $('oc-connector').value=plan.connector.connector_id;
+        originView();prepare({preventDefault(){}});$('oc-proposal').scrollIntoView({block:'start'});
+      });recover.id='oc-answer-recovery';el.append(recover);
+    }
     if (view.error || result.error) el.append(node('p',view.error || result.error,'error'));
     if (['unknown','interrupted','failed'].includes(view.status)) el.append(button('Check recorded progress', async () => { try { await api('/api/open-case/operations/'+enc(selected)+'/recover',{}); await open(selected); } catch(e) {error(e);} }, 'quiet'));
     const events = entries(view.producer_state?.events || view.events);
@@ -161,15 +186,20 @@
       if (plan.synthesis?.enabled) el.append(detail('Model run and usage',synthesis));
       const renderFinding = (n,f) => {
         n.append(node('strong',f.title || f.signal_type || f.id || 'Finding'));
-        if (f.epistemic_level || f.is_absence) n.append(node('div',(f.epistemic_level ? 'Open Case label: '+f.epistemic_level : '')+(f.is_absence?' · documented absence':''),'foot'));
+        if(f.evidence_label || f.evidence_kind) n.append(node('div',f.evidence_label || f.evidence_kind,'foot'));
+        if(f.correction) n.append(node('p','Linked producer correction: interpret the typed source fields below. The historical rendering is preserved.','foot'));
+        if(f.semantic_record?.appointments) {for(const a of f.semantic_record.appointments) n.append(node('p',a.court_name+' · commission: '+(a.commission_date || 'not supplied')+' · oath: '+(a.oath_date || 'not supplied by this source'),'body'));}
+        if(f.lineage) n.append(node('div','Source identity: '+f.lineage.identity_status+(f.lineage.provenance_family_id?' · family '+f.lineage.provenance_family_id:''),'foot'));
+        if (!f.evidence_kind && (f.epistemic_level || f.is_absence)) n.append(node('div',(f.epistemic_level ? 'Open Case label: '+f.epistemic_level : '')+(f.is_absence?' · documented absence':''),'foot'));
         if (f.body || f.description) { const body=node('p',f.body || f.description); body.style.whiteSpace='pre-line';n.append(body); }
         if (f.source_url) n.append(link(f.source_name || 'Source',f.source_url));
         n.append(detail('Source record and provenance',f));
       };
-      const findings = entries(result.findings);
-      recordRows(el,'Findings',findings.filter(f=>!f.is_absence),renderFinding);
-      const gaps = findings.filter(f=>f.is_absence);
-      if (gaps.length) recordRows(el,'Documented gaps',gaps,renderFinding);
+      const findings = entries(view.findings || result.findings);
+      if(view.evidence_groups) el.append(detail('Source families and substantive revisions',view.evidence_groups));
+      recordRows(el,'Findings',findings.filter(f=>!f.is_absence && f.evidence_kind!=='acquisition_notice'),renderFinding);
+      const gaps = findings.filter(f=>f.is_absence || f.evidence_kind==='acquisition_notice');
+      if (gaps.length) recordRows(el,'Acquisition notices and documented gaps',gaps,renderFinding);
       recordRows(el,'Sources',entries(result.sources),(n,s) => { n.append(s.url || s.source_url ? link(s.name || s.source_name || s.title || 'Source',s.url || s.source_url) : node('strong',s.name || s.source_name || s.title || 'Source')); n.append(detail('Saved source record',s)); });
       recordRows(el,'Failures and gaps',entries(result.failures),(n,f) => { n.append(node('div',typeof f === 'string'?f:(f.message || f.error || f.detail || f.source || 'Source failed'),'warn')); if (typeof f !== 'string') n.append(detail('Failure record',f)); });
       el.append(detail('Source coverage',result.source_statuses || {}));
@@ -204,11 +234,13 @@
   }
   async function historyList() {
     const d = await api('/api/open-case/operations'); const el = $('oc-history'); el.replaceChildren();
-    for (const o of (d.operations || [])) { const item = node('div',null,'item'); item.append(button(o.question || o.plan?.question || o.operation_id,()=>open(o.operation_id,true),'quiet')); const status=['unknown','failed'].includes(o.status)?o.status:o.result?.status || o.producer_state?.status || o.status;item.append(node('div',[status,o.saved?'saved':'automatically kept',o.created_at].filter(Boolean).join(' · '),'foot')); el.append(item); }
+    for (const o of (d.operations || [])) { const item = node('div',null,'item'); item.append(button(o.question || o.plan?.question || o.operation_id,()=>open(o.operation_id,true),'quiet')); const status=o.dimensions?.display_status || (['unknown','failed'].includes(o.status)?o.status:o.result?.status || o.producer_state?.status || o.status);item.append(node('div',[status,o.saved?'saved':'automatically kept',o.created_at].filter(Boolean).join(' · '),'foot')); el.append(item); }
     if (!el.childElementCount) el.append(node('p','No investigations yet. Start with a question above.','foot'));
   }
   async function boot() {
     $('oc-form').addEventListener('submit',prepare);
+    $('oc-question').addEventListener('input',()=>{reuseEvidence='';});
+    $('oc-profile').addEventListener('change',()=>{if($('oc-profile').value==='senator') $('oc-task-profile').value='public_records';});
     try {
       const params = new URLSearchParams(location.search), key = params.get('origin_key');
       if (key) { const raw = sessionStorage.getItem(key); if (raw) origin = JSON.parse(raw); }
@@ -220,7 +252,7 @@
       $('oc-readiness').textContent = r.reason || r.readiness?.reason || (r.available || r.ready || r.readiness?.available ? 'Open Case is ready. Review a proposal before starting.' : 'Open Case connection needs setup. Existing investigations remain readable.');
       if(r.synthesis) {
         $('oc-synthesis').disabled = r.synthesis.available === false;
-        $('oc-synthesis-config').textContent = (r.synthesis.available === false ? (r.synthesis.reason || 'No model API is configured.') : `${r.synthesis.provider || 'Configured API'} · ${r.synthesis.model || 'configured model'}.`) + ' Optional: one request, at most 2,048 output tokens. API usage charges apply; dollar total unavailable. No model tools or automatic retries; no plugin subscription required.';
+        $('oc-synthesis-config').textContent = (r.synthesis.available === false ? (r.synthesis.reason || 'No model API is configured.') : `${r.synthesis.provider || 'Configured API'} · ${r.synthesis.model || 'configured model'}.`) + ' Optional: one request, at most 4,096 output tokens. '+(r.synthesis.cost || '')+' No model tools or automatic retries; no plugin subscription required.';
       }
       await historyList(); if (params.get('operation')) await open(params.get('operation'));
       const pending = sessionStorage.getItem(PENDING); if(pending) {const v=JSON.parse(pending);drawProposal(v.proposal,v.request);}

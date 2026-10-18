@@ -7,6 +7,9 @@ Every response is kept by hash and the result remains readable without a produce
 from __future__ import annotations
 
 import hashlib
+import base64
+import copy
+from pathlib import Path
 import json
 import re
 import threading
@@ -146,9 +149,25 @@ def prepare(question, inputs):
     origin = _origin(inputs.get("origin"), question) if not parent else (parent.get("execution") or {}).get("plan", {}).get("origin")
     if parent and not origin:
         raise WorkflowError("The earlier investigation has no saved origin.", 409)
+    task_profile = str(inputs.get("task_profile") or "public_records")
+    if task_profile not in ("public_records", "judicial_biography") or (task_profile == "judicial_biography" and typ == "senator"):
+        raise WorkflowError("Choose an applicable investigation purpose: judicial biography or broad public records.")
+    reuse = str(inputs.get("reuse_evidence_from") or "")
+    if reuse and (not parent or reuse != parent_id or question != parent["execution"]["plan"]["question"]):
+        raise WorkflowError("Answer recovery must keep the previous question and name its saved investigation.")
     model_plan = synthesis.prepare(inputs.get("synthesis"), parent)
+    if reuse and not model_plan.get("enabled"):
+        raise WorkflowError("Answer recovery needs an explicitly enabled model allowance.")
+    if reuse:
+        model_plan["recovery_of"] = reuse
     source_scope = (["Federal Judicial Center biographies", "CourtListener (availability depends on credentials)", "USAspending", "Indiana campaign finance"] if typ != "senator" else
                     ["FEC campaign finance", "Senate roll call records", "Congress.gov", "Lobbying Disclosure Act records", "USAspending", "Other existing Open Case public-record adapters"])
+    if task_profile == "judicial_biography":
+        source_scope = ["Required: Federal Judicial Center biography", "Optional: CourtListener, if credentials are available",
+                        "Inapplicable: campaign finance, contracts, lobbying and regulatory records",
+                        "Unimplemented sources are disclosed by the producer and are not counted as failed attempts"]
+    if reuse:
+        source_scope = ["Saved evidence from " + reuse + "; no new source collection"]
     c = connector(inputs.get("connector_id"))
     if inputs.get("connector_id") and (not c or c.get("producer") != "open_case"):
         raise WorkflowError("No Open Case connector with that id.", 404)
@@ -157,9 +176,10 @@ def prepare(question, inputs):
     outbound_origin["storage"] = "The complete frozen origin is retained in Nikodemus."
     parent_plan = (parent.get("execution") or {}).get("plan") or {} if parent else {}
     return {"contract": CONTRACT, "question": question, "root_question": parent_plan.get("root_question") or parent_plan.get("question") or question,
-        "subject_name": name, "subject_type": typ, "jurisdiction": jurisdiction,
+        "subject_name": name, "subject_type": typ, "jurisdiction": jurisdiction, "task_profile": task_profile, "reuse_evidence_from": reuse,
         "origin": origin, "outbound_origin": outbound_origin, "follow_up_of": parent_id, "allowance": dict(ALLOWANCE), "connector": _identity(c) if c else None,
         "source_scope": source_scope, "synthesis": model_plan,
+        "source_capabilities": json.loads(Path(__file__).with_name("opencase_capabilities.json").read_text())["profiles"][typ][task_profile] if not reuse else [],
         "steps": ["Create a case for this question", "Check the public records supported by the selected profile",
                   "Keep findings, source checks, failures and a signed case export", "Save a local copy in Nikodemus"],
         "limitations": ["The question is saved as the investigation's purpose; it is not a model instruction to search arbitrary topics.",
@@ -176,6 +196,16 @@ def is_ours(op):
 def validate_plan(plan):
     if not isinstance(plan, dict) or plan.get("contract") != CONTRACT or plan.get("allowance") != ALLOWANCE:
         raise WorkflowError("The frozen Open Case plan is not supported; prepare again.", 409)
+    if plan.get("reuse_evidence_from"):
+        parent = ops.get(plan["reuse_evidence_from"])
+        if not is_ours(parent) or plan.get("follow_up_of") != parent["op_id"]:
+            raise WorkflowError("The recovery's saved investigation is unavailable.", 409)
+        frozen = (plan.get("synthesis") or {}).get("follow_up_context") or {}
+        raw = artifact(parent, (frozen.get("result_artifact") or {}).get("name", ""))
+        if hashlib.sha256(raw).hexdigest() != (frozen.get("result_artifact") or {}).get("sha256"):
+            raise WorkflowError("The recovery evidence differs from its proposal.", 409)
+        synthesis.validate(plan)
+        return None
     c = connector((plan.get("connector") or {}).get("connector_id"))
     if not c or plan.get("connector") != _identity(c):
         raise WorkflowError("The Open Case connection changed since this proposal; prepare again.", 409)
@@ -190,6 +220,8 @@ def _correlate(remote_plan, plan):
     if not isinstance(remote_plan, dict):
         raise WorkflowError("The producer reply has no investigation plan to check.", 502)
     expected = {k: plan.get(k) for k in ("question", "subject_name", "subject_type", "jurisdiction", "allowance", "bioguide_id", "fec_committee_id")}
+    if "task_profile" in plan:
+        expected["task_profile"] = plan["task_profile"]
     expected["origin"] = plan["outbound_origin"]
     expected["follow_up_of"] = plan.get("follow_up_of") or ""
     for key, value in expected.items():
@@ -249,11 +281,27 @@ def _run(op_id, resume=False):
             synthesis.run(op_id)
             return
         c = validate_plan(plan)
+        if plan.get("reuse_evidence_from"):
+            parent = ops.get(plan["reuse_evidence_from"])
+            original = parent["result_ref"]
+            source = _keep(op_id, "result.json", artifact(parent, original["result_artifact"]["name"]))
+            frozen_corrections = (plan.get("synthesis") or {}).get("follow_up_context", {}).get("corrections", [])
+            correction_names = {r["name"] for r in frozen_corrections}
+            for kept in original.get("kept", []):
+                if kept["name"] == "deposition.json" or kept["name"] in correction_names:
+                    _keep(op_id, kept["name"], artifact(parent, kept["name"]))
+            ref = dict(ops.get(op_id).get("result_ref") or {})
+            ref.update(result_artifact=source, artifact=source, custody=original.get("custody"),
+                       upstream_status=original.get("upstream_status"), case_id=original.get("case_id"),
+                       evidence_reused_from=parent["op_id"], corrections=frozen_corrections)
+            _mark(op_id, "running", result_ref=ref, local_state="Reusing the saved evidence; preparing one new model answer.")
+            synthesis.run(op_id)
+            return
         job_id = (op.get("result_ref") or {}).get("upstream_id")
         if not job_id:
             if resume:
                 raise WorkflowError("No upstream job id was recorded; the Start is not repeated.", 409)
-            body = {k: plan[k] for k in ("question", "subject_name", "subject_type", "jurisdiction", "allowance", "origin", "follow_up_of", "bioguide_id", "fec_committee_id") if k in plan}
+            body = {k: plan[k] for k in ("question", "subject_name", "subject_type", "jurisdiction", "allowance", "origin", "follow_up_of", "bioguide_id", "fec_committee_id", "task_profile") if k in plan}
             body["origin"] = plan["outbound_origin"]
             body["request_key"] = op_id
             r, kept = _request(op_id, c, "POST", "/api/v1/investigations", body)
@@ -340,6 +388,20 @@ def _result(op_id, c, job_id, status):
         with vault.corpus_write():
             vault.mark_dirty()
             custody = federation.import_package(c, raw, how="open_case_investigation", object_id_hint=str(result.get("case_id") or ""))
+    semantic_keys = ("evidence_kind", "evidence_label", "semantics_version", "kind_note", "semantic_record", "source_identity")
+    if any(any(k in f for k in semantic_keys) for f in result.get("findings", [])):
+        if not custody or not (custody.get("verification") or {}).get("ok"):
+            raise WorkflowError("The new evidence identities need a source package verified against the pinned key.", 409)
+        signed = {str(e.get("id")): e for e in (dep.get("payload") or {}).get("evidence", [])}
+        for finding in result.get("findings", []):
+            sealed = signed.get(str(finding.get("id"))) or {}
+            meta = sealed.get("producer_semantics") or {}
+            if not meta or {k: finding[k] for k in semantic_keys if k in finding} != {k: meta[k] for k in semantic_keys if k in meta}:
+                raise WorkflowError("The source semantics differ from the signed evidence package.", 409)
+            for key in ("id", "title", "body", "source_url", "source_name", "is_absence", "entry_type", "epistemic_level", "classification_basis", "source_type"):
+                actual = (finding.get(key) or "") if key in ("source_url", "source_name") else finding.get(key)
+                if key in sealed and actual != sealed[key]:
+                    raise WorkflowError("The source text or classification differs from the signed evidence package.", 409)
     ref = dict(ops.get(op_id).get("result_ref") or {})
     ref.update({"artifact": kept, "result_artifact": kept, "case_id": result.get("case_id"), "custody": custody, "upstream_status": status})
     enabled = plan.get("synthesis", {}).get("enabled")
@@ -347,6 +409,8 @@ def _result(op_id, c, job_id, status):
              local_state={"completed": "Findings and sources saved locally", "partial": "Partial investigation saved; review source failures and coverage",
                           "failed": "Investigation failed; the failure record is saved locally", "interrupted": "Investigation interrupted; the available record is saved locally"}[status],
              last_error="" if status in ("completed", "partial") else "; ".join(str(f) for f in result.get("failures", []))[:500], result_ref=ref)
+    import operation_costs
+    operation_costs.reconcile(ops.get(op_id))
     if enabled:
         synthesis.run(op_id)
 
@@ -376,7 +440,11 @@ def view(op):
             result = json.loads(artifact(op, name))
         except (WorkflowError, ValueError) as e:
             error = str(e)
-    events = ops.events(op["op_id"])
+    events = ops.events(op["op_id"], limit=-1)
+    import evidence_lineage
+    import operation_costs
+    findings = findings_for(op, result) if result else []
+    dimensions = result_dimensions(op, result)
     saves = [e for e in events if e["kind"] == "note" and e.get("detail", {}).get("saved")]
     return {"operation_id": op["op_id"], "action_id": ACTION, "kind": "investigation", "producer": "open_case",
         "status": op["status"], "progress": op.get("local_state"), "error": error,
@@ -384,7 +452,9 @@ def view(op):
         "prepared_id": op.get("prepared_id"), "snapshot_id": op.get("snapshot_id"), "plan": plan,
         "question": plan.get("question"), "origin": plan.get("origin"), "follow_up_of": plan.get("follow_up_of"),
         "result": result, "result_ref": ref, "producer_state": op.get("producer_state"), "events": events,
-        "synthesis": synthesis.view(op),
+        "synthesis": synthesis.view(op), "dimensions": dimensions,
+        "findings": findings, "evidence_groups": evidence_lineage.group(findings),
+        "costs": operation_costs.total(op), "thread_costs": operation_costs.total(op, ancestry=True),
         "custody": ref.get("custody"), "deposition_id": (ref.get("custody") or {}).get("deposition_id"),
         "saved": bool(saves), "saved_at": saves[-1]["at"] if saves else None, "autosaved": True,
         "artifacts": [{**k, "url": f"/api/open-case/operations/{op['op_id']}/artifacts/{k['name']}"} for k in ref.get("kept", [])],
@@ -423,7 +493,118 @@ def resume_known():
         ref = op.get("result_ref") or {}
         same_store = (op.get("config") or {}).get("state_root") == str(cli.LOCAL_STATE.resolve())
         pending = not ref.get("result_artifact") or synthesis.needs_resume(op)
-        if is_ours(op) and same_store and ref.get("upstream_id") and pending and op["status"] in ("running", "claimed", "unknown"):
+        if is_ours(op) and same_store and (ref.get("upstream_id") or ((op.get("execution") or {}).get("plan", {}).get("reuse_evidence_from"))) and pending and op["status"] in ("running", "claimed", "unknown"):
             if launch(op["op_id"], resume=True):
                 resumed.append(op["op_id"])
     return resumed
+
+
+def _verified_correction(op, envelope, result):
+    """Verify the correction against pinned authority and exact original record."""
+    if envelope.get('schema') != 'open_case.investigation.correction.v1':
+        raise WorkflowError('Unsupported evidence correction.', 409)
+    payload, sig = envelope.get('payload') or {}, envelope.get('signature') or {}
+    digest = federation.payload_sha256(payload)
+    c = connector(((op.get('execution') or {}).get('plan', {}).get('connector') or {}).get('connector_id'))
+    pinned = next((k for k in (c or {}).get('trusted_keys', []) if k.get('key_id') == sig.get('trusted_key_id')), None)
+    try:
+        valid = (sig.get('algorithm') == 'Ed25519' and sig.get('canonicalization') == 'RFC8785'
+                 and sig.get('signed_bytes') == 'utf8(hex(sha256(jcs(payload))))'
+                 and digest == envelope.get('payload_sha256') and pinned
+                 and federation.verify_ed25519(base64.b64decode(pinned['public_key_b64'], validate=True),
+                     digest.encode('utf-8'), base64.b64decode(sig['value'], validate=True)))
+    except (ValueError, KeyError):
+        valid = False
+    if not valid:
+        raise WorkflowError('The evidence correction does not verify against the pinned Open Case key.', 409)
+    if (envelope.get('job_id') != result.get('job_id') or payload.get('job_id') != result.get('job_id')
+            or payload.get('original_result_sha256') != federation.payload_sha256(result)
+            or payload.get('original_deposition_payload_sha256') != (result.get('deposition') or {}).get('payload_sha256')):
+        raise WorkflowError('The correction does not refer to these exact original source records.', 409)
+    originals = {str(f.get('id')): f for f in result.get('findings', [])}
+    for change in payload.get('evidence', []):
+        original = originals.get(str(change.get('evidence_id')))
+        if original is None or change.get('original_finding_sha256') != federation.payload_sha256(original):
+            raise WorkflowError('The correction names a different original finding.', 409)
+    return payload
+
+
+def findings_for(op, result):
+    """Derived view only: never mutate the immutable result or its signed seal."""
+    import evidence_lineage
+    findings = copy.deepcopy(result.get('findings', []))
+    by_id = {str(f.get('id')): f for f in findings}
+    for ref in (op.get('result_ref') or {}).get('corrections', []):
+        raw = artifact(op, ref['name'])
+        if hashlib.sha256(raw).hexdigest() != ref.get('sha256'):
+            raise WorkflowError('The correction artifact differs from its recorded hash.', 409)
+        envelope = json.loads(raw)
+        payload = _verified_correction(op, envelope, result)
+        for change in payload.get('evidence', []):
+            finding = by_id[str(change['evidence_id'])]
+            for key in ('evidence_kind', 'evidence_label', 'semantics_version', 'kind_note', 'semantic_record', 'source_identity'):
+                if key in change:
+                    finding[key] = change[key]
+            finding['correction'] = {'correction_id': envelope['correction_id'], 'payload_sha256': envelope['payload_sha256'],
+                                     'original_finding_sha256': change['original_finding_sha256'], 'basis': change.get('correction_basis')}
+    for index, finding in enumerate(findings):
+        finding['lineage'] = evidence_lineage.for_finding(finding, capture_id=op['op_id'])
+        finding['lineage']['capture_sha256'] = hashlib.sha256(json.dumps(result['findings'][index], ensure_ascii=False, sort_keys=True, indent=2).encode()).hexdigest()
+    return findings
+
+
+def correct_saved_evidence(op):
+    """Explicit migration, one idempotent non-model producer request."""
+    if not is_ours(op):
+        raise WorkflowError('No Open Case investigation with that id.', 404)
+    ref = op.get('result_ref') or {}
+    if not ref.get('upstream_id') or not ref.get('result_artifact'):
+        raise WorkflowError('A saved producer result is required for evidence corrections.', 409)
+    result = json.loads(artifact(op, ref['result_artifact']['name']))
+    c = connector(((op.get('execution') or {}).get('plan', {}).get('connector') or {}).get('connector_id'))
+    stage = 'open_case.evidence_correction'
+    _event(op['op_id'], 'stage_intent', stage=stage, detail={'upstream_id':ref['upstream_id'], 'billable':False})
+    response = producers._request(c, 'POST', '/api/v1/investigations/' + _job_id(ref['upstream_id']) + '/corrections', {}, auth='bearer')
+    raw = response.get('raw')
+    kept = _keep(op['op_id'], 'correction-' + hashlib.sha256(raw).hexdigest()[:24] + '.json', raw) if raw else None
+    _event(op['op_id'], 'stage_end', stage=stage, outcome='received' if response.get('ok') else 'error',
+           detail={'artifact':kept,'delivery':response.get('delivery'),'http_status':response.get('status')})
+    if not response.get('ok') or not kept:
+        raise WorkflowError('The producer correction could not be retrieved; saved originals are unchanged.', 502)
+    envelope = response.get('json') or {}
+    try:
+        _verified_correction(op, envelope, result)
+    except WorkflowError as exc:
+        _event(op['op_id'], 'note', detail={'correction_rejected':str(exc),'artifact':kept})
+        raise
+    updated = dict(ops.get(op['op_id']).get('result_ref') or {})
+    corrections = list(updated.get('corrections') or [])
+    if not any(c['sha256'] == kept['sha256'] for c in corrections):
+        corrections.append(kept)
+        updated['corrections'] = corrections
+        _mark(op['op_id'], result_ref=updated, event_kind='note', detail={'evidence_correction': kept, 'originals_preserved': True})
+    return kept
+
+
+def result_dimensions(op, result):
+    plan = (op.get('execution') or {}).get('plan') or {}
+    ref = op.get('result_ref') or {}
+    syn = synthesis.view(op)
+    acquisition = copy.deepcopy((result or {}).get('dimensions', {}).get('acquisition') or {})
+    if not acquisition:
+        acquisition = {'status': 'legacy_unassessed' if result else 'pending', 'required_ready': None,
+                       'reason': 'This older proposal did not declare required and optional sources; its original status is preserved.'}
+    answer_status = syn.get('answer_status') or ('legacy_unassessed' if syn.get('answer') else 'not_generated')
+    if syn.get('status') in ('failed', 'rejected', 'truncated', 'unknown'):
+        answer_status = 'held'
+    completed = bool(acquisition.get('required_ready') and acquisition.get('status') == 'ready'
+                     and syn.get('status') == 'complete' and answer_status == 'answered')
+    label = ('Completed' if completed else 'Answer held' if answer_status == 'held' else
+             'Answer partially supported' if answer_status == 'partial' else 'More evidence needed' if answer_status == 'insufficient' else
+             'Answer saved · adequacy unassessed' if answer_status == 'legacy_unassessed' else
+             'Sources saved · no answer generated' if result and not plan.get('synthesis', {}).get('enabled') else
+             'Investigation in progress' if op.get('status') in ('running', 'claimed', 'reserved') else 'Needs review')
+    return {'lifecycle': op.get('status'), 'acquisition': acquisition,
+            'answer': {'status': answer_status, 'hold': syn.get('hold_reason'), 'adequacy': syn.get('adequacy_reason'), 'adequacy_basis': syn.get('adequacy_basis'),
+                       'support_verification': syn.get('support_verification')},
+            'completed': completed, 'display_status': label}

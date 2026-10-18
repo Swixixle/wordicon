@@ -725,7 +725,15 @@ def deposition_representation(dep: dict) -> "dict | None":
     if not p.exists():
         return None
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        representation = json.loads(p.read_text(encoding="utf-8"))
+        if dep.get("producer") == "deflate" and (dep.get("verification") or {}).get("ok"):
+            import evidence_lineage
+            raw = deposition_bytes(dep)
+            if hashlib.sha256(raw).hexdigest() != dep.get("sha256"):
+                raise ValueError("The kept Deflate bytes differ from their custody hash.")
+            representation["lineage"] = evidence_lineage.for_deflate(json.loads(raw), capture_id=dep["deposition_id"])
+            representation["lineage"]["capture_sha256"] = dep["sha256"]
+        return representation
     except (OSError, ValueError):
         return None
 

@@ -134,7 +134,7 @@ class WorkflowTests(unittest.TestCase):
     def test_known_job_resumes_without_start(self):
         p = self.prepare()
         plan = p["inputs"]["plan"]
-        self.plan = {k: plan[k] for k in ("question", "subject_name", "subject_type", "jurisdiction", "allowance", "follow_up_of")}
+        self.plan = {k: plan[k] for k in ("question", "subject_name", "subject_type", "jurisdiction", "allowance", "follow_up_of", "task_profile")}
         self.plan["origin"] = plan["outbound_origin"]
         op, _ = ops.reserve(request_key="interrupted", kind="investigation", action_id=opencase.ACTION,
             execution={"plan": plan}, config={"state_root": str(cli.LOCAL_STATE.resolve())})

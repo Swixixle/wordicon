@@ -268,6 +268,16 @@ function renderSettings() {
   else if (PREVIEW.on) v.appendChild(el('div', { class: 'kv warn', text: 'This process is a preview (started with WORDICON_PREVIEW=1): it seals no backups at start, on a timer or at shutdown, prunes and drills nothing, and sends no notification — whatever vault configuration its data root carries. Its writing is kept in its own data root only.' }));
   v.appendChild(el('div', { class: 'row' }, [el('button', { class: 'btn', type: 'button', text: 'Open the previous interface (new tab)', onclick: () => window.open('/', '_blank', 'noopener') }), el('button', { class: 'btn', type: 'button', text: 'Devices and pairing', onclick: () => window.open('/pair', '_blank', 'noopener') })]));
   v.appendChild(el('div', { class: 'kv' }, ['Arrangement: Tools and Results remember whether they are open and how wide, per screen size. ', el('button', { class: 'btn small', type: 'button', text: 'Forget the arrangement', onclick: () => { try { Object.keys(localStorage).filter(k => k.startsWith('nikodemus.work.layout.')).forEach(k => localStorage.removeItem(k)); } catch (e) {} toast('Forgotten. Reload to see the defaults.'); } })]));
+  const costsPanel = el('div', {class:'kv',text:'Loading operation usage accounting…'});
+  v.appendChild(costsPanel);
+  getJSON('/api/operation-costs').then(r => {
+    if(!r.ok) {costsPanel.textContent='Operation usage accounting is unavailable.';return;}
+    const c=r.data;costsPanel.textContent='Usage accounting · known estimate $'+Number(c.known_estimated_subtotal_usd || 0).toFixed(6)+
+      (c.accounting_status==='unknown'?' + unresolved usage':'')+'. Provider-billed model charges remain unconfirmed. ';
+    costsPanel.appendChild(el('div',{class:'muted small-text',text:(c.unaccounted_operation_ids || []).length+' older operations have no complete accounting record; they are not treated as free.'}));
+    const details=el('details',{},[el('summary',{text:'Component ledger and rate basis'})]);
+    details.appendChild(el('pre',{style:'white-space:pre-wrap;overflow-wrap:anywhere',text:JSON.stringify(c,null,2)}));costsPanel.appendChild(details);
+  }).catch(()=>{costsPanel.textContent='Operation usage accounting is unavailable.';});
   // the Ledger (2026-10-16): the switch is HERE, visible and named — the
   // owner's trail is captured in the light or not at all
   const ledRow = el('div', { class: 'kv' }, [

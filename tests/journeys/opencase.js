@@ -7,7 +7,7 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   const page = await ctx.newPage();
   const errors = [], starts = [], prepares = [];
   page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errors.push(e.message); });
-  let saved = false, reads = 0, rejectedResult = false;
+  let saved = false, reads = 0, rejectedResult = false, heldAnswer = false;
   const origin = {kind:'selection',text:'A preserved passage about a judge.',doc_id:'fixture-document',revision:7,range:{start:0,end:34},title:'Origin fixture'};
   let plan;
   const result = {job_id:'job-fixture',case_id:'case-fixture',status:'partial',actual_cost_usd:0,model_runs:[],
@@ -25,10 +25,12 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
     if (path.endsWith('/operations')) return route.fulfill({json:{operations:plan?[{operation_id:'op_fixture',question:plan.question,status:'complete',saved}]:[]}});
     const v = view();
     if (rejectedResult) { v.status='unknown';v.result=null;v.producer_state.status='completed';v.error='The producer returned a different subject; result not accepted.'; }
+    if(heldAnswer) {v.synthesis={status:'truncated',answer:'',hold_reason:'output_limit',error:'Output allowance reached.'};v.dimensions={display_status:'Answer held',lifecycle:'complete',acquisition:{status:'ready'},answer:{status:'held'}};}
+    v.costs={estimated_cost_usd:0.035772,known_estimated_subtotal_usd:0.035772,unknown_components:[]};v.thread_costs={...v.costs,estimated_cost_usd:0.062022};
     return route.fulfill({json:v});
   });
   await page.route('**/api/actions/prepare', async route => {
-    const body = route.request().postDataJSON(); prepares.push(body); plan={...body.inputs,question:body.subject.text,source_scope:['FJC','CourtListener'],outbound_origin:{doc_id:origin.doc_id,revision:7},synthesis:{...body.inputs.synthesis,provider:'anthropic',model:'fixture-model'}};
+    const body = route.request().postDataJSON(); prepares.push(body); plan={...body.inputs,question:body.subject.text,source_scope:['FJC','CourtListener'],outbound_origin:{doc_id:origin.doc_id,revision:7},synthesis:{...body.inputs.synthesis,provider:'anthropic',model:'fixture-model',allowance_usd:0.5,max_estimated_cost_usd:0.363008,cost:'Conservative estimate checked before dispatch; provider billing confirmed separately.'}};
     return route.fulfill({json:{prepared_id:'prep_fixture',inputs:{plan},disclosure:{investigation_plan:plan}}});
   });
   await page.route('**/api/operations', async route => {starts.push(route.request().postDataJSON());return route.fulfill({json:{operation_id:'op_fixture',status:'running'}});});
@@ -57,13 +59,19 @@ const { BASE, ok, launch, pairedContext, finish } = require('./lib');
   await page.getByRole('button',{name:'Ask a follow-up…',exact:true}).click();
   await page.fill('#oc-question','Which source is still missing?'); await page.check('#oc-synthesis'); await page.click('#oc-prepare'); await page.waitForSelector('#oc-start');
   ok(prepares[1].inputs.follow_up_of==='op_fixture' && prepares[1].inputs.origin.doc_id===origin.doc_id,'follow-up preserves its parent and original passage');
-  ok(prepares[1].inputs.synthesis.enabled && prepares[1].inputs.synthesis.max_requests===1 && prepares[1].inputs.synthesis.max_output_tokens===2048 && prepares[1].inputs.allowance.paid_models===false,'optional existing-model usage has a separate bounded allowance');
-  ok(/not an enforceable dollar cap/.test(await page.textContent('#oc-proposal')) && /fixture-model/.test(await page.textContent('#oc-proposal')),'proposal discloses the model and unknown dollar cost');
+  ok(prepares[1].inputs.synthesis.enabled && prepares[1].inputs.synthesis.max_requests===1 && prepares[1].inputs.synthesis.max_output_tokens===4096 && prepares[1].inputs.allowance.paid_models===false,'optional existing-model usage has a separate bounded allowance');
+  ok(/Estimate allowance: \$0.50/.test(await page.textContent('#oc-proposal')) && /fixture-model/.test(await page.textContent('#oc-proposal')),'proposal discloses the model and estimate allowance');
   await page.reload(); await page.waitForFunction(()=>document.querySelector('#oc-current').textContent.includes('The saved appointment record establishes'));
   ok(/Cited evidence/.test(await page.textContent('#oc-current')) && /API dollar total: not reported/.test(await page.textContent('#oc-current')) && /input_tokens/.test(await page.textContent('#oc-current')),'saved model answer exposes resolved evidence and usage without claiming a dollar total');
   ok((await page.locator('#oc-current a[href="#oc-citation-1"]').count())===1 && /Fixture biography retained/.test(await page.textContent('#oc-citation-1')),'answer citations link to the saved source excerpt actually supplied to the model');
   ok(starts.length===1,'reopening an optional model answer never sends Start');
-  rejectedResult = true;
+  heldAnswer=true;await page.reload();await page.waitForSelector('#oc-answer-recovery');
+  ok((await page.textContent('#oc-progress'))==='Answer held','held answers do not inherit source completion');
+  ok(/estimated \$0.035772/.test(await page.textContent('#oc-current')) && /estimated \$0.062022/.test(await page.textContent('#oc-current')),'operation and thread estimates include earlier attempts');
+  await page.click('#oc-answer-recovery');await page.waitForSelector('#oc-start');
+  ok(prepares.at(-1).inputs.reuse_evidence_from==='op_fixture' && prepares.at(-1).inputs.synthesis.max_output_tokens===8192,'recovery proposes a larger single allowance over the saved evidence');
+  ok(starts.length===1,'reviewing recovery sends no paid Start');
+  heldAnswer=false;rejectedResult = true;
   await page.reload(); await page.waitForFunction(()=>document.querySelector('#oc-current').textContent.includes('result not accepted'));
   ok((await page.textContent('#oc-progress'))==='unknown','a rejected result cannot inherit the producer’s completed label');
   ok(errors.length===0,'no page errors: '+JSON.stringify(errors));

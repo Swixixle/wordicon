@@ -1,0 +1,46 @@
+Open Case integrity checkpoint — 2026-10-18
+
+The shared workspace keeps source collection, answer validity and workflow
+lifecycle separate. Completed means required acquisition is ready AND a valid
+answer reports the question answered. Adequacy is explicitly the model's own
+assessment; citations are checked structurally, not a proof of interpretation.
+
+A judicial-biography proposal declares FJC required, CourtListener optional,
+and finance/regulatory sources inapplicable. Unimplemented sources are named
+separately. The contract snapshot is local; availability is checked at Start.
+The producer records actual capabilities and attempts in its result.
+
+New source semantics are checked against the pinned signed package, including
+source text and classification. Old originals never change. Explicit signed
+corrections bind to original result, deposition payload and individual finding
+hashes; verified corrections appear as derived views. A follow-up freezes the
+correction set along with the source artifact.
+
+Source lineage records captures, authoritative record IDs, substantive revisions
+and provenance families independently. URLs and renderer hashes alone cannot
+establish independence. The answer guard detects unsupported positive claims
+of corroboration; this heuristic is not a complete semantic truth checker.
+Deflate reimports/new interpretations share their original reading identity;
+transcript-content duplicate groups are separate from source identity.
+
+One model attempt defaults to 4,096 output tokens. Explicit answer recovery uses
+up to 8,192 and only the frozen saved evidence, with no producer collection.
+A held original, raw partial response, provider usage and errors remain kept.
+No hidden retry or resending an ambiguous Start. Known recovery operations are
+reconciled after restart even without a producer job ID.
+
+Before a billable dispatch, an append-only reservation checks a conservative
+request estimate against the disclosed $0.50 allowance. The current supported
+rate card is Anthropic Sonnet 5 standard direct global API, dated2026-10-18.
+Settlements preserve input/output/cache counts, response identity and receipt
+hash. Estimates are distinct from provider-billed totals. Unknown usage/rates
+remain unknown; duplicates of the same response are not charged twice.
+Settings, operation and ancestry totals use the same existing event ledger.
+Legacy reconciliation appends linked accounting corrections. Other older
+operations lacking accounting remain explicitly unaccounted, not zero.
+
+Offline gates: tests/test_evidence_lineage.py, test_operation_costs.py,
+test_opencase_integrity_workflow.py (includes inherited synthesis/workflow
+regressions), test_global_constraints.py, tests/journeys/opencase.js.
+Live acceptance is recorded separately under integration/verification; passing
+fixtures alone is not evidence of a useful live investigation.

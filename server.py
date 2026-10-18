@@ -4600,6 +4600,12 @@ def _start_open_case(prepared, request_key):
         return jsonify({"error": str(e), "nothing_was_sent": True}), e.status
 
 
+@app.route("/api/operation-costs")
+def api_operation_costs():
+    import operation_costs
+    return jsonify(operation_costs.ledger_summary())
+
+
 @app.route("/api/open-case/status")
 def api_open_case_status():
     return jsonify(opencase.readiness())

@@ -76,9 +76,10 @@
       <div><label for="oc-jurisdiction">Jurisdiction</label><input id="oc-jurisdiction" required value="United States" maxlength="120"></div>
       <div><label for="oc-connector">Connected Open Case</label><select id="oc-connector"></select></div>
     </div>
+    <label for="oc-task-profile">Investigation purpose</label><select id="oc-task-profile"><option value="judicial_biography">Judicial appointments and service</option><option value="public_records">Broad public records</option></select>
     <div id="oc-origin" class="item"></div>
     <label style="font-size:14px"><input id="oc-synthesis" type="checkbox" style="width:auto"> Use my configured model API for a cited answer</label>
-    <p class="foot" id="oc-synthesis-config">Optional: one model request, at most 2,048 output tokens, no model tools or automatic retries. API usage charges apply; the dollar total is not available here. A plugin subscription is not required.</p>
+    <p class="foot" id="oc-synthesis-config">Optional: one model request, at most 4,096 output tokens, no model tools or automatic retries. Review the usage allowance before Start. A plugin subscription is not required.</p>
     <div class="row"><button type="submit" id="oc-prepare">Review investigation</button><span class="foot">Public-record collection: $0 · optional model usage billed separately</span></div>
   </form>
   <div id="oc-error" class="error" role="alert"></div>

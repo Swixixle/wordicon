@@ -2693,10 +2693,14 @@ class StreamInterrupted(RuntimeError):
     Only the gateway can tell them apart, and only by iterating the stream
     itself instead of asking for the finished message and hoping."""
 
-    def __init__(self, message: str, saw_content: bool, cause_class: str = ""):
+    def __init__(self, message: str, saw_content: bool, cause_class: str = "", response_record=None):
         super().__init__(message)
         self.saw_content = bool(saw_content)
         self.cause_class = cause_class
+        # Provider message content only, never the transport/headers. A caller
+        # that owns durable custody can keep an interrupted response instead
+        # of losing the text and usage already observed at the stream boundary.
+        self.response_record = response_record
 
 
 class RateLimited(RuntimeError):
@@ -2966,6 +2970,7 @@ class Gateway:
                 t1 = time.monotonic()
                 self._record_attempt(stage=stage, attempt=attempt, started_at=started_at,
                                      t0=t0, t1=t1, outcome="error", exc=e,
+                                     usage=(e.response_record or {}).get("usage"),
                                      outcome_detail=("partial_stream_failure" if e.saw_content
                                                      else "stream_failed_before_content"))
                 if e.saw_content:
@@ -3856,20 +3861,32 @@ class AnthropicAPIGateway(Gateway):
         The caller owns the durable intent and decides whether the response is
         usable. Token usage is a provider measurement, never a dollar estimate.
         """
-        if type(max_output_tokens) is not int or not 1 <= max_output_tokens <= 2048:
-            raise ValueError("max_output_tokens must be an integer from 1 through 2048")
+        if type(max_output_tokens) is not int or not 1 <= max_output_tokens <= 8192:
+            raise ValueError("max_output_tokens must be an integer from 1 through 8192")
         previous = self.MAX_OUTPUT_TOKENS
         self.MAX_OUTPUT_TOKENS = max_output_tokens
         try:
-            response = self._call_with_attempts("opencase_synthesis",
-                lambda: self._create(prompt, allow_truncated=True), max_attempts=1)
+            try:
+                response = self._call_with_attempts("opencase_synthesis",
+                    lambda: self._create(prompt, allow_truncated=True), max_attempts=1)
+            except StreamInterrupted as e:
+                record = dict(e.response_record or {})
+                record.setdefault("text", "")
+                record.setdefault("response_id", None)
+                record.setdefault("stop_reason", None)
+                record.setdefault("usage", None)
+                record.setdefault("response", None)
+                record.update(stream_complete=False, usage_complete=False,
+                              error=sanitize_attempt_message(e), error_class=e.cause_class or type(e).__name__)
+                return record
         finally:
             self.MAX_OUTPUT_TOKENS = previous
         return {"text": "".join(block.text for block in response.content if hasattr(block, "text")),
                 "response_id": getattr(response, "id", None),
                 "stop_reason": getattr(response, "stop_reason", None),
                 "usage": _usage_fields(getattr(response, "usage", None)),
-                "response": response.model_dump(mode="json")}
+                "response": response.model_dump(mode="json"), "stream_complete": True,
+                "usage_complete": True}
 
     def _complete(self, prompt: str, *, max_attempts=None) -> str:
         response = self._call_with_attempts("complete", lambda: self._create(prompt),
@@ -4044,6 +4061,30 @@ class AnthropicAPIGateway(Gateway):
         iterating = False
         failure = None
         message = None
+        partial_record = None
+        delta_text, fallback_text = [], []
+        def keep_partial(stream):
+            # The SDK keeps an accumulating Message snapshot. Its body has no
+            # request authentication headers. Preserve its observed usage as
+            # incomplete; do not manufacture a final stop reason or token count.
+            snapshot = None
+            try:
+                snapshot = stream.current_message_snapshot
+            except Exception:
+                pass
+            raw = None
+            if snapshot is not None:
+                try:
+                    raw = snapshot.model_dump(mode="json")
+                except Exception:
+                    pass
+            text = "".join(getattr(b, "text", "") for b in getattr(snapshot, "content", [])
+                           if isinstance(getattr(b, "text", None), str))
+            return {"text": text or "".join(delta_text or fallback_text),
+                    "response_id": getattr(snapshot, "id", None),
+                    "stop_reason": getattr(snapshot, "stop_reason", None),
+                    "usage": _usage_fields(getattr(snapshot, "usage", None)),
+                    "response": raw, "stream_complete": False, "usage_complete": False}
         try:
             with self.client.messages.stream(**kwargs) as stream:
                 iterating = True
@@ -4051,19 +4092,34 @@ class AnthropicAPIGateway(Gateway):
                     for event in stream:
                         if getattr(event, "type", "") in ("content_block_delta", "text"):
                             saw_content = True
+                        if getattr(event, "type", "") == "content_block_delta":
+                            text = getattr(getattr(event, "delta", None), "text", None)
+                            if isinstance(text, str):
+                                delta_text.append(text)
+                        elif getattr(event, "type", "") == "text":
+                            text = getattr(event, "text", None)
+                            if isinstance(text, str):
+                                fallback_text.append(text)
                 except BaseException as e:  # noqa: BLE001 — kept, then re-raised
                     failure = e
+                    partial_record = keep_partial(stream)
                     raise
-                message = stream.get_final_message()
+                try:
+                    message = stream.get_final_message()
+                except BaseException:
+                    partial_record = keep_partial(stream)
+                    raise
         except BaseException as e:  # noqa: BLE001
             if not iterating:
                 raise
             cause = failure if failure is not None else e
+            if partial_record is None:
+                partial_record = keep_partial(stream)
             raise StreamInterrupted(
                 f"The response stream ended before the message was complete "
                 f"({type(cause).__name__}: {str(cause)[:160]}).",
                 saw_content=saw_content,
-                cause_class=type(cause).__name__) from cause
+                cause_class=type(cause).__name__, response_record=partial_record) from cause
         if not allow_truncated and getattr(message, "stop_reason", None) == "max_tokens":
             # Fail with the REAL diagnosis instead of letting the JSON
             # parser report a confusing "could not find a JSON object".
