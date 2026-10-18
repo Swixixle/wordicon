@@ -1,0 +1,80 @@
+P2 — INTEGRATION BEHAVIOR IN THE MAIN GATE
+18 October 2026
+
+Starting code checkpoint: 76ec0cfeecbe1bd652d55223e795c8e7b7bc21ee.
+Builder branch: codex/integration-gate-20261018.
+Compared CURRENT-STATE.txt in the integration owner's shared checkout with this
+worktree before implementation. Its named runtime/code checkpoint is 76ec0cf.
+The integration owner maintains the canonical shared CURRENT-STATE and release
+manifests; this note documents the isolated gate-registration slice only.
+
+Inventory was measured from Git candidate-r89..76ec0cf, not inferred from the
+older review's count. There are 11 added Python modules, one capabilities JSON,
+16 Python test files, one Node outbox suite, and two standalone Chromium page
+fixtures. Open Case and Receipts browser journeys already have runner entries.
+Deflate's new lifecycle remains staged and is not registered as shipped code.
+
+Added modules and behavioral coverage
+- evidence_lineage: test_evidence_lineage and integrity/synthesis workflow tests.
+- opencase, opencase_synthesis, opencase_grounding, opencase_review:
+  test_opencase_workflow, test_opencase_integrity_workflow,
+  test_opencase_synthesis, test_opencase_grounding, test_opencase_grounded_view.
+- operation_costs: test_operation_costs; model failure/hold costs in synthesis.
+- operation_capture: test_operation_capture and test_capture_gaps.
+- workspace_identity: test_workspace_identity and attention/capture suites.
+- capture_history: test_capture_history, test_capture_routes and actual-page UI.
+- pure_receipts, receipts_projection: test_receipts_projection and integration.
+- Existing capture.py, ledger.py and browser ledger.js changes:
+  test_capture_durable, test_attention_durable, test_ledger_outbox.mjs,
+  test_work_selection_capture.cjs and relevant route/history tests.
+
+The existing test_global_constraints.py now invokes _check_integration_wing.
+Required modules, fixtures and every named suite are checked before execution.
+The 16 existing Python suites execute through pytest in one separate process;
+the Node outbox suite and both intercepted-request page fixtures execute in
+separate processes. Dependencies, timeouts and suite failures fail by name.
+No copied test implementations or new provider calls are introduced.
+
+Commands
+- Full gate: python tests/test_global_constraints.py
+- Same integration helper alone:
+  python tests/test_global_constraints.py --integration-wing-only
+The focused option explicitly reports that other wings were not run. It is
+useful for failure-injection diagnostics and never substitutes for release's
+full gate or the declared WebKit/Chromium journey runner.
+
+Dependencies: requirements.txt includes pytest. The existing journey package
+must be installed in tests/journeys (npm ci; npx playwright install chromium).
+The helper sets NODE_PATH to that known dependency directory and uses the Node
+executable on PATH. It reports missing dependencies as failures, not successes.
+Tests retain their scratch-state, test-mode, provider poisoning and intercepted
+request boundaries. Canonical TMPDIR avoids macOS temporary-path alias errors.
+
+One old wiring assertion now follows _capture_search("library",...) through
+capture.query(scope,...). Its existing search-capture behavioral tests remain
+unchanged. The wrapper owns a guarded capture write; it is not a generic
+permission to mutate arbitrary state during reads.
+
+Acceptance and evidence
+The registered helper passes 216 Python tests plus 32 subtests, 27 outbox fixtures,
+20 capture-history page checks and20 Work selection page checks. These counts
+are the helper's populations and must not be added to overlapping old totals.
+The two browser fixtures use Chromium; they do not establish WebKit or Safari.
+
+Negative checks use the same main-gate entry point with --integration-wing-only:
+1. Withhold tests/test_evidence_lineage.py: fail by its exact missing path.
+2. Weaken the implementation's primary-family count guard from 2 to 0:
+   fail test_independence_guard and associated workflow behavior by name.
+Both files are restored byte-for-byte before the final full-gate run. No live
+store, credentials, private source or provider was used in these experiments.
+External diagnostic logs are maintained by the integration owner under
+integration/verification/integration-gate-*. The shared checkpoint should record
+the completed full-gate result and this commit after integration; this note does
+not embed its own future Git hash or claim publication.
+
+Final full normal gate: PASS (exit0) on this restored worktree. Three checks
+were explicitly skipped: python-docx export reopening (dependency unavailable
+in the selected Python runtime), the private-corpus sanitization scan, and the
+private corpus-titles anatomy check. The latter two require the owner's excluded
+corpus. The DOCX dependency skip is additional and must remain disclosed or be
+resolved in the release environment; it is not silently counted as a pass.

@@ -6515,6 +6515,80 @@ console.log(JSON.stringify({rail, ids: bar.map(b=>b.id), acts: bar.map(b=>b.act)
     return out
 
 
+# Registered from candidate-r89..76ec0cf, not inferred from module names.
+# Each behavioral suite remains the authoritative test; this entry point runs it.
+_INTEGRATION_MODULES = (
+    "scripts/capture_history.py", "scripts/evidence_lineage.py", "scripts/opencase.py",
+    "scripts/opencase_grounding.py", "scripts/opencase_review.py", "scripts/opencase_synthesis.py",
+    "scripts/operation_capture.py", "scripts/operation_costs.py", "scripts/pure_receipts.py",
+    "scripts/receipts_projection.py", "scripts/workspace_identity.py",
+)
+_INTEGRATION_PYTESTS = (
+    "tests/test_attention_durable.py", "tests/test_capture_durable.py", "tests/test_capture_gaps.py",
+    "tests/test_capture_history.py", "tests/test_capture_routes.py", "tests/test_evidence_lineage.py",
+    "tests/test_opencase_grounded_view.py", "tests/test_opencase_grounding.py",
+    "tests/test_opencase_integrity_workflow.py", "tests/test_opencase_synthesis.py",
+    "tests/test_opencase_workflow.py", "tests/test_operation_capture.py", "tests/test_operation_costs.py",
+    "tests/test_receipts_integration.py", "tests/test_receipts_projection.py", "tests/test_workspace_identity.py",
+)
+_INTEGRATION_NODE_TESTS = (
+    "tests/test_ledger_outbox.mjs", "tests/test_capture_history_ui.cjs", "tests/test_work_selection_capture.cjs",
+)
+_INTEGRATION_SUPPORT = (
+    "scripts/opencase_capabilities.json", "tests/fixtures/receipts.json",
+    "webapp/capture-history.html", "webapp/capture-history.js", "webapp/opencase.js", "webapp/receipts.js",
+)
+
+
+def _check_integration_wing():
+    """P2: shipped integrity, accounting, capture and Receipts behavior belongs
+    to the main gate. Child suites use scratch stores and poisoned providers;
+    browser fixtures intercept every request. None opens the owner's live store.
+    Deflate's new launch bridge remains isolated and is not registered as shipped.
+    Missing files, dependencies, timeouts and behavioral failures fail by name.
+    """
+    import importlib.util as _iu
+    import os as _os
+    import shutil as _sh
+    import subprocess as _sp
+    import sys as _sys
+    root = Path(__file__).resolve().parents[1]
+    out = [f"INTEGRATION: {name} is missing — its required behavioral coverage cannot run"
+           for name in (*_INTEGRATION_MODULES, *_INTEGRATION_PYTESTS, *_INTEGRATION_NODE_TESTS, *_INTEGRATION_SUPPORT)
+           if not (root / name).is_file()]
+    if out:
+        return out
+    env = dict(_os.environ)
+    env.update(WORDICON_TEST_MODE="1", PYTHONDONTWRITEBYTECODE="1")
+    # Canonical temporary root also avoids macOS /var versus /private/var aliases
+    # violating the same containment checks the production store uses.
+    env["TMPDIR"] = str(Path(_tempfile.gettempdir()).resolve())
+    env["NODE_PATH"] = str(root / "tests/journeys/node_modules")
+    def run(label, command, timeout):
+        try:
+            result = _sp.run(command, cwd=root, env=env, capture_output=True, text=True, timeout=timeout)
+        except (_sp.TimeoutExpired, OSError) as exc:
+            out.append(f"INTEGRATION: {label} could not complete: {type(exc).__name__}: {exc}")
+            return
+        combined = (result.stdout + "\n" + result.stderr).strip().splitlines()
+        if result.returncode:
+            out.append(f"INTEGRATION: {label} behavioral checks fail (exit {result.returncode}):\n      " + "\n      ".join(combined[-24:]))
+        else:
+            summary = next((line for line in reversed(combined) if "passed" in line or "PASS " in line or "CHECKS " in line), "passed")
+            print(f"INTEGRATION: {label}: {summary}")
+    if _iu.find_spec("pytest") is None:
+        out.append("INTEGRATION: pytest is unavailable — install the declared Python test dependencies; the 16 suites did not run")
+    else:
+        run("registered Python suites", [_sys.executable, "-m", "pytest", *_INTEGRATION_PYTESTS, "-q", "-p", "no:cacheprovider"], 180)
+    node = _sh.which("node")
+    if not node:
+        out.append("INTEGRATION: Node.js is unavailable — outbox and page fixtures did not run")
+    else:
+        for name in _INTEGRATION_NODE_TESTS:
+            run(name, [node, name], 120)
+    return out
+
+
 def _check_deeper_wing():
     """Go deeper (16 October 2026) arrived from another builder with its
     behavioural pins in pytest files — tests/test_deeper.py and
@@ -6964,8 +7038,8 @@ def _check_capture(server, paired):
 
     # ---- the wiring is law, not habit: the hook, the transaction, the brackets
     sv = (root / "server.py").read_text(encoding="utf-8")
-    if 'capture.query("library"' not in sv:
-        out.append("CAPTURE: the library search route lost its capture hook")
+    if '_capture_search("library"' not in sv or 'capture.query(scope, query, hits)' not in sv:
+        out.append("CAPTURE: the library search route lost its guarded capture hook")
     nb = (root / "scripts" / "notebook.py").read_text(encoding="utf-8")
     if nb.count("_keep_revision(conn") < 2:
         out.append("CAPTURE: retention left one of the two save paths (create / bump) \u2014 or left the save's transaction")
@@ -8883,6 +8957,7 @@ def main() -> int:
     failures.extend(_check_capture(server, _paired))
     failures.extend(_check_journey_error_law())
     failures.extend(_check_deeper_wing())
+    failures.extend(_check_integration_wing())
     failures.extend(_check_document_contract(server, _paired))
     failures.extend(_check_docx_export(server, _paired))
     failures.extend(_check_concept_picker(server, _paired))
@@ -27388,7 +27463,18 @@ console.log(out.join('\\n'));
 
 if __name__ == "__main__":
     try:
-        _rc = main()
+        if sys.argv[1:] == ["--integration-wing-only"]:
+            # Same registered helper as the full main gate; useful for named
+            # removal/sabotage diagnostics without rerunning unrelated wings.
+            _wing_failures = _check_integration_wing()
+            for _failure in _wing_failures:
+                print("FAIL — " + _failure)
+            if not _wing_failures:
+                print("OK — integration wing behavioral gate (other wings not run)")
+            _shutil.rmtree(_SCRATCH, ignore_errors=True)
+            _rc = 1 if _wing_failures else 0
+        else:
+            _rc = main()
     except SystemExit:
         raise
     except BaseException:
