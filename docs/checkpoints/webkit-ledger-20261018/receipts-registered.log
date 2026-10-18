@@ -1,0 +1,16 @@
+ok   opening an investigation does not automatically project or start anything
+ok   Receipts reads local saved evidence without preparing or dispatching
+ok   source-family limits are visible before opening matrix details
+ok   typed timeline renders the commission date without inventing a conflict
+ok   source markup is rendered as text
+ok   citation usage is explicitly structural
+ok   access blockers and local-only behavior are visible
+ok   selecting a gap only fills the question
+ok   reviewed follow-up retains parent and original passage
+ok   continuation carries the exact displayed projection identity for server revalidation
+ok   proposal review never dispatches Start
+ok   reopening rebuilds the saved view without a new investigation
+ok   no page errors: []
+ok   receipts: no request left the scratch origin
+CHECKS 14
+JOURNEY receipts OK

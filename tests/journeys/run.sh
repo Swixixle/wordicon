@@ -81,7 +81,7 @@ settle() { local s1 s2; s2=$(digest); for i in 1 2 3 4 5 6 7 8 9 10; do s1="$s2"
 # of this bracket proved it by switching the wrong ledger off and watching the
 # desk write two events into the measured store.
 lswitch() { (cd "$ROOT" && "$PY" -c "import sys, pathlib; sys.path.insert(0,'scripts'); sys.path.insert(0,'src'); import state_root; state_root.apply(pathlib.Path(sys.argv[2])); import ledger; ledger.set_enabled(sys.argv[1] == 'on')" "$1" "$JOURNEY_STATE"); }
-for j in quiet home anatomy chooser speak speakkeep encounter federation opencase shell room deep resume inquiry epistemic partial constitution anchorfit carry wayfinder map moira notebook related narrowing gloss; do
+for j in quiet home anatomy chooser speak speakkeep encounter federation opencase receipts shell room deep resume inquiry epistemic partial constitution anchorfit carry wayfinder map moira notebook related narrowing gloss; do
   echo "== journey: $j"
   if [ "$j" = quiet ] || [ "$j" = speak ] || [ "$j" = map ]; then lswitch off; before=$(settle); fi
   (cd "$HERE" && node "$j.js") > "$JOURNEY_OUT/$j.log" 2>&1
@@ -94,6 +94,10 @@ for j in quiet home anatomy chooser speak speakkeep encounter federation opencas
     if [ -z "$before" ] || [ "$before" != "$after" ]; then echo "== $j: the store changed during a journey that must write nothing ($before -> $after)"; status=1; else echo "ok   $j: the store is byte-identical ($before)"; fi
     lswitch on
   fi
+done
+# Receipts is local evidence review, not an implicit investigation dispatch.
+for need in "Receipts reads local saved evidence without preparing or dispatching" "source-family limits are visible before opening matrix details" "reviewed follow-up retains parent and original passage" "continuation carries the exact displayed projection identity for server revalidation" "reopening rebuilds the saved view without a new investigation"; do
+  grep -qF "ok   $need" "$JOURNEY_OUT/receipts.log" || { echo "== receipts: missing check: $need"; status=1; }
 done
 # the writing-room identity checks must have run (a journey that skipped them is not a pass)
 # The desktop layout (2026-09-14) adds two: the rail IS the navigation now,
@@ -370,6 +374,8 @@ cat "$JOURNEY_OUT/deeper-evidence.log"
 if [ $rc -ne 0 ]; then echo "== deeper-evidence: FAILED (exit $rc)"; status=1; fi
 if ! grep -q "^JOURNEY deeper-evidence OK" "$JOURNEY_OUT/deeper-evidence.log"; then echo "== deeper-evidence: did not reach its final line — not a pass"; status=1; fi
 
-total=$(grep -h "^CHECKS " "$JOURNEY_OUT"/work.log "$JOURNEY_OUT"/doors.log "$JOURNEY_OUT"/deeper.log "$JOURNEY_OUT"/deeper-evidence.log "$JOURNEY_OUT"/editor-chromium.log "$JOURNEY_OUT"/editor-webkit.log "$JOURNEY_OUT"/notes-chromium.log "$JOURNEY_OUT"/notes-webkit.log "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/opencase.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log "$JOURNEY_OUT"/constitution.log "$JOURNEY_OUT"/anchorfit.log "$JOURNEY_OUT"/carry.log "$JOURNEY_OUT"/wayfinder.log "$JOURNEY_OUT"/map.log "$JOURNEY_OUT"/moira.log "$JOURNEY_OUT"/notebook.log "$JOURNEY_OUT"/related.log "$JOURNEY_OUT"/narrowing.log "$JOURNEY_OUT"/gloss.log | awk '{s+=$2} END {print s+0}')
-echo "== journeys: $total checks, exit $status"
+counts=$(grep -h "^CHECKS " "$JOURNEY_OUT"/work.log "$JOURNEY_OUT"/doors.log "$JOURNEY_OUT"/deeper.log "$JOURNEY_OUT"/deeper-evidence.log "$JOURNEY_OUT"/editor-chromium.log "$JOURNEY_OUT"/editor-webkit.log "$JOURNEY_OUT"/notes-chromium.log "$JOURNEY_OUT"/notes-webkit.log "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/opencase.log "$JOURNEY_OUT"/receipts.log "$JOURNEY_OUT"/ledger-delivery-chromium.log "$JOURNEY_OUT"/ledger-delivery-webkit.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log "$JOURNEY_OUT"/constitution.log "$JOURNEY_OUT"/anchorfit.log "$JOURNEY_OUT"/carry.log "$JOURNEY_OUT"/wayfinder.log "$JOURNEY_OUT"/map.log "$JOURNEY_OUT"/moira.log "$JOURNEY_OUT"/notebook.log "$JOURNEY_OUT"/related.log "$JOURNEY_OUT"/narrowing.log "$JOURNEY_OUT"/gloss.log)
+total=$(printf '%s\n' "$counts" | awk '{s+=$2} END {print s+0}')
+completed=$(printf '%s\n' "$counts" | awk 'NF {n++} END {print n+0}')
+echo "== journeys: $completed completed, $total checks, exit $status"
 exit $status

@@ -78,3 +78,12 @@ Run `notes.js`, `editor.js`, and `ledger-delivery.js` with `JOURNEY_ENGINE`
 `chromium`, then `webkit`, using that scratch `JOURNEY_DIR` and `JOURNEY_OUT`.
 Set `JOURNEY_LEDGER_TRACE` to a short diagnostic filename prefix to capture
 scrubbed request evidence. Run `node tests/test_ledger_outbox.mjs` separately.
+
+## Runner registration follow-up
+
+The shipped Receipts Chromium fixture is now executed by `run.sh`, with named
+checks for local-only review, source-family limits, exact continuation references
+and reopening without dispatch. Its focused rerun passed14/14. The totals now
+include Receipts and both Ledger engines, and report the actual number of completed
+journeys from their CHECKS records instead of assuming an old journey count.
+No full browser-suite pass is claimed by this registration-only follow-up.
