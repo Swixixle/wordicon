@@ -1,0 +1,32 @@
+CI suite repair — 18 October 2026
+
+Base: 2f0e918 (published integration checkpoint).
+Observed: GitHub run39109320333, suite job117621828988.
+
+Actual failures:
+- Nine pytest collection errors on Ubuntu because fixture temporary directories
+  used the macOS-only /private/tmp. Eight owning fixture modules are corrected;
+  inherited Open Case test modules account for the remaining collection errors.
+- Documentation classification rejected the unindexed P1 verification Markdown.
+- CI dependency pin expected one literal requirements.txt install command even
+  though requirements-test.txt legitimately includes that application file.
+
+Repair:
+- Use Path(tempfile.gettempdir()).resolve() in the affected fixture constructors:
+  portable configured scratch storage, still canonical for containment checks.
+- Classify the P1 checkpoint report in docs/README.md.
+- Inspect actual YAML job steps and follow declared requirements includes for
+  suite and journeys. Comments, missing includes and cycles cannot satisfy it.
+  No application behavior, workflow dependencies or security checks changed.
+
+Focused verification:
+- All registered integration Python suites:231 passed,39 subtests passed.
+  The probe deliberately rejects an explicit /private/tmp parent, simulating
+  the missing Linux path;180 temporary directories used the configured parent.
+- Actual dependency-check block:6 probes passed (indirect and direct installation,
+  missing application include, commented include, commented install, cycle).
+- All maintained Markdown documents classified with no phantom index entries.
+- Source diff/whitespace checks passed.
+
+This is local fixture evidence, not a claim the remote rerun passed. The root
+integration owner runs the full combined gate and publishes the repaired commit.

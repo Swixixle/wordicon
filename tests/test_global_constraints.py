@@ -18475,9 +18475,39 @@ console.log(out.join('\\n'));
         failures.append("89: no CI workflow exists")
     else:
         _wtxt89 = _wf89.read_text()
+        # CI may install the test requirements, which include the application
+        # requirements. Follow the actual job steps and that include instead of
+        # requiring one obsolete command spelling (or trusting a comment).
+        import shlex as _shlex89
+        import yaml as _yaml89
+        _jobs89 = (_yaml89.safe_load(_wtxt89) or {}).get("jobs", {})
+        _app_req89 = _wf89.parents[2] / "requirements.txt"
+        def _includes_app89(path, seen=None):
+            seen = set() if seen is None else seen
+            path = path.resolve()
+            if path in seen or not path.is_file() or not path.is_relative_to(_wf89.parents[2].resolve()):
+                return False
+            if path == _app_req89.resolve():
+                return True
+            seen.add(path)
+            for line in path.read_text().splitlines():
+                parts = _shlex89.split(line, comments=True)
+                if len(parts) == 2 and parts[0] in ("-r", "--requirement") and _includes_app89(path.parent / parts[1], seen):
+                    return True
+            return False
+        for _job89 in ("suite", "journeys"):
+            _installed89 = False
+            for _step89 in _jobs89.get(_job89, {}).get("steps", []):
+                for _line89 in str(_step89.get("run", "")).splitlines():
+                    _parts89 = _shlex89.split(_line89, comments=True)
+                    if _parts89[:2] == ["pip", "install"]:
+                        for _i89, _part89 in enumerate(_parts89[:-1]):
+                            if _part89 in ("-r", "--requirement") and _includes_app89(_wf89.parents[2] / _step89.get("working-directory", "") / _parts89[_i89 + 1]):
+                                _installed89 = True
+            if not _installed89:
+                failures.append(f"89: CI {_job89} does not install application dependencies directly or through a declared requirements include")
         for _n89, _w89 in [
             ('python-version: "3.14"', "CI is not on the Mac's Python"),
-            ("pip install -r requirements.txt", "CI skips dependencies"),
             ("python3 tests/test_global_constraints.py",
              "CI does not run the suite"),
             ("scripts/scan_secrets.py --tracked", "CI skips the scanner"),

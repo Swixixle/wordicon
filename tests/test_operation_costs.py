@@ -19,7 +19,7 @@ import producers
 
 class CostTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="nk-cost-", dir="/private/tmp")
+        self.temp = tempfile.TemporaryDirectory(prefix="nk-cost-", dir=Path(tempfile.gettempdir()).resolve())
         self.before_root = cli.LOCAL_STATE
         cli.LOCAL_STATE = Path(self.temp.name)
         self.op = self.new_op("first")

@@ -94,6 +94,13 @@ These are the written contracts that sit under it.
 - [`backlog-post-launch-observations.md`](./backlog-post-launch-observations.md)
   — observations from real use, captured verbatim and deliberately not built.
 
+## Verified checkpoint evidence
+
+- [`checkpoints/webkit-ledger-20261018.md`](./checkpoints/webkit-ledger-20261018.md)
+  — observed WebKit lifecycle and undo failures, scoped repairs, scrubbed request
+  evidence and browser checks by engine. This is a dated verification record,
+  not a claim that later changes passed the same checks.
+
 ## Historical design archive
 
 Superseded, preserved, and clearly marked. Their bodies are untouched; each

@@ -11,7 +11,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "scripts")]
 os.environ["WORDICON_TEST_MODE"] = "1"
-SCRATCH = tempfile.TemporaryDirectory(prefix="nk-capture-fixture-", dir="/private/tmp")
+SCRATCH = tempfile.TemporaryDirectory(prefix="nk-capture-fixture-", dir=Path(tempfile.gettempdir()).resolve())
 os.environ["WORDICON_STATE"] = str(Path(SCRATCH.name) / "state")
 import wordicon_cli as cli
 import operations as ops
@@ -19,7 +19,7 @@ import operations as ops
 
 class CaptureTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="nk-capture-test-", dir="/private/tmp")
+        self.temp = tempfile.TemporaryDirectory(prefix="nk-capture-test-", dir=Path(tempfile.gettempdir()).resolve())
         self.old = cli.LOCAL_STATE
         cli.LOCAL_STATE = Path(self.temp.name)
         self.op, _ = ops.reserve(request_key="fixture", kind="job", execution={"fixture": True})

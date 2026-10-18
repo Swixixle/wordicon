@@ -16,7 +16,7 @@ from unittest.mock import patch
 FILES=Path(__file__).resolve().parents[1]
 ROOT=Path(os.environ.get("NK_ROOT", FILES))
 STAGE=Path(os.environ["RECEIPTS_STAGE"]) if os.environ.get("RECEIPTS_STAGE") else None
-SCRATCH=tempfile.TemporaryDirectory(prefix="nk-receipts-",dir="/private/tmp")
+SCRATCH=tempfile.TemporaryDirectory(prefix="nk-receipts-",dir=Path(tempfile.gettempdir()).resolve())
 os.environ["WORDICON_TEST_MODE"]="1"
 os.environ["WORDICON_PREVIEW"]="1"
 os.environ["WORDICON_STATE"]=SCRATCH.name
@@ -39,7 +39,7 @@ if STAGE and "api_open_case_receipts" not in server.app.view_functions:
 
 class IntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory(prefix="nk-receipts-case-",dir="/private/tmp")
+        self.temp=tempfile.TemporaryDirectory(prefix="nk-receipts-case-",dir=Path(tempfile.gettempdir()).resolve())
         cli.LOCAL_STATE=Path(self.temp.name)
         self.op,_=ops.reserve(request_key="saved",kind="investigation",action_id=opencase.ACTION,
             execution={"plan":{"question":"What remains unavailable?","subject_name":"Fixture Judge",

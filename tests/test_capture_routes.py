@@ -11,7 +11,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "scripts")]
 os.environ["WORDICON_TEST_MODE"] = "1"
-BOOT = tempfile.TemporaryDirectory(prefix="nk-capture-route-", dir="/private/tmp")
+BOOT = tempfile.TemporaryDirectory(prefix="nk-capture-route-", dir=Path(tempfile.gettempdir()).resolve())
 os.environ["WORDICON_STATE"] = BOOT.name
 import server
 import gate
@@ -23,7 +23,7 @@ import producers
 
 class CaptureRouteTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="nk-capture-route-", dir="/private/tmp")
+        self.temp = tempfile.TemporaryDirectory(prefix="nk-capture-route-", dir=Path(tempfile.gettempdir()).resolve())
         self.prior = cli.LOCAL_STATE
         cli.LOCAL_STATE = Path(self.temp.name)
         self.client = server.app.test_client()

@@ -63,7 +63,7 @@ def raw_message(**changes):
 
 class OperationCaptureTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="nk-body-capture-", dir="/private/tmp")
+        self.temp = tempfile.TemporaryDirectory(prefix="nk-body-capture-", dir=Path(tempfile.gettempdir()).resolve())
         self.old = cli.LOCAL_STATE, cli.INPUTS_LOG, cli.EDGES_LOG
         cli.LOCAL_STATE = Path(self.temp.name)
         cli.INPUTS_LOG, cli.EDGES_LOG = cli.LOCAL_STATE / "inputs.jsonl", cli.LOCAL_STATE / "edges.jsonl"

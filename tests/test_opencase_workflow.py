@@ -11,7 +11,7 @@ from contextlib import contextmanager
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "scripts")]
-SCRATCH = tempfile.TemporaryDirectory(prefix="nk-opencase-", dir="/private/tmp")
+SCRATCH = tempfile.TemporaryDirectory(prefix="nk-opencase-", dir=Path(tempfile.gettempdir()).resolve())
 os.environ["WORDICON_TEST_MODE"] = "1"
 os.environ["WORDICON_STATE"] = str(Path(SCRATCH.name) / "state")
 os.environ["NK_WORKFLOW_FIXTURE_TOKEN"] = "fixture-credential-do-not-store"
@@ -28,7 +28,7 @@ import wordicon_cli as cli
 
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="nk-case-test-", dir="/private/tmp")
+        self.temp = tempfile.TemporaryDirectory(prefix="nk-case-test-", dir=Path(tempfile.gettempdir()).resolve())
         cli.LOCAL_STATE = Path(self.temp.name)
         federation.register_connector("case-test", "open_case", "http://127.0.0.1:31888", credential_ref="env:NK_WORKFLOW_FIXTURE_TOKEN", dev_loopback=True)
         self.client = server.app.test_client()
