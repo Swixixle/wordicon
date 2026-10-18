@@ -35,7 +35,12 @@ def _hash(value):
 
 
 def rate_card(provider, model):
-    """Explicit supported family only; Sonnet 5.5 must not inherit Sonnet 5 rates."""
+    """Explicit supported families; Sonnet 5.5 has its own cache-read price."""
+    if provider == "anthropic" and re.fullmatch(r"claude-sonnet-5-5(?:-\d{8})?", str(model or "")):
+        return {"version": "anthropic-sonnet5.5-standard-global-2026-10-18", "provider": provider,
+                "model_family": "claude-sonnet-5-5", "currency": "USD", "checked_at": CHECKED_AT,
+                "source_url": PRICE_URL, "scope": "direct_api_standard_global_no_tools",
+                "categories": [{"category": c, "usd_per_million": n} for c, n in zip(CATEGORIES, (2, 10, 0.1, 2.5, 4))]}
     if provider != "anthropic" or not re.fullmatch(r"claude-sonnet-5(?:-\d{8})?", str(model or "")):
         return None
     return {"version": "anthropic-sonnet5-standard-global-2026-10-18", "provider": provider,

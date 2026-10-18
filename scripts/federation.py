@@ -109,7 +109,8 @@ PRODUCERS = {
     },
     # Deflate Lens (W1 of the extraction rulings, docs/adr-extraction.md,
     # 2026-10-16): the owner's transcript-reading instrument joins the same
-    # door. Import only — Nikodemus never starts a Deflate reading. Unlike
+    # door. The original import path remains; deflate_workflow adds a separately
+    # enabled, bounded proposal/Start bridge for new readings. Unlike
     # the other two, the export routes are not on a producer branch: stock
     # Deflate (0.15.2 and origin/main e25f7c2 alike) serves no deposition
     # routes at all; the deposition module this block ADDS to the owner's

@@ -102,6 +102,7 @@ import operations as ops  # noqa: E402  (workspace-v2 slice D: the durable opera
 import workindex  # noqa: E402  (workspace-v2 slice E: the derived Your work index — rebuildable, never authority)
 import producers  # noqa: E402  (workspace-v2 slice F: investigation adapters — contracts pinned, live starts by the owner's ruling)
 import opencase  # noqa: E402  (bounded question → investigation → saved evidence workflow)
+import deflate_workflow  # noqa: E402  (bounded media intake and retained reading lifecycle)
 
 # One dispatcher per store (slice D). The lock is taken when this process
 # first dispatches (or when it starts serving and reconciles), never on
@@ -3732,6 +3733,11 @@ def _create_job_from(data: dict, op_id: str | None = None):
         deepen_context = data.get("deepen_context")
         if not isinstance(deepen_context, dict) or not deepen_context:
             return jsonify({"error": "the exploration context is missing; prepare again", "nothing_was_sent": True}), 400
+        try:
+            import deeper
+            deeper.validate_operation_lineage(deepen_context)
+        except (ValueError, OSError) as exc:
+            return jsonify({"error": str(exc), "nothing_was_sent": True}), 409
         parent_trace_id = deepen_context.get("parent_trace_id") or ""
         # the Deflate door: a deposition-started exploration has no parent
         # run, but it IS a door press — via carries the deposition so the
@@ -4115,10 +4121,24 @@ def api_actions_prepare():
 
 def _execution_for_proposal(prepared: dict, a: dict, rd: dict, adapter: str) -> dict:
     lane = rd.get("lane") or {}
-    return {"adapter": adapter, "action_id": a["id"], "registry_version": prepared.get("registry_version"),
+    execution = {"adapter": adapter, "action_id": a["id"], "registry_version": prepared.get("registry_version"),
             "prepared_id": prepared["prepared_id"], "snapshot_id": prepared.get("snapshot_id"),
             "inputs": prepared.get("inputs") or {}, "mode": a.get("mode"), "handler": a.get("handler"),
             "lane": lane.get("lane"), "model": lane.get("model"), "outbound": a.get("outbound")}
+    if a.get("mode") == "deepen":
+        # Derive ancestry only from the verifying server-frozen proposal. Do
+        # not re-resolve a mutable parent before known request-key recovery:
+        # _create_job_from and deeper.run recheck it before a NEW dispatch.
+        context = actions.job_payload(prepared)["deepen_context"]
+        source = (context.get("root") or {}).get("source_operation")
+        if source:
+            lineage = context.get("operation_lineage") or {}
+            if not lineage.get("follow_up_of") or lineage.get("source_operation_id") != source.get("operation_id"):
+                raise actions.PrepareError("the proposal's source operation linkage is incomplete; prepare again", 409)
+            execution["plan"] = {"follow_up_of": lineage["follow_up_of"], "question": context["question"],
+                                 "origin": source["origin"], "source_operation": source,
+                                 "operation_lineage": lineage}
+    return execution
 
 
 def _investigation_result_ref(started: dict, art: dict | None) -> dict:
@@ -4130,6 +4150,27 @@ def _investigation_result_ref(started: dict, art: dict | None) -> dict:
     return {"upstream_id": started["upstream_id"], "object_id": started.get("object_id", ""), "reply_kept": started.get("reply_kept"),
             "artifact": art.get("artifact"), "receipt": art.get("receipt"), "verification": art.get("verification") or "",
             "artifact_outcome": art.get("outcome", ""), "kept": kept, "kind": started.get("kind", "start")}
+
+
+def _validate_linked_retry(parent, execution):
+    """A new attempt retains the prior attempt's known AND unknown charges."""
+    if not isinstance(parent, dict):
+        raise ValueError("the prior attempt is missing; no new attempt was sent")
+    old = parent.get("execution") or {}
+    if (parent.get("action_id") != "explore.deepen" or ops.fingerprint(old) != parent.get("fingerprint")
+            or (old.get("plan") or {}).get("source_operation") != execution["plan"]["source_operation"]):
+        raise ValueError("the prior attempt no longer matches the frozen source operation; prepare again")
+    seen, current = set(), parent
+    while current:
+        if current["op_id"] in seen:
+            raise ValueError("the prior attempt has a cyclic operation ancestry; no new attempt was sent")
+        seen.add(current["op_id"])
+        next_id = ((current.get("execution") or {}).get("plan") or {}).get("follow_up_of") or current.get("retry_parent")
+        if not next_id:
+            break
+        current = ops.get(next_id)
+        if not current or current["op_id"] != next_id:
+            raise ValueError("the prior attempt has a missing operation ancestor; no new attempt was sent")
 
 
 def _run_investigation(op_id: str, spec: dict) -> None:
@@ -4188,6 +4229,8 @@ def _run_investigation(op_id: str, spec: dict) -> None:
 
 
 def _shape_investigation_view(op: dict) -> dict:
+    if deflate_workflow.is_ours(op):
+        return deflate_workflow.view(op)
     if opencase.is_ours(op):
         return opencase.view(op)
     st = producers.status(op)
@@ -4286,6 +4329,8 @@ def api_operations_start():
     a = actions.BY_ID.get(prepared["action_id"])
     if a is None:
         return jsonify({"error": "the proposal names an action the registry no longer has"}), 409
+    if a["handler"] == "deflate_workflow":
+        return _start_deflate_reading(prepared, key)
     if a["handler"] == "open_case_workflow":
         return _start_open_case(prepared, key)
     rd = actions.readiness(a, server_gateway)
@@ -4296,7 +4341,10 @@ def api_operations_start():
             return jsonify({"error": "the model lane changed since this proposal; prepare again before starting",
                             "nothing_was_sent": True}), 409
     adapter = "moira/v1" if a["handler"] == "moira" else ("adapter/" + ((rd.get("producer") or {}).get("adapter_version") or "0") if a["handler"] == "adapter" else "job/v1")
-    execution = _execution_for_proposal(prepared, a, rd, adapter)
+    try:
+        execution = _execution_for_proposal(prepared, a, rd, adapter)
+    except (actions.PrepareError, ValueError, KeyError, TypeError) as exc:
+        return jsonify({"error": str(exc), "nothing_was_sent": True}), 409
     kind = "reading" if a["handler"] == "moira" else ("investigation" if a["handler"] == "adapter" else "job")
     spec = None
     if a["handler"] == "adapter":
@@ -4478,6 +4526,13 @@ def api_operation_recover(op_id):
     op = ops.get(op_id)
     if op is None:
         return jsonify({"error": "no operation with that id"}), 404
+    if deflate_workflow.is_ours(op):
+        try:
+            if not _dispatching():
+                return jsonify({"error":"This process does not hold the reading dispatcher."}),409
+            return jsonify(deflate_workflow.recover(op))
+        except deflate_workflow.WorkflowError as e:
+            return jsonify({"error":str(e)}),e.status
     if opencase.is_ours(op):
         try:
             if not _dispatching():
@@ -4563,7 +4618,10 @@ def api_operation_attempt(op_id):
     if not rd["available"]:
         return jsonify({"error": f"{a['label']} is not available now: {rd['reason']}", "nothing_was_sent": True}), 409
     adapter = "moira/v1" if a["handler"] == "moira" else "job/v1"
-    execution = _execution_for_proposal(prepared, a, rd, adapter)
+    try:
+        execution = _execution_for_proposal(prepared, a, rd, adapter)
+    except (actions.PrepareError, ValueError, KeyError, TypeError) as exc:
+        return jsonify({"error": str(exc), "nothing_was_sent": True}), 409
     old_exec = op.get("execution") or {}
     changed = [k for k in ("lane", "model", "registry_version", "adapter", "action_id") if old_exec.get(k) != execution.get(k)]
     if changed and a.get("mode") == "deepen":
@@ -4574,6 +4632,12 @@ def api_operation_attempt(op_id):
                         "changed": {k: {"was": old_exec.get(k), "now": execution.get(k)} for k in changed}, "nothing_was_sent": True}), 409
     if a["handler"] != "job":
         return jsonify({"error": "another attempt of a reading is started from Get feedback again", "nothing_was_sent": True}), 409
+    linked_retry = a.get("mode") == "deepen" and bool((execution.get("plan") or {}).get("source_operation"))
+    if linked_retry:
+        # The frozen selection stays unchanged; only this explicit new
+        # operation's accounting parent becomes the immediately prior attempt.
+        execution["plan"]["follow_up_of"] = op["op_id"]
+        execution["plan"]["retry_of"] = op["op_id"]
     try:
         new_id = _new_job_id()
         row, created = ops.reserve(request_key=key, kind="job", execution=execution, config={"lane": rd.get("lane") or {}}, op_id=new_id,
@@ -4585,6 +4649,13 @@ def api_operation_attempt(op_id):
     if not created:
         _release_job_id(new_id)
         return jsonify({"operation_id": row["op_id"], "status": row["status"], "repeated": True, "retry_parent": op["op_id"]})
+    if linked_retry:
+        try:
+            _validate_linked_retry(op, execution)
+        except ValueError as exc:
+            _release_job_id(new_id)
+            ops.mark(new_id, "failed", last_error=str(exc), local_state="Refused before dispatch")
+            return jsonify({"error": str(exc), "nothing_was_sent": True}), 409
     payload = actions.job_payload(prepared)
     with JOBS_LOCK:
         JOBS[new_id]["prepared_id"] = op["prepared_id"]
@@ -4633,6 +4704,106 @@ def api_connector_live_start(cid):
     except producers.AdapterError as e:
         return jsonify({"error": str(e)}), e.status
     return jsonify({"ok": True, "ruling": row})
+
+
+def _start_deflate_reading(prepared, request_key):
+    plan = (prepared.get("inputs") or {}).get("plan")
+    snap = snapshots.load(prepared.get("snapshot_id"))
+    if not snap or not snapshots.verify(snap):
+        return jsonify({"error":"The frozen reading purpose is missing or no longer verifies.","nothing_was_sent":True}),409
+    execution={"adapter":deflate_workflow.CONTRACT,"action_id":deflate_workflow.ACTION,"prepared_id":prepared["prepared_id"],
+        "snapshot_id":prepared.get("snapshot_id"),"plan":plan}
+    try:
+        row,created=ops.reserve(request_key=request_key,kind="investigation",execution=execution,
+            action_id=deflate_workflow.ACTION,registry_version=str(prepared.get("registry_version") or ""),
+            prepared_id=prepared["prepared_id"],snapshot_id=prepared.get("snapshot_id") or "",
+            config={"producer":"deflate","state_root":str(cli.LOCAL_STATE.resolve())},retry_parent=(plan or {}).get("follow_up_of") or None)
+        if not created:
+            return jsonify({"operation_id":row["op_id"],"status":row["status"],"kind":"investigation","repeated":True})
+        try: deflate_workflow.validate_plan(plan)
+        except deflate_workflow.WorkflowError as e:
+            ops.mark(row["op_id"],"failed",local_state="Refused before dispatch",last_error=str(e))
+            return jsonify({"error":str(e),"operation_id":row["op_id"],"nothing_was_sent":True}),e.status
+        if not _dispatching():
+            return jsonify({"operation_id":row["op_id"],"status":"queued","kind":"investigation","dispatched":False})
+        if not ops.claim(row["op_id"],OPS_DISPATCHER.token):
+            return jsonify({"error":"This reading was already claimed."}),409
+        ops.mark(row["op_id"],"running",local_state="Starting the reviewed Deflate reading")
+        deflate_workflow.launch(row["op_id"])
+        return jsonify({"operation_id":row["op_id"],"status":"running","kind":"investigation","dispatched":True})
+    except ops.OperationsError as e:
+        return jsonify({"error":str(e),"nothing_was_sent":True}),e.status
+
+
+@app.route("/deflate-reading")
+def deflate_reading_page():
+    return send_from_directory(app.static_folder,"deflate-reading.html")
+
+
+@app.route("/api/deflate/status")
+def api_deflate_status():
+    return jsonify(deflate_workflow.readiness())
+
+
+@app.route("/api/deflate/authorize",methods=["POST"])
+def api_deflate_authorize():
+    data=request.get_json(silent=True) or {}
+    try: return jsonify({"ok":True,"ruling":deflate_workflow.authorize(str(data.get("connector_id") or ""),bool(data.get("enabled")),data.get("note"))})
+    except deflate_workflow.WorkflowError as e: return jsonify({"error":str(e)}),e.status
+
+
+@app.route("/api/deflate/uploads",methods=["POST"])
+def api_deflate_upload():
+    try:
+        if request.mimetype not in ("audio/mpeg","application/octet-stream"):
+            return jsonify({"error":"Choose an MP3 audio file."}),415
+        return jsonify({"upload":deflate_workflow.stage_upload(request.stream,request.args.get("name") or "chosen.mp3",request.content_length)}),201
+    except deflate_workflow.WorkflowError as e: return jsonify({"error":str(e)}),e.status
+
+
+@app.route("/api/deflate/operations")
+def api_deflate_operations():
+    return jsonify({"operations":deflate_workflow.list_views(),"population":"Deflate readings saved in this Nikodemus workspace"})
+
+
+@app.route("/api/deflate/operations/<op_id>")
+def api_deflate_operation(op_id):
+    try: return jsonify(deflate_workflow.view(deflate_workflow._read_operation(op_id)))
+    except deflate_workflow.WorkflowError as e: return jsonify({"error":str(e)}),e.status
+
+
+@app.route("/api/deflate/operations/<op_id>/save",methods=["POST"])
+def api_deflate_save(op_id):
+    try: return jsonify(deflate_workflow.save(deflate_workflow._read_operation(op_id)))
+    except deflate_workflow.WorkflowError as e: return jsonify({"error":str(e)}),e.status
+
+
+@app.route("/api/deflate/operations/<op_id>/recover",methods=["POST"])
+def api_deflate_recover(op_id):
+    try:
+        if not _dispatching(): return jsonify({"error":"This process does not hold the reading dispatcher."}),409
+        return jsonify(deflate_workflow.recover(deflate_workflow._read_operation(op_id)))
+    except deflate_workflow.WorkflowError as e: return jsonify({"error":str(e)}),e.status
+
+
+@app.route("/api/deflate/operations/<op_id>/original")
+def api_deflate_original(op_id):
+    from flask import send_file
+    try:
+        record,path=deflate_workflow.original_upload(deflate_workflow._read_operation(op_id))
+        response=send_file(path,mimetype="audio/mpeg",as_attachment=True,download_name=record["name"],conditional=False)
+        response.headers["X-Content-SHA256"]=record["sha256"]
+        response.headers["X-Content-Type-Options"]="nosniff"
+        return response
+    except deflate_workflow.WorkflowError as e: return jsonify({"error":str(e)}),e.status
+
+
+@app.route("/api/deflate/operations/<op_id>/artifacts/<name>")
+def api_deflate_artifact(op_id,name):
+    try:
+        return Response(deflate_workflow.artifact(deflate_workflow._read_operation(op_id),name),mimetype="application/json",
+            headers={"Content-Disposition":"attachment; filename="+name,"X-Content-Type-Options":"nosniff"})
+    except deflate_workflow.WorkflowError as e: return jsonify({"error":str(e)}),e.status
 
 
 def _start_open_case(prepared, request_key):
@@ -6562,6 +6733,7 @@ def _ops_startup() -> dict:
         summary["left_queued"] = [o["op_id"] for o in ops.queued()]
         return summary
     summary["open_case_resumed"] = opencase.resume_known()
+    summary["deflate_resumed"] = deflate_workflow.resume_known()
     if vault.preview_mode():
         # the review of 0f2db31, finding 2: a preview on a COPIED store inherits that store's queued work.
         # Those operations keep their identity, provenance and events, but this process does not dispatch
@@ -6588,7 +6760,15 @@ def _ops_startup() -> dict:
             ops.mark(op["op_id"], "failed", last_error="interrupted before dispatch and not resumable: the action is not a job the registry holds", local_state="Not resumed")
             continue
         rd = actions.readiness(a, server_gateway)
-        execution = _execution_for_proposal(prepared, a, rd, "job/v1")
+        try:
+            execution = _execution_for_proposal(prepared, a, rd, "job/v1")
+            if op.get("retry_parent") and (execution.get("plan") or {}).get("source_operation"):
+                execution["plan"]["follow_up_of"] = op["retry_parent"]
+                execution["plan"]["retry_of"] = op["retry_parent"]
+                _validate_linked_retry(ops.get(op["retry_parent"]), execution)
+        except (actions.PrepareError, ValueError, KeyError, TypeError) as exc:
+            ops.mark(op["op_id"], "failed", last_error=f"not resumable: {exc}", local_state="Not resumed")
+            continue
         if ops.fingerprint(execution) != op["fingerprint"] or not rd["available"]:
             ops.mark(op["op_id"], "failed", last_error="interrupted before dispatch and not resumed: the plan changed since it was reserved (lane, model, registry or action) — start another attempt",
                      local_state="Not resumed")

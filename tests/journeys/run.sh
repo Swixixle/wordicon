@@ -95,6 +95,20 @@ for j in quiet home anatomy chooser speak speakkeep encounter federation opencas
     lswitch on
   fi
 done
+# Deflate's standalone read lifecycle is required in both installed engines.
+for eng in chromium webkit; do
+  j="deflate-reading-$eng"
+  echo "== journey: $j"
+  (cd "$HERE" && JOURNEY_ENGINE="$eng" node deflate-reading.js) > "$JOURNEY_OUT/$j.log" 2>&1
+  rc=$?
+  cat "$JOURNEY_OUT/$j.log"
+  if [ $rc -ne 0 ] || ! grep -q "^JOURNEY $j OK" "$JOURNEY_OUT/$j.log"; then
+    echo "== $j: required journey failed or incomplete"; status=1
+  fi
+  for need in "Deflate reading is measured in $eng" "a lost Start reply does not automatically resubmit" "explicit check reuses the exact original Nikodemus request identity" "reopen reads saved results with no Start, import, or other mutation" "missing known subtotal stays unavailable rather than becoming zero" "missing and mismatched source basis withhold prose with an inspection notice" "a ready label cannot override the same passage in held records" "Go deeper proposal carries the explicit source operation and exact retained item" "reviewing linked Go deeper prepares only and never starts a model call" "another source operation never inherits an uncertain Start for the same signed item" "explicit Go deeper recovery retains the same original source-bound request identity" "Deflate read restoration and visible resume never retry Start or another mutation" "one explicit Save keeps its receipt across read cancellation without replay"; do
+    grep -qF "ok   $need" "$JOURNEY_OUT/$j.log" || { echo "== $j: missing check: $need"; status=1; }
+  done
+done
 # Receipts is local evidence review, not an implicit investigation dispatch.
 for need in "Receipts reads local saved evidence without preparing or dispatching" "source-family limits are visible before opening matrix details" "reviewed follow-up retains parent and original passage" "continuation carries the exact displayed projection identity for server revalidation" "reopening rebuilds the saved view without a new investigation"; do
   grep -qF "ok   $need" "$JOURNEY_OUT/receipts.log" || { echo "== receipts: missing check: $need"; status=1; }
@@ -374,7 +388,7 @@ cat "$JOURNEY_OUT/deeper-evidence.log"
 if [ $rc -ne 0 ]; then echo "== deeper-evidence: FAILED (exit $rc)"; status=1; fi
 if ! grep -q "^JOURNEY deeper-evidence OK" "$JOURNEY_OUT/deeper-evidence.log"; then echo "== deeper-evidence: did not reach its final line — not a pass"; status=1; fi
 
-counts=$(grep -h "^CHECKS " "$JOURNEY_OUT"/work.log "$JOURNEY_OUT"/doors.log "$JOURNEY_OUT"/deeper.log "$JOURNEY_OUT"/deeper-evidence.log "$JOURNEY_OUT"/editor-chromium.log "$JOURNEY_OUT"/editor-webkit.log "$JOURNEY_OUT"/notes-chromium.log "$JOURNEY_OUT"/notes-webkit.log "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/opencase.log "$JOURNEY_OUT"/receipts.log "$JOURNEY_OUT"/ledger-delivery-chromium.log "$JOURNEY_OUT"/ledger-delivery-webkit.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log "$JOURNEY_OUT"/constitution.log "$JOURNEY_OUT"/anchorfit.log "$JOURNEY_OUT"/carry.log "$JOURNEY_OUT"/wayfinder.log "$JOURNEY_OUT"/map.log "$JOURNEY_OUT"/moira.log "$JOURNEY_OUT"/notebook.log "$JOURNEY_OUT"/related.log "$JOURNEY_OUT"/narrowing.log "$JOURNEY_OUT"/gloss.log)
+counts=$(grep -h "^CHECKS " "$JOURNEY_OUT"/work.log "$JOURNEY_OUT"/doors.log "$JOURNEY_OUT"/deeper.log "$JOURNEY_OUT"/deeper-evidence.log "$JOURNEY_OUT"/editor-chromium.log "$JOURNEY_OUT"/editor-webkit.log "$JOURNEY_OUT"/notes-chromium.log "$JOURNEY_OUT"/notes-webkit.log "$JOURNEY_OUT"/quiet.log "$JOURNEY_OUT"/home.log "$JOURNEY_OUT"/anatomy.log "$JOURNEY_OUT"/chooser.log "$JOURNEY_OUT"/speak.log "$JOURNEY_OUT"/speakkeep.log "$JOURNEY_OUT"/encounter.log "$JOURNEY_OUT"/federation.log "$JOURNEY_OUT"/opencase.log "$JOURNEY_OUT"/receipts.log "$JOURNEY_OUT"/deflate-reading-chromium.log "$JOURNEY_OUT"/deflate-reading-webkit.log "$JOURNEY_OUT"/ledger-delivery-chromium.log "$JOURNEY_OUT"/ledger-delivery-webkit.log "$JOURNEY_OUT"/shell.log "$JOURNEY_OUT"/room.log "$JOURNEY_OUT"/deep.log "$JOURNEY_OUT"/resume.log "$JOURNEY_OUT"/inquiry.log "$JOURNEY_OUT"/epistemic.log "$JOURNEY_OUT"/partial.log "$JOURNEY_OUT"/constitution.log "$JOURNEY_OUT"/anchorfit.log "$JOURNEY_OUT"/carry.log "$JOURNEY_OUT"/wayfinder.log "$JOURNEY_OUT"/map.log "$JOURNEY_OUT"/moira.log "$JOURNEY_OUT"/notebook.log "$JOURNEY_OUT"/related.log "$JOURNEY_OUT"/narrowing.log "$JOURNEY_OUT"/gloss.log)
 total=$(printf '%s\n' "$counts" | awk '{s+=$2} END {print s+0}')
 completed=$(printf '%s\n' "$counts" | awk 'NF {n++} END {print n+0}')
 echo "== journeys: $completed completed, $total checks, exit $status"

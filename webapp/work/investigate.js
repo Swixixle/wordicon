@@ -24,7 +24,7 @@ export class Investigate {
   async render() {
     const v = this.view; v.textContent = '';
     v.appendChild(el('h1', { text: 'Investigate' }));
-    v.appendChild(el('div', { class: 'muted small-text', text: 'Four instruments. What each can do from here is derived from the record at this moment — no producer is contacted by opening this page.' }));
+    v.appendChild(el('div', { class: 'muted small-text', text: 'Connected instruments and saved work. Opening this page reads local connection records.' }));
     const [, prod] = await Promise.all([this.actions.load(), getJSON('/api/producers')]);
     const questionAction = this.actions.byId['investigate.opencase.question'];
     if (questionAction) {
@@ -39,6 +39,16 @@ export class Investigate {
         el('div', { class: 'muted small-text', text: questionAction.readiness?.available ? 'Connection ready. Nothing runs until you review the proposal and press Start.' : (questionAction.readiness?.reason || 'Connection setup is pending; saved results remain available.') }),
       ]));
     }
+    const readingAction = this.actions.byId['investigate.deflate.read'];
+    if (readingAction) v.appendChild(el('section', { class: 'card', id: 'deflate-workflow' }, [
+      el('h2', { text: 'Read a link or recording' }),
+      el('p', { text: 'Bring in a public article, transcript or MP3 recording with Deflate. Inspect the saved text and attributed reading, then Go deeper. Optional model use has its own reviewed allowance.' }),
+      el('div', { class: 'row' }, [
+        el('button', { class: 'btn primary', type: 'button', text: 'Add a link or recording…', onclick: () => this.actions.choose(readingAction.id) }),
+        el('button', { class: 'btn', type: 'button', text: 'Reopen saved sources', onclick: () => this.places.open('/deflate-reading') }),
+      ]),
+      el('p', { class: 'muted small-text', text: 'Your draft or selected passage stays connected to the source. Nothing runs until Start.' }),
+    ]));
     this.producers = prod.ok ? prod.data.producers : {};
     this.packageContract = prod.ok ? prod.data.package_contract : null;
     const grid = el('div', { style: 'display:grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px' });

@@ -1,0 +1,91 @@
+DEFLATE READINGS INSIDE NIKODEMUS
+Contract: deflate.bridge.v1. Selectively integrated on Nikodemus 088441c.
+
+Open /deflate-reading, or choose Read with Deflate in Work's Investigate page.
+An existing Open Case / Receipts continuation can open Add a source with Deflate.
+Enter a public URL or choose an MP3, add an optional purpose/question, review the
+proposal, then explicitly Start. The question records the reading's purpose;
+Deflate's established reading does not promise to answer arbitrary questions.
+
+Reuse
+- Existing Nikodemus action proposals, immutable snapshots, durable operation
+  identities, vault guards, pinned-key federation custody, cost-event ledger,
+  capture history, saved results and Go deeper.
+- Existing Deflate acquisition, local transcription, reading/judgment pipeline,
+  speaker attribution, claims export, signed depositions and source artifacts.
+
+Added boundaries
+- Local upload intake retains the exact chosen MP3 under this workspace's
+  deflate-inputs directory, with SHA-256 and restrictive permissions. No local
+  source path is sent. The operation exposes a verified original-file download.
+  Preparing sends the descriptor; only Start sends bytes to configured Deflate.
+- Preparing asks Deflate to freeze configuration but acquires no source and
+  starts no model. Full document/passage/parent evidence origin stays local;
+  the bridge receives limited origin references plus their hash and purpose.
+- Model reading defaults off. Captions/articles/local transcription may still
+  produce a transcript and signed source without model interpretation.
+- Optional reading has a visible editable $0.50 estimate allowance, up to $10,
+  at most 24 provider calls, 8,192 output tokens and 80,000 prompt bytes per call.
+  Each producer call reserves a conservative bound and settles preserved usage
+  before another call. No automatic paid retry; unresolved charge blocks calls.
+- Supported paid scope: direct Anthropic standard global text-only requests with
+  an exact configured, reviewed model/rate card. Sonnet 5.5 pricing is its own
+  card: input $2, output $10, cache read $0.10, five-minute write $2.50, one-hour
+  write $4 per million tokens. Verified 2026-10-18 at
+  https://platform.claude.com/docs/en/about-claude/pricing
+  Estimates are not invoices. Cache categories and unknown charges stay distinct.
+  Unsupported model/provider/endpoint pricing fails closed before paid Start.
+- Bridge acquisition uses local transcription only. Cloud transcription and
+  plugin subscriptions are outside this allowance. Native Deflate settings
+  remain available separately; no browser-session credentials enter metadata.
+
+Recovery and saved evidence
+- Each Start carries the immutable Nikodemus operation id as producer request id.
+  A repeated local Start key returns its existing operation. Lost producer replies
+  are reconciled using GET by request/job id; recovery never repeats Start.
+- Known jobs can resume observation after process restart. A missing or uncertain
+  Start stays unknown until its original identity can be confirmed.
+- Source acquisition artifacts, exact signed export/transcript, optional original
+  article artifact, every observed model request/response, unknowns and failures
+  remain local. Autosave is continuous; Save records an explicit owner marker.
+- Reopen/list/result/download are local, read-only operations without producer
+  or provider calls. Signature validity establishes custody, not truth.
+- Reopening rechecks the current local signing-key pins and the exact captured
+  transcript/run/result hashes. The historical custody verdict stays unchanged;
+  current_verification reports today's check. A removed pin or inconsistent
+  signed source withholds the ordinary reading but preserves original artifacts.
+- Held/stale prose is separated from ready attributed readings. A changed provider
+  model holds accounting as unknown while preserving the signed source result.
+- Current readings require an unambiguous passage identity, a ready gate, the
+  exact retained transcript basis and no duplicate held record. This workflow’s
+  Go deeper control also requires a retained primary reading; other fields and
+  historical metadata remain inspectable. Direct Go deeper Prepare/Start check
+  source binding independently; source-bound legacy metadata remains explorable
+  under its existing attribution, without claiming missing prose is available.
+- Display GETs pause during navigation and resume with a fresh read generation.
+  If navigation is cancelled, Updates paused / Resume updates remains visible;
+  the next trusted page interaction or that button resumes reads. Restoring a
+  page from browser history resumes reads automatically. These paths never
+  retry upload, proposal, Start, Save or recovery mutations.
+- Operation/thread costs use the shared cents display, retaining exact receipts.
+  Missing totals remain unknown even when a known estimated subtotal exists.
+- A Go deeper proposal opened from this workflow retains its explicitly validated
+  source operation and exact deposition. Its new operation joins the same local
+  history and cost ancestry; preparing or reopening does not start a model call.
+- Receipts gaps are linked to their original operation/projection/hash. Adding a
+  different source does not rewrite the earlier source's missing fields and does
+  not establish automatic subject identity or independent corroboration.
+
+Deployment
+The existing Deflate connector must remain pinned and enabled. After verifying
+bridge deployment, an authenticated POST /api/deflate/authorize with connector_id,
+enabled:true and a deployment note appends the capability ruling. It launches no
+reading. Normal API requests require the existing paired session/auth protections.
+
+Tests and live acceptance
+Offline fixture tests prove contracts, custody, accounting/recovery boundaries and
+UI interactions only. Actual URL / MP3 acquisition and paid reading must be reported
+separately after explicit reviewed Start; no live calls occur in these tests.
+Both browser engines run the actual page with all traffic intercepted locally.
+Chromium additionally verifies a native original-file download. The installed
+WebKit fixture verifies the retained response bytes, not native download UI.

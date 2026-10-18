@@ -305,7 +305,7 @@ class _History:
         execution = _mapping(op.get("execution"))
         self.node("operations", oid, operation_id=oid, action_id=op.get("action_id"), kind=op.get("kind"), status=op.get("status"),
                   question=plan.get("question"), created_at=op.get("created_at"), finished_at=op.get("finished_at"),
-                  error=_message(op.get("last_error")), url="/investigation?operation=" + quote(oid) if op.get("action_id") == "investigate.opencase.question" else "/api/operations/" + quote(oid))
+                  error=_message(op.get("last_error")), url=("/investigation?operation=" if op.get("action_id") == "investigate.opencase.question" else "/deflate-reading?operation=" if op.get("action_id") == "investigate.deflate.read" else "/api/operations/") + quote(oid))
         for key, method, relation in (("prepared_id", self.proposal, "started_from"), ("snapshot_id", self.snapshot, "captured_input")):
             identity = op.get(key) or execution.get(key)
             if identity:
@@ -420,6 +420,8 @@ class _History:
                     self.gap("result_parse", oid, "The exact result bytes are retained but are not readable JSON.")
         elif result_ref:
             self.gap("result_artifact_unavailable", oid, "The saved result pointer does not resolve to a verified retained artifact.")
+        if op.get("action_id") == "investigate.deflate.read":
+            self.collect_deflate(op, result, artifacts)
         if isinstance(result, dict):
             findings = _list(result.get("findings"))
             if ref.get("corrections"):
@@ -484,6 +486,172 @@ class _History:
                     self.link(answer_id, citation["record_id"], "cites_record", "saved synthesis citation; not an entailment verdict")
             if not integrity and state.get("status") in ("complete", "rejected", "truncated"):
                 self.gap("answer_artifact_unavailable", answer_id, "Saved answer metadata exists but its linked artifacts do not all verify; no usable answer is asserted.")
+
+    def collect_deflate(self, op, result, artifacts):
+        """Project saved bridge links and signed text, without reopening a producer.
+
+        A source transcript is evidence of the acquired words. Model readings are
+        attributed interpretations; neither their gate nor custody answers an
+        arbitrary question. Every body remains in its exact protected artifact.
+        """
+        oid = op["op_id"]; ref = _mapping(op.get("result_ref"))
+        plan = _mapping(_mapping(op.get("execution")).get("plan"))
+        if not isinstance(result, dict):
+            return
+        import federation
+        frozen = _mapping(plan.get("producer_plan"))
+        try:
+            valid = (result.get("contract") == "deflate.bridge.v1" and result.get("request_id") == oid
+                     and result.get("plan_id") == plan.get("plan_id") and result.get("plan_sha256") == plan.get("plan_sha256")
+                     and result.get("plan") == frozen and federation.payload_sha256(frozen) == plan.get("plan_sha256"))
+        except (ValueError, TypeError, UnicodeError):
+            valid = False
+        bid = result.get("bridge_id")
+        if not valid or not isinstance(bid, str) or not re.fullmatch(r"b_[a-f0-9]{32}", bid) or ref.get("upstream_id") != bid:
+            self.gap("deflate_result_identity", oid, "The retained bridge result does not match this operation and frozen plan; no source or reading is promoted.")
+            return
+        result_ref = _mapping(ref.get("result_artifact")); result_aid = "artifact:" + oid + ":" + result_ref.get("name", "")
+        local_refs = _list(ref.get("kept"))
+
+        def captured(remote, label):
+            remote = _mapping(remote); name, digest = remote.get("name"), remote.get("sha256")
+            if (not isinstance(name, str) or not NAME.fullmatch(name) or name in (".", "..")
+                    or not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest)
+                    or remote.get("path") != f"/api/bridge/jobs/{bid}/artifacts/{name}"):
+                self.gap("deflate_capture_reference", oid, "The saved " + label + " reference is missing or invalid; no replacement is inferred.")
+                return None
+            matches = [r for r in local_refs if isinstance(r, dict) and r.get("sha256") == digest and r.get("name") in artifacts
+                       and _sha(artifacts[r["name"]]) == digest and (remote.get("bytes") is None or len(artifacts[r["name"]]) == remote["bytes"])]
+            if not matches:
+                self.gap("deflate_capture_missing", oid, "The saved " + label + " names exact bytes that are not available in this operation's retained artifacts.")
+                return None
+            kept = matches[0]
+            if remote.get("exact") is False:
+                self.gap("deflate_capture_redacted", "artifact:" + oid + ":" + kept["name"], "The producer explicitly redacted this " + label + "; its original unredacted bytes are not claimed to be retained.")
+            return kept
+
+        acquisition = _mapping(result.get("acquisition"))
+        sid = "source-check:" + oid + ":deflate-acquisition"
+        source_ref = captured(acquisition.get("artifact"), "acquisition") if acquisition.get("artifact") else None
+        self.node("source_checks", sid, operation_id=oid, kind="acquisition", source="Deflate source acquisition",
+                  status=acquisition.get("status") or "unknown", reason=_message(_mapping(acquisition.get("error")).get("message")),
+                  original_record_sha256=_digest(acquisition), source_pointer="/acquisition", artifact_id=result_aid,
+                  source_artifact=source_ref, result_kind=acquisition.get("result_kind"), attempt_inferred=False)
+        self.link(oid, sid, "recorded_source_outcome", "saved bridge acquisition")
+        for flag in ("export_gap", "cleanup_gap"):
+            if result.get(flag):
+                self.gap("deflate_" + flag, oid, _message(result[flag]))
+        for label, remote in (("acquisition", acquisition.get("artifact")), ("source page", result.get("source_artifact"))):
+            kept = source_ref if label == "acquisition" else captured(remote, label) if remote else None
+            if kept:
+                self.link(sid, "artifact:" + oid + ":" + kept["name"], "captured_source", "saved bridge " + label + " artifact reference")
+        attempts = _list(result.get("attempts")); seen = set()
+        for index, attempt in enumerate(attempts[:200]):
+            attempt = _mapping(attempt); aid = attempt.get("attempt_id")
+            if not isinstance(aid, str) or not re.fullmatch(r"model_[0-9]{3}", aid) or aid in seen:
+                self.gap("deflate_attempt_identity", oid, "A producer model attempt has a missing or duplicate identity; separate calls are not inferred.")
+                continue
+            seen.add(aid); node_id = "deflate-attempt:" + oid + ":" + aid
+            detail = {k: _message(attempt[k]) for k in ("provider", "model", "purpose", "producer_call_id") if isinstance(attempt.get(k), str)}
+            detail["attempt_id"] = aid
+            detail["message"] = _message(_mapping(attempt.get("error")).get("message"))
+            self.node("attempts", node_id, operation_id=oid, kind="producer_model_attempt", stage=detail.get("purpose"),
+                      at=attempt.get("started_at"), outcome=attempt.get("status") or "unknown", detail=detail,
+                      record_sha256=_digest(attempt), source_pointer=f"/attempts/{index}", artifact_id=result_aid,
+                      identity_status="explicit_attempt_id", attribution="Producer's saved attempt, not an inferred Nikodemus dispatch")
+            self.link(oid, node_id, "recorded_attempt_event", "saved bridge attempt_id")
+            self.link(node_id, result_aid, "captured_status", "saved bridge result /attempts/" + str(index))
+            for phase in ("request", "response"):
+                if not attempt.get(phase):
+                    if phase == "request" or attempt.get("status") in ("completed", "failed"):
+                        self.gap("deflate_attempt_capture_missing", node_id, "The recorded attempt has no " + phase + " capture reference. Missing response or usage is not a free call.")
+                    continue
+                kept = captured(attempt[phase], "model " + phase)
+                if kept:
+                    self.link(node_id, "artifact:" + oid + ":" + kept["name"], "captured_" + phase, "saved bridge attempt." + phase)
+        if len(attempts) > 200:
+            self.gap("deflate_attempt_limit", oid, "Additional producer attempts remain in the complete retained result.")
+        remote = _mapping(result.get("result")); dep = _mapping(ref.get("deposition_artifact"))
+        dep_ref = captured(remote.get("deposition"), "signed deposition") if remote.get("deposition") else None
+        envelope = None; verified = False
+        if dep_ref and dep.get("name") in artifacts and dep.get("sha256") == dep_ref.get("sha256") and _sha(artifacts[dep["name"]]) == dep.get("sha256"):
+            try:
+                envelope = json.loads(artifacts[dep["name"]])
+                connector = federation.get_connector(_mapping(plan.get("connector")).get("connector_id")) or {}
+                verified = (connector.get("producer") == "deflate" and _mapping(envelope.get("producer")).get("id") == "deflate"
+                            and _mapping(envelope.get("object")).get("id") == result.get("runId") == remote.get("runId")
+                            and _mapping(_mapping(ref.get("custody")).get("verification")).get("ok") is True
+                            and federation.verify_envelope(envelope, connector.get("trusted_keys", []))["ok"])
+            except (ValueError, TypeError, KeyError, OSError, AttributeError):
+                verified = False
+        answer_id = "answer:" + oid; reading = _mapping(result.get("reading"))
+        self.node("answers", answer_id, operation_id=oid, kind="deflate_reading_outcome", current_status=(reading.get("status") or "unknown") if verified else "integrity_unavailable",
+                  recorded_status=reading.get("status"), receipt_verified=verified, answer_available=False,
+                  display_url="/deflate-reading?operation=" + quote(oid), source_refs=[dep] if dep_ref else [],
+                  interpretation_support="Deflate records a reading of source material. Its model and review gates do not establish that the originating question has been answered.")
+        self.link(oid, answer_id, "recorded_answer_outcome", "saved bridge reading status")
+        if not verified:
+            self.gap("deflate_deposition_unverified", oid, "A current pinned-key verification and exact operation-linked deposition are unavailable. Captured attempts remain visible; no signed transcript or reading is promoted.")
+            return
+        payload = _mapping(envelope.get("payload")); claims = _mapping(payload.get("claims")); run = _mapping(claims.get("run"))
+        if payload.get("schema") != "deflate-lens/deposition@1" or claims.get("schema") != "deflate-lens/claims@0.7" or run.get("id") != result.get("runId"):
+            self.gap("deflate_payload_schema", oid, "The signed payload schema or run identity is unsupported; exact bytes remain available.")
+            self.nodes["answers"][answer_id]["current_status"] = "integrity_unavailable"
+            return
+        dep_aid = "artifact:" + oid + ":" + dep["name"]; transcript = _mapping(payload.get("transcript")); body = transcript.get("text")
+        transcript_valid = (transcript.get("included") is True and isinstance(body, str) and bool(body.strip()) and _sha(body) == transcript.get("sha256")
+                            == _mapping(run.get("transcript")).get("sha256") == remote.get("transcript_sha256"))
+        source_id = "deflate-transcript:" + oid
+        if transcript_valid:
+            source = _mapping(run.get("source"))
+            self.node("evidence", source_id, operation_id=oid, finding_id=run["id"], title=_message(run.get("title")) or "Captured source transcript",
+                      evidence_kind="captured_source_text", source_name=_message(source.get("label")) or "Deflate acquired text", source_url=source.get("url"),
+                      source_identity=copy.deepcopy(run.get("sourceIdentity")), body_sha256=transcript["sha256"],
+                      derived_record_sha256=_digest(transcript), source_pointer="/payload/transcript", artifact_id=dep_aid,
+                      result_artifact_sha256=dep["sha256"], signed_payload_sha256=envelope.get("payload_sha256"),
+                      interpretation_support="Exact captured words; transcription and source identity are attributed to Deflate, not independently validated.")
+            self.link(dep_aid, source_id, "contains_record", "signed payload /transcript")
+            self.link(sid, source_id, "yielded_captured_text", "matching result transcript SHA-256 and signed transcript hash")
+        else:
+            self.gap("deflate_transcript_integrity", oid, "The signed transcript text and its declared source hashes do not all agree; no source text or usable reading is asserted.")
+        held_ids = {p.get("id") for p in _list(claims.get("passagesHeld")) if isinstance(p, dict)}
+        passage_counts = {}
+        for passage in _list(claims.get("passages")):
+            if isinstance(passage, dict):
+                pid = str(passage.get("id") or "")
+                passage_counts[pid] = passage_counts.get(pid, 0) + 1
+        for field in ("passages", "passagesHeld"):
+            passages = _list(claims.get(field))
+            for index, passage in enumerate(passages[:200]):
+                if not isinstance(passage, dict):
+                    continue
+                pid = str(passage.get("id") or "index-" + str(index)); reading_id = f"deflate-reading:{oid}:{field}:{index}"
+                held = field == "passagesHeld" or pid in held_ids or _mapping(passage.get("readingGate")).get("status") == "held"
+                ambiguous = field == "passages" and passage_counts.get(str(passage.get("id") or ""), 0) != 1
+                text_match = not ambiguous and transcript_valid and _mapping(passage.get("basedOn")).get("inputHash") == transcript.get("sha256")
+                prose = _mapping(_mapping(passage.get("reading")).get("deflated")).get("hs")
+                has_prose = isinstance(prose, str) and bool(prose.strip())
+                status = "held" if held else "identity_ambiguous" if ambiguous else "stale" if passage.get("stale") else ("reading_available" if has_prose else "reading_metadata_only") if text_match and _mapping(passage.get("readingGate")).get("status") == "ready" else "basis_unverified"
+                self.node("answers", reading_id, operation_id=oid, kind="deflate_passage_reading", passage_id=pid,
+                          current_status=status, receipt_verified=True, reading_available=status == "reading_available", answer_available=False,
+                          reading_metadata_available=True,
+                          title=_message(passage.get("title")), source_refs=[dep], source_pointer=f"/payload/claims/{field}/{index}",
+                          derived_record_sha256=_digest(passage), signed_payload_sha256=envelope.get("payload_sha256"),
+                          based_on_text_sha256=_mapping(passage.get("basedOn")).get("inputHash"), transcript_match=bool(text_match),
+                          display_url="/deflate-reading?operation=" + quote(oid),
+                          interpretation_support="Deflate's model reading, checked by its own gate. A held or stale reading is not a finished answer; gate acceptance is not independent factual validation.")
+                self.link(dep_aid, reading_id, "contains_reading", f"signed payload /claims/{field}/{index}")
+                if text_match:
+                    self.link(reading_id, source_id, "read_from", "signed passage basedOn.inputHash matches retained transcript SHA-256")
+            if len(passages) > 200:
+                self.gap("deflate_reading_limit", oid, "Additional passage readings remain in the complete signed deposition.")
+        for index, gap in enumerate(_list(envelope.get("gaps"))[:200]):
+            gap = _mapping(gap); gid = f"source-check:{oid}:deflate-envelope-gap:{index}"
+            self.node("source_checks", gid, operation_id=oid, kind="producer_declared_gap", source="Deflate export limitation",
+                      status=_message(gap.get("kind")) or "not_recorded", reason=_message(gap.get("detail")),
+                      attribution="Producer's envelope metadata; describes Deflate's custody, not whether Nikodemus retained an uploaded original.",
+                      source_pointer=f"/gaps/{index}", original_record_sha256=_digest(gap), artifact_id=dep_aid)
+            self.link(oid, gid, "recorded_source_outcome", "retained deposition envelope gap; outside signed payload")
 
     def attention(self):
         known = set(self.nodes["operations"]) | set(self.nodes["documents"]) | set(self.nodes["snapshots"]) | set(self.nodes["proposals"])

@@ -166,6 +166,11 @@ ACTIONS = [
        inputs=("text",), mutation="record", outbound_fields=("text",), recipient="model", provider="model",
        calls="several", result_type="run", legacy_entry="the chooser's routed run", note="the router proposes a mode; the record says which"),
     # ---- investigate ---------------------------------------------------------
+    _a("investigate.deflate.read", "Read a link or upload with Deflate", group="investigate", kind="dispatch", rail=False,
+       subjects=("description",), handler="deflate_workflow", aliases=("deflate", "read a link", "read an upload", "read a podcast"),
+       mutation="external", outbound_fields=("chosen URL or upload after Start, reading purpose and origin references",),
+       recipient="producer:deflate", provider="producer:deflate", calls="one bounded acquisition; optional model reading within its own disclosed estimate allowance",
+       result_type="investigation", note="Keep the transcript, attributed reading, source gaps and signed export inside Nikodemus."),
     _a("investigate.ethicalalt.lookup", "Look up existing profiles", group="investigate", kind="lookup", rail=False,
        subjects=("none",), handler="federation", aliases=("ethicalalt", "ethical alt", "ethical alternatives", "profiles"),
        mutation="record", outbound_fields=("nothing — a read of the producer's index",), recipient="producer:ethicalalt",
@@ -323,6 +328,10 @@ def _producer_readiness(producer: str, wants: str) -> dict:
 def readiness(action: dict, server_gateway) -> dict:
     """What the card may say, from the record. Never a constant."""
     a = action
+    if a["handler"] == "deflate_workflow":
+        import deflate_workflow
+        r = deflate_workflow.readiness()
+        return {"available": r["available"], "reason": r["reason"], "producer": r}
     if a["handler"] == "open_case_workflow":
         import opencase
         r = opencase.readiness()
@@ -453,6 +462,15 @@ def prepare(action_id: str, subject: dict, inputs: dict, server_gateway) -> dict
     snap = None
     deeper_context = None
     investigation_plan = None
+    reading_plan = None
+    if a["handler"] == "deflate_workflow":
+        import deflate_workflow
+        try:
+            reading_plan = deflate_workflow.prepare(str(subject.get("text") or ""), inputs or {})
+            rd = {"available": reading_plan["ready"], "reason": "; ".join(reading_plan.get("blockers") or []),
+                  "producer": deflate_workflow.readiness((reading_plan.get("connector") or {}).get("connector_id"))}
+        except deflate_workflow.WorkflowError as e:
+            raise PrepareError(str(e), e.status) from e
     if a["handler"] == "open_case_workflow":
         import opencase
         try:
@@ -518,6 +536,10 @@ def prepare(action_id: str, subject: dict, inputs: dict, server_gateway) -> dict
                 "recipient": "configured model provider and public source hosts",
                 "fields": deeper_context["research_plan"]["outbound"]}
     extra = {}
+    if reading_plan is not None:
+        extra["plan"] = reading_plan
+        disclosure.update(reading_plan=reading_plan, cost=reading_plan["cost"], calls=reading_plan["calls"],
+            leaves_this_machine={"recipient":"configured Deflate producer; optional existing model provider", "fields":reading_plan["outbound"]})
     if investigation_plan is not None:
         extra["plan"] = investigation_plan
         disclosure["investigation_plan"] = investigation_plan

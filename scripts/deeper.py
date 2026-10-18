@@ -88,7 +88,116 @@ def _root(trace_id: str, index) -> dict:
                                 "relation_verdict_scope": "the original proposed parallel only"}}
 
 
-def _deposition_root(deposition_id, item_ref) -> dict:
+def _digest(value) -> str:
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _source_operation(operation_id, deposition_id, deposition_sha256) -> dict:
+    """An explicit local relationship, never a search by title or source text.
+
+    Keep full origin bodies in their original operation. Frozen hashes detect
+    changed context; only bounded references accompany this new proposal.
+    """
+    import operations as ops
+    import deflate_workflow
+    import workspace_identity
+    operation_id = _trace(operation_id)
+    op = ops.get(operation_id)
+    if not op or op.get("op_id") != operation_id or not deflate_workflow.is_ours(op):
+        raise ValueError("the source operation is not a saved Deflate reading in this workspace")
+    ref = op.get("result_ref") or {}
+    if (ref.get("custody") or {}).get("deposition_id") != deposition_id:
+        raise ValueError("the source operation does not own this imported deposition")
+    try:
+        dep_ref, result_ref = ref["deposition_artifact"], ref["result_artifact"]
+        raw = deflate_workflow.artifact(op, dep_ref["name"])
+        result_raw = deflate_workflow.artifact(op, result_ref["name"])
+        result = json.loads(result_raw)
+        envelope, check = deflate_workflow._current_deposition(op, ref, result)
+        if not envelope or not check.get("ok"):
+            raise ValueError("the source operation's current custody check failed")
+        if hashlib.sha256(raw).hexdigest() != deposition_sha256 or dep_ref.get("sha256") != deposition_sha256:
+            raise ValueError("the source operation does not retain this deposition's exact bytes")
+        plan = op["execution"]["plan"]
+        workspace_id = (workspace_identity.read() or {}).get("workspace_id")
+        if not workspace_id or plan.get("workspace_id") != workspace_id:
+            raise ValueError("the source operation belongs to a different or unidentified workspace")
+        question, origin = plan.get("question") or "", plan.get("origin") or {}
+        if not isinstance(question, str) or len(question) > 4000 or not isinstance(origin, dict):
+            raise ValueError("the source operation has unsupported question or origin metadata")
+        refs = {k: origin[k] for k in ("kind", "doc_id", "snapshot_id", "revision", "operation_id", "trace_id", "reading_id")
+                if isinstance(origin.get(k), (str, int)) and not isinstance(origin.get(k), bool)}
+        if any(isinstance(v, str) and len(v) > 200 for v in refs.values()):
+            raise ValueError("the source operation's origin references exceed the context limit")
+        def artifact_reference(ref, body):
+            digest = hashlib.sha256(body).hexdigest()
+            if ref.get("sha256") != digest or ref.get("bytes") != len(body):
+                raise ValueError("the source operation artifact reference differs from its retained bytes")
+            return {"name": ref["name"], "sha256": digest, "bytes": len(body)}
+        source = {"operation_id": operation_id, "action_id": op["action_id"], "workspace_id": workspace_id,
+                "plan_sha256": _digest(plan), "question": question,
+                "origin": {**refs, "origin_sha256": _digest(origin), "storage": "full origin retained in source operation"},
+                "deposition_id": deposition_id, "deposition_sha256": deposition_sha256,
+                "deposition_artifact": artifact_reference(dep_ref, raw), "result_artifact": artifact_reference(result_ref, result_raw)}
+        if len(json.dumps(source, ensure_ascii=False)) > 8192:
+            raise ValueError("the source operation metadata exceeds the local context limit")
+        return source
+    except (KeyError, TypeError, OSError, deflate_workflow.WorkflowError) as exc:
+        raise ValueError("the source operation's retained custody and context are unavailable") from exc
+
+
+def _operation_lineage(root, parent_trace_id="") -> dict:
+    """Only explicit source relationships opt into operation ancestry.
+
+    A follow-up must retain its immediate exploration's costs as well. The
+    saved operation's result_ref, not a title/time join, identifies that run.
+    """
+    source = root.get("source_operation")
+    if not source:
+        return {}
+    lineage = {"source_operation_id": source["operation_id"], "follow_up_of": source["operation_id"]}
+    if not parent_trace_id:
+        return lineage
+    import operations as ops
+    parent_trace_id = _trace(parent_trace_id)
+    conn = ops._connect_readonly()
+    matches = []
+    try:
+        if conn is not None:
+            for row in conn.execute("SELECT * FROM operations WHERE action_id=?", ("explore.deepen",)):
+                op = ops._row(row); ref = op.get("result_ref") or {}
+                recovered = ref.get("trace_ids")
+                if ref.get("trace_id") == parent_trace_id or (isinstance(recovered, list) and parent_trace_id in recovered):
+                    matches.append(op)
+    finally:
+        if conn is not None: conn.close()
+    if len(matches) != 1:
+        raise ValueError("the prior exploration has no unique saved operation link; inspect its saved result before continuing")
+    op = matches[0]
+    parent = _snapshot(parent_trace_id)
+    if (parent.get("context") or {}).get("root") != root:
+        raise ValueError("the prior exploration does not retain this source operation")
+    parent_plan = (op.get("execution") or {}).get("plan") or {}
+    if (parent_plan.get("source_operation") or {}).get("operation_id") != source["operation_id"]:
+        raise ValueError("the prior exploration operation does not retain this explicit source relationship")
+    lineage.update(follow_up_of=op["op_id"], parent_trace_id=parent_trace_id,
+                   parent_result_sha256=hashlib.sha256((cli.RESULTS_DIR / f"{parent_trace_id}.json").read_bytes()).hexdigest(),
+                   parent_execution_sha256=_digest(op.get("execution") or {}))
+    return lineage
+
+
+def validate_operation_lineage(context):
+    """Recheck only the new opt-in contract; legacy frozen contexts are unchanged."""
+    root = context.get("root") or {}
+    if "source_operation" not in root and "operation_lineage" not in context:
+        return
+    if not root.get("source_operation") or root != _resolve_root(root):
+        raise ValueError("the frozen source operation no longer matches its saved custody or context; prepare again")
+    if context.get("operation_lineage") != _operation_lineage(root, context.get("parent_trace_id") or ""):
+        raise ValueError("the frozen parent operation no longer matches the saved exploration; prepare again")
+
+
+def _deposition_root(deposition_id, item_ref, source_operation_id=None) -> dict:
     """Resolve one reading or claim of a VERIFIED imported deposition into a
     frozen exploration subject. Custody first: the exact bytes must still
     hash to the deposition's sha256 and re-verify against the connector's
@@ -123,13 +232,50 @@ def _deposition_root(deposition_id, item_ref) -> dict:
     payload = env.get("payload") or {}
     claims_doc = payload.get("claims") or {}
     run_doc = claims_doc.get("run") or {}
+    tr = payload.get("transcript") or {}
+    body = tr.get("text")
+    source_hash = tr.get("sha256")
+    if not (tr.get("included") is True and isinstance(body, str) and body.strip()
+            and hashlib.sha256(body.encode("utf-8")).hexdigest() == source_hash
+            == (run_doc.get("transcript") or {}).get("sha256")):
+        raise ValueError("the deposition transcript does not match its retained source hashes; inspect the original import")
+
+    def bound_passage(passage_id):
+        # A valid signature establishes which bytes the producer signed. It
+        # does not establish that a reading names the transcript it uses.
+        passages = claims_doc.get("passages") or []
+        matches = [p for p in passages if isinstance(p, dict) and str(p.get("id")) == passage_id]
+        if not matches:
+            raise ValueError(f"the deposition carries no passage {passage_id!r}")
+        if len(matches) != 1:
+            raise ValueError("the deposition has an ambiguous passage identity; inspect the original import")
+        p = matches[0]
+        if any(isinstance(h, dict) and str(h.get("id")) == passage_id for h in claims_doc.get("passagesHeld") or []):
+            raise ValueError("the selected passage is held by the producer; inspect the original import")
+        if p.get("stale"):
+            raise ValueError("the selected passage is stale; inspect the original import")
+        if "readingGate" in p and (not isinstance(p["readingGate"], dict) or p["readingGate"].get("status") != "ready"):
+            raise ValueError("the selected passage has not passed the producer's reading gate; inspect the original import")
+        if not isinstance(p.get("basedOn"), dict) or p["basedOn"].get("inputHash") != source_hash:
+            raise ValueError("the selected passage does not name the retained transcript as its basis; inspect the original import")
+        # Historic exports omit readingGate and prose. Their source-bound
+        # metadata can still be explored with the existing attribution; this
+        # does not promote them to a finished reading in the Deflate workflow.
+        return p
+
     run_title = str(run_doc.get("title") or dep.get("object_id") or deposition_id)
     kind, item_id = item_ref.split(":")[1], item_ref.split(":", 2)[2]
     item, turns = None, None
     if kind == "claim":
-        c = next((x for x in claims_doc.get("claims") or [] if str(x.get("id")) == item_id), None)
-        if c is None:
+        matches = [x for x in claims_doc.get("claims") or [] if isinstance(x, dict) and str(x.get("id")) == item_id]
+        if not matches:
             raise ValueError(f"the deposition carries no claim {item_id!r}")
+        if len(matches) != 1:
+            raise ValueError("the deposition has an ambiguous claim identity; inspect the original import")
+        c = matches[0]
+        if not isinstance(c.get("passageId"), str) or not c["passageId"]:
+            raise ValueError("the selected claim has no explicit parent passage; inspect the original import")
+        bound_passage(c["passageId"])
         turns = c.get("turns") if isinstance(c.get("turns"), list) else None
         item = {"kind": "claim", "id": item_id, "text": str(c.get("text") or ""),
                 "type": str(c.get("displayType") or c.get("type") or ""), "speaker": str(c.get("speaker") or ""),
@@ -139,9 +285,7 @@ def _deposition_root(deposition_id, item_ref) -> dict:
                 "attributed_to": "a claim as Deflate's export states it — presence in the export is not verification"}
         title = item["text"][:300] or f"claim {item_id}"
     else:
-        p = next((x for x in claims_doc.get("passages") or [] if str(x.get("id")) == item_id), None)
-        if p is None:
-            raise ValueError(f"the deposition carries no passage {item_id!r}")
+        p = bound_passage(item_id)
         turns = [p.get("turnStart"), p.get("turnEnd")]
         q = p.get("quoteCheck") or {}
         item = {"kind": "reading", "id": item_id, "title": str(p.get("title") or ""),
@@ -150,8 +294,14 @@ def _deposition_root(deposition_id, item_ref) -> dict:
                 "fidelity": str(p.get("fidelity") or ""), "quotes_matched": q.get("matched"), "quotes_total": q.get("quotes"),
                 "quotes_meaning": "'matched' means the quoted words are in the saved transcript — Deflate's own words: it does not prove the card reads them fairly",
                 "attributed_to": "Deflate's model reading, reviewed by its own second pass — not independent validation"}
+        if source_operation_id is not None and (p.get("readingGate") or {}).get("status") == "ready" and isinstance(p.get("reading"), dict):
+            # New linked reading proposals carry the actual displayed signed
+            # interpretation. Historic frozen roots retain their exact shape.
+            # It remains attributed model prose beside the transcript, not
+            # source fact; the total selection limit below bounds both.
+            item["reading"] = {k: copy.deepcopy(p["reading"][k]) for k in
+                               ("deflated", "supports", "notShown", "open", "defense", "revision") if k in p["reading"]}
         title = item["title"][:300] or f"reading {item_id}"
-    tr = payload.get("transcript") or {}
     lines, omitted = [], 0
     if isinstance(tr.get("text"), str) and isinstance(turns, list) and len(turns) == 2 \
             and all(type(t) is int and t >= 1 for t in turns) and turns[0] <= turns[1]:
@@ -189,13 +339,16 @@ def _deposition_root(deposition_id, item_ref) -> dict:
                                             "quoted from custody, never from recall, and never a public-source verification"}}}
     if len(json.dumps(selection, ensure_ascii=False)) > MAX_SELECTION:
         raise ValueError("the selected deposition item exceeds the disclosed context limit")
-    return {"deposition_id": deposition_id, "item_ref": item_ref,
+    root = {"deposition_id": deposition_id, "item_ref": item_ref,
             "selection": selection,
             "source_standing": {"kind": "federated_deposition",
                                 "quotes": "producer transcript in custody — never a public-source verification",
                                 "source_admitted": False, "verified": False,
                                 "signature": {"ok": True, "key_id": str(verdict.get("key_id") or "")},
                                 "note": DEPOSITION_SOURCE_NOTE}}
+    if source_operation_id is not None:
+        root["source_operation"] = _source_operation(source_operation_id, deposition_id, dep["sha256"])
+    return root
 
 
 def _resolve_root(root_ref: dict) -> dict:
@@ -205,7 +358,11 @@ def _resolve_root(root_ref: dict) -> dict:
     if not isinstance(root_ref, dict):
         raise ValueError("the saved exploration has no original selection")
     if root_ref.get("deposition_id"):
-        return _deposition_root(root_ref.get("deposition_id"), root_ref.get("item_ref"))
+        source = root_ref.get("source_operation")
+        if source is not None and not isinstance(source, dict):
+            raise ValueError("the saved source operation link is malformed")
+        return _deposition_root(root_ref.get("deposition_id"), root_ref.get("item_ref"),
+                                source.get("operation_id") if source is not None else None)
     return _root(root_ref.get("trace_id"), root_ref.get("thread_index"))
 
 
@@ -246,7 +403,7 @@ def build_context(subject: dict, inputs: dict | None = None) -> dict:
         # the Deflate door: no parent run exists — the verified deposition
         # item IS the root, and the evidence lane's goal/resume are computed
         # from the same stand-in parent that Start will recompute them from
-        root = _deposition_root(subject.get("deposition_id"), subject.get("item_ref"))
+        root = _deposition_root(subject.get("deposition_id"), subject.get("item_ref"), subject.get("source_operation_id"))
         q = _question(inputs, False)
         selection = root["selection"]
         title = selection["anchor_name"]
@@ -257,6 +414,7 @@ def build_context(subject: dict, inputs: dict | None = None) -> dict:
         trail = [{"deposition_id": root["deposition_id"], "item_ref": root["item_ref"],
                   "title": title, "kind": "deposition"}]
         return {"version": VERSION, "parent_trace_id": "", "root": root,
+                **({"operation_lineage": _operation_lineage(root)} if root.get("source_operation") else {}),
                 "focus": {"title": title, "work": selection.get("culture_or_work") or ""},
                 "question": q, "ancestry": [],
                 "context_limits": {"max_selection_chars": MAX_SELECTION,
@@ -311,6 +469,7 @@ def build_context(subject: dict, inputs: dict | None = None) -> dict:
         q = (f"Help me understand {title} more deeply on its own terms. "
              "Explain the idea in context and where in the work I should continue.")
     return {"version": VERSION, "parent_trace_id": parent_id, "root": root,
+            **({"operation_lineage": _operation_lineage(root, parent_id)} if root.get("source_operation") else {}),
             "focus": {"title": title, "work": selection.get("culture_or_work") or ""},
             "question": q, "ancestry": ancestry,
             "context_limits": {"max_selection_chars": MAX_SELECTION,
@@ -329,6 +488,9 @@ def build_prompt(context: dict) -> str:
     # Trail is navigation metadata; only the explicitly bounded ancestry is
     # model context. The exact original thread remains in the frozen input.
     payload = {k: context[k] for k in ("root", "focus", "question", "ancestry", "context_limits")}
+    # The operation relationship is local provenance. It must not expand the
+    # approved source/model context with an ancestor's private question/origin.
+    payload["root"] = {k: v for k, v in payload["root"].items() if k != "source_operation"}
     return PROMPT_PREFIX + """
 Stay with the selected person, work or idea. Explain it in its own terms,
 progressively, rather than producing parallels in other fields. The earlier
@@ -418,6 +580,7 @@ def run(context: dict, gateway, on_progress=None) -> dict:
         _trace(context.get("parent_trace_id"))
     if root != _resolve_root(root):
         raise ValueError("the frozen original selection does not match the record")
+    validate_operation_lineage(context)
     _question({"question": context.get("question")}, True)
     expected_focus = {"title": root["selection"].get("anchor_name") or root["selection"].get("culture_or_work"),
                       "work": root["selection"].get("culture_or_work") or ""}

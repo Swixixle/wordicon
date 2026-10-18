@@ -47,6 +47,15 @@
     group(host,'Targeted continuation suggestions',data.continuations,(n,r)=>{
       n.append(node('strong',r.title),node('p',r.reason),node('p',r.question),node('p',r.limitation));
       const b=node('button','Use as follow-up question');b.type='button';b.addEventListener('click',()=>onFollowUp({...r,projection_sha256:data.projection_sha256}));n.append(b);
+      const add=node('button','Add a source with Deflate');add.type='button';add.className='quiet';
+      add.addEventListener('click',()=>{
+        const key='nikodemus.deflate.origin.'+crypto.randomUUID();
+        const origin={kind:'operation',operation_id:data.operation_id,title:r.title,
+          receipts_continuation:{operation_id:data.operation_id,id:r.id,projection_sha256:data.projection_sha256}};
+        try{sessionStorage.setItem(key,JSON.stringify(origin));}
+        catch(_){n.append(node('p','The source link could not be retained in browser storage. No source was started.'));return;}
+        location.href='/deflate-reading?origin_key='+encodeURIComponent(key);
+      });n.append(add);
       n.append(detail('Proposed action and evidence references',r));
     });
     host.append(detail('Projection manifest and limits',{manifest:data.manifest,limitations:data.limitations,projection_sha256:data.projection_sha256}));

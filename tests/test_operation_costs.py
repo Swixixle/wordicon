@@ -49,7 +49,11 @@ class CostTests(unittest.TestCase):
         return ops.get(op["op_id"])
 
     def test_verified_rates_exclude_other_models_and_proposal_bound(self):
-        self.assertIsNone(costs.rate_card("anthropic", "claude-sonnet-5-5"))
+        self.assertIsNone(costs.rate_card("anthropic", "claude-sonnet-5-6"))
+        sonnet55 = costs.rate_card("anthropic", "claude-sonnet-5-5")
+        self.assertEqual(sonnet55["model_family"], "claude-sonnet-5-5")
+        self.assertEqual({r["category"]: r["usd_per_million"] for r in sonnet55["categories"]}["cache_read_input_tokens"], .1)
+        self.assertEqual({r["category"]: r["usd_per_million"] for r in costs.rate_card("anthropic", "claude-sonnet-5")["categories"]}["cache_read_input_tokens"], .2)
         self.assertIsNone(costs.rate_card("unknown", "claude-sonnet-5"))
         self.assertEqual(costs.rate_card("anthropic", "claude-sonnet-5-20261001")["checked_at"], "2026-10-18")
         proposal = costs.proposal_estimate("anthropic", "claude-sonnet-5", max_output_tokens=8192)

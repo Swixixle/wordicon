@@ -373,9 +373,13 @@ export class Results {
         t.status !== 'queued' ? el('button', { class: 'btn small', type: 'button', text: 'Start another attempt', title: 'A new operation under a new key, linked to this one; it sends the frozen text again', onclick: () => this.anotherAttempt(t) }) : null,
       ]));
     }
-    if (t.kind === 'investigation' && (d.action_id || p?.action_id) === 'investigate.opencase.question') {
+    if (t.kind === 'investigation' && (d.action_id || p?.action_id) === 'investigate.deflate.read') {
+      card.appendChild(el('div', { class: 'kv', text: d.question || 'Deflate source reading' }));
+      card.appendChild(el('div', { class: 'kv muted small-text', text: 'Your source, transcript, model attempts and costs remain together. Reopening starts no new reading.' }));
+      card.appendChild(el('button', { class: 'btn small', type: 'button', text: 'Open source and reading', onclick: () => this.places.open('/deflate-reading?operation=' + encodeURIComponent(t.id)) }));
+    } else if (t.kind === 'investigation' && (d.action_id || p?.action_id) === 'investigate.opencase.question') {
       card.appendChild(el('div', { class: 'kv', text: d.question || 'Open Case public-record investigation' }));
-      card.appendChild(el('div', { class: 'kv muted small-text', text: 'Paid-model allowance $0. The saved investigation contains its question, origin, progress, findings, source records, and failures.' }));
+      card.appendChild(el('div', { class: 'kv muted small-text', text: 'The saved investigation contains its question, origin, progress, source records, answer state and component costs.' }));
       card.appendChild(el('button', { class: 'btn small', type: 'button', text: 'Open investigation', onclick: () => this.places.open('/investigation?operation=' + encodeURIComponent(t.id)) }));
     } else if (t.kind === 'investigation') {
       const inv = d.investigation || {};

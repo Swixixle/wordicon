@@ -10,6 +10,7 @@ establishes origin and integrity, custody, never truth.
 from __future__ import annotations
 
 import copy
+import base64
 import json
 import sys
 from pathlib import Path
@@ -83,6 +84,88 @@ def test_passage_context_and_default_question(store):
     assert item["attributed_to"].endswith("not independent validation")
     assert "'matched' means the quoted words are in the saved transcript" in item["quotes_meaning"]
     assert "do not treat them as publicly verified" in ctx["question"].lower()
+
+
+def _signed_variant(store, mutate):
+    """Keep a new, correctly signed fixture; never alter the original import."""
+    from cryptography.hazmat.primitives import serialization
+    key_path = FIXTURE.parents[1] / "producers" / "deflate.fixture.key.pkcs8.b64"
+    key = serialization.load_der_private_key(base64.b64decode(key_path.read_bytes()), password=None)
+    env = copy.deepcopy(store["env"])
+    mutate(env["payload"])
+    env["payload_sha256"] = federation.payload_sha256(env["payload"])
+    env["signature"]["value"] = base64.b64encode(key.sign(federation.canonical_json(env["payload"]))).decode()
+    raw = json.dumps(env, ensure_ascii=False).encode("utf-8")
+    out = federation.import_package(federation.get_connector("deflate-test"), raw, how="pasted")
+    assert out["verification"]["ok"] is True
+    return {**store, "deposition_id": out["deposition_id"], "env": env}
+
+
+@pytest.mark.parametrize("change,reason", [
+    ("missing_basis", "basis"), ("wrong_basis", "basis"), ("held_duplicate", "held"),
+    ("stale", "stale"), ("gate_held", "reading gate"), ("gate_malformed", "reading gate"),
+    ("duplicate", "ambiguous passage"), ("transcript_changed", "source hashes"),
+    ("run_hash_changed", "source hashes"), ("transcript_omitted", "source hashes"),
+])
+def test_signed_inconsistent_source_refused_at_prepare_and_start(store, monkeypatch, change, reason):
+    def mutate(payload):
+        claims = payload["claims"]; p = claims["passages"][0]
+        if change == "missing_basis": p.pop("basedOn")
+        elif change == "wrong_basis": p["basedOn"]["inputHash"] = "0" * 64
+        elif change == "held_duplicate": claims["passagesHeld"].append({"id": p["id"]})
+        elif change == "stale": p["stale"] = ["source changed"]
+        elif change == "gate_held": p["readingGate"] = {"status": "held"}
+        elif change == "gate_malformed": p["readingGate"] = "ready"
+        elif change == "duplicate": claims["passages"].append(copy.deepcopy(p))
+        elif change == "transcript_changed": payload["transcript"]["text"] += " altered"
+        elif change == "run_hash_changed": claims["run"]["transcript"]["sha256"] = "0" * 64
+        elif change == "transcript_omitted": payload["transcript"]["included"] = False
+    variant = _signed_variant(store, mutate)
+    before = federation.deposition_bytes(federation.get_deposition(variant["deposition_id"]))
+    def no_dispatch(*args, **kwargs):
+        raise AssertionError("an inconsistent source must be refused before dispatch")
+    gateway = FixtureGateway()
+    monkeypatch.setattr(gateway, "complete_with_search", no_dispatch)
+    for kind, key in (("passage", "passage_id"), ("claim", "claim_id")):
+        ref = f"deflate:{kind}:{store[key]}"
+        with pytest.raises(ValueError, match=reason):
+            deeper.build_context(subject(variant, ref), {})
+        # Start must independently resolve the root, even if a previously
+        # frozen proposal or a direct caller supplies this imported identity.
+        context = deeper.build_context(subject(store, ref), {})
+        context["root"]["deposition_id"] = variant["deposition_id"]
+        with pytest.raises(ValueError, match=reason):
+            deeper.run(context, gateway)
+    assert federation.deposition_bytes(federation.get_deposition(variant["deposition_id"])) == before
+
+
+def test_current_ready_gate_and_legacy_metadata_are_both_source_bound(store):
+    legacy = deeper.build_context(subject(store, f"deflate:passage:{store['passage_id']}"), {})
+    assert "readingGate" not in store["env"]["payload"]["claims"]["passages"][0]
+    current = _signed_variant(store, lambda payload: payload["claims"]["passages"][0].update(readingGate={"status": "ready"}))
+    context = deeper.build_context(subject(current, f"deflate:passage:{store['passage_id']}"), {})
+    assert context["root"]["selection"]["deposition"]["item"] == legacy["root"]["selection"]["deposition"]["item"]
+
+
+@pytest.mark.parametrize("change", ["missing_parent", "null_parent", "duplicate_claim"])
+def test_claim_cannot_bypass_parent_binding_or_ambiguate_identity(store, monkeypatch, change):
+    def mutate(payload):
+        claims = payload["claims"]; c = claims["claims"][0]
+        if change == "missing_parent": c.pop("passageId")
+        elif change == "null_parent": c["passageId"] = None
+        else: claims["claims"].append(copy.deepcopy(c))
+    variant = _signed_variant(store, mutate)
+    ref = f"deflate:claim:{store['claim_id']}"
+    reason = "ambiguous claim" if change == "duplicate_claim" else "explicit parent passage"
+    with pytest.raises(ValueError, match=reason):
+        deeper.build_context(subject(variant, ref), {})
+    context = deeper.build_context(subject(store, ref), {})
+    context["root"]["deposition_id"] = variant["deposition_id"]
+    def no_dispatch(*args, **kwargs):
+        raise AssertionError("unbound claims must be refused before dispatch")
+    gateway = FixtureGateway(); monkeypatch.setattr(gateway, "complete_with_search", no_dispatch)
+    with pytest.raises(ValueError, match=reason):
+        deeper.run(context, gateway)
 
 
 def test_quoteless_evidence_goal_full_allowance(store):

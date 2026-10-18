@@ -4275,7 +4275,7 @@ def _check_journey_engines():
     # slice C: a journey that runs in BOTH engines takes the engine from
     # JOURNEY_ENGINE, launches exactly that one, asks the browser which it
     # is, and run.sh runs it once per engine and requires both logs
-    for name in ("editor",):
+    for name in ("editor", "deflate-reading"):
         src = (jdir / f"{name}.js").read_text(encoding="utf-8") if (jdir / f"{name}.js").exists() else ""
         if "playwright[ENGINE].launch()" not in src or "browser.browserType().name() === ENGINE" not in src or "process.env.JOURNEY_ENGINE" not in src:
             out.append(f"ENGINE: tests/journeys/{name}.js must launch the engine JOURNEY_ENGINE names and say which it got")
@@ -6518,7 +6518,7 @@ console.log(JSON.stringify({rail, ids: bar.map(b=>b.id), acts: bar.map(b=>b.act)
 # Registered from candidate-r89..76ec0cf, not inferred from module names.
 # Each behavioral suite remains the authoritative test; this entry point runs it.
 _INTEGRATION_MODULES = (
-    "scripts/capture_history.py", "scripts/evidence_lineage.py", "scripts/opencase.py",
+    "scripts/capture_history.py", "scripts/deflate_workflow.py", "scripts/evidence_lineage.py", "scripts/opencase.py",
     "scripts/opencase_grounding.py", "scripts/opencase_review.py", "scripts/opencase_synthesis.py",
     "scripts/operation_capture.py", "scripts/operation_costs.py", "scripts/pure_receipts.py",
     "scripts/receipts_projection.py", "scripts/workspace_identity.py",
@@ -6527,6 +6527,7 @@ _INTEGRATION_PYTESTS = (
     "tests/test_attention_durable.py", "tests/test_capture_durable.py", "tests/test_capture_gaps.py",
     "tests/test_code_manifest.py", "tests/test_install_beta_release.py",
     "tests/test_capture_history.py", "tests/test_capture_routes.py", "tests/test_evidence_lineage.py",
+    "tests/test_deflate_workflow.py", "tests/test_deflate_capture_history.py", "tests/test_deflate_deeper_lineage.py",
     "tests/test_opencase_grounded_view.py", "tests/test_opencase_grounding.py",
     "tests/test_opencase_integrity_workflow.py", "tests/test_opencase_synthesis.py",
     "tests/test_opencase_workflow.py", "tests/test_operation_capture.py", "tests/test_operation_costs.py",
@@ -6539,7 +6540,7 @@ _INTEGRATION_NODE_TESTS = (
 _INTEGRATION_SUPPORT = (
     "scripts/install_beta_release.py", "scripts/opencase_capabilities.json", "tests/fixtures/receipts.json", "scripts/code_manifest.py",
     "webapp/capture-history.html", "webapp/capture-history.js", "webapp/opencase.js", "webapp/receipts.js",
-    "webapp/work/cost-display.js",
+    "webapp/work/cost-display.js", "webapp/deflate-reading.html", "webapp/deflate-reading.js",
 )
 
 
@@ -6547,7 +6548,7 @@ def _check_integration_wing():
     """P2: shipped integrity, accounting, capture and Receipts behavior belongs
     to the main gate. Child suites use scratch stores and poisoned providers;
     browser fixtures intercept every request. None opens the owner's live store.
-    Deflate's new launch bridge remains isolated and is not registered as shipped.
+    Deflate's bounded bridge is covered by its offline contract and custody suites.
     Missing files, dependencies, timeouts and behavioral failures fail by name.
     """
     import importlib.util as _iu

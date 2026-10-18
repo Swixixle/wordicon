@@ -17,7 +17,11 @@
     if (subject.trace_id) return JSON.stringify([subject.trace_id, subject.thread_index == null ? null : subject.thread_index]);
     // the Deflate door: a deposition item keeps the same lost-Start recovery
     // (one pending request key per subject) as a thread does
-    if (subject.deposition_id) return JSON.stringify(['dep', subject.deposition_id, subject.item_ref || '']);
+    if (subject.deposition_id) {
+      const identity = ['dep', subject.deposition_id, subject.item_ref || ''];
+      if (subject.source_operation_id) identity.push(subject.source_operation_id);
+      return JSON.stringify(identity);
+    }
     return null;
   };
   function savePending(entry) {
@@ -273,12 +277,13 @@
     return `${button(entry, 'open', '↓ Go deeper', 'style="margin-top:6px;font-size:12px" title="Stay with this person, work or idea; review the proposal before anything runs"')}<div id="${entry.mountId}" aria-live="polite"></div>`;
   };
 
-  window.deeperDepositionControl = (depositionId, itemRef, title) => {
+  window.deeperDepositionControl = (depositionId, itemRef, title, sourceOperationId) => {
     // the Deflate door (2026-10-17): an imported, verified reading or claim
     // opens the same proposal machinery a saved thread does — the subject is
     // resolved server-side from custody; this control carries only its ids
     if (!depositionId || !itemRef) return '';
-    const entry = makeEntry({subject: {kind:'deposition', deposition_id:depositionId, item_ref:itemRef}, title:title || 'this imported reading'});
+    const entry = makeEntry({subject: {kind:'deposition', deposition_id:depositionId, item_ref:itemRef,
+      ...(sourceOperationId ? {source_operation_id:sourceOperationId} : {})}, title:title || 'this imported reading'});
     return `${button(entry, 'open', '↓ Go deeper', 'style="margin-top:6px;font-size:12px" title="Explore this imported reading or claim; review the proposal before anything runs"')}<div id="${entry.mountId}" aria-live="polite"></div>`;
   };
 

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Nikodemus — Read a source</title><style>
+  :root {
+    --bg: #11161d; --panel: #181f29; --panel-2: #1f2833; --border: #2a3441;
+    --text: #e7ecf3; --muted: #8b98a9; --accent: #78aaff;
+    --good: #6fcf97; --bad: #e08a8a; --warn: #d9a441;
+    --oc: #9bb8ff; --ea: #b9d7a8; --nk: #d9c7ff;
+    --mode-source: #9bb8ff;   /* the Go deeper door's accent, as the desk names it */
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 18px 20px 40px; }
+  header { display: flex; align-items: baseline; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 15px; margin: 0 0 6px; }
+  header a, a { color: var(--accent); text-decoration: none; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; margin: 12px 0; }
+  .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+  .body { font-size: 14px; line-height: 1.55; margin: 6px 0; }
+  .muted { color: var(--muted); }
+  .foot { font-size: 12px; color: var(--muted); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+  label { font-size: 11.5px; color: var(--muted); display: block; margin: 8px 0 3px; }
+  input, textarea, select { background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 9px; font-size: 13px; font-family: inherit; width: 100%; box-sizing: border-box; }
+  textarea { min-height: 64px; resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  button { background: var(--panel-2); color: var(--accent); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.reject { color: var(--bad); } button.unresolved { color: var(--muted); } button.quiet { color: var(--muted); font-size: 12px; padding: 4px 9px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .error { color: var(--bad); font-size: 13px; }
+  .ok { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+  .item { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; margin: 6px 0; font-size: 13px; line-height: 1.5; }
+  .item .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .seat { border-left: 3px solid var(--border); padding-left: 10px; margin: 12px 0; }
+  .seat.open_case { border-left-color: var(--oc); } .seat.ethicalalt { border-left-color: var(--ea); } .seat.nikodemus { border-left-color: var(--nk); }
+  .tag { display: inline-block; font-size: 10.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); margin-right: 4px; }
+  .tag.open_case { color: var(--oc); border-color: var(--oc); } .tag.ethicalalt { color: var(--ea); border-color: var(--ea); } .tag.nikodemus { color: var(--nk); border-color: var(--nk); }
+  code { font-size: 12px; color: var(--muted); word-break: break-all; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { text-align: left; padding: 5px 7px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .scroll { overflow-x: auto; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  details summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  .result-title { font-size: 16px; font-weight: 600; margin: 4px 0 6px; }
+  .deeper-proposal pre { background: var(--panel-2); border-radius: 8px; padding: 8px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } .wrap { padding: 12px 10px 60px; } }
+
+.wrap{max-width:1020px}label{display:block;margin:12px 0 6px}input[type=url],input[type=text],textarea{box-sizing:border-box;width:100%}textarea{min-height:72px}input[type=number]{width:100px}input[type=checkbox]{width:auto;margin:0 7px 0 0;vertical-align:middle}.source-text{white-space:pre-wrap;overflow-wrap:anywhere;max-height:480px;overflow:auto;line-height:1.65}.readiness{min-height:1em}button:disabled{opacity:.55}blockquote{border-left:2px solid var(--accent);margin:10px 0;padding:6px 12px}#dr-error{white-space:pre-wrap}a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+</style><script src="/deeper.js" defer></script><script type="module" src="/deflate-reading.js"></script></head>
+<body><main class="wrap"><header><h1>Read a source</h1><a href="/work">Back to writing</a><a href="/investigation">Investigations</a></header>
+<p class="foot">Bring a link or recording into your workspace. Keep its text, reading, evidence and follow-ups together.</p>
+<section class="card" aria-labelledby="dr-heading"><div class="section-label">DEFLATE</div><h2 id="dr-heading">Add a link or recording</h2>
+<p id="dr-readiness" class="foot readiness" role="status">Checking the saved connection…</p>
+<form id="dr-form"><label for="dr-url">Public link</label><input id="dr-url" type="url" placeholder="https://…" autocomplete="off">
+<label for="dr-file">Or choose an MP3 recording</label><input id="dr-file" type="file" accept="audio/mpeg,.mp3"><p id="dr-upload" class="foot">The chosen file stays local until Start. This workflow uses the installed local transcription engine.</p>
+<label for="dr-question">What would you like to examine? <span class="foot">Optional</span></label><textarea id="dr-question" placeholder="A question or something to pay attention to"></textarea>
+<label for="dr-title">Source title <span class="foot">Optional</span></label><input id="dr-title" type="text" maxlength="200" placeholder="A title you will recognize later">
+<div id="dr-origin" class="item"></div>
+<label><input id="dr-reading" type="checkbox"> Use my configured model API to read the source</label>
+<p class="foot">Optional usage charges, separate from plugin subscriptions. The proposal names the model and rates. The source and transcript remain useful when a reading is held or unavailable.</p>
+<div id="dr-budget-box" hidden><label for="dr-budget">Model usage estimate allowance (USD)</label><input id="dr-budget" type="number" min="0.01" max="10" step="0.01" value="0.50"><p class="foot">Calls are checked against the remaining allowance. The estimate is based on published rates; actual provider billing is confirmed separately. No automatic paid retries.</p></div>
+<button id="dr-prepare" type="submit">Review source</button></form><p id="dr-error" class="error" role="alert"></p><div id="dr-proposal"></div></section>
+<div id="dr-updates-paused" class="card" role="status" hidden><span>Updates paused</span> <button id="dr-resume-updates" type="button">Resume updates</button></div>
+<section id="dr-current" class="card" aria-label="Saved source and reading" hidden></section>
+<section class="card"><h2>Saved sources and readings</h2><p class="foot">Opening saved work reads your local records. It starts no new reading.</p><div id="dr-history"></div></section>
+</main></body></html>

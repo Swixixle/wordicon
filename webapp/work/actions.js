@@ -133,14 +133,15 @@ export class Actions {
   async choose(actionId, opener) {
     const a = this.byId[actionId];
     if (!a) return;
-    if (actionId === 'investigate.opencase.question') {
+    if (['investigate.opencase.question','investigate.deflate.read'].includes(actionId)) {
+      const route = actionId === 'investigate.deflate.read' ? '/deflate-reading' : '/investigation';
       if (this.session.adapter.isComposing && this.session.adapter.isComposing()) { toast('Finish composing the character before capturing this passage.'); return; }
       const origin = this.subjectNow();
-      if (!origin.text?.trim()) { this.places.open('/investigation?compose=1'); if (this.hooks.onPlace) this.hooks.onPlace(); return; }
-      const key = 'nikodemus.opencase.origin.' + requestKey();
+      if (!origin.text?.trim()) { this.places.open(route + '?compose=1'); if (this.hooks.onPlace) this.hooks.onPlace(); return; }
+      const key = 'nikodemus.' + actionId + '.origin.' + requestKey();
       try { sessionStorage.setItem(key, JSON.stringify(origin)); }
       catch (_) { toast('The source could not be captured. Free browser storage and try again.'); return; }
-      this.places.open('/investigation?compose=1&origin_key=' + encodeURIComponent(key));
+      this.places.open(route + '?compose=1&origin_key=' + encodeURIComponent(key));
       if (this.hooks.onPlace) this.hooks.onPlace();
       return;
     }
@@ -199,12 +200,13 @@ export class Actions {
 
   async prepare(actionId, subjectOverride) {
     const a = this.byId[actionId];
-    if (actionId === 'investigate.opencase.question') {
+    if (['investigate.opencase.question','investigate.deflate.read'].includes(actionId)) {
+      const route = actionId === 'investigate.deflate.read' ? '/deflate-reading' : '/investigation';
       if (!subjectOverride) return this.choose(actionId);
-      const key = 'nikodemus.opencase.origin.' + requestKey();
+      const key = 'nikodemus.' + actionId + '.origin.' + requestKey();
       try { sessionStorage.setItem(key, JSON.stringify(subjectOverride)); }
       catch (_) { toast('The source could not be captured. Free browser storage and try again.'); return; }
-      this.places.open('/investigation?compose=1&origin_key=' + encodeURIComponent(key));
+      this.places.open(route + '?compose=1&origin_key=' + encodeURIComponent(key));
       if (this.hooks.onPlace) this.hooks.onPlace();
       return;
     }
