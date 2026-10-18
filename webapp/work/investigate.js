@@ -30,7 +30,7 @@ export class Investigate {
     if (questionAction) {
       v.appendChild(el('section', { class: 'card', id: 'open-case-workflow' }, [
         el('h2', { text: 'Ask Open Case a question' }),
-        el('p', { text: 'Investigate a named federal judge or senator using public records. Review a proposal and a $0 paid-model allowance, follow progress, inspect sources, and keep the result here.' }),
+        el('p', { text: 'Investigate a named federal judge or senator using public records. Collection costs $0; optional use of your configured model API has its own disclosed allowance. Review the proposal, follow progress, inspect sources, and keep the result here.' }),
         el('p', { class: 'muted small-text', text: 'Your current draft or selected passage becomes the saved origin. You can also begin with a question alone.' }),
         el('div', { class: 'row' }, [
           el('button', { class: 'btn primary', type: 'button', text: 'Propose an Open Case investigation…', onclick: () => this.actions.choose(questionAction.id) }),

@@ -34,7 +34,7 @@ import { Ledger } from '/work/ledger.js';
     el.append(node('strong', 'From ' + (origin.title || origin.kind || 'a saved source')));
     el.append(node('div', [origin.doc_id, origin.revision != null ? 'revision ' + origin.revision : '', origin.deposition_id, origin.item_ref].filter(Boolean).join(' · '), 'foot'));
     if (origin.text) el.append(detail('Passage carried into the proposal', origin.text));
-    el.append(button('Use question alone', () => { origin = null; followUp = null; originView(); }, 'quiet'));
+    el.append(button('Use question alone', () => { origin = null; followUp = null; receiptsContinuation = null; originView(); }, 'quiet'));
     if (followUp) el.append(node('div', 'Follow-up to ' + followUp, 'foot'));
   }
   // These are observed navigation/carry boundaries, not evidence of reading
@@ -43,15 +43,15 @@ import { Ledger } from '/work/ledger.js';
     const id = value?.doc_id || value?.deposition_id;
     if (id) ledger.note('material_carried', {id, revision:value.revision ?? '', kind:'investigation_origin', scope:'open_case'});
   }
-  function setOrigin(value) { origin = value; noteOrigin(value); proposal = null; $('oc-proposal').replaceChildren(); originView(); $('open-case-card').scrollIntoView({block:'start',behavior:'smooth'}); $('oc-question').focus(); }
-  let reuseEvidence = '';
+  function setOrigin(value) { receiptsContinuation = null; origin = value; noteOrigin(value); proposal = null; $('oc-proposal').replaceChildren(); originView(); $('open-case-card').scrollIntoView({block:'start',behavior:'smooth'}); $('oc-question').focus(); }
+  let reuseEvidence = '', receiptsContinuation = null;
   async function prepare(event) {
     event.preventDefault(); if (busy) return; busy = true; error(null); $('oc-prepare').disabled = true;
     try {
       const question = $('oc-question').value.trim();
       const inputs = {question, subject_name:$('oc-subject').value.trim(), subject_type:$('oc-profile').value,
         jurisdiction:$('oc-jurisdiction').value.trim(), connector_id:$('oc-connector').value,
-        task_profile:$('oc-task-profile').value, reuse_evidence_from:reuseEvidence,
+        task_profile:$('oc-task-profile').value, reuse_evidence_from:reuseEvidence, receipts_continuation:receiptsContinuation,
         synthesis:{enabled:$('oc-synthesis').checked,max_requests:1,max_output_tokens:reuseEvidence?8192:4096,max_input_chars:40000},
         allowance:{max_cost_usd:0,paid_models:false}, origin:origin || {kind:'question',text:question}, follow_up_of:followUp};
       proposal = await api('/api/actions/prepare', {action_id:ACTION, subject:{kind:'description',text:question,title:question.slice(0,100)}, inputs});
@@ -139,7 +139,7 @@ import { Ledger } from '/work/ledger.js';
     save.id = 'oc-save'; save.disabled = !!view.saved;
     const follow = button('Ask a follow-up…', () => {
       ledger.note('page_shown', {page:'investigation_follow_up', id:view.operation_id || selected, scope:'open_case'});
-      reuseEvidence = ''; followUp = view.operation_id || selected; origin = view.origin || plan.origin || {kind:'question',text:plan.question};
+      reuseEvidence = ''; receiptsContinuation = null; followUp = view.operation_id || selected; origin = view.origin || plan.origin || {kind:'question',text:plan.question};
       proposal = null; $('oc-proposal').replaceChildren(); error(null);
       $('oc-subject').value = plan.subject_name || ''; $('oc-profile').value = plan.subject_type || 'federal_judge_district';
       $('oc-jurisdiction').value = plan.jurisdiction || 'United States'; $('oc-question').value = '';
@@ -152,7 +152,7 @@ import { Ledger } from '/work/ledger.js';
     el.append(row(save, follow, history));
     if ((['truncated','rejected','failed','unknown'].includes(synthesis.status) || ['partial','insufficient'].includes(synthesis.answer_status)) && view.result) {
       const recover=button('Review answer recovery', () => {
-        reuseEvidence=view.operation_id; followUp=view.operation_id;origin=view.origin || plan.origin;
+        receiptsContinuation=null; reuseEvidence=view.operation_id; followUp=view.operation_id;origin=view.origin || plan.origin;
         $('oc-question').value=plan.question; $('oc-subject').value=plan.subject_name;
         $('oc-profile').value=plan.subject_type; $('oc-task-profile').value=plan.task_profile || 'public_records';
         $('oc-jurisdiction').value=plan.jurisdiction; $('oc-synthesis').checked=true;
@@ -259,6 +259,12 @@ import { Ledger } from '/work/ledger.js';
       el.append(detail('Source coverage',result.source_statuses || {}));
       el.append(detail('Model runs',result.model_runs || []));
     }
+    window.NikodemusReceipts?.mount(el,view,suggestion=>{
+      // Populate only; review the existing profile and allowance before Start.
+      follow.click(); $('oc-question').value=suggestion.question;
+      receiptsContinuation={operation_id:view.operation_id,id:suggestion.id,projection_sha256:suggestion.projection_sha256};
+      $('oc-proposal').append(node('p',suggestion.reason+' '+suggestion.limitation,'foot'));
+    });
     el.append(detail('Origin as captured',view.origin || plan.origin || {}));
     if (view.follow_up_of || plan.follow_up_of) el.append(button('Open preceding investigation',()=>open(view.follow_up_of || plan.follow_up_of,true),'quiet'));
     const custody = view.result_ref?.custody || {};

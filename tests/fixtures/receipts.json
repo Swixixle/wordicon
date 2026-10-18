@@ -1,0 +1,251 @@
+{
+  "schema": "nikodemus.receipts.projection.v1",
+  "operation_id": "op_a",
+  "question": "When was the commission issued?",
+  "manifest": {
+    "adapter_version": "nikodemus.receipts.projection.v1",
+    "receipts_commit": "daf17d57a09b26ed82695a836c437453cb945474",
+    "inputs": [
+      {
+        "operation_id": "op_a",
+        "result_artifact": {
+          "name": "result.json",
+          "sha256": "79b8a0e27bc4aeff466b663f3714f23103dbf24029bb5a822b4e5db86882b5bf"
+        },
+        "corrections": [],
+        "question_sha256": "24768e7fd166477a3486a10d9857fc129514eb180b44405ff073e82aa440f7ab",
+        "origin_sha256": "54192a698be8d92a681ff086b283c5c5f636ddaa5a59f2e3ef33ffcf849f9e3f"
+      }
+    ],
+    "source_manifest_sha256": "e39d45fcf44d53b28e8e5e4ee579dfff5a32175ed3687147f6f4acad1e53102f",
+    "omissions": [],
+    "scope": "Selected operation and locally saved ancestors, at most 20; all captures retained.",
+    "transformation": "Derived local JSON projection; source text not redacted or rewritten; no URL/title deduplication."
+  },
+  "evidence_matrix": [
+    {
+      "record_id": "op_a:f1",
+      "operation_id": "op_a",
+      "finding_id": "f1",
+      "title": "<img src=x onerror=alert(1)>",
+      "source_name": "FJC",
+      "source_url": "https://example.test/shared",
+      "state": "source_text_available",
+      "evidence_kind": "official_primary_record",
+      "epistemic_level": null,
+      "lineage": {
+        "source_record_id": "fjc:record:1",
+        "identity_status": "resolved",
+        "provenance_family_id": "fjc:record:1",
+        "substantive_revision_id": "revision-one",
+        "substantive_revision_status": "identified"
+      },
+      "result_artifact": {
+        "name": "result.json",
+        "sha256": "79b8a0e27bc4aeff466b663f3714f23103dbf24029bb5a822b4e5db86882b5bf"
+      },
+      "source_pointer": "/findings/0",
+      "original_record_sha256": "eafbe0ad78538ed87240524c3f91be31c5604169b9144408d343e65985249af8",
+      "record_hash_basis": "sha256 compact sorted UTF-8 JSON of original finding; not original transport bytes",
+      "body_sha256": "5c4d9ed23c26bfdeb49457c42792cea296d384cb8e5e7e1a70480144bd90b88b",
+      "excerpt": "A biography.",
+      "excerpt_range": {
+        "start": 0,
+        "end": 12,
+        "unit": "unicode_code_points",
+        "field": "body"
+      },
+      "corrections": [],
+      "used_in_answer": true,
+      "answer_operation_id": "op_a",
+      "citation_basis": "structural_reference_only",
+      "support_for_question": "not_assessed",
+      "source_truth": "not_certified_by_signature"
+    }
+  ],
+  "missing_evidence": [
+    {
+      "id": "gap_d30761ac1233a2e08b8f4d1a",
+      "kind": "typed_field_not_supplied",
+      "state": "not_supplied",
+      "title": "Oath date is not supplied for Court One",
+      "reason": "The commission date is a different field; this record does not establish an oath date.",
+      "source_pointer": "/semantic_record/appointments/0/oath_date",
+      "trace": {
+        "record_id": "op_a:f1",
+        "operation_id": "op_a",
+        "finding_id": "f1",
+        "result_artifact": {
+          "name": "result.json",
+          "sha256": "79b8a0e27bc4aeff466b663f3714f23103dbf24029bb5a822b4e5db86882b5bf"
+        },
+        "original_record_sha256": "eafbe0ad78538ed87240524c3f91be31c5604169b9144408d343e65985249af8",
+        "body_sha256": "5c4d9ed23c26bfdeb49457c42792cea296d384cb8e5e7e1a70480144bd90b88b",
+        "lineage": {
+          "source_record_id": "fjc:record:1",
+          "identity_status": "resolved",
+          "provenance_family_id": "fjc:record:1",
+          "substantive_revision_id": "revision-one",
+          "substantive_revision_status": "identified"
+        },
+        "corrections": []
+      },
+      "action": "provide_official_source"
+    }
+  ],
+  "coverage": [
+    {
+      "id": "coverage_5fdd6b44211af39e717e1cd3",
+      "operation_id": "op_a",
+      "source_pointer": "/source_statuses/courtlistener",
+      "result_artifact": {
+        "name": "result.json",
+        "sha256": "79b8a0e27bc4aeff466b663f3714f23103dbf24029bb5a822b4e5db86882b5bf"
+      },
+      "record_sha256": "27981bb8d3357b1d97d76b23e559963f08def4aaf9dd427e90e6666910eb8702",
+      "source": "courtlistener",
+      "state": "setup_required",
+      "reason": "Credential unavailable",
+      "required": null,
+      "role": null,
+      "next_action": "Configure authorized source access before considering another collection.",
+      "capability_id": null,
+      "continuation_candidate": true,
+      "original": {
+        "status": "credential_failure",
+        "detail": "Credential unavailable"
+      }
+    }
+  ],
+  "timeline": [
+    {
+      "id": "event_c3c57a1fbcd8451a00f83ec7",
+      "type": "commission",
+      "date": "2003-01-02",
+      "original_date": "01/02/2003",
+      "precision": "date",
+      "title": "Court One · commission date",
+      "source_pointer": "/semantic_record/appointments/0/commission_date",
+      "status": "typed_source_field",
+      "trace": {
+        "record_id": "op_a:f1",
+        "operation_id": "op_a",
+        "finding_id": "f1",
+        "result_artifact": {
+          "name": "result.json",
+          "sha256": "79b8a0e27bc4aeff466b663f3714f23103dbf24029bb5a822b4e5db86882b5bf"
+        },
+        "original_record_sha256": "eafbe0ad78538ed87240524c3f91be31c5604169b9144408d343e65985249af8",
+        "body_sha256": "5c4d9ed23c26bfdeb49457c42792cea296d384cb8e5e7e1a70480144bd90b88b",
+        "lineage": {
+          "source_record_id": "fjc:record:1",
+          "identity_status": "resolved",
+          "provenance_family_id": "fjc:record:1",
+          "substantive_revision_id": "revision-one",
+          "substantive_revision_status": "identified"
+        },
+        "corrections": []
+      },
+      "subject_id": "fjc:judge:nid:1:jid:2",
+      "appointment_key": [
+        "fjc:judge:nid:1:jid:2",
+        "Court One",
+        "district",
+        "seat-1",
+        "Judge"
+      ],
+      "comparison_key": "8777551949e30ba38425ffbd0ae45f3fba3942679d5a63b12127f775e86cd1f1",
+      "historical_coverage": "captured_typed_record"
+    }
+  ],
+  "unplaced_records": [],
+  "comparisons": [],
+  "continuations": [
+    {
+      "id": "continuation_eb90606bd1a9846601a56377",
+      "gap_id": "gap_d30761ac1233a2e08b8f4d1a",
+      "title": "Oath date is not supplied for Court One",
+      "action": "provide_official_source",
+      "reason": "The commission date is a different field; this record does not establish an oath date.",
+      "question": "For Fixture Judge, what does the saved evidence establish about oath date is not supplied for court one? Identify the exact missing record or verification needed and distinguish it from the available evidence.",
+      "follow_up_of": "op_a",
+      "origin_preserved": true,
+      "source_refs": [
+        {
+          "record_id": "op_a:f1",
+          "operation_id": "op_a",
+          "finding_id": "f1",
+          "result_artifact": {
+            "name": "result.json",
+            "sha256": "79b8a0e27bc4aeff466b663f3714f23103dbf24029bb5a822b4e5db86882b5bf"
+          },
+          "original_record_sha256": "eafbe0ad78538ed87240524c3f91be31c5604169b9144408d343e65985249af8",
+          "body_sha256": "5c4d9ed23c26bfdeb49457c42792cea296d384cb8e5e7e1a70480144bd90b88b",
+          "lineage": {
+            "source_record_id": "fjc:record:1",
+            "identity_status": "resolved",
+            "provenance_family_id": "fjc:record:1",
+            "substantive_revision_id": "revision-one",
+            "substantive_revision_status": "identified"
+          },
+          "corrections": []
+        }
+      ],
+      "source_manifest_sha256": "e39d45fcf44d53b28e8e5e4ee579dfff5a32175ed3687147f6f4acad1e53102f",
+      "dispatch": "manual_proposal_only",
+      "auto_retry": false,
+      "supported_next_step": "fill_follow_up_question",
+      "limitation": "Review the existing source profile and allowance before Start. This question does not repair access or limit collection to one adapter."
+    },
+    {
+      "id": "continuation_1deb069bcda70ce9f932305c",
+      "gap_id": "coverage_5fdd6b44211af39e717e1cd3",
+      "title": "Coverage from courtlistener",
+      "action": "setup_required",
+      "reason": "Configure authorized source access before considering another collection.",
+      "question": "For Fixture Judge, what does the saved evidence establish about coverage from courtlistener? Identify the exact missing record or verification needed and distinguish it from the available evidence.",
+      "follow_up_of": "op_a",
+      "origin_preserved": true,
+      "source_refs": [
+        {
+          "id": "coverage_5fdd6b44211af39e717e1cd3",
+          "operation_id": "op_a",
+          "source_pointer": "/source_statuses/courtlistener",
+          "result_artifact": {
+            "name": "result.json",
+            "sha256": "79b8a0e27bc4aeff466b663f3714f23103dbf24029bb5a822b4e5db86882b5bf"
+          },
+          "record_sha256": "27981bb8d3357b1d97d76b23e559963f08def4aaf9dd427e90e6666910eb8702",
+          "source": "courtlistener",
+          "state": "setup_required",
+          "reason": "Credential unavailable",
+          "required": null,
+          "role": null,
+          "next_action": "Configure authorized source access before considering another collection.",
+          "capability_id": null,
+          "continuation_candidate": true,
+          "original": {
+            "status": "credential_failure",
+            "detail": "Credential unavailable"
+          }
+        }
+      ],
+      "source_manifest_sha256": "e39d45fcf44d53b28e8e5e4ee579dfff5a32175ed3687147f6f4acad1e53102f",
+      "dispatch": "manual_proposal_only",
+      "auto_retry": false,
+      "supported_next_step": "fill_follow_up_question",
+      "limitation": "Review the existing source profile and allowance before Start. This question does not repair access or limit collection to one adapter."
+    }
+  ],
+  "limitations": [
+    "Reference detection identifies mentions, not proof that material is missing or concealed.",
+    "Evidence presence and producer labels do not establish support for every part of the question.",
+    "Timeline events are typed source fields; prose dates remain unplaced. Only supported FJC appointment fields are compared in this slice.",
+    "Different source families alone do not establish independent corroboration. Candidate conflicts require review.",
+    "Continuation suggestions fill a question only; source setup, uploads and targeted adapter retries are not implemented here."
+  ],
+  "network_requests": 0,
+  "model_requests": 0,
+  "writes": 0,
+  "projection_sha256": "f644410c9d069e0bfb986d3241ce4e83e03280f0b2ac75c0e1c3f779b5d6cb00"
+}

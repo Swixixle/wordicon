@@ -1,0 +1,46 @@
+{
+  "repository": "https://github.com/Swixixle/Receipts",
+  "commit": "daf17d57a09b26ed82695a836c437453cb945474",
+  "license": "MIT",
+  "extraction": "Selected AST top-level definitions, verbatim source; imports limited to stdlib. No IO or write wrappers.",
+  "files": [
+    {
+      "path": "src/brief/missing_evidence.py",
+      "sha256": "2a6f8a616a3d7cf1987d105ef43780c09b24e395c2c0452b072162b34a1bafaf",
+      "symbols": [
+        "_NEG_BODY",
+        "_NEG_EXHIBIT",
+        "_Rule",
+        "_negates_near",
+        "_rules"
+      ]
+    },
+    {
+      "path": "src/brief/case_timeline.py",
+      "sha256": "6ac6b5b47a19a79b4bca9fea482e31bd559f87bd4b42cdd5fd05d374b811eee2",
+      "symbols": [
+        "DatePrecision",
+        "_MONTHS",
+        "_RE_APPROX",
+        "_RE_CAD",
+        "_RE_FILED",
+        "_RE_ISO",
+        "_RE_MON",
+        "_RE_TIME_12",
+        "_RE_TIME_24",
+        "_RE_US",
+        "_month_to_num",
+        "_to_minutes",
+        "extract_best_datetime"
+      ]
+    },
+    {
+      "path": "src/brief/contradiction_matrix.py",
+      "sha256": "30d9c28f994296132d63c3c32732c01f82cb05b0d6928fb4222e300d18a1514e",
+      "symbols": [
+        "_FORBIDDEN_WORDS",
+        "_neutral_guard"
+      ]
+    }
+  ]
+}

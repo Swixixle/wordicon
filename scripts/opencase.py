@@ -156,6 +156,10 @@ def prepare(question, inputs):
     reuse = str(inputs.get("reuse_evidence_from") or "")
     if reuse and (not parent or reuse != parent_id or question != parent["execution"]["plan"]["question"]):
         raise WorkflowError("Answer recovery must keep the previous question and name its saved investigation.")
+    receipts_continuation = None
+    if inputs.get("receipts_continuation") is not None:
+        import receipts_projection
+        receipts_continuation = receipts_projection.freeze_continuation(parent, inputs["receipts_continuation"])
     model_plan = synthesis.prepare(inputs.get("synthesis"), parent)
     if reuse and not model_plan.get("enabled"):
         raise WorkflowError("Answer recovery needs an explicitly enabled model allowance.")
@@ -179,7 +183,7 @@ def prepare(question, inputs):
     return {"contract": CONTRACT, "question": question, "root_question": parent_plan.get("root_question") or parent_plan.get("question") or question,
         "subject_name": name, "subject_type": typ, "jurisdiction": jurisdiction, "task_profile": task_profile, "reuse_evidence_from": reuse,
         "origin": origin, "outbound_origin": outbound_origin, "follow_up_of": parent_id, "allowance": dict(ALLOWANCE), "connector": _identity(c) if c else None,
-        "source_scope": source_scope, "synthesis": model_plan,
+        "source_scope": source_scope, "synthesis": model_plan, "receipts_continuation": receipts_continuation,
         "source_capabilities": json.loads(Path(__file__).with_name("opencase_capabilities.json").read_text())["profiles"][typ][task_profile] if not reuse else [],
         "steps": (["Verify the frozen saved evidence and corrections", "Make one model answer attempt under the reviewed allowance", "Keep this attempt beside its original question and history"] if reuse else
                   ["Create a case for this question", "Check the public records supported by the selected profile",

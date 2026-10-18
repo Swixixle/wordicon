@@ -4699,6 +4699,15 @@ def api_open_case_operation(op_id):
         return jsonify({"error": str(e)}), e.status
 
 
+@app.route("/api/open-case/operations/<op_id>/receipts")
+def api_open_case_receipts(op_id):
+    import receipts_projection
+    try:
+        return jsonify(receipts_projection.from_operation(receipts_projection.load_operation(op_id)))
+    except opencase.WorkflowError as e:
+        return jsonify({"error": str(e)}), e.status
+
+
 @app.route("/api/open-case/operations/<op_id>/save", methods=["POST"])
 def api_open_case_save(op_id):
     try:
