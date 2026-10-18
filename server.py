@@ -99,6 +99,7 @@ import capture  # noqa: E402  (W2, 2026-10-17: the content layer — his searche
 import operations as ops  # noqa: E402  (workspace-v2 slice D: the durable operations store; JOBS is its projection)
 import workindex  # noqa: E402  (workspace-v2 slice E: the derived Your work index — rebuildable, never authority)
 import producers  # noqa: E402  (workspace-v2 slice F: investigation adapters — contracts pinned, live starts by the owner's ruling)
+import opencase  # noqa: E402  (bounded question → investigation → saved evidence workflow)
 
 # One dispatcher per store (slice D). The lock is taken when this process
 # first dispatches (or when it starts serving and reconciles), never on
@@ -4121,6 +4122,8 @@ def _run_investigation(op_id: str, spec: dict) -> None:
 
 
 def _shape_investigation_view(op: dict) -> dict:
+    if opencase.is_ours(op):
+        return opencase.view(op)
     st = producers.status(op)
     ex = op.get("execution") or {}
     return {"operation_id": op["op_id"], "kind": "investigation", "status": op["status"], "action_id": op.get("action_id"),
@@ -4217,6 +4220,8 @@ def api_operations_start():
     a = actions.BY_ID.get(prepared["action_id"])
     if a is None:
         return jsonify({"error": "the proposal names an action the registry no longer has"}), 409
+    if a["handler"] == "open_case_workflow":
+        return _start_open_case(prepared, key)
     rd = actions.readiness(a, server_gateway)
     if a.get("mode") == "deepen":
         proposed_lane = (prepared.get("disclosure") or {}).get("lane") or {}
@@ -4407,6 +4412,13 @@ def api_operation_recover(op_id):
     op = ops.get(op_id)
     if op is None:
         return jsonify({"error": "no operation with that id"}), 404
+    if opencase.is_ours(op):
+        try:
+            if not _dispatching():
+                return jsonify({"error": "This process does not hold the investigation dispatcher."}), 409
+            return jsonify(opencase.recover(op))
+        except opencase.WorkflowError as e:
+            return jsonify({"error": str(e)}), e.status
     if op["kind"] == "reading":
         rid = (op.get("result_ref") or {}).get("reading_id")
         v = moira.view(rid) if rid else None
@@ -4555,6 +4567,94 @@ def api_connector_live_start(cid):
     except producers.AdapterError as e:
         return jsonify({"error": str(e)}), e.status
     return jsonify({"ok": True, "ruling": row})
+
+
+def _start_open_case(prepared, request_key):
+    plan = (prepared.get("inputs") or {}).get("plan")
+    snap = snapshots.load(prepared.get("snapshot_id"))
+    if not snap or not snapshots.verify(snap):
+        return jsonify({"error": "The frozen question is missing or no longer verifies.", "nothing_was_sent": True}), 409
+    execution = {"adapter": opencase.CONTRACT, "action_id": opencase.ACTION, "prepared_id": prepared["prepared_id"],
+                 "snapshot_id": prepared.get("snapshot_id"), "plan": plan}
+    try:
+        # A repeated request key is resolved before current availability: a lost reply never starts twice.
+        row, created = ops.reserve(request_key=request_key, kind="investigation", execution=execution,
+            action_id=opencase.ACTION, registry_version=str(prepared.get("registry_version") or ""),
+            prepared_id=prepared["prepared_id"], snapshot_id=prepared.get("snapshot_id") or "",
+            config={"producer": "open_case", "state_root": str(cli.LOCAL_STATE.resolve())}, retry_parent=(plan or {}).get("follow_up_of") or None)
+        if not created:
+            return jsonify({"operation_id": row["op_id"], "status": row["status"], "kind": "investigation", "repeated": True})
+        try:
+            opencase.validate_plan(plan)
+        except opencase.WorkflowError as e:
+            ops.mark(row["op_id"], "failed", local_state="Refused before dispatch", last_error=str(e))
+            return jsonify({"error": str(e), "operation_id": row["op_id"], "nothing_was_sent": True}), e.status
+        if not _dispatching():
+            return jsonify({"operation_id": row["op_id"], "status": "queued", "kind": "investigation", "dispatched": False})
+        if not ops.claim(row["op_id"], OPS_DISPATCHER.token):
+            return jsonify({"error": "This investigation was already claimed."}), 409
+        ops.mark(row["op_id"], "running", local_state="Sending the approved investigation to Open Case")
+        opencase.launch(row["op_id"])
+        return jsonify({"operation_id": row["op_id"], "status": "running", "kind": "investigation", "dispatched": True})
+    except ops.OperationsError as e:
+        return jsonify({"error": str(e), "nothing_was_sent": True}), e.status
+
+
+@app.route("/api/open-case/status")
+def api_open_case_status():
+    return jsonify(opencase.readiness())
+
+
+@app.route("/api/open-case/authorize", methods=["POST"])
+def api_open_case_authorize():
+    d = request.get_json(silent=True) or {}
+    try:
+        return jsonify({"ok": True, "ruling": opencase.authorize(str(d.get("connector_id") or ""), bool(d.get("enabled")), d.get("note"))})
+    except opencase.WorkflowError as e:
+        return jsonify({"error": str(e)}), e.status
+
+
+@app.route("/api/open-case/operations")
+def api_open_case_operations():
+    return jsonify({"operations": opencase.list_views(), "population": "Open Case investigations saved in this Nikodemus store"})
+
+
+@app.route("/api/open-case/operations/<op_id>")
+def api_open_case_operation(op_id):
+    try:
+        return jsonify(opencase.view(ops.get(op_id)))
+    except opencase.WorkflowError as e:
+        return jsonify({"error": str(e)}), e.status
+
+
+@app.route("/api/open-case/operations/<op_id>/save", methods=["POST"])
+def api_open_case_save(op_id):
+    try:
+        return jsonify(opencase.save(ops.get(op_id)))
+    except opencase.WorkflowError as e:
+        return jsonify({"error": str(e)}), e.status
+
+
+@app.route("/api/open-case/operations/<op_id>/recover", methods=["POST"])
+def api_open_case_recover(op_id):
+    try:
+        if not _dispatching():
+            return jsonify({"error": "This process does not hold the investigation dispatcher."}), 409
+        return jsonify(opencase.recover(ops.get(op_id)))
+    except opencase.WorkflowError as e:
+        return jsonify({"error": str(e)}), e.status
+
+
+@app.route("/api/open-case/operations/<op_id>/artifacts/<name>")
+def api_open_case_artifact(op_id, name):
+    try:
+        op = ops.get(op_id)
+        if not opencase.is_ours(op):
+            raise opencase.WorkflowError("No Open Case investigation with that id.", 404)
+        return Response(opencase.artifact(op, name), mimetype="application/json",
+                        headers={"Content-Disposition": f'inline; filename="{name}"', "Cache-Control": "no-store"})
+    except opencase.WorkflowError as e:
+        return jsonify({"error": str(e)}), e.status
 
 
 @app.route("/api/work")
@@ -6369,6 +6469,7 @@ def _ops_startup() -> dict:
     if not dispatching:
         summary["left_queued"] = [o["op_id"] for o in ops.queued()]
         return summary
+    summary["open_case_resumed"] = opencase.resume_known()
     if vault.preview_mode():
         # the review of 0f2db31, finding 2: a preview on a COPIED store inherits that store's queued work.
         # Those operations keep their identity, provenance and events, but this process does not dispatch

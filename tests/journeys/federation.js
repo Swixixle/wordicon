@@ -40,7 +40,7 @@ const OC_ID = OC.object.id, EA_ID = EA.object.id;
   const reg = await text('#connectors');
   ok(/Open Case \(scratch\)/.test(reg) && /EthicalAlt \(scratch\)/.test(reg) && /env:JOURNEY_OPEN_CASE_KEY/.test(reg) && !/jjjjjj/.test(reg) && (reg.match(/ed25519:sha256:/g) || []).length >= 2,
     'the registry lists both instruments with a pinned key fingerprint and a credential named by reference, no value: ' + reg.slice(0, 160));
-  ok(/read-only \(locate, import, verify\)/.test(reg) && /never tried/.test(reg), 'each instrument says what it can do (read-only) and that nothing has been tried: ' + (reg.match(/never tried/g) || []).length);
+  ok(/locate, import, verify/.test(reg) && /separately authorized connection/.test(reg) && /never tried/.test(reg), 'each instrument names its import capabilities, Open Case names its separate investigation authorization, and nothing has been tried: ' + (reg.match(/never tried/g) || []).length);
   ok(posts.length === 0, 'opening the page posted nothing — no fetch on load: ' + JSON.stringify(posts));
   ok((await api('/api/depositions')).count === 0, 'custody is empty before any press');
 

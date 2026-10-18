@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>__BRAND_NAME__ — Investigation Rooms</title>
+<title>__BRAND_NAME__ — Investigations</title>
 <style>
   :root {
     --bg: #11161d; --panel: #181f29; --panel-2: #1f2833; --border: #2a3441;
@@ -57,10 +57,39 @@
 <body>
 <div class="wrap">
 <header>
-  <h1>Investigation Rooms</h1>
+  <h1>Investigations</h1>
   <a href="/">← back to <span data-brand>__BRAND_NAME__</span></a>
-  <span class="foot" id="fed-line">connected instruments · manual pull only · a model runs only from a Go deeper proposal you review and Start</span>
+  <span class="foot" id="fed-line">Questions, source records, and saved investigations</span>
 </header>
+
+<section class="card" id="open-case-card" aria-labelledby="oc-heading">
+  <div class="section-label">Open Case</div>
+  <h2 id="oc-heading">Investigate a question</h2>
+  <p class="body">Gather public records about a named federal official. Review the sources and allowance before starting; your question, evidence, and source failures stay together here.</p>
+  <p class="foot" id="oc-readiness" role="status">Checking the saved connection…</p>
+  <form id="oc-form">
+    <label for="oc-question">Your question</label>
+    <textarea id="oc-question" required maxlength="4000" placeholder="What do official records document about this judge’s appointment and service?" style="font:inherit;min-height:84px"></textarea>
+    <div class="grid2">
+      <div><label for="oc-subject">Official’s full name</label><input id="oc-subject" required maxlength="200" placeholder="e.g. Tanya S. Chutkan"></div>
+      <div><label for="oc-profile">Public-record investigation</label><select id="oc-profile"><option value="federal_judge_district">Federal district judge</option><option value="federal_judge_circuit">Federal appeals judge</option><option value="federal_judge_scotus">Supreme Court justice</option><option value="senator">U.S. senator</option></select></div>
+      <div><label for="oc-jurisdiction">Jurisdiction</label><input id="oc-jurisdiction" required value="United States" maxlength="120"></div>
+      <div><label for="oc-connector">Connected Open Case</label><select id="oc-connector"></select></div>
+    </div>
+    <div id="oc-origin" class="item"></div>
+    <label style="font-size:14px"><input id="oc-synthesis" type="checkbox" style="width:auto"> Use my configured model API for a cited answer</label>
+    <p class="foot" id="oc-synthesis-config">Optional: one model request, at most 2,048 output tokens, no model tools or automatic retries. API usage charges apply; the dollar total is not available here. A plugin subscription is not required.</p>
+    <div class="row"><button type="submit" id="oc-prepare">Review investigation</button><span class="foot">Public-record collection: $0 · optional model usage billed separately</span></div>
+  </form>
+  <div id="oc-error" class="error" role="alert"></div>
+  <div id="oc-proposal"></div>
+</section>
+<section class="card" id="oc-current" hidden aria-label="Investigation result"></section>
+<section class="card" aria-labelledby="oc-history-heading">
+  <h2 id="oc-history-heading">Saved investigations</h2>
+  <p class="foot">Progress and results are kept automatically. Reopening reads the saved record; it starts no new investigation.</p>
+  <div id="oc-history">Loading…</div>
+</section>
 
 <div class="card">
   <div class="section-label">What this is</div>
@@ -69,7 +98,7 @@
     byte for byte. Their records stay the producer's — an Open Case signal stays Open Case's, an EthicalAlt concern level stays
     EthicalAlt's, a Deflate reading stays Deflate's model's, in its own words — and nothing is joined across them until you declare
     that two named things are one. After a declaration, and only then, the room computes a mechanical timeline that names its
-    source records. Nothing on this page calls a model, polls, or refreshes.</div>
+    source records. Open Case starts only after you review a proposal and press Start. Active investigations check progress; the saved records below are imported only by your press.</div>
   <div class="foot" id="fed-libs"></div>
 </div>
 
@@ -142,6 +171,7 @@
      so an imported reading's door opens the SAME lane the desk uses; it is
      standalone-safe (desk-only globals are guarded by typeof checks) -->
 <script src="/deeper.js"></script>
+<script src="/opencase.js" defer></script>
 <script>
 const STATE = { connectors: [], depositions: [], rooms: [], room: null, producers: {} };
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -171,7 +201,7 @@ function renderConnectors() {
     <div class="item" data-connector="${esc(c.connector_id)}">
       <span class="tag ${esc(c.producer)}">${esc((STATE.producers[c.producer] || {}).display || c.producer)}</span>
       <strong>${esc(c.display)}</strong> <code>${esc(c.connector_id)}</code> · ${c.enabled ? '<span class="ok">enabled</span>' : '<span class="warn">disabled</span>'}
-      <div class="foot">origin <code>${esc(c.origin)}</code>${c.dev_loopback ? ' · development loopback' : ''} · capabilities: read-only (locate, import, verify); mutating: none${c.package_export_served_by ? ' · <span class="warn">the signed package route is served by ' + esc(c.package_export_served_by) + ' — an import from a deployment of main lands as a named 404</span>' : ''}</div>
+      <div class="foot">origin <code>${esc(c.origin)}</code>${c.dev_loopback ? ' · development loopback' : ''} · locate, import, verify${c.producer === 'open_case' ? ' · investigations use the separately authorized connection above' : ''}${c.package_export_served_by ? ' · export contract: ' + esc(c.package_export_served_by) : ''}</div>
       <div class="foot">status: <span class="${c.last_attempt && c.last_attempt.ok ? 'ok' : (c.last_attempt ? 'bad' : 'muted')}">${esc(c.status)}</span>${c.last_attempt ? ' · last attempt ' + esc(c.last_attempt.recorded_at) + ' (' + esc(c.last_attempt.outcome) + ')' : ''}${c.last_success_at ? ' · last reachable ' + esc(c.last_success_at) : ''}</div>
       <div class="foot">credential: ${c.credential_ref ? '<code>' + esc(c.credential_ref) + '</code> ' + (c.credential_configured ? '<span class="ok">set in the server environment</span>' : '<span class="warn">NOT set in the server environment</span>') : 'none (this producer needs none)'} · depositions ${c.depositions}${c.latest_deposition ? ' · latest <code>' + esc(c.latest_deposition) + '</code>' : ''}</div>
       <div class="foot">trusted keys: ${(c.trusted_keys || []).length ? c.trusted_keys.map(k => '<code>' + esc(short(k.key_id, 36)) + '</code> ' + esc(k.label || '') + ' <button class="quiet" onclick="unpinKey(\'' + esc(c.connector_id) + '\',\'' + esc(k.key_id) + '\')">unpin</button>').join(' ') : '<span class="warn">none pinned — nothing from this instrument can verify until you pin its public key</span>'}</div>
@@ -274,7 +304,7 @@ function depositionItemsHtml(id, rep) {
     const head = i.kind === 'claim'
       ? `${esc(i.text || '')}<div class="foot">${esc(i.type || 'claim')}${i.speaker ? ' · ' + esc(i.speaker) : ''}${i.status ? ' · status ' + esc(i.status) : ''} · ${esc(i.status_attributed_to || '')}</div>`
       : `${esc(i.title || '')}<div class="foot">turns ${esc((i.turns || []).join('–'))}${i.fidelity ? ' · fidelity ' + esc(i.fidelity) : ''}${i.quotes_total != null ? ' · quotes matched ' + esc(i.quotes_matched) + '/' + esc(i.quotes_total) : ''} · ${esc(i.attributed_to || '')}</div>`;
-    return `<div class="item"><div class="k">${esc(i.kind)}</div>${head}${window.deeperDepositionControl(id, i.ref, String(title).slice(0, 120))}</div>`;
+    return `<div class="item"><div class="k">${esc(i.kind)}</div>${head}${window.deeperDepositionControl(id, i.ref, String(title).slice(0, 120))}<button type="button" class="quiet" data-oc-deposition="${esc(id)}" data-oc-item="${esc(i.ref)}" data-oc-title="${esc(String(title).slice(0, 120))}">Investigate with Open Case…</button></div>`;
   });
   return rows.length ? `<div class="section-label" style="margin-top:10px">Readings and claims, as the producer states them</div>${rows.join('')}` : '';
 }

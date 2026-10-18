@@ -308,7 +308,11 @@ export class Results {
         t.status !== 'queued' ? el('button', { class: 'btn small', type: 'button', text: 'Start another attempt', title: 'A new operation under a new key, linked to this one; it sends the frozen text again', onclick: () => this.anotherAttempt(t) }) : null,
       ]));
     }
-    if (t.kind === 'investigation') {
+    if (t.kind === 'investigation' && (d.action_id || p?.action_id) === 'investigate.opencase.question') {
+      card.appendChild(el('div', { class: 'kv', text: d.question || 'Open Case public-record investigation' }));
+      card.appendChild(el('div', { class: 'kv muted small-text', text: 'Paid-model allowance $0. The saved investigation contains its question, origin, progress, findings, source records, and failures.' }));
+      card.appendChild(el('button', { class: 'btn small', type: 'button', text: 'Open investigation', onclick: () => this.places.open('/investigation?operation=' + encodeURIComponent(t.id)) }));
+    } else if (t.kind === 'investigation') {
       const inv = d.investigation || {};
       const pst = d.producer_state || {};
       const isSnapshot = (d.result_ref && d.result_ref.kind === 'snapshot') || /snapshot/.test(d.action_id || (p && p.action_id) || '');

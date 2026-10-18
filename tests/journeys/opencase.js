@@ -1,0 +1,71 @@
+// UI-only fixture: deterministic API replies, no source/model requests.
+// Producer/backend durability is exercised in the Python integration tests.
+const { BASE, ok, launch, pairedContext, finish } = require('./lib');
+(async () => {
+  const browser = await launch();
+  const ctx = await pairedContext(browser);
+  const page = await ctx.newPage();
+  const errors = [], starts = [], prepares = [];
+  page.on('pageerror', e => { if (!require('./lib').benignPageError(e)) errors.push(e.message); });
+  let saved = false, reads = 0, rejectedResult = false;
+  const origin = {kind:'selection',text:'A preserved passage about a judge.',doc_id:'fixture-document',revision:7,range:{start:0,end:34},title:'Origin fixture'};
+  let plan;
+  const result = {job_id:'job-fixture',case_id:'case-fixture',status:'partial',actual_cost_usd:0,model_runs:[],
+    findings:[{id:'fjc-1',title:'Official appointment record',body:'Fixture biography retained.',source_name:'FJC',source_url:'https://www.fjc.gov/history/judges',epistemic_level:'VERIFIED',raw_data_json:'{"fixture":true}'}],
+    sources:[{name:'FJC biography',url:'https://www.fjc.gov/history/judges'},{name:'Unsafe link fixture',url:'javascript:alert(1)'}],
+    failures:[{source:'CourtListener',message:'Credential unavailable'}],source_statuses:{fjc:'ok',courtlistener:'credential_failure'}};
+  const view = () => ({operation_id:'op_fixture',action_id:'investigate.opencase.question',status:reads++ < 1 ? 'running':'complete',question:plan.question,plan,origin,saved,
+    progress:'Public records gathered; source gaps retained',producer_state:{status:reads < 2?'running':'partial',events:[{at:'2026-10-18T12:00:00Z',type:'source',message:'FJC checked'}]},result:reads<2?null:result,
+    synthesis:plan.synthesis?.enabled ? {status:'complete',answer:'The saved appointment record establishes the appointment. [op_fixture:fjc-1]',citations:[{record_id:'op_fixture:fjc-1',excerpt:'Fixture biography retained.',title:'Official appointment record',source_name:'FJC',source_url:'https://www.fjc.gov/history/judges'}],usage:{input_tokens:250,output_tokens:80},actual_cost_usd:null} : {status:'not_requested'},
+    result_ref:{custody:{deposition_id:'dep_fixture',verification:{ok:true}}},artifacts:[{name:'result.json',sha256:'fixturehash',url:'/api/open-case/operations/op_fixture/artifacts/result.json'}]});
+  await page.route('**/api/open-case/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/status')) return route.fulfill({json:{available:true,synthesis:{available:true,provider:'anthropic',model:'fixture-model'}}});
+    if (path.endsWith('/save')) {saved=true;return route.fulfill({json:{saved:true}});}
+    if (path.endsWith('/operations')) return route.fulfill({json:{operations:plan?[{operation_id:'op_fixture',question:plan.question,status:'complete',saved}]:[]}});
+    const v = view();
+    if (rejectedResult) { v.status='unknown';v.result=null;v.producer_state.status='completed';v.error='The producer returned a different subject; result not accepted.'; }
+    return route.fulfill({json:v});
+  });
+  await page.route('**/api/actions/prepare', async route => {
+    const body = route.request().postDataJSON(); prepares.push(body); plan={...body.inputs,question:body.subject.text,source_scope:['FJC','CourtListener'],outbound_origin:{doc_id:origin.doc_id,revision:7},synthesis:{...body.inputs.synthesis,provider:'anthropic',model:'fixture-model'}};
+    return route.fulfill({json:{prepared_id:'prep_fixture',inputs:{plan},disclosure:{investigation_plan:plan}}});
+  });
+  await page.route('**/api/operations', async route => {starts.push(route.request().postDataJSON());return route.fulfill({json:{operation_id:'op_fixture',status:'running'}});});
+  await page.addInitScript(o => sessionStorage.setItem('fixture-origin',JSON.stringify(o)),origin);
+  await page.goto(BASE+'/investigation?origin_key=fixture-origin');
+  await page.waitForSelector('#oc-question');
+  await page.fill('#oc-question','What does the appointment record establish?');
+  await page.fill('#oc-subject','Fixture Judge');
+  await page.click('#oc-prepare');
+  await page.waitForSelector('#oc-start');
+  ok(starts.length===0,'reviewing the proposal starts no investigation');
+  ok(prepares.length===1 && prepares[0].inputs.origin.text===origin.text,'the exact selected passage and revision reach preparation');
+  ok(/\$0 paid-model allowance/.test(await page.textContent('#oc-proposal')),'the proposal shows the fixed zero-dollar allowance');
+  await page.click('#oc-start');
+  await page.waitForFunction(()=>document.querySelector('#oc-current').textContent.includes('Fixture biography retained.'),null,{timeout:12000});
+  ok(starts.length===1 && starts[0].prepared_id==='prep_fixture' && !!starts[0].request_key,'Start dispatches the frozen proposal under one request key');
+  ok(/Partial result/.test(await page.textContent('#oc-current')) && /Credential unavailable/.test(await page.textContent('#oc-current')),'partial results show source failure beside retained findings');
+  ok(/FJC checked/.test(await page.textContent('#oc-current')),'source progress is visible');
+  ok((await page.locator('#oc-current a[href^="javascript:"]').count())===0,'untrusted source URLs cannot become executable links');
+  await page.click('#oc-save');
+  await page.waitForFunction(()=>document.querySelector('#oc-save').textContent==='Saved');
+  await page.reload();
+  await page.waitForFunction(()=>document.querySelector('#oc-current').textContent.includes('Fixture biography retained.'));
+  ok(starts.length===1 && /Saved to your investigations/.test(await page.textContent('#oc-current')),'reload reopens saved findings without another Start');
+  ok(/preserved passage/.test(await page.textContent('#oc-current')) && /fixturehash/.test(await page.textContent('#oc-current')),'the reopened record retains origin and exact artifact hash');
+  await page.getByRole('button',{name:'Ask a follow-up…',exact:true}).click();
+  await page.fill('#oc-question','Which source is still missing?'); await page.check('#oc-synthesis'); await page.click('#oc-prepare'); await page.waitForSelector('#oc-start');
+  ok(prepares[1].inputs.follow_up_of==='op_fixture' && prepares[1].inputs.origin.doc_id===origin.doc_id,'follow-up preserves its parent and original passage');
+  ok(prepares[1].inputs.synthesis.enabled && prepares[1].inputs.synthesis.max_requests===1 && prepares[1].inputs.synthesis.max_output_tokens===2048 && prepares[1].inputs.allowance.paid_models===false,'optional existing-model usage has a separate bounded allowance');
+  ok(/not an enforceable dollar cap/.test(await page.textContent('#oc-proposal')) && /fixture-model/.test(await page.textContent('#oc-proposal')),'proposal discloses the model and unknown dollar cost');
+  await page.reload(); await page.waitForFunction(()=>document.querySelector('#oc-current').textContent.includes('The saved appointment record establishes'));
+  ok(/Cited evidence/.test(await page.textContent('#oc-current')) && /API dollar total: not reported/.test(await page.textContent('#oc-current')) && /input_tokens/.test(await page.textContent('#oc-current')),'saved model answer exposes resolved evidence and usage without claiming a dollar total');
+  ok((await page.locator('#oc-current a[href="#oc-citation-1"]').count())===1 && /Fixture biography retained/.test(await page.textContent('#oc-citation-1')),'answer citations link to the saved source excerpt actually supplied to the model');
+  ok(starts.length===1,'reopening an optional model answer never sends Start');
+  rejectedResult = true;
+  await page.reload(); await page.waitForFunction(()=>document.querySelector('#oc-current').textContent.includes('result not accepted'));
+  ok((await page.textContent('#oc-progress'))==='unknown','a rejected result cannot inherit the producer’s completed label');
+  ok(errors.length===0,'no page errors: '+JSON.stringify(errors));
+  await browser.close(); finish('opencase');
+})().catch(e=>{console.error(e);process.exit(1);});

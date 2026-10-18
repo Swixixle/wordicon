@@ -176,6 +176,11 @@ ACTIONS = [
        provider="producer:ethicalalt", calls="1 POST (the start), then 1 read of the unsigned export, then 1 POST for the signed receipt — which the producer stores",
        result_type="investigation", legacy_entry="none (not connected)",
        note="the contract is pinned from the producer's main at 1a71460 (read from source); live starts wait for the owner's ruling that the deployment runs that revision"),
+    _a("investigate.opencase.question", "Open Case investigation", group="investigate", kind="dispatch", rail=False,
+       subjects=("description",), handler="open_case_workflow", aliases=("investigate a question",),
+       mutation="external", outbound_fields=("question, public subject, source origin and zero-cost allowance",),
+       recipient="producer:open_case", provider="producer:open_case", calls="one investigation; public-record sources only; zero paid model calls",
+       result_type="investigation", note="A bounded investigation retained inside Nikodemus, including findings, sources and failures."),
     _a("investigate.opencase.list", "List cases", group="investigate", kind="lookup", rail=False,
        subjects=("none",), handler="federation", aliases=("open case", "opencase", "cases"),
        mutation="record", outbound_fields=("your key, to the configured origin",), recipient="producer:open_case",
@@ -318,6 +323,10 @@ def _producer_readiness(producer: str, wants: str) -> dict:
 def readiness(action: dict, server_gateway) -> dict:
     """What the card may say, from the record. Never a constant."""
     a = action
+    if a["handler"] == "open_case_workflow":
+        import opencase
+        r = opencase.readiness()
+        return {"available": r["available"], "reason": r["reason"], "producer": r}
     if a["kind"] == "view":
         if a["handler"] == "unavailable":
             return {"available": False, "reason": a["note"] or "not available"}
@@ -443,6 +452,15 @@ def prepare(action_id: str, subject: dict, inputs: dict, server_gateway) -> dict
     rd = readiness(a, server_gateway)
     snap = None
     deeper_context = None
+    investigation_plan = None
+    if a["handler"] == "open_case_workflow":
+        import opencase
+        try:
+            investigation_plan = opencase.prepare(str(subject.get("text") or ""), inputs or {})
+            producer_readiness = opencase.readiness((investigation_plan.get("connector") or {}).get("connector_id"))
+            rd = {"available": producer_readiness["available"], "reason": producer_readiness["reason"], "producer": producer_readiness}
+        except (opencase.WorkflowError, ValueError) as e:
+            raise PrepareError(str(e), getattr(e, "status", 400)) from e
     if a["mode"] == "deepen":
         import deeper
         try:
@@ -500,6 +518,16 @@ def prepare(action_id: str, subject: dict, inputs: dict, server_gateway) -> dict
                 "recipient": "configured model provider and public source hosts",
                 "fields": deeper_context["research_plan"]["outbound"]}
     extra = {}
+    if investigation_plan is not None:
+        extra["plan"] = investigation_plan
+        disclosure["investigation_plan"] = investigation_plan
+        disclosure["cost"] = investigation_plan["cost"]
+        with_model = investigation_plan.get("synthesis", {}).get("enabled")
+        disclosure["calls"] = ("One bounded Open Case investigation, then one tool-free model API request with one attempt" if with_model else
+                               "One bounded Open Case investigation; no model calls")
+        if with_model:
+            disclosure["leaves_this_machine"] = {"recipient": "configured Open Case producer and existing model API",
+                "fields": investigation_plan["synthesis"]["outbound"]}
     if a["mode"] == "refract":
         extra["entry"] = "selection" if kind == "selection" else ("description" if kind == "description" else "concept")
         extra["only_languages"] = [str(x)[:40] for x in ((inputs or {}).get("only_languages") or [])][:6]

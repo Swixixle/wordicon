@@ -3850,6 +3850,27 @@ class AnthropicAPIGateway(Gateway):
         """Tool-free explanation with exactly one HTTP attempt."""
         return self._complete(prompt, max_attempts=1)
 
+    def complete_record_once(self, prompt: str, *, max_output_tokens: int) -> dict:
+        """One tool-free attempt with the complete SDK receipt, even if truncated.
+
+        The caller owns the durable intent and decides whether the response is
+        usable. Token usage is a provider measurement, never a dollar estimate.
+        """
+        if type(max_output_tokens) is not int or not 1 <= max_output_tokens <= 2048:
+            raise ValueError("max_output_tokens must be an integer from 1 through 2048")
+        previous = self.MAX_OUTPUT_TOKENS
+        self.MAX_OUTPUT_TOKENS = max_output_tokens
+        try:
+            response = self._call_with_attempts("opencase_synthesis",
+                lambda: self._create(prompt, allow_truncated=True), max_attempts=1)
+        finally:
+            self.MAX_OUTPUT_TOKENS = previous
+        return {"text": "".join(block.text for block in response.content if hasattr(block, "text")),
+                "response_id": getattr(response, "id", None),
+                "stop_reason": getattr(response, "stop_reason", None),
+                "usage": _usage_fields(getattr(response, "usage", None)),
+                "response": response.model_dump(mode="json")}
+
     def _complete(self, prompt: str, *, max_attempts=None) -> str:
         response = self._call_with_attempts("complete", lambda: self._create(prompt),
                                             max_attempts=max_attempts)

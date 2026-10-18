@@ -1,0 +1,77 @@
+Open Case inside Nikodemus
+Verified locally: 2026-10-18
+
+USE
+Open Investigate in Nikodemus, then Open Case. Enter a question, a named
+federal judge or U.S. senator, and the profile. Review investigation shows
+the frozen question, source plan, origin, and allowance. Only Start
+dispatches. Progress, findings, source failures, and exact artifacts remain
+in the existing local store. Save marks the investigation in the saved list.
+Reopen reads that store. Ask a follow-up retains the root question, original
+origin, parent operation, and saved evidence. Inline answer citations open
+the exact source excerpts supplied to the model.
+
+ALLOWANCES
+Public-record collection has a $0 paid-model allowance. This is useful live:
+the verified example retrieved FJC public records without model calls.
+Optional synthesis uses the existing server-side Anthropic configuration.
+No plugin subscription is required. Each reviewed Start permits one model
+request and one HTTP attempt, at most 40,000 input characters and 2,048
+output tokens. This is not a dollar ceiling. Provider token usage is saved;
+actual API dollar cost remains unknown because it is not returned by the
+gateway. Truncated/rejected/unknown responses retain their receipt and are
+never automatically retried. A new paid attempt requires a new proposal and
+Start. The original private document/passage stays local; the question and
+bounded saved public-source evidence go to the model API.
+
+REUSED
+- Existing Open Case subject profiles, public-source adapters, case/evidence
+  database, source classification, patterns, and signed deposition export.
+- Existing Nikodemus paired-session gate, action proposals, immutable
+  snapshots, durable operations, model attempt ledger, federation custody,
+  pinned producer identity, and configured Anthropic model/key.
+- Existing Deflate connector, Go deeper path, imported records, and data
+  stores. No unrelated install or record was replaced.
+
+ADDED
+- Producer owner-bound plan/start/status/result contract and separate durable
+  SQLite job journal, private case handling, keyed Start idempotency, source
+  progress, retained failure states, and frozen signed result bytes.
+- Local question workflow and screen, record correlation/integrity checks,
+  source and model artifacts, save/history, and follow-up lineage.
+- Optional single-attempt synthesis over the saved evidence manifest,
+  citations resolved locally, source hashes, exact prompt and API receipt,
+  and explicit unknown-dollar accounting.
+
+RESTART / FAILURE RULES
+Known producer jobs may resume GET polling. An uncertain Start without a
+known job is never automatically resent. A model intent without a saved
+receipt becomes unknown and is never automatically replayed. A saved model
+receipt can be normalized after restart without calling the API again.
+Source evidence remains available if optional synthesis fails. Read-only
+views make no producer/model calls; artifact hashes are checked before use.
+
+IMPLEMENTATION
+scripts/opencase.py owns the local producer workflow and origin/provenance.
+scripts/opencase_synthesis.py owns the optional evidence-only answer.
+scripts/wordicon_cli.py provides complete_record_once with SDK retries=0.
+server.py exposes paired /api/open-case/* routes and standard action Start.
+webapp/opencase.js provides the full workflow on /investigation.
+The work-page action carries a captured document/selection into this page.
+
+VERIFY
+Offline workflow/synthesis tests: tests/test_opencase_workflow.py and
+tests/test_opencase_synthesis.py (24 tests in the latter include core tests).
+Browser fixture: tests/journeys/opencase.js, run by tests/journeys/run.sh.
+These tests make no live source/model requests. Live acceptance and restart
+hash proofs are recorded separately in the integration workspace's
+VERIFICATION.txt and verification/ files.
+
+LIMITS
+This first workflow covers named federal judges and senators, not arbitrary
+web research or every Open Case subject taxonomy entry. Some source adapters
+are planned, manual, or require credentials. A signed package proves origin
+and integrity, not factual accuracy. Model citation identities are checked;
+the interpretation still needs reading. The live model answered the three
+requested court/date facts correctly but misdescribed the relative order of
+two duplicate source pulls. Its original wording remains preserved.

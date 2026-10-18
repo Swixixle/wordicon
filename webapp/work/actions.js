@@ -133,6 +133,17 @@ export class Actions {
   async choose(actionId, opener) {
     const a = this.byId[actionId];
     if (!a) return;
+    if (actionId === 'investigate.opencase.question') {
+      if (this.session.adapter.isComposing && this.session.adapter.isComposing()) { toast('Finish composing the character before capturing this passage.'); return; }
+      const origin = this.subjectNow();
+      if (!origin.text?.trim()) { this.places.open('/investigation?compose=1'); if (this.hooks.onPlace) this.hooks.onPlace(); return; }
+      const key = 'nikodemus.opencase.origin.' + requestKey();
+      try { sessionStorage.setItem(key, JSON.stringify(origin)); }
+      catch (_) { toast('The source could not be captured. Free browser storage and try again.'); return; }
+      this.places.open('/investigation?compose=1&origin_key=' + encodeURIComponent(key));
+      if (this.hooks.onPlace) this.hooks.onPlace();
+      return;
+    }
     if (a.kind === 'view') {
       if (a.handler === 'intake') { if (this.hooks.onIntake) this.hooks.onIntake(); return; }
       if (a.handler === 'unavailable') { toast(a.readiness && a.readiness.reason || 'not available'); return; }
@@ -188,6 +199,15 @@ export class Actions {
 
   async prepare(actionId, subjectOverride) {
     const a = this.byId[actionId];
+    if (actionId === 'investigate.opencase.question') {
+      if (!subjectOverride) return this.choose(actionId);
+      const key = 'nikodemus.opencase.origin.' + requestKey();
+      try { sessionStorage.setItem(key, JSON.stringify(subjectOverride)); }
+      catch (_) { toast('The source could not be captured. Free browser storage and try again.'); return; }
+      this.places.open('/investigation?compose=1&origin_key=' + encodeURIComponent(key));
+      if (this.hooks.onPlace) this.hooks.onPlace();
+      return;
+    }
     if (this.session.adapter.isComposing && this.session.adapter.isComposing()) { toast('Finish the character being composed first — the capture waits for it.'); return; }
     const subject = subjectOverride || this.subjectNow();
     if (subject.kind !== 'concept' && (!subject.text || !subject.text.trim())) { toast('Nothing is written or selected yet.'); return; }
