@@ -6533,10 +6533,12 @@ _INTEGRATION_PYTESTS = (
 )
 _INTEGRATION_NODE_TESTS = (
     "tests/test_ledger_outbox.mjs", "tests/test_capture_history_ui.cjs", "tests/test_work_selection_capture.cjs",
+    "tests/test_cost_display.mjs",
 )
 _INTEGRATION_SUPPORT = (
     "scripts/opencase_capabilities.json", "tests/fixtures/receipts.json",
     "webapp/capture-history.html", "webapp/capture-history.js", "webapp/opencase.js", "webapp/receipts.js",
+    "webapp/work/cost-display.js",
 )
 
 
