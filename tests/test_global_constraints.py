@@ -8006,6 +8006,10 @@ def _check_work_index(server, paired):
     tmp = Path(_tf.mkdtemp(prefix="wordicon_work_"))
     state_root.apply(tmp)
     try:
+        # The history families are required inputs even when this older
+        # index fixture contains no relationships or rulings.
+        (tmp / "edges.jsonl").write_text("", encoding="utf-8")
+        (tmp / "judgments.jsonl").write_text("", encoding="utf-8")
         # a store: forty recent documents, one from yesterday with a word of its own, two twins
         for i in range(40):
             nbk.save(f"doc_recent_{i:03d}", title="", title_is_manual=False, body=f"Recent draft number {i} about ordinary matters.", base_revision=0, base_fingerprint="", request_id=f"req_wi_recent_{i:03d}")
@@ -8968,6 +8972,8 @@ def main() -> int:
     failures.extend(_check_durable_operations(server, _paired))
     failures.extend(_check_dispatch_concurrency(server, _paired))
     failures.extend(_check_work_index(server, _paired))
+    from test_workindex_history import run_checks as _check_workindex_history
+    failures.extend(_check_workindex_history())
     failures.extend(_check_producer_contracts())
     failures.extend(_check_investigation_adapters(server, _paired))
     failures.extend(_check_investigation_correlation(server, _paired))
