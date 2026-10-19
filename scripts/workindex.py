@@ -42,6 +42,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import wordicon_cli as cli
+import workindex_history as history
 
 DB_NAME = "work_index.sqlite3"
 ARCHIVE_LOG = "work_archive.jsonl"
@@ -85,7 +86,11 @@ def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(str(p), timeout=BUSY_TIMEOUT_S, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=%d" % int(BUSY_TIMEOUT_S * 1000))
-    _ensure_schema(conn)
+    try:
+        _ensure_schema(conn)
+    except Exception:
+        conn.close()
+        raise
     return conn
 
 
@@ -103,6 +108,11 @@ def has_fts(conn: sqlite3.Connection | None = None) -> bool:
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
+    # A future schema is not ours to edit, even through the old item DDL.
+    if conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'").fetchone():
+        row = conn.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone()
+        if row is None or row[0] not in ("1", "2"):
+            raise IndexError_(f"unsupported work index schema {row[0] if row else None!r}")
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS items (
@@ -149,6 +159,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
                     INSERT INTO items_fts(rowid, title, body, meta_text) VALUES (new.rowid, new.title, new.body, new.meta_text); END;
             """)
         conn.execute("UPDATE meta SET value = ? WHERE key = 'fts'", ("1" if ok else "0",))
+    history.ensure_schema(conn)
 
 
 def _meta(conn, key, default=""):
@@ -620,7 +631,14 @@ def _adapters() -> list[tuple[str, callable]]:
                                        lambda r: str(r.get("root_question") or ""), "inquiry", lambda r: str(r.get("status") or ""), "created_at", lambda r: {"place": "/inquiry"})),
         ("recovery", _scan_jsonl_simple("recovery", "recovery", root() / "recovery_review_queue.jsonl", "judgment_id", lambda r: "Recovery case: " + str(r.get("title") or ""),
                                         lambda r: str(r.get("note") or ""), "recovery review", lambda r: str(r.get("status") or ""), "queued_at", lambda r: {"place": "/recovery"})),
+        ("edges", lambda conn, gen, full: _scan_history(conn, gen, full, "edges", cli.EDGES_LOG)),
+        ("judgments", lambda conn, gen, full: _scan_history(conn, gen, full, "judgments", cli.JUDGMENTS_LOG)),
     ]
+
+
+def _scan_history(conn, gen, full, family, path):
+    _rows, complete = history.scan(conn, gen, full, family, path, _wm_get, _wm_set)
+    return [], [], complete
 
 
 # ---- archive rulings --------------------------------------------------------------
@@ -741,6 +759,8 @@ def rebuild() -> dict:
                 # nothing built and something broke: the old generation stays
                 conn.execute("DELETE FROM items WHERE gen = ?", (new,))
                 conn.execute("DELETE FROM watermarks WHERE gen = ?", (new,))
+                conn.execute("DELETE FROM history_edges WHERE gen = ?", (new,))
+                conn.execute("DELETE FROM history_rulings WHERE gen = ?", (new,))
                 _set_meta(conn, "last_error", "; ".join(failed))
                 return {"rebuilt": False, "failed": failed, **health()}
             conn.execute("BEGIN IMMEDIATE")
@@ -751,6 +771,8 @@ def rebuild() -> dict:
             _set_meta(conn, "incomplete", "; ".join(failed))
             conn.execute("DELETE FROM items WHERE gen != ?", (new,))
             conn.execute("DELETE FROM watermarks WHERE gen != ?", (new,))
+            conn.execute("DELETE FROM history_edges WHERE gen != ?", (new,))
+            conn.execute("DELETE FROM history_rulings WHERE gen != ?", (new,))
             conn.execute("COMMIT")
             _LAST["refresh_at"] = time.time()
             _LAST["incomplete_why"] = "; ".join(failed)
@@ -765,7 +787,8 @@ def health() -> dict:
     """What the page may say about the index: measured pending counts, the
     generation, when it was built and refreshed, and whether it is
     incomplete — never a promise it cannot keep."""
-    out = {"generation": 0, "items": 0, "built_at": "", "last_refresh_at": "", "incomplete": "", "fts": False, "pending": {}, "population": ""}
+    out = {"generation": 0, "items": 0, "built_at": "", "last_refresh_at": "", "incomplete": "", "fts": False,
+           "pending": {}, "history": {"edges": 0, "rulings": 0}, "population": ""}
     try:
         conn = _connect()
     except sqlite3.Error as e:
@@ -775,6 +798,12 @@ def health() -> dict:
         out.update({"generation": gen, "items": int(conn.execute("SELECT COUNT(*) FROM items WHERE gen = ?", (gen,)).fetchone()[0]),
                     "built_at": _meta(conn, "built_at", ""), "last_refresh_at": _meta(conn, "last_refresh_at", ""),
                     "incomplete": _meta(conn, "incomplete", ""), "fts": _meta(conn, "fts", "0") == "1"})
+        out["history"] = {
+            "edges": int(conn.execute("SELECT COUNT(*) FROM history_edges WHERE gen = ?", (gen,)).fetchone()[0]),
+            "rulings": int(conn.execute("SELECT COUNT(*) FROM history_rulings WHERE gen = ?", (gen,)).fetchone()[0]),
+        }
+        out["history"]["producer_identity_gaps"] = int(conn.execute(
+            "SELECT COUNT(*) FROM history_edges WHERE gen = ? AND producer_gap IS NOT NULL", (gen,)).fetchone()[0])
         pending = {}
         try:
             import notebook as nbk
@@ -798,9 +827,16 @@ def health() -> dict:
                     src.close()
         except Exception:  # noqa: BLE001
             pending["operations"] = None
+        for family, path in (("edges", cli.EDGES_LOG), ("judgments", cli.JUDGMENTS_LOG)):
+            try:
+                pending[family] = history.pending_bytes(conn, gen, family, path, _wm_get)
+            except (OSError, ValueError):
+                pending[family] = None
         out["pending"] = pending
-        out["updating"] = any((v or 0) > 0 for v in pending.values()) or bool(out["incomplete"])
-        out["population"] = f"{out['items']} items from {len(_adapters())} stores, generation {gen}" + (" (incomplete)" if out["incomplete"] else "")
+        out["updating"] = any(v is None or v > 0 for v in pending.values()) or bool(out["incomplete"])
+        out["population"] = (f"{out['items']} items from {len(_adapters()) - 2} item stores; "
+                             f"{out['history']['edges']} edges and {out['history']['rulings']} rulings, generation {gen}"
+                             + (" (incomplete)" if out["incomplete"] else ""))
         return out
     finally:
         conn.close()
@@ -880,6 +916,46 @@ def search(q: str = "", *, kind: str = "", tool: str = "", status: str = "", sin
                 "kinds": {r["kind"]: int(r["n"]) for r in conn.execute("SELECT kind, COUNT(*) AS n FROM items WHERE gen = ? AND archived = 0 GROUP BY kind", (gen,)).fetchall()}}
     finally:
         conn.close()
+
+
+def search_history(q: str, limit: int = 30) -> dict:
+    """Search items and recorded edge/ruling rows without inventing joins.
+
+    The three lists are separate on purpose: matching words are not an
+    identity mapping. Every edge carries its recorded basis or `unknown`;
+    validator rulings remain attributed to the validator.
+    """
+    observer = _connect()
+    try:
+        before_version = observer.execute("PRAGMA data_version").fetchone()[0]
+        before_state = _history_index_state(observer)
+        item_result = search(q, limit=limit)
+        conn = _connect()
+        try:
+            gen = generation(conn)
+            found = history.matches(conn, gen, q, limit=limit)
+        finally:
+            conn.close()
+        h = health()
+        after_state = _history_index_state(observer)
+        after_version = observer.execute("PRAGMA data_version").fetchone()[0]
+    finally:
+        observer.close()
+    same_generation = item_result["health"]["generation"] == gen == h["generation"]
+    return {"query": q, "generation": gen, "items": item_result["items"],
+            **found, "health": h, "exhaustive": bool(same_generation and before_version == after_version
+                                                  and before_state == after_state and item_result["exhaustive"]
+                                                  and not h["updating"] and not h["incomplete"]
+                                                  and not h["history"]["producer_identity_gaps"]),
+            "association": "word match only; no cross-family identity join asserted"}
+
+
+def _history_index_state(conn) -> tuple:
+    """The generation and watermarks, including offsets and prefix digests."""
+    gen = generation(conn)
+    rows = conn.execute("SELECT store, key, value FROM watermarks WHERE gen = ? "
+                        "ORDER BY store, key", (gen,)).fetchall()
+    return gen, tuple((r[0], r[1], r[2]) for r in rows)
 
 
 def _action_label(action_id: str) -> str:
